@@ -1,0 +1,39 @@
+# Diagrams: sindresorhus/ky
+
+## Component Architecture
+
+```mermaid
+graph LR
+    A["Ky factory"]
+    B["Core request engine"]
+    C["Errors"]
+    D["Utilities"]
+    E["Types"]
+    A --> B
+    B --> C
+    C --> D
+    D --> E
+```
+
+## Directory Structure
+
+```mermaid
+graph TD
+    D0["source"]
+    D1["source/core"]
+    D2["source/errors"]
+    D3["source/utils"]
+    D4["source/types"]
+    D5["test"]
+```
+
+## CI/CD Pipeline
+
+```mermaid
+graph LR
+    A[Push] --> B[CI]
+    B --> C{Tests Pass?}
+    C -->|Yes| D[Build]
+    C -->|No| E[Fix]
+    D --> F[Deploy]
+```

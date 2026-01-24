@@ -1,0 +1,351 @@
+{
+  "repoName": "sindresorhus/ky",
+  "purpose": "Tiny Fetch-based HTTP client with ergonomic helpers, retries, and hooks.",
+  "description": "Ky is a small, dependency-free HTTP client built on the Fetch API for modern runtimes like browsers and Node.js. It adds method shortcuts, typed response helpers, retry and timeout handling, and hook-based lifecycle extensions. The source exports a factory that creates Ky instances with merged defaults and exposes helper symbols for retry control.",
+  "sources": [
+    "readme.md",
+    "package.json",
+    "source/index.ts",
+    "source/core/Ky.ts"
+  ],
+  "confidence": "high",
+  "stack": {
+    "languages": [
+      "TypeScript"
+    ],
+    "frameworks": [],
+    "buildSystem": "npm",
+    "packageManager": null,
+    "hasDocker": false,
+    "hasCi": true
+  },
+  "quickstart": {
+    "prerequisites": [
+      "Node.js >=18",
+      "npm"
+    ],
+    "steps": [
+      "Install dependencies: npm install",
+      "Run tests and lint/build: npm test",
+      "Build distribution output: npm run build",
+      "If running browser-related tests, install Playwright browsers: npx playwright install --with-deps"
+    ],
+    "commands": [
+      {
+        "name": "install",
+        "command": "npm install",
+        "source": ".github/workflows/main.yml"
+      },
+      {
+        "name": "test",
+        "command": "npm test",
+        "source": "package.json"
+      },
+      {
+        "name": "build",
+        "command": "npm run build",
+        "source": "package.json"
+      },
+      {
+        "name": "install-playwright",
+        "command": "npx playwright install --with-deps",
+        "source": ".github/workflows/main.yml"
+      }
+    ],
+    "commonErrors": [
+      {
+        "error": "Node.js version is lower than 18",
+        "fix": "Upgrade Node.js to >=18 as required by engines in package.json."
+      },
+      {
+        "error": "Playwright browsers not installed for tests",
+        "fix": "Run npx playwright install --with-deps before running npm test."
+      }
+    ],
+    "sources": [
+      "package.json",
+      ".github/workflows/main.yml"
+    ]
+  },
+  "structure": {
+    "keyDirs": [
+      {
+        "path": "source",
+        "purpose": "Library TypeScript source and public exports.",
+        "keyFiles": [
+          "source/index.ts"
+        ]
+      },
+      {
+        "path": "source/core",
+        "purpose": "Core request engine, retry, hooks, and response helpers.",
+        "keyFiles": [
+          "source/core/Ky.ts"
+        ]
+      },
+      {
+        "path": "source/errors",
+        "purpose": "Error types thrown by the client.",
+        "keyFiles": [
+          "source/errors/HTTPError.ts",
+          "source/errors/TimeoutError.ts"
+        ]
+      },
+      {
+        "path": "source/utils",
+        "purpose": "Shared helpers for merging options, normalization, and body/timeout handling.",
+        "keyFiles": [
+          "source/utils/merge.ts",
+          "source/utils/normalize.ts",
+          "source/utils/body.ts"
+        ]
+      },
+      {
+        "path": "source/types",
+        "purpose": "Public TypeScript type definitions for options, hooks, and responses.",
+        "keyFiles": [
+          "source/types/options.ts",
+          "source/types/hooks.ts",
+          "source/types/ky.ts"
+        ]
+      },
+      {
+        "path": "test",
+        "purpose": "AVA test suite and helpers.",
+        "keyFiles": [
+          "test/fetch.ts",
+          "test/hooks.ts",
+          "test/helpers/create-http-test-server.ts"
+        ]
+      }
+    ],
+    "entrypoints": [
+      {
+        "path": "source/index.ts",
+        "type": "library",
+        "description": "Exports the ky factory, helpers, and public types."
+      }
+    ],
+    "testDirs": [
+      "test"
+    ],
+    "docsDirs": [],
+    "sources": [
+      "source/index.ts",
+      "source/core/Ky.ts",
+      "readme.md"
+    ]
+  },
+  "ci": {
+    "workflows": [
+      {
+        "name": "CI",
+        "file": ".github/workflows/main.yml",
+        "triggers": [
+          "push",
+          "pull_request"
+        ],
+        "mainSteps": [
+          "actions/checkout",
+          "actions/setup-node",
+          "npm install",
+          "npx playwright install --with-deps",
+          "npm test"
+        ]
+      }
+    ],
+    "mainChecks": [
+      "npm test"
+    ],
+    "sources": [
+      ".github/workflows/main.yml"
+    ]
+  },
+  "contrib": {
+    "howToAddFeature": [
+      "Implement behavior in source/core/Ky.ts or supporting helpers in source/utils.",
+      "Update public types under source/types and re-export from source/index.ts.",
+      "Run npm test to lint, build, and run the AVA test suite."
+    ],
+    "howToAddTest": [
+      "Add or extend AVA tests under test/ (for example test/fetch.ts or test/hooks.ts) using helpers in test/helpers.",
+      "Run npm test."
+    ],
+    "codeStyle": "ESM TypeScript with XO linting (npm test runs xo before build and AVA).",
+    "sources": [
+      "package.json",
+      "source/index.ts",
+      "source/core/Ky.ts",
+      ".github/workflows/main.yml"
+    ]
+  },
+  "architecture": {
+    "overview": "The public API is a ky factory function that creates Ky instances with merged default options and method shortcuts. The Ky class normalizes input/options, builds a Request, runs hooks, manages retries and timeouts, and returns a ResponsePromise with body helper methods. Errors are surfaced through dedicated error types and hook customization.",
+    "components": [
+      {
+        "name": "Ky factory",
+        "description": "Builds ky instances, method shortcuts, and exposes stop/retry helpers.",
+        "directory": "source/index.ts"
+      },
+      {
+        "name": "Core request engine",
+        "description": "Implements option normalization, hook execution, fetch/timeout, retries, and response decoration.",
+        "directory": "source/core"
+      },
+      {
+        "name": "Errors",
+        "description": "Defines HTTPError, TimeoutError, and related error types.",
+        "directory": "source/errors"
+      },
+      {
+        "name": "Utilities",
+        "description": "Shared helpers for merging options, body/stream handling, and normalization.",
+        "directory": "source/utils"
+      },
+      {
+        "name": "Types",
+        "description": "Public TypeScript types for options, hooks, and response promises.",
+        "directory": "source/types"
+      }
+    ],
+    "dataFlow": "Caller invokes ky()/ky.get(), defaults are merged, a Ky instance builds a Request, beforeRequest hooks run, fetch executes with timeout handling, afterResponse hooks can modify/force retries, retry logic decides backoff, and a ResponsePromise exposes body helpers.",
+    "keyAbstractions": [
+      {
+        "name": "KyInstance",
+        "description": "Callable instance with method shortcuts and factory helpers."
+      },
+      {
+        "name": "ResponsePromise",
+        "description": "Promise-like response with .json/.text/.formData helpers."
+      },
+      {
+        "name": "Hooks",
+        "description": "beforeRequest, beforeRetry, beforeError, afterResponse lifecycle extensions."
+      },
+      {
+        "name": "Retry options",
+        "description": "Configurable retry limits, status codes, delays, and custom shouldRetry logic."
+      }
+    ],
+    "sources": [
+      "source/index.ts",
+      "source/core/Ky.ts",
+      "readme.md"
+    ]
+  },
+  "firstTasks": [
+    {
+      "title": "Document Node.js version requirement",
+      "description": "Add a short prerequisite note in the Install section that Node.js >=18 is required, matching package.json engines.",
+      "difficulty": "beginner",
+      "category": "docs",
+      "files": [
+        "readme.md",
+        "package.json"
+      ],
+      "why": "Keeps contributor setup instructions aligned with the supported runtime."
+    },
+    {
+      "title": "Document ky.stop and ky.retry helpers",
+      "description": "Add a brief README snippet showing how to stop retries in beforeRetry and how to trigger retries from afterResponse.",
+      "difficulty": "beginner",
+      "category": "docs",
+      "files": [
+        "readme.md",
+        "source/index.ts",
+        "source/core/Ky.ts"
+      ],
+      "why": "These helpers are part of the public API but are easy to miss without explicit docs."
+    },
+    {
+      "title": "Test prefixUrl leading-slash validation",
+      "description": "Add an AVA test that asserts ky throws when prefixUrl is used with an input starting with '/'.",
+      "difficulty": "beginner",
+      "category": "test",
+      "files": [
+        "source/core/Ky.ts",
+        "test/fetch.ts"
+      ],
+      "why": "Guards against regressions in URL normalization behavior."
+    },
+    {
+      "title": "Test searchParams undefined filtering",
+      "description": "Verify that undefined values are removed while null values are preserved when building search params.",
+      "difficulty": "beginner",
+      "category": "test",
+      "files": [
+        "source/core/Ky.ts",
+        "test/fetch.ts"
+      ],
+      "why": "Confirms documented query normalization behavior."
+    },
+    {
+      "title": "Test beforeError hook mutation",
+      "description": "Add a test to ensure beforeError can change error name/message and is invoked before throwing.",
+      "difficulty": "intermediate",
+      "category": "test",
+      "files": [
+        "source/core/Ky.ts",
+        "test/hooks.ts"
+      ],
+      "why": "Improves coverage of hook customization logic."
+    },
+    {
+      "title": "Test shouldRetry precedence",
+      "description": "Create a test showing that retry.shouldRetry overrides status code and timeout checks.",
+      "difficulty": "intermediate",
+      "category": "test",
+      "files": [
+        "source/core/Ky.ts",
+        "test/hooks.ts"
+      ],
+      "why": "Ensures custom retry logic remains the top-priority decision point."
+    },
+    {
+      "title": "Refactor Retry-After parsing into a utility",
+      "description": "Extract the Retry-After/RateLimit parsing logic from Ky.#calculateRetryDelay into a helper in source/utils and add focused tests.",
+      "difficulty": "intermediate",
+      "category": "refactor",
+      "files": [
+        "source/core/Ky.ts",
+        "source/utils/normalize.ts",
+        "test/fetch.ts"
+      ],
+      "why": "Simplifies the retry flow and makes header parsing easier to test."
+    },
+    {
+      "title": "Improve KyInstance typing for create/extend",
+      "description": "Tighten TypeScript overloads so defaults passed to ky.create/ky.extend are reflected in the returned instance types.",
+      "difficulty": "advanced",
+      "category": "feature",
+      "files": [
+        "source/types/ky.ts",
+        "source/index.ts"
+      ],
+      "why": "Enhances developer experience for advanced TypeScript consumers."
+    },
+    {
+      "title": "Add progress hook streaming tests",
+      "description": "Use a large payload helper to test onDownloadProgress/onUploadProgress streaming behavior and error handling.",
+      "difficulty": "advanced",
+      "category": "test",
+      "files": [
+        "source/core/Ky.ts",
+        "source/utils/body.ts",
+        "test/helpers/create-large-file.ts",
+        "test/fetch.ts"
+      ],
+      "why": "Validates stream-based progress support across environments."
+    }
+  ],
+  "runbook": {
+    "applicable": false,
+    "deploySteps": [],
+    "observability": [],
+    "incidents": [],
+    "sources": [
+      "readme.md",
+      "package.json"
+    ]
+  }
+}

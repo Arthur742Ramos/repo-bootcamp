@@ -1,0 +1,35 @@
+{
+  "name": "repo-bootcamp",
+  "version": "1.0.0",
+  "description": "Turn any public GitHub repository into a Day 1 onboarding kit using GitHub Copilot SDK",
+  "type": "module",
+  "main": "dist/index.js",
+  "bin": {
+    "bootcamp": "dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "start": "tsx src/index.ts",
+    "dev": "tsx watch src/index.ts",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage"
+  },
+  "dependencies": {
+    "@github/copilot-sdk": "^0.1.16",
+    "chalk": "^5.3.0",
+    "commander": "^12.1.0",
+    "ora": "^8.1.0",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@vitest/coverage-v8": "^4.0.18",
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.0",
+    "vitest": "^4.0.18"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
