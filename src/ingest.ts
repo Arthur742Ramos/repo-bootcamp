@@ -154,6 +154,15 @@ function detectStack(files: FileInfo[]): StackInfo {
     PHP: /\.php$/,
     Swift: /\.swift$/,
     Kotlin: /\.kt$/,
+    Lean: /\.lean$/,
+    Haskell: /\.hs$/,
+    OCaml: /\.ml$/,
+    Scala: /\.scala$/,
+    Elixir: /\.ex$/,
+    Clojure: /\.clj$/,
+    C: /\.[ch]$/,
+    "C++": /\.(cpp|cc|cxx|hpp)$/,
+    Zig: /\.zig$/,
   };
 
   for (const [lang, pattern] of Object.entries(langPatterns)) {
@@ -183,6 +192,14 @@ function detectStack(files: FileInfo[]): StackInfo {
     maven: { file: "pom.xml", type: "build" },
     gradle: { file: "build.gradle", type: "build" },
     make: { file: "Makefile", type: "build" },
+    Lake: { file: "lakefile.toml", type: "build" },
+    "Lake (lean)": { file: "lakefile.lean", type: "build" },
+    stack: { file: "stack.yaml", type: "build" },
+    cabal: { file: /\.cabal$/, type: "build" },
+    mix: { file: "mix.exs", type: "build" },
+    sbt: { file: "build.sbt", type: "build" },
+    CMake: { file: "CMakeLists.txt", type: "build" },
+    zig: { file: "build.zig", type: "build" },
   };
 
   for (const [name, { file, type }] of Object.entries(configPatterns)) {
