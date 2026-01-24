@@ -18,6 +18,8 @@ import { join } from "path";
 import { parseGitHubUrl, cloneRepo, scanRepo } from "./ingest.js";
 import { analyzeRepo, AnalysisStats } from "./agent.js";
 import { ProgressTracker } from "./progress.js";
+import { extractDependencies, generateDependencyDocs } from "./deps.js";
+import { analyzeSecurityPatterns, generateSecurityDocs, getSecurityGrade } from "./security.js";
 import {
   generateBootcamp,
   generateOnboarding,
@@ -146,8 +148,23 @@ async function run(repoUrl: string, options: BootcampOptions): Promise<void> {
 
   // Generate documents
   const generateStart = Date.now();
-  progress.startPhase("generate", options.jsonOnly ? "JSON only" : "8 files");
+  progress.startPhase("generate", options.jsonOnly ? "JSON only" : "10 files");
   try {
+    // Extract dependencies
+    const deps = await extractDependencies(repoPath);
+    
+    // Analyze security (read package.json for deps check)
+    let packageJson: Record<string, unknown> | undefined;
+    try {
+      const pkgContent = await import("fs/promises").then(fs => 
+        fs.readFile(join(repoPath, "package.json"), "utf-8")
+      );
+      packageJson = JSON.parse(pkgContent);
+    } catch {
+      // No package.json
+    }
+    const security = await analyzeSecurityPatterns(repoPath, scanResult.files, packageJson);
+
     const documents = [
       { name: "BOOTCAMP.md", content: generateBootcamp(facts, options) },
       { name: "ONBOARDING.md", content: generateOnboarding(facts) },
@@ -158,6 +175,20 @@ async function run(repoUrl: string, options: BootcampOptions): Promise<void> {
       { name: "diagrams.mmd", content: generateDiagrams(facts) },
       { name: "repo_facts.json", content: JSON.stringify(facts, null, 2) },
     ];
+
+    // Add dependency docs if we have deps
+    if (deps) {
+      documents.push({
+        name: "DEPENDENCIES.md",
+        content: generateDependencyDocs(deps, repoInfo.repo),
+      });
+    }
+
+    // Add security docs
+    documents.push({
+      name: "SECURITY.md",
+      content: generateSecurityDocs(security, repoInfo.repo),
+    });
 
     // Only write if not json-only mode
     if (!options.jsonOnly) {
@@ -172,6 +203,16 @@ async function run(repoUrl: string, options: BootcampOptions): Promise<void> {
 
     runStats.generateTime = Date.now() - generateStart;
     progress.succeed(`Generated ${options.jsonOnly ? 1 : documents.length} files`);
+
+    // Show security score
+    if (!options.jsonOnly) {
+      const grade = getSecurityGrade(security.score);
+      const scoreColor = security.score >= 80 ? chalk.green : security.score >= 60 ? chalk.yellow : chalk.red;
+      console.log(chalk.cyan("\nSecurity Score: ") + scoreColor(`${security.score}/100 (${grade})`));
+      if (deps) {
+        console.log(chalk.cyan("Dependencies: ") + chalk.white(`${deps.totalCount} total (${deps.runtime.length} runtime, ${deps.dev.length} dev)`));
+      }
+    }
   } catch (error: any) {
     progress.fail(`Document generation failed: ${error.message}`);
     process.exit(1);
@@ -206,6 +247,8 @@ async function run(repoUrl: string, options: BootcampOptions): Promise<void> {
     console.log(chalk.white("  CODEMAP.md       - Directory tour"));
     console.log(chalk.white("  FIRST_TASKS.md   - Starter issues"));
     console.log(chalk.white("  RUNBOOK.md       - Operations guide"));
+    console.log(chalk.white("  DEPENDENCIES.md  - Dependency graph & analysis"));
+    console.log(chalk.white("  SECURITY.md      - Security overview & findings"));
     console.log(chalk.white("  diagrams.mmd     - Mermaid diagrams"));
     console.log(chalk.white("  repo_facts.json  - Structured data"));
     console.log();
