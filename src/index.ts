@@ -12,12 +12,12 @@
 
 import { Command } from "commander";
 import chalk from "chalk";
-import ora from "ora";
 import { mkdir, writeFile, rm } from "fs/promises";
 import { join } from "path";
 
 import { parseGitHubUrl, cloneRepo, scanRepo } from "./ingest.js";
 import { analyzeRepo, AnalysisStats } from "./agent.js";
+import { ProgressTracker } from "./progress.js";
 import {
   generateBootcamp,
   generateOnboarding,
@@ -43,7 +43,7 @@ interface RunStats {
 }
 
 async function run(repoUrl: string, options: BootcampOptions): Promise<void> {
-  const spinner = ora();
+  const progress = new ProgressTracker(options.verbose);
   const runStats: Partial<RunStats> = {};
   const startTime = Date.now();
 
@@ -56,16 +56,18 @@ async function run(repoUrl: string, options: BootcampOptions): Promise<void> {
   if (options.model) {
     console.log(chalk.gray(`Model override: ${options.model}`));
   }
-  console.log();
+
+  // Show phase overview
+  ProgressTracker.printPhaseOverview();
 
   // Parse URL
-  spinner.start("Parsing repository URL...");
   let repoInfo;
   try {
     repoInfo = parseGitHubUrl(repoUrl);
-    spinner.succeed(`Repository: ${repoInfo.fullName}`);
+    console.log(chalk.white(`Target: ${chalk.bold(repoInfo.fullName)}`));
+    console.log();
   } catch (error: any) {
-    spinner.fail(`Invalid URL: ${error.message}`);
+    console.error(chalk.red(`Invalid URL: ${error.message}`));
     process.exit(1);
   }
 
@@ -74,28 +76,28 @@ async function run(repoUrl: string, options: BootcampOptions): Promise<void> {
 
   // Clone repository
   const cloneStart = Date.now();
-  spinner.start(`Cloning ${repoInfo.fullName}...`);
+  progress.startPhase("clone", repoInfo.fullName);
   let repoPath: string;
   try {
     repoPath = await cloneRepo(repoInfo, process.cwd(), options.branch);
     runStats.cloneTime = Date.now() - cloneStart;
-    spinner.succeed(`Cloned to temporary directory (branch: ${repoInfo.branch})`);
+    progress.succeed(`Cloned ${repoInfo.fullName} (branch: ${repoInfo.branch})`);
   } catch (error: any) {
-    spinner.fail(`Clone failed: ${error.message}`);
+    progress.fail(`Clone failed: ${error.message}`);
     process.exit(1);
   }
 
   // Scan repository
   const scanStart = Date.now();
-  spinner.start(`Scanning file tree (max ${options.maxFiles} files)...`);
+  progress.startPhase("scan", `max ${options.maxFiles} files`);
   let scanResult;
   try {
     scanResult = await scanRepo(repoPath, options.maxFiles);
     runStats.scanTime = Date.now() - scanStart;
     runStats.filesScanned = scanResult.files.length;
-    spinner.succeed(`Scanned ${scanResult.files.length} files (${scanResult.keySourceFiles.size} key files read)`);
+    progress.succeed(`Scanned ${scanResult.files.length} files (${scanResult.keySourceFiles.size} key files read)`);
   } catch (error: any) {
-    spinner.fail(`Scan failed: ${error.message}`);
+    progress.fail(`Scan failed: ${error.message}`);
     process.exit(1);
   }
 
@@ -110,38 +112,41 @@ async function run(repoUrl: string, options: BootcampOptions): Promise<void> {
 
   // Analyze with Copilot SDK
   const analysisStart = Date.now();
-  spinner.start("Analyzing repository with Copilot...");
+  progress.startPhase("analyze");
   let facts: RepoFacts;
   let analysisStats: AnalysisStats;
   try {
     const result = await analyzeRepo(repoPath, repoInfo, scanResult, options, (msg) => {
-      spinner.text = `Analyzing: ${msg}`;
+      // Track tool calls
+      if (msg.startsWith("Tool:")) {
+        const toolName = msg.replace("Tool:", "").trim();
+        progress.recordToolCall(toolName);
+      }
+      progress.update(msg);
     });
     facts = result.facts;
     analysisStats = result.stats;
     runStats.analysisTime = Date.now() - analysisStart;
     runStats.toolCalls = analysisStats.toolCalls.length;
     runStats.model = analysisStats.model;
-    spinner.succeed(`Analysis complete (${analysisStats.toolCalls.length} tool calls)`);
+    progress.succeed(`Analysis complete`);
   } catch (error: any) {
-    spinner.fail(`Analysis failed: ${error.message}`);
+    progress.fail(`Analysis failed: ${error.message}`);
     console.log(chalk.yellow("\nTip: Make sure you're authenticated with GitHub Copilot"));
     process.exit(1);
   }
 
   // Create output directory
-  spinner.start(`Creating output directory: ${outputDir}`);
   try {
     await mkdir(outputDir, { recursive: true });
-    spinner.succeed(`Output directory ready`);
   } catch (error: any) {
-    spinner.fail(`Failed to create output directory: ${error.message}`);
+    console.error(chalk.red(`Failed to create output directory: ${error.message}`));
     process.exit(1);
   }
 
   // Generate documents
   const generateStart = Date.now();
-  spinner.start("Generating bootcamp documents...");
+  progress.startPhase("generate", options.jsonOnly ? "JSON only" : "8 files");
   try {
     const documents = [
       { name: "BOOTCAMP.md", content: generateBootcamp(facts, options) },
@@ -157,6 +162,7 @@ async function run(repoUrl: string, options: BootcampOptions): Promise<void> {
     // Only write if not json-only mode
     if (!options.jsonOnly) {
       for (const doc of documents) {
+        progress.update(doc.name);
         await writeFile(join(outputDir, doc.name), doc.content, "utf-8");
       }
     } else {
@@ -165,25 +171,26 @@ async function run(repoUrl: string, options: BootcampOptions): Promise<void> {
     }
 
     runStats.generateTime = Date.now() - generateStart;
-    spinner.succeed(`Generated ${options.jsonOnly ? 1 : documents.length} files`);
+    progress.succeed(`Generated ${options.jsonOnly ? 1 : documents.length} files`);
   } catch (error: any) {
-    spinner.fail(`Document generation failed: ${error.message}`);
+    progress.fail(`Document generation failed: ${error.message}`);
     process.exit(1);
   }
 
   // Cleanup temporary clone
   if (!options.keepTemp) {
-    spinner.start("Cleaning up...");
+    progress.startPhase("cleanup");
     try {
       await rm(repoPath, { recursive: true, force: true });
-      spinner.succeed("Cleanup complete");
+      progress.succeed("Cleanup complete");
     } catch {
-      spinner.warn("Could not clean up temporary files");
+      progress.warn("Could not clean up temporary files");
     }
   } else {
     console.log(chalk.gray(`Temporary clone kept at: ${repoPath}`));
   }
 
+  progress.stop();
   runStats.totalTime = Date.now() - startTime;
 
   // Print summary
