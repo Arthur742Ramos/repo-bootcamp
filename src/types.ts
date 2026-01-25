@@ -15,6 +15,81 @@ export interface BootcampOptions {
   keepTemp?: boolean;
   jsonOnly?: boolean;
   stats?: boolean;
+  // New features
+  interactive?: boolean;
+  transcript?: boolean;
+  compare?: string;
+  createIssues?: boolean;
+  dryRun?: boolean;
+  renderDiagrams?: boolean;
+  diagramFormat?: "svg" | "png" | "pdf";
+  style?: "startup" | "enterprise" | "oss" | "devops";
+  web?: boolean;
+}
+
+// Template style pack
+export type StylePack = "startup" | "enterprise" | "oss" | "devops";
+
+// Tech Radar signal
+export interface RadarSignal {
+  name: string;
+  category: "modern" | "stable" | "legacy" | "risky";
+  reason: string;
+}
+
+// Tech Radar result
+export interface TechRadar {
+  modern: RadarSignal[];
+  stable: RadarSignal[];
+  legacy: RadarSignal[];
+  risky: RadarSignal[];
+  onboardingRisk: {
+    score: number; // 0-100, lower is better (less risky)
+    grade: string; // A-F
+    factors: string[];
+  };
+}
+
+// Change impact result
+export interface ChangeImpact {
+  file: string;
+  affectedFiles: string[];
+  affectedTests: string[];
+  affectedDocs: string[];
+  importedBy: string[];
+  imports: string[];
+}
+
+// Diff summary
+export interface DiffSummary {
+  baseRef: string;
+  headRef: string;
+  filesChanged: number;
+  filesAdded: string[];
+  filesRemoved: string[];
+  filesModified: string[];
+  onboardingDeltas: {
+    newDependencies: string[];
+    removedDependencies: string[];
+    newEnvVars: string[];
+    newCommands: string[];
+    breakingChanges: string[];
+  };
+}
+
+// Interactive session message
+export interface ChatMessage {
+  role: "user" | "assistant";
+  content: string;
+  citations?: string[];
+  timestamp: Date;
+}
+
+// Interactive session transcript
+export interface Transcript {
+  repoName: string;
+  startedAt: Date;
+  messages: ChatMessage[];
 }
 
 // Parsed repo URL

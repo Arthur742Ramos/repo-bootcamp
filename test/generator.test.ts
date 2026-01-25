@@ -269,3 +269,134 @@ describe("generateRunbook", () => {
     expect(result).toContain("library/tool");
   });
 });
+
+describe("edge cases", () => {
+  it("handles empty languages array", () => {
+    const emptyLanguages = {
+      ...mockFacts,
+      stack: { ...mockFacts.stack, languages: [] },
+    };
+    const result = generateBootcamp(emptyLanguages, mockOptions);
+    expect(result).toContain("Bootcamp");
+  });
+
+  it("handles empty frameworks array", () => {
+    const noFrameworks = {
+      ...mockFacts,
+      stack: { ...mockFacts.stack, frameworks: [] },
+    };
+    const result = generateBootcamp(noFrameworks, mockOptions);
+    expect(result).toContain("Bootcamp");
+  });
+
+  it("handles empty commands array", () => {
+    const noCommands = {
+      ...mockFacts,
+      quickstart: { ...mockFacts.quickstart, commands: [] },
+    };
+    const result = generateOnboarding(noCommands);
+    expect(result).toContain("Onboarding");
+  });
+
+  it("handles empty firstTasks array", () => {
+    const noTasks = {
+      ...mockFacts,
+      firstTasks: [],
+    };
+    const result = generateFirstTasks(noTasks);
+    expect(result).toContain("First Tasks");
+  });
+
+  it("handles empty components array", () => {
+    const noComponents = {
+      ...mockFacts,
+      architecture: { ...mockFacts.architecture, components: [] },
+    };
+    const result = generateArchitecture(noComponents);
+    expect(result).toContain("Architecture");
+  });
+
+  it("handles empty keyDirs array", () => {
+    const noDirs = {
+      ...mockFacts,
+      structure: { ...mockFacts.structure, keyDirs: [] },
+    };
+    const result = generateCodemap(noDirs);
+    expect(result).toContain("Code Map");
+  });
+
+  it("handles special characters in repo name", () => {
+    const specialName = {
+      ...mockFacts,
+      repoName: "@org/my-package",
+    };
+    const result = generateBootcamp(specialName, mockOptions);
+    expect(result).toContain("@org/my-package");
+  });
+
+  it("handles very long description", () => {
+    const longDesc = {
+      ...mockFacts,
+      description: "A".repeat(1000),
+    };
+    const result = generateBootcamp(longDesc, mockOptions);
+    expect(result.length).toBeGreaterThan(1000);
+  });
+
+  it("handles different audience options", () => {
+    const audiences: Array<"new-hire" | "oss-contributor" | "internal-dev"> = [
+      "new-hire",
+      "oss-contributor",
+      "internal-dev",
+    ];
+    for (const audience of audiences) {
+      const opts = { ...mockOptions, audience };
+      const result = generateBootcamp(mockFacts, opts);
+      expect(result).toContain("Bootcamp");
+    }
+  });
+
+  it("handles different focus options", () => {
+    const focusTypes: Array<"onboarding" | "architecture" | "contributing" | "all"> = [
+      "onboarding",
+      "architecture",
+      "contributing",
+      "all",
+    ];
+    for (const focus of focusTypes) {
+      const opts = { ...mockOptions, focus };
+      const result = generateBootcamp(mockFacts, opts);
+      expect(result).toContain("Bootcamp");
+    }
+  });
+
+  it("handles missing confidence field", () => {
+    const noConfidence = {
+      ...mockFacts,
+      confidence: undefined,
+    };
+    const result = generateBootcamp(noConfidence, mockOptions);
+    expect(result).toContain("Bootcamp");
+  });
+
+  it("handles all difficulty levels in tasks", () => {
+    const allDifficulties = {
+      ...mockFacts,
+      firstTasks: [
+        { title: "Easy", description: "d", difficulty: "beginner" as const, category: "docs" as const, files: [], why: "w" },
+        { title: "Medium", description: "d", difficulty: "intermediate" as const, category: "test" as const, files: [], why: "w" },
+        { title: "Hard", description: "d", difficulty: "advanced" as const, category: "feature" as const, files: [], why: "w" },
+      ],
+    };
+    const result = generateFirstTasks(allDifficulties);
+    expect(result).toContain("Beginner");
+    expect(result).toContain("Intermediate");
+    expect(result).toContain("Advanced");
+  });
+
+  it("handles incidents in runbook", () => {
+    const result = generateRunbook(mockFacts);
+    expect(result).toContain("High latency");
+    expect(result).toContain("database connections");
+  });
+});

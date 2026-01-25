@@ -8,18 +8,30 @@
  * Usage:
  *   bootcamp https://github.com/owner/repo
  *   bootcamp https://github.com/owner/repo --output ./my-bootcamp
+ *   bootcamp https://github.com/owner/repo --interactive
+ *   bootcamp https://github.com/owner/repo --compare v1.0.0
+ *   bootcamp ask https://github.com/owner/repo
+ *   bootcamp --web
  */
 
 import { Command } from "commander";
 import chalk from "chalk";
-import { mkdir, writeFile, rm } from "fs/promises";
-import { join } from "path";
+import { mkdir, writeFile, rm, readFile } from "fs/promises";
+import { join, basename } from "path";
 
 import { parseGitHubUrl, cloneRepo, scanRepo } from "./ingest.js";
 import { analyzeRepo, AnalysisStats } from "./agent.js";
 import { ProgressTracker } from "./progress.js";
 import { extractDependencies, generateDependencyDocs } from "./deps.js";
 import { analyzeSecurityPatterns, generateSecurityDocs, getSecurityGrade } from "./security.js";
+import { generateTechRadar, generateRadarDocs, getRiskEmoji } from "./radar.js";
+import { buildImportGraph, analyzeChangeImpact, generateImpactDocs, getKeyFilesForImpact } from "./impact.js";
+import { runInteractiveMode, quickAsk } from "./interactive.js";
+import { createIssuesFromTasks, generateIssuePreview } from "./issues.js";
+import { analyzeDiff, generateDiffDocs } from "./diff.js";
+import { startServer } from "./web.js";
+import { loadConfig, getStyleConfig, loadPlugins, runPlugins, STYLE_PACKS } from "./plugins.js";
+import { renderOutputDiagrams, isMermaidCliAvailable, DiagramFormat } from "./diagrams.js";
 import {
   generateBootcamp,
   generateOnboarding,
@@ -29,7 +41,7 @@ import {
   generateRunbook,
   generateDiagrams,
 } from "./generator.js";
-import type { BootcampOptions, RepoFacts } from "./types.js";
+import type { BootcampOptions, RepoFacts, ScanResult, RepoInfo, StylePack } from "./types.js";
 
 const VERSION = "1.0.0";
 
@@ -49,21 +61,41 @@ async function run(repoUrl: string, options: BootcampOptions): Promise<void> {
   const runStats: Partial<RunStats> = {};
   const startTime = Date.now();
 
-  console.log(chalk.bold.blue("\n=== Repo Bootcamp Generator ===\n"));
-  console.log(chalk.gray(`Repository: ${repoUrl}`));
-  console.log(chalk.gray(`Branch: ${options.branch || "default"}`));
-  console.log(chalk.gray(`Focus: ${options.focus}`));
-  console.log(chalk.gray(`Audience: ${options.audience}`));
-  console.log(chalk.gray(`Max files: ${options.maxFiles}`));
+  // Load config file if present
+  const config = await loadConfig();
+  const styleConfig = getStyleConfig(
+    options.style || config?.style,
+    config?.customStyle
+  );
+
+  // ASCII art banner
+  console.log(chalk.cyan(`
+  ╦═╗╔═╗╔═╗╔═╗  ╔╗ ╔═╗╔═╗╔╦╗╔═╗╔═╗╔╦╗╔═╗
+  ╠╦╝║╣ ╠═╝║ ║  ╠╩╗║ ║║ ║ ║ ║  ╠═╣║║║╠═╝
+  ╩╚═╚═╝╩  ╚═╝  ╚═╝╚═╝╚═╝ ╩ ╚═╝╩ ╩╩ ╩╩  
+  `));
+  console.log(chalk.white.bold("  Turn any repo into a Day 1 onboarding kit\n"));
+  
+  console.log(chalk.dim("─".repeat(50)));
+  console.log(chalk.white(`  Repository:  ${chalk.cyan(repoUrl)}`));
+  console.log(chalk.white(`  Branch:      ${chalk.cyan(options.branch || "default")}`));
+  console.log(chalk.white(`  Focus:       ${chalk.cyan(options.focus)}`));
+  console.log(chalk.white(`  Audience:    ${chalk.cyan(options.audience)}`));
+  console.log(chalk.white(`  Style:       ${chalk.cyan(styleConfig.name)}`));
   if (options.model) {
-    console.log(chalk.gray(`Model override: ${options.model}`));
+    console.log(chalk.white(`  Model:       ${chalk.cyan(options.model)}`));
   }
+  if (options.compare) {
+    console.log(chalk.white(`  Compare:     ${chalk.cyan(options.compare)}`));
+  }
+  console.log(chalk.dim("─".repeat(50)));
+  console.log();
 
   // Show phase overview
   ProgressTracker.printPhaseOverview();
 
   // Parse URL
-  let repoInfo;
+  let repoInfo: RepoInfo;
   try {
     repoInfo = parseGitHubUrl(repoUrl);
     console.log(chalk.white(`Target: ${chalk.bold(repoInfo.fullName)}`));
@@ -92,7 +124,7 @@ async function run(repoUrl: string, options: BootcampOptions): Promise<void> {
   // Scan repository
   const scanStart = Date.now();
   progress.startPhase("scan", `max ${options.maxFiles} files`);
-  let scanResult;
+  let scanResult: ScanResult;
   try {
     scanResult = await scanRepo(repoPath, options.maxFiles);
     runStats.scanTime = Date.now() - scanStart;
@@ -148,7 +180,7 @@ async function run(repoUrl: string, options: BootcampOptions): Promise<void> {
 
   // Generate documents
   const generateStart = Date.now();
-  progress.startPhase("generate", options.jsonOnly ? "JSON only" : "10 files");
+  progress.startPhase("generate", options.jsonOnly ? "JSON only" : "12+ files");
   try {
     // Extract dependencies
     const deps = await extractDependencies(repoPath);
@@ -156,15 +188,44 @@ async function run(repoUrl: string, options: BootcampOptions): Promise<void> {
     // Analyze security (read package.json for deps check)
     let packageJson: Record<string, unknown> | undefined;
     try {
-      const pkgContent = await import("fs/promises").then(fs => 
-        fs.readFile(join(repoPath, "package.json"), "utf-8")
-      );
+      const pkgContent = await readFile(join(repoPath, "package.json"), "utf-8");
       packageJson = JSON.parse(pkgContent);
     } catch {
       // No package.json
     }
     const security = await analyzeSecurityPatterns(repoPath, scanResult.files, packageJson);
 
+    // Generate Tech Radar
+    const radar = generateTechRadar(
+      scanResult.stack,
+      scanResult.files,
+      deps,
+      security,
+      !!scanResult.readme,
+      !!scanResult.contributing
+    );
+
+    // Generate Change Impact Map
+    const keyFiles = getKeyFilesForImpact(scanResult.files);
+    const importGraph = await buildImportGraph(repoPath, scanResult.files);
+    const impacts = await Promise.all(
+      keyFiles.slice(0, 10).map(file => 
+        analyzeChangeImpact(repoPath, scanResult.files, file, importGraph)
+      )
+    );
+
+    // Generate Diff if --compare is specified
+    let diffSummary = null;
+    if (options.compare) {
+      try {
+        progress.update("Analyzing diff...");
+        diffSummary = await analyzeDiff(repoPath, options.compare, "HEAD");
+      } catch (error: any) {
+        console.log(chalk.yellow(`  Warning: Could not generate diff: ${error.message}`));
+      }
+    }
+
+    // Build document list
     const documents = [
       { name: "BOOTCAMP.md", content: generateBootcamp(facts, options) },
       { name: "ONBOARDING.md", content: generateOnboarding(facts) },
@@ -174,6 +235,8 @@ async function run(repoUrl: string, options: BootcampOptions): Promise<void> {
       { name: "RUNBOOK.md", content: generateRunbook(facts) },
       { name: "diagrams.mmd", content: generateDiagrams(facts) },
       { name: "repo_facts.json", content: JSON.stringify(facts, null, 2) },
+      { name: "SECURITY.md", content: generateSecurityDocs(security, repoInfo.repo) },
+      { name: "RADAR.md", content: generateRadarDocs(radar, repoInfo.repo) },
     ];
 
     // Add dependency docs if we have deps
@@ -184,11 +247,45 @@ async function run(repoUrl: string, options: BootcampOptions): Promise<void> {
       });
     }
 
-    // Add security docs
-    documents.push({
-      name: "SECURITY.md",
-      content: generateSecurityDocs(security, repoInfo.repo),
-    });
+    // Add impact docs if we have impacts
+    if (impacts.length > 0) {
+      documents.push({
+        name: "IMPACT.md",
+        content: generateImpactDocs(impacts, repoInfo.repo),
+      });
+    }
+
+    // Add diff docs if generated
+    if (diffSummary) {
+      documents.push({
+        name: "DIFF.md",
+        content: generateDiffDocs(diffSummary, repoInfo.repo),
+      });
+    }
+
+    // Load and run plugins if configured
+    if (config?.plugins && config.plugins.length > 0) {
+      progress.update("Running plugins...");
+      const plugins = await loadPlugins(config.plugins);
+      const pluginOutput = await runPlugins(plugins, repoPath, scanResult, facts, options);
+      
+      // Add plugin docs
+      for (const doc of pluginOutput.docs) {
+        documents.push(doc);
+      }
+
+      // Merge extra data into facts JSON
+      if (Object.keys(pluginOutput.extraData).length > 0) {
+        const factsWithPlugins = {
+          ...facts,
+          plugins: pluginOutput.extraData,
+        };
+        const factsDoc = documents.find(d => d.name === "repo_facts.json");
+        if (factsDoc) {
+          factsDoc.content = JSON.stringify(factsWithPlugins, null, 2);
+        }
+      }
+    }
 
     // Only write if not json-only mode
     if (!options.jsonOnly) {
@@ -209,17 +306,55 @@ async function run(repoUrl: string, options: BootcampOptions): Promise<void> {
       const grade = getSecurityGrade(security.score);
       const scoreColor = security.score >= 80 ? chalk.green : security.score >= 60 ? chalk.yellow : chalk.red;
       console.log(chalk.cyan("\nSecurity Score: ") + scoreColor(`${security.score}/100 (${grade})`));
+      
+      // Show onboarding risk
+      const riskEmoji = getRiskEmoji(radar.onboardingRisk.grade);
+      const riskColor = radar.onboardingRisk.score <= 25 ? chalk.green : 
+                        radar.onboardingRisk.score <= 50 ? chalk.yellow : chalk.red;
+      console.log(chalk.cyan("Onboarding Risk: ") + riskColor(`${radar.onboardingRisk.score}/100 (${radar.onboardingRisk.grade}) ${riskEmoji}`));
+
       if (deps) {
         console.log(chalk.cyan("Dependencies: ") + chalk.white(`${deps.totalCount} total (${deps.runtime.length} runtime, ${deps.dev.length} dev)`));
       }
     }
+
+    // Create issues if requested
+    if (options.createIssues && facts.firstTasks.length > 0) {
+      console.log();
+      if (options.dryRun) {
+        const preview = generateIssuePreview(facts.firstTasks, repoInfo);
+        await writeFile(join(outputDir, "ISSUES_PREVIEW.md"), preview, "utf-8");
+        console.log(chalk.yellow("Issue preview saved to ISSUES_PREVIEW.md"));
+      }
+      await createIssuesFromTasks(facts.firstTasks, repoInfo, {
+        dryRun: options.dryRun,
+        verbose: options.verbose,
+      });
+    }
+
+    // Render diagrams if requested
+    if (options.renderDiagrams && !options.jsonOnly) {
+      progress.update("Rendering diagrams...");
+      const format = options.diagramFormat || "svg";
+      const renderResult = await renderOutputDiagrams(outputDir, format);
+      if (renderResult.rendered) {
+        console.log(chalk.cyan("\nDiagrams rendered: ") + chalk.white(renderResult.files.map(f => basename(f)).join(", ")));
+      } else if (renderResult.error) {
+        console.log(chalk.yellow(`\nDiagram rendering skipped: ${renderResult.error}`));
+      }
+    }
+
   } catch (error: any) {
     progress.fail(`Document generation failed: ${error.message}`);
     process.exit(1);
   }
 
-  // Cleanup temporary clone
-  if (!options.keepTemp) {
+  // Store repoPath and scanResult for interactive mode before cleanup
+  const interactiveRepoPath = repoPath;
+  const interactiveScanResult = scanResult;
+
+  // Cleanup temporary clone (unless keeping for interactive mode)
+  if (!options.keepTemp && !options.interactive) {
     progress.startPhase("cleanup");
     try {
       await rm(repoPath, { recursive: true, force: true });
@@ -227,6 +362,8 @@ async function run(repoUrl: string, options: BootcampOptions): Promise<void> {
     } catch {
       progress.warn("Could not clean up temporary files");
     }
+  } else if (options.interactive) {
+    console.log(chalk.gray(`Keeping clone for interactive mode: ${repoPath}`));
   } else {
     console.log(chalk.gray(`Temporary clone kept at: ${repoPath}`));
   }
@@ -234,37 +371,47 @@ async function run(repoUrl: string, options: BootcampOptions): Promise<void> {
   progress.stop();
   runStats.totalTime = Date.now() - startTime;
 
-  // Print summary
-  console.log(chalk.bold.green("\n=== Bootcamp Generated! ===\n"));
-  console.log(chalk.white(`Output: ${outputDir}/`));
+  // Print summary with nice box
+  console.log();
+  console.log(chalk.green("  ╔══════════════════════════════════════════════════════╗"));
+  console.log(chalk.green("  ║") + chalk.white.bold("        ✓ Bootcamp Generated Successfully!           ") + chalk.green("║"));
+  console.log(chalk.green("  ╚══════════════════════════════════════════════════════╝"));
+  console.log();
+  console.log(chalk.white(`  📁 Output: ${chalk.cyan.bold(outputDir + "/")}`));
   console.log();
 
   if (!options.jsonOnly) {
-    console.log(chalk.gray("Generated files:"));
-    console.log(chalk.white("  BOOTCAMP.md      - 1-page overview (start here!)"));
-    console.log(chalk.white("  ONBOARDING.md    - Full setup guide"));
-    console.log(chalk.white("  ARCHITECTURE.md  - System design & components"));
-    console.log(chalk.white("  CODEMAP.md       - Directory tour"));
-    console.log(chalk.white("  FIRST_TASKS.md   - Starter issues"));
-    console.log(chalk.white("  RUNBOOK.md       - Operations guide"));
-    console.log(chalk.white("  DEPENDENCIES.md  - Dependency graph & analysis"));
-    console.log(chalk.white("  SECURITY.md      - Security overview & findings"));
-    console.log(chalk.white("  diagrams.mmd     - Mermaid diagrams"));
-    console.log(chalk.white("  repo_facts.json  - Structured data"));
+    console.log(chalk.dim("  Generated files:"));
+    console.log(chalk.white("  ├── ") + chalk.cyan("BOOTCAMP.md") + chalk.dim("      → 1-page overview (start here!)"));
+    console.log(chalk.white("  ├── ") + chalk.cyan("ONBOARDING.md") + chalk.dim("    → Full setup guide"));
+    console.log(chalk.white("  ├── ") + chalk.cyan("ARCHITECTURE.md") + chalk.dim("  → System design & diagrams"));
+    console.log(chalk.white("  ├── ") + chalk.cyan("CODEMAP.md") + chalk.dim("       → Directory tour"));
+    console.log(chalk.white("  ├── ") + chalk.cyan("FIRST_TASKS.md") + chalk.dim("   → Starter issues"));
+    console.log(chalk.white("  ├── ") + chalk.cyan("RUNBOOK.md") + chalk.dim("       → Operations guide"));
+    console.log(chalk.white("  ├── ") + chalk.cyan("DEPENDENCIES.md") + chalk.dim("  → Dependency graph"));
+    console.log(chalk.white("  ├── ") + chalk.cyan("SECURITY.md") + chalk.dim("      → Security findings"));
+    console.log(chalk.white("  ├── ") + chalk.cyan("RADAR.md") + chalk.dim("         → Tech radar & risk score"));
+    console.log(chalk.white("  ├── ") + chalk.cyan("IMPACT.md") + chalk.dim("        → Change impact analysis"));
+    if (options.compare) {
+      console.log(chalk.white("  ├── ") + chalk.cyan("DIFF.md") + chalk.dim("          → Version comparison"));
+    }
+    console.log(chalk.white("  ├── ") + chalk.cyan("diagrams.mmd") + chalk.dim("     → Mermaid diagrams"));
+    console.log(chalk.white("  └── ") + chalk.cyan("repo_facts.json") + chalk.dim("  → Structured data"));
     console.log();
   }
 
   // Show stats if requested
   if (options.stats) {
-    console.log(chalk.cyan("Statistics:"));
-    console.log(chalk.white(`  Model: ${runStats.model}`));
-    console.log(chalk.white(`  Files scanned: ${runStats.filesScanned}`));
-    console.log(chalk.white(`  Tool calls: ${runStats.toolCalls}`));
-    console.log(chalk.white(`  Clone time: ${(runStats.cloneTime! / 1000).toFixed(1)}s`));
-    console.log(chalk.white(`  Scan time: ${(runStats.scanTime! / 1000).toFixed(1)}s`));
-    console.log(chalk.white(`  Analysis time: ${(runStats.analysisTime! / 1000).toFixed(1)}s`));
-    console.log(chalk.white(`  Generate time: ${(runStats.generateTime! / 1000).toFixed(1)}s`));
-    console.log(chalk.white(`  Total time: ${(runStats.totalTime! / 1000).toFixed(1)}s`));
+    console.log(chalk.dim("  ─────────────────────────────────────────"));
+    console.log(chalk.white.bold("  📊 Statistics"));
+    console.log(chalk.white(`     Model:         ${chalk.cyan(runStats.model)}`));
+    console.log(chalk.white(`     Files scanned: ${chalk.cyan(runStats.filesScanned)}`));
+    console.log(chalk.white(`     Tool calls:    ${chalk.cyan(runStats.toolCalls)}`));
+    console.log(chalk.white(`     Total time:    ${chalk.cyan((runStats.totalTime! / 1000).toFixed(1) + "s")}`));
+    console.log(chalk.dim(`       ├── Clone:    ${(runStats.cloneTime! / 1000).toFixed(1)}s`));
+    console.log(chalk.dim(`       ├── Scan:     ${(runStats.scanTime! / 1000).toFixed(1)}s`));
+    console.log(chalk.dim(`       ├── Analyze:  ${(runStats.analysisTime! / 1000).toFixed(1)}s`));
+    console.log(chalk.dim(`       └── Generate: ${(runStats.generateTime! / 1000).toFixed(1)}s`));
     console.log();
 
     if (analysisStats.toolCalls.length > 0) {
@@ -276,10 +423,86 @@ async function run(repoUrl: string, options: BootcampOptions): Promise<void> {
     }
   }
 
-  console.log(chalk.cyan(`Open ${outputDir}/BOOTCAMP.md to get started!`));
-  
-  // Ensure process exits cleanly (SDK may have lingering connections)
-  process.exit(0);
+  console.log(chalk.white("  🚀 ") + chalk.white.bold("Next step: ") + chalk.cyan(`open ${outputDir}/BOOTCAMP.md`));
+  console.log();
+
+  // Start interactive mode if requested
+  if (options.interactive) {
+    await runInteractiveMode(
+      interactiveRepoPath,
+      repoInfo,
+      interactiveScanResult,
+      outputDir,
+      facts,
+      { verbose: options.verbose, saveTranscript: options.transcript }
+    );
+    
+    // Cleanup after interactive mode
+    if (!options.keepTemp) {
+      try {
+        await rm(interactiveRepoPath, { recursive: true, force: true });
+      } catch {
+        // Ignore cleanup errors
+      }
+    }
+  } else {
+    // Ensure process exits cleanly (SDK may have lingering connections)
+    process.exit(0);
+  }
+}
+
+/**
+ * Run ask command - standalone Q&A mode
+ */
+async function runAsk(repoUrl: string, options: { branch?: string; verbose?: boolean }): Promise<void> {
+  console.log(chalk.bold.blue("\n=== Repo Bootcamp - Ask Mode ===\n"));
+
+  // Parse URL
+  let repoInfo: RepoInfo;
+  try {
+    repoInfo = parseGitHubUrl(repoUrl);
+    console.log(chalk.gray(`Repository: ${repoInfo.fullName}`));
+  } catch (error: any) {
+    console.error(chalk.red(`Invalid URL: ${error.message}`));
+    process.exit(1);
+  }
+
+  // Clone
+  console.log(chalk.gray("Cloning repository..."));
+  let repoPath: string;
+  try {
+    repoPath = await cloneRepo(repoInfo, process.cwd(), options.branch);
+  } catch (error: any) {
+    console.error(chalk.red(`Clone failed: ${error.message}`));
+    process.exit(1);
+  }
+
+  // Scan
+  console.log(chalk.gray("Scanning files..."));
+  let scanResult: ScanResult;
+  try {
+    scanResult = await scanRepo(repoPath, 200);
+  } catch (error: any) {
+    console.error(chalk.red(`Scan failed: ${error.message}`));
+    process.exit(1);
+  }
+
+  // Run interactive mode
+  await runInteractiveMode(
+    repoPath,
+    repoInfo,
+    scanResult,
+    process.cwd(),
+    undefined,
+    { verbose: options.verbose, saveTranscript: true }
+  );
+
+  // Cleanup
+  try {
+    await rm(repoPath, { recursive: true, force: true });
+  } catch {
+    // Ignore
+  }
 }
 
 // CLI setup
@@ -288,7 +511,10 @@ const program = new Command();
 program
   .name("bootcamp")
   .description("Turn any public GitHub repository into a Day 1 onboarding kit using GitHub Copilot SDK")
-  .version(VERSION)
+  .version(VERSION);
+
+// Main command
+program
   .argument("<repo-url>", "GitHub repository URL")
   .option("-b, --branch <branch>", "Branch to analyze", "")
   .option(
@@ -309,6 +535,14 @@ program
   .option("--json-only", "Only generate repo_facts.json, skip markdown docs")
   .option("--stats", "Show detailed statistics after generation")
   .option("-v, --verbose", "Show detailed progress including tool calls")
+  // New feature flags
+  .option("-i, --interactive", "Start interactive Q&A mode after generation")
+  .option("--transcript", "Save interactive session transcript to TRANSCRIPT.md")
+  .option("-c, --compare <ref>", "Compare with another git ref (tag, branch, commit)")
+  .option("--create-issues", "Create GitHub issues from FIRST_TASKS.md")
+  .option("--dry-run", "Preview issues without creating (use with --create-issues)")
+  .option("-s, --style <style>", "Output style: startup, enterprise, oss, devops", "oss")
+  .option("--render-diagrams [format]", "Render diagrams.mmd to SVG/PNG (requires mermaid-cli)", "svg")
   .action(async (repoUrl: string, opts) => {
     const options: BootcampOptions = {
       branch: opts.branch,
@@ -322,6 +556,15 @@ program
       keepTemp: opts.keepTemp || false,
       jsonOnly: opts.jsonOnly || false,
       stats: opts.stats || false,
+      // New options
+      interactive: opts.interactive || false,
+      transcript: opts.transcript || false,
+      compare: opts.compare,
+      createIssues: opts.createIssues || false,
+      dryRun: opts.dryRun || false,
+      style: opts.style as StylePack,
+      renderDiagrams: opts.renderDiagrams !== undefined,
+      diagramFormat: (opts.renderDiagrams === true ? "svg" : opts.renderDiagrams) as DiagramFormat,
     };
 
     if (!["onboarding", "architecture", "contributing", "all"].includes(options.focus)) {
@@ -334,7 +577,32 @@ program
       process.exit(1);
     }
 
+    if (options.style && !["startup", "enterprise", "oss", "devops"].includes(options.style)) {
+      console.error(chalk.red(`Invalid style: ${options.style}. Use: startup, enterprise, oss, devops`));
+      process.exit(1);
+    }
+
     await run(repoUrl, options);
+  });
+
+// Ask subcommand
+program
+  .command("ask <repo-url>")
+  .description("Start interactive Q&A mode without full generation")
+  .option("-b, --branch <branch>", "Branch to analyze")
+  .option("-v, --verbose", "Show detailed output")
+  .action(async (repoUrl: string, opts) => {
+    await runAsk(repoUrl, opts);
+  });
+
+// Web subcommand
+program
+  .command("web")
+  .alias("serve")
+  .description("Start local web demo server")
+  .option("-p, --port <port>", "Port to listen on", "3000")
+  .action((opts) => {
+    startServer(parseInt(opts.port, 10));
   });
 
 program.parse();

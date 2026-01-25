@@ -1,0 +1,30 @@
+# Source files (we ship compiled dist/)
+src/
+
+# Test files
+test/
+*.test.ts
+vitest.config.ts
+coverage/
+
+# Development files
+.git/
+.github/
+.tmp/
+.DS_Store
+*.log
+
+# Config files not needed in package
+tsconfig.json
+.gitignore
+.env*
+
+# Example outputs (too large)
+bootcamp-*/
+examples/
+
+# Editor files
+.vscode/
+.idea/
+*.swp
+*.swo

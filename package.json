@@ -7,22 +7,52 @@
   "bin": {
     "bootcamp": "dist/index.js"
   },
+  "files": [
+    "dist/**/*.js",
+    "dist/**/*.d.ts",
+    "README.md",
+    "LICENSE"
+  ],
+  "keywords": [
+    "github",
+    "copilot",
+    "onboarding",
+    "documentation",
+    "cli",
+    "developer-tools",
+    "bootcamp",
+    "repository",
+    "analyzer"
+  ],
+  "author": "Arthur Ramos",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Arthur742Ramos/repo-bootcamp.git"
+  },
+  "homepage": "https://github.com/Arthur742Ramos/repo-bootcamp#readme",
+  "bugs": {
+    "url": "https://github.com/Arthur742Ramos/repo-bootcamp/issues"
+  },
   "scripts": {
     "build": "tsc",
     "start": "tsx src/index.ts",
     "dev": "tsx watch src/index.ts",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:coverage": "vitest run --coverage"
+    "test:coverage": "vitest run --coverage",
+    "prepublishOnly": "npm run build && npm test"
   },
   "dependencies": {
     "@github/copilot-sdk": "^0.1.16",
     "chalk": "^5.3.0",
     "commander": "^12.1.0",
+    "express": "^5.2.1",
     "ora": "^8.1.0",
     "zod": "^4.3.6"
   },
   "devDependencies": {
+    "@types/express": "^5.0.6",
     "@types/node": "^22.0.0",
     "@vitest/coverage-v8": "^4.0.18",
     "tsx": "^4.19.0",

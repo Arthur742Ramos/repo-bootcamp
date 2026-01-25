@@ -242,3 +242,147 @@ describe("SecurityAnalysis with no findings", () => {
     expect(docs).toContain("security posture looks good");
   });
 });
+
+describe("edge cases", () => {
+  it("handles edge of grade boundaries", () => {
+    expect(getSecurityGrade(90)).toBe("A");
+    expect(getSecurityGrade(89.9)).toBe("B");
+    expect(getSecurityGrade(80)).toBe("B");
+    expect(getSecurityGrade(79.9)).toBe("C");
+    expect(getSecurityGrade(70)).toBe("C");
+    expect(getSecurityGrade(69.9)).toBe("D");
+    expect(getSecurityGrade(60)).toBe("D");
+    expect(getSecurityGrade(59.9)).toBe("F");
+  });
+
+  it("handles negative scores", () => {
+    expect(getSecurityGrade(-10)).toBe("F");
+  });
+
+  it("handles scores over 100", () => {
+    expect(getSecurityGrade(110)).toBe("A");
+  });
+
+  it("handles empty repo name", () => {
+    const minimalAnalysis: SecurityAnalysis = {
+      score: 50,
+      authPatterns: [],
+      securityDeps: [],
+      findings: [],
+      secretsHandling: {
+        envFiles: [],
+        configFiles: [],
+        gitignoreSecrets: false,
+        hasEnvExample: false,
+      },
+      headers: {
+        hasHelmet: false,
+        hasCors: false,
+        hasCSP: false,
+      },
+      hasRateLimiting: false,
+      hasInputValidation: false,
+      hasSqlInjectionPrevention: false,
+    };
+    const docs = generateSecurityDocs(minimalAnalysis, "");
+    expect(docs).toContain("# Security Overview");
+  });
+
+  it("handles special characters in repo name", () => {
+    const minimalAnalysis: SecurityAnalysis = {
+      score: 75,
+      authPatterns: [],
+      securityDeps: [],
+      findings: [],
+      secretsHandling: {
+        envFiles: [],
+        configFiles: [],
+        gitignoreSecrets: true,
+        hasEnvExample: true,
+      },
+      headers: {
+        hasHelmet: false,
+        hasCors: false,
+        hasCSP: false,
+      },
+      hasRateLimiting: false,
+      hasInputValidation: true,
+      hasSqlInjectionPrevention: true,
+    };
+    const docs = generateSecurityDocs(minimalAnalysis, "@org/my-pkg");
+    expect(docs).toContain("@org/my-pkg");
+  });
+
+  it("handles high severity findings", () => {
+    const highSeverityAnalysis: SecurityAnalysis = {
+      score: 55,
+      authPatterns: [],
+      securityDeps: [],
+      findings: [
+        {
+          category: "XSS",
+          title: "Script injection",
+          description: "User input not sanitized",
+          severity: "high",
+          file: "src/render.ts",
+          line: 100,
+          recommendation: "Sanitize input",
+        },
+      ],
+      secretsHandling: {
+        envFiles: [],
+        configFiles: [],
+        gitignoreSecrets: true,
+        hasEnvExample: false,
+      },
+      headers: {
+        hasHelmet: false,
+        hasCors: false,
+        hasCSP: false,
+      },
+      hasRateLimiting: false,
+      hasInputValidation: false,
+      hasSqlInjectionPrevention: false,
+    };
+    const docs = generateSecurityDocs(highSeverityAnalysis, "app");
+    expect(docs).toContain("High");
+    expect(docs).toContain("Script injection");
+  });
+
+  it("handles low severity findings", () => {
+    const lowSeverityAnalysis: SecurityAnalysis = {
+      score: 90,
+      authPatterns: [],
+      securityDeps: [],
+      findings: [
+        {
+          category: "Info",
+          title: "Missing strict mode",
+          description: "Consider using strict mode",
+          severity: "low",
+          file: "src/index.ts",
+          line: 1,
+          recommendation: "Add 'use strict'",
+        },
+      ],
+      secretsHandling: {
+        envFiles: [],
+        configFiles: [],
+        gitignoreSecrets: true,
+        hasEnvExample: true,
+      },
+      headers: {
+        hasHelmet: true,
+        hasCors: true,
+        hasCSP: false,
+      },
+      hasRateLimiting: true,
+      hasInputValidation: true,
+      hasSqlInjectionPrevention: true,
+    };
+    const docs = generateSecurityDocs(lowSeverityAnalysis, "app");
+    // Low severity is grouped as "Informational" 
+    expect(docs).toContain("Informational");
+    expect(docs).toContain("1 informational findings");
+  });
+});
