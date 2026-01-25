@@ -167,6 +167,7 @@ async function run(repoUrl: string, options: BootcampOptions): Promise<void> {
   } catch (error: any) {
     progress.fail(`Analysis failed: ${error.message}`);
     console.log(chalk.yellow("\nTip: Make sure you're authenticated with GitHub Copilot"));
+    console.log(chalk.gray("Run: gh auth status"));
     process.exit(1);
   }
 

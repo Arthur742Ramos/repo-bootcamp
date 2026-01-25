@@ -12,7 +12,6 @@ import type {
   RepoFacts, 
   ChatMessage, 
   Transcript,
-  BootcampOptions 
 } from "./types.js";
 import { getRepoTools, setToolContext, clearToolContext } from "./tools.js";
 import { writeFile } from "fs/promises";

@@ -47,7 +47,8 @@ That's it. You get 12+ interconnected markdown files covering everything a new c
 
 <div align="center">
 
-![Repo Bootcamp Demo](https://raw.githubusercontent.com/Arthur742Ramos/repo-bootcamp/main/media/demo.gif)
+<!-- Demo GIF: Generate with `vhs media/demo.tape` -->
+<!-- ![Repo Bootcamp Demo](https://raw.githubusercontent.com/Arthur742Ramos/repo-bootcamp/main/media/demo.gif) -->
 
 *Generate comprehensive onboarding docs in under 60 seconds*
 
@@ -151,9 +152,9 @@ Repo Bootcamp is a showcase of the **GitHub Copilot SDK's agentic capabilities**
 The SDK enables Claude to autonomously explore repositories using custom tools:
 
 ```typescript
-import CopilotSDK from "@github/copilot-sdk";
+import { CopilotClient } from "@github/copilot-sdk";
 
-const client = new CopilotSDK({ token });
+const client = new CopilotClient();
 
 // Define tools the agent can use
 const tools = [
@@ -175,12 +176,14 @@ const tools = [
 ];
 
 // Agent autonomously decides which files to read
-const response = await client.chat({
+const session = await client.createSession({
   model: "claude-opus-4-5",
-  messages: [{ role: "user", content: systemPrompt }],
+  systemMessage: { content: systemPrompt },
   tools,
-  tool_choice: "auto"
+  streaming: true,
 });
+
+await session.sendAndWait({ prompt: analysisPrompt });
 ```
 
 ### Why This Matters
@@ -578,7 +581,7 @@ npm run test:coverage
 
 - Node.js 18+
 - GitHub Copilot SDK access (requires GitHub Copilot subscription)
-- `GITHUB_TOKEN` environment variable for API authentication
+- `GITHUB_TOKEN` environment variable for API authentication (provided by Copilot SDK)
 - `gh` CLI (optional, for `--create-issues`)
 
 ## Model Configuration
