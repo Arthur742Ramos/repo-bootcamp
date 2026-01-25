@@ -3,7 +3,8 @@
  */
 
 import { describe, it, expect } from "vitest";
-import { parseGitHubUrl } from "../src/ingest.js";
+import { parseGitHubUrl, detectFrameworksFromDeps, mergeFrameworksFromDeps } from "../src/ingest.js";
+import type { StackInfo } from "../src/types.js";
 
 describe("parseGitHubUrl", () => {
   it("parses standard GitHub URL", () => {
@@ -79,5 +80,93 @@ describe("parseGitHubUrl", () => {
     const result = parseGitHubUrl("https://github.com/owner/repo/blob/main/file.js");
     expect(result.owner).toBe("owner");
     expect(result.repo).toBe("repo");
+  });
+});
+
+describe("detectFrameworksFromDeps", () => {
+  it("detects React from dependencies", () => {
+    const frameworks = detectFrameworksFromDeps(["react", "react-dom"]);
+    expect(frameworks).toContain("React");
+  });
+
+  it("detects Express from dependencies", () => {
+    const frameworks = detectFrameworksFromDeps(["express", "cors"]);
+    expect(frameworks).toContain("Express");
+    expect(frameworks).not.toContain("cors"); // cors is not a framework
+  });
+
+  it("detects multiple frameworks", () => {
+    const frameworks = detectFrameworksFromDeps(["react", "express", "next"]);
+    expect(frameworks).toContain("React");
+    expect(frameworks).toContain("Express");
+    expect(frameworks).toContain("Next.js");
+  });
+
+  it("handles Python frameworks", () => {
+    const frameworks = detectFrameworksFromDeps(["flask", "sqlalchemy"]);
+    expect(frameworks).toContain("Flask");
+  });
+
+  it("handles Go frameworks from go.mod paths", () => {
+    const frameworks = detectFrameworksFromDeps(["github.com/gin-gonic/gin"]);
+    expect(frameworks).toContain("Gin");
+  });
+
+  it("returns empty array for non-framework dependencies", () => {
+    const frameworks = detectFrameworksFromDeps(["lodash", "moment", "chalk"]);
+    expect(frameworks).toHaveLength(0);
+  });
+
+  it("handles empty input", () => {
+    const frameworks = detectFrameworksFromDeps([]);
+    expect(frameworks).toHaveLength(0);
+  });
+});
+
+describe("mergeFrameworksFromDeps", () => {
+  it("merges new frameworks from dependencies", () => {
+    const stack: StackInfo = {
+      languages: ["TypeScript"],
+      frameworks: ["Next.js"],
+      buildSystem: "npm",
+      packageManager: "npm",
+      hasDocker: false,
+      hasCi: true,
+    };
+    
+    const result = mergeFrameworksFromDeps(stack, ["react", "express"]);
+    expect(result.frameworks).toContain("Next.js"); // existing
+    expect(result.frameworks).toContain("React");
+    expect(result.frameworks).toContain("Express");
+  });
+
+  it("does not duplicate existing frameworks", () => {
+    const stack: StackInfo = {
+      languages: ["TypeScript"],
+      frameworks: ["React"],
+      buildSystem: "npm",
+      packageManager: "npm",
+      hasDocker: false,
+      hasCi: true,
+    };
+    
+    const result = mergeFrameworksFromDeps(stack, ["react", "react-dom"]);
+    const reactCount = result.frameworks.filter(f => f === "React").length;
+    expect(reactCount).toBe(1);
+  });
+
+  it("handles case-insensitive matching for deduplication", () => {
+    const stack: StackInfo = {
+      languages: ["TypeScript"],
+      frameworks: ["REACT"], // uppercase
+      buildSystem: "npm",
+      packageManager: "npm",
+      hasDocker: false,
+      hasCi: true,
+    };
+    
+    const result = mergeFrameworksFromDeps(stack, ["react"]);
+    // Should not add React again since REACT already exists
+    expect(result.frameworks).toHaveLength(1);
   });
 });

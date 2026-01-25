@@ -195,6 +195,49 @@ export function generateArchitecture(facts: RepoFacts): string {
     ?.map((a) => `- **${a.name}**: ${a.description}`)
     .join("\n") || "_None documented_";
 
+  // Generate code examples section
+  let codeExamplesSection = "";
+  if (facts.architecture.codeExamples && facts.architecture.codeExamples.length > 0) {
+    const examples = facts.architecture.codeExamples
+      .map((ex) => {
+        // Detect language from file extension
+        const ext = ex.file.split('.').pop() || '';
+        const langMap: Record<string, string> = {
+          ts: "typescript",
+          tsx: "typescript",
+          js: "javascript",
+          jsx: "javascript",
+          py: "python",
+          go: "go",
+          rs: "rust",
+          java: "java",
+          rb: "ruby",
+          php: "php",
+          cs: "csharp",
+          cpp: "cpp",
+          c: "c",
+        };
+        const lang = langMap[ext] || ext;
+        
+        return `### ${ex.title}
+
+**File:** \`${ex.file}\`
+
+\`\`\`${lang}
+${ex.code}
+\`\`\`
+
+${ex.explanation}`;
+      })
+      .join("\n\n");
+    
+    codeExamplesSection = `## Code Examples
+
+${examples}
+
+`;
+  }
+
   // Generate Mermaid diagram
   const mermaidDiagram = generateMermaidDiagram(facts);
 
@@ -215,7 +258,7 @@ ${mermaidDiagram}
 
 ${components}
 
-## Data Flow
+${codeExamplesSection}## Data Flow
 
 ${facts.architecture.dataFlow || "_Data flow not documented_"}
 
@@ -227,7 +270,9 @@ ${abstractions}
 
 | Path | Type | Description |
 |------|------|-------------|
-${facts.structure.entrypoints.map((e) => `| \`${e.path}\` | ${e.type} | ${e.description || "-"} |`).join("\n")}
+${facts.structure.entrypoints.length > 0
+  ? facts.structure.entrypoints.map((e) => `| \`${e.path}\` | ${e.type} | ${e.description || "-"} |`).join("\n")
+  : "| _None detected_ | - | - |"}
 
 ## Where to Change What
 
@@ -305,13 +350,17 @@ ${dirs}
 
 | Directory | Purpose |
 |-----------|---------|
-${facts.structure.testDirs.map((d) => `| \`${d}\` | Test files |`).join("\n")}
+${facts.structure.testDirs.length > 0 
+  ? facts.structure.testDirs.map((d) => `| \`${d}\` | Test files |`).join("\n")
+  : "| _None detected_ | - |"}
 
 ## CI/CD
 
 | Workflow | Triggers |
 |----------|----------|
-${facts.ci.workflows.map((w) => `| \`${w.file}\` | ${w.triggers.join(", ")} |`).join("\n")}
+${facts.ci.workflows.length > 0
+  ? facts.ci.workflows.map((w) => `| \`${w.file}\` | ${w.triggers.join(", ") || "-"} |`).join("\n")
+  : "| _None detected_ | - |"}
 
 ## Reading Order for New Contributors
 

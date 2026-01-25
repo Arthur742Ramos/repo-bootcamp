@@ -128,6 +128,7 @@ Return a JSON object with this exact structure. Include "sources" arrays citing 
     "components": [{"name": "", "description": "", "directory": ""}],
     "dataFlow": "",
     "keyAbstractions": [{"name": "", "description": ""}],
+    "codeExamples": [{"title": "", "file": "", "code": "", "explanation": ""}],
     "sources": []
   },
   "firstTasks": [
@@ -155,6 +156,7 @@ Target audience: ${options.audience}
 
 Provide at least 8-10 first tasks of varying difficulty. Be specific about file paths.
 Set runbook.applicable = false for libraries/tools that aren't deployed as services.
+Include 2-4 codeExamples showing key patterns/usage (short snippets of 5-15 lines with explanations).
 
 REMEMBER: Limit tool calls. After reading key files, produce output immediately. Don't over-research.`;
 }

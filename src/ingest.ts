@@ -172,16 +172,25 @@ function detectStack(files: FileInfo[]): StackInfo {
   }
 
   // Framework/build system detection from config files
+  // NOTE: Frameworks like React, Express, Flask are NOT detected by file path patterns
+  // as that causes false positives. They should be detected via dependency analysis (deps.ts).
+  // Only config files that definitively indicate framework usage are listed here.
   const configPatterns: Record<string, { file: RegExp | string; type: "framework" | "build" | "pm" }> = {
     "Next.js": { file: "next.config.js", type: "framework" },
     "Next.js (mjs)": { file: "next.config.mjs", type: "framework" },
-    React: { file: /react/, type: "framework" },
+    "Next.js (ts)": { file: "next.config.ts", type: "framework" },
     Vue: { file: "vue.config.js", type: "framework" },
+    "Nuxt.js": { file: "nuxt.config.js", type: "framework" },
+    "Nuxt.js (ts)": { file: "nuxt.config.ts", type: "framework" },
     Angular: { file: "angular.json", type: "framework" },
-    Express: { file: /express/, type: "framework" },
     Django: { file: "manage.py", type: "framework" },
-    Flask: { file: /flask/, type: "framework" },
     Rails: { file: "Gemfile", type: "framework" },
+    Astro: { file: "astro.config.mjs", type: "framework" },
+    "Astro (ts)": { file: "astro.config.ts", type: "framework" },
+    Remix: { file: "remix.config.js", type: "framework" },
+    SvelteKit: { file: "svelte.config.js", type: "framework" },
+    Vite: { file: "vite.config.ts", type: "build" },
+    "Vite (js)": { file: "vite.config.js", type: "build" },
     npm: { file: "package-lock.json", type: "pm" },
     yarn: { file: "yarn.lock", type: "pm" },
     pnpm: { file: "pnpm-lock.yaml", type: "pm" },
@@ -191,6 +200,7 @@ function detectStack(files: FileInfo[]): StackInfo {
     cargo: { file: "Cargo.toml", type: "build" },
     maven: { file: "pom.xml", type: "build" },
     gradle: { file: "build.gradle", type: "build" },
+    "gradle (kts)": { file: "build.gradle.kts", type: "build" },
     make: { file: "Makefile", type: "build" },
     Lake: { file: "lakefile.toml", type: "build" },
     "Lake (lean)": { file: "lakefile.lean", type: "build" },
@@ -200,6 +210,10 @@ function detectStack(files: FileInfo[]): StackInfo {
     sbt: { file: "build.sbt", type: "build" },
     CMake: { file: "CMakeLists.txt", type: "build" },
     zig: { file: "build.zig", type: "build" },
+    Webpack: { file: "webpack.config.js", type: "build" },
+    Rollup: { file: "rollup.config.js", type: "build" },
+    esbuild: { file: "esbuild.config.js", type: "build" },
+    tsup: { file: "tsup.config.ts", type: "build" },
   };
 
   for (const [name, { file, type }] of Object.entries(configPatterns)) {
@@ -209,12 +223,14 @@ function detectStack(files: FileInfo[]): StackInfo {
         : filePaths.some((p) => file.test(p));
 
     if (matches) {
-      if (type === "framework" && !stack.frameworks.includes(name.replace(" (mjs)", ""))) {
-        stack.frameworks.push(name.replace(" (mjs)", ""));
+      // Normalize framework names by removing variant suffixes like (mjs), (ts), etc.
+      const normalizedName = name.replace(/\s*\([^)]+\)$/, "");
+      if (type === "framework" && !stack.frameworks.includes(normalizedName)) {
+        stack.frameworks.push(normalizedName);
       } else if (type === "build" && !stack.buildSystem) {
-        stack.buildSystem = name;
+        stack.buildSystem = normalizedName;
       } else if (type === "pm" && !stack.packageManager) {
-        stack.packageManager = name;
+        stack.packageManager = normalizedName;
       }
     }
   }
@@ -540,4 +556,97 @@ export function listFilesByPattern(files: FileInfo[], pattern: string): string[]
 
   const regex = new RegExp(`^${regexPattern}$`);
   return files.filter((f) => !f.isDirectory && regex.test(f.path)).map((f) => f.path);
+}
+
+/**
+ * Known frameworks that can be detected from dependencies
+ * Maps dependency name to display name
+ */
+const DEPENDENCY_FRAMEWORKS: Record<string, string> = {
+  // JavaScript/TypeScript frameworks
+  "react": "React",
+  "react-dom": "React",
+  "vue": "Vue",
+  "angular": "Angular",
+  "@angular/core": "Angular",
+  "svelte": "Svelte",
+  "solid-js": "Solid",
+  "preact": "Preact",
+  "express": "Express",
+  "fastify": "Fastify",
+  "hono": "Hono",
+  "koa": "Koa",
+  "hapi": "Hapi",
+  "@hapi/hapi": "Hapi",
+  "nest": "NestJS",
+  "@nestjs/core": "NestJS",
+  "next": "Next.js",
+  "gatsby": "Gatsby",
+  "nuxt": "Nuxt.js",
+  "remix": "Remix",
+  "@remix-run/node": "Remix",
+  "astro": "Astro",
+  "electron": "Electron",
+  // Python frameworks
+  "flask": "Flask",
+  "django": "Django",
+  "fastapi": "FastAPI",
+  "tornado": "Tornado",
+  "pyramid": "Pyramid",
+  "bottle": "Bottle",
+  // Go frameworks (from go.mod require)
+  "github.com/gin-gonic/gin": "Gin",
+  "github.com/gorilla/mux": "Gorilla Mux",
+  "github.com/labstack/echo": "Echo",
+  "github.com/gofiber/fiber": "Fiber",
+  // Ruby frameworks
+  "rails": "Rails",
+  "sinatra": "Sinatra",
+  // Rust frameworks
+  "actix-web": "Actix Web",
+  "rocket": "Rocket",
+  "axum": "Axum",
+};
+
+/**
+ * Detect frameworks from dependency list
+ * This is more accurate than file path matching
+ */
+export function detectFrameworksFromDeps(depNames: string[]): string[] {
+  const frameworks = new Set<string>();
+  
+  for (const dep of depNames) {
+    const normalized = dep.toLowerCase();
+    if (DEPENDENCY_FRAMEWORKS[normalized]) {
+      frameworks.add(DEPENDENCY_FRAMEWORKS[normalized]);
+    }
+    // Also check the full dep name (for Go modules, etc.)
+    if (DEPENDENCY_FRAMEWORKS[dep]) {
+      frameworks.add(DEPENDENCY_FRAMEWORKS[dep]);
+    }
+  }
+  
+  return Array.from(frameworks);
+}
+
+/**
+ * Merge frameworks detected from dependencies into stack info
+ * Should be called after extractDependencies() in the main flow
+ */
+export function mergeFrameworksFromDeps(
+  stack: StackInfo,
+  depNames: string[]
+): StackInfo {
+  const depFrameworks = detectFrameworksFromDeps(depNames);
+  const existingNormalized = new Set(
+    stack.frameworks.map(f => f.toLowerCase())
+  );
+  
+  for (const framework of depFrameworks) {
+    if (!existingNormalized.has(framework.toLowerCase())) {
+      stack.frameworks.push(framework);
+    }
+  }
+  
+  return stack;
 }

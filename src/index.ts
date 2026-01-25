@@ -19,7 +19,7 @@ import chalk from "chalk";
 import { mkdir, writeFile, rm, readFile } from "fs/promises";
 import { join, basename } from "path";
 
-import { parseGitHubUrl, cloneRepo, scanRepo } from "./ingest.js";
+import { parseGitHubUrl, cloneRepo, scanRepo, mergeFrameworksFromDeps } from "./ingest.js";
 import { analyzeRepo, AnalysisStats } from "./agent.js";
 import { ProgressTracker } from "./progress.js";
 import { extractDependencies, generateDependencyDocs } from "./deps.js";
@@ -185,6 +185,15 @@ async function run(repoUrl: string, options: BootcampOptions): Promise<void> {
   try {
     // Extract dependencies
     const deps = await extractDependencies(repoPath);
+    
+    // Merge frameworks detected from dependencies into stack info
+    if (deps) {
+      const allDepNames = [
+        ...deps.runtime.map(d => d.name),
+        ...deps.dev.map(d => d.name),
+      ];
+      mergeFrameworksFromDeps(scanResult.stack, allDepNames);
+    }
     
     // Analyze security (read package.json for deps check)
     let packageJson: Record<string, unknown> | undefined;

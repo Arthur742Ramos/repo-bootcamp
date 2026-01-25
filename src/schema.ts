@@ -97,12 +97,21 @@ const KeyAbstractionSchema = z.object({
   description: z.string(),
 });
 
+// Code example schema
+const CodeExampleSchema = z.object({
+  title: z.string(),
+  file: z.string(),
+  code: z.string(),
+  explanation: z.string(),
+});
+
 // Architecture schema
 const ArchitectureSchema = z.object({
   overview: z.string().default(""),
   components: z.array(ComponentSchema).default([]),
   dataFlow: z.string().optional(),
   keyAbstractions: z.array(KeyAbstractionSchema).optional(),
+  codeExamples: z.array(CodeExampleSchema).optional(),
   sources: z.array(z.string()).optional(),
 });
 

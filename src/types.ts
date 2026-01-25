@@ -189,6 +189,7 @@ export interface RepoFacts {
     components: { name: string; description: string; directory: string }[];
     dataFlow?: string;
     keyAbstractions?: { name: string; description: string }[];
+    codeExamples?: { title: string; file: string; code: string; explanation: string }[];
     sources?: string[];
   };
   firstTasks: FirstTask[];
