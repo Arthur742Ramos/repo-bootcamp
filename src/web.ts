@@ -217,7 +217,8 @@ export function createApp(): express.Application {
     res.header("Access-Control-Allow-Headers", "Content-Type");
     res.header("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
     if (req.method === "OPTIONS") {
-      return res.sendStatus(200);
+      res.sendStatus(200);
+      return;
     }
     next();
   });
@@ -228,17 +229,19 @@ export function createApp(): express.Application {
   });
 
   // Start analysis
-  app.post("/api/analyze", async (req: Request, res: Response) => {
+  app.post("/api/analyze", async (req: Request, res: Response): Promise<void> => {
     const { repoUrl, options = {} } = req.body;
 
     if (!repoUrl) {
-      return res.status(400).json({ error: "repoUrl is required" });
+      res.status(400).json({ error: "repoUrl is required" });
+      return;
     }
 
     try {
       parseGitHubUrl(repoUrl); // Validate URL
     } catch (error: any) {
-      return res.status(400).json({ error: error.message });
+      res.status(400).json({ error: error.message });
+      return;
     }
 
     const job: AnalysisJob = {
@@ -258,11 +261,12 @@ export function createApp(): express.Application {
   });
 
   // SSE endpoint for progress
-  app.get("/api/jobs/:jobId/stream", (req: Request, res: Response) => {
+  app.get("/api/jobs/:jobId/stream", (req: Request, res: Response): void => {
     const jobId = req.params.jobId as string;
     const job = jobs.get(jobId);
     if (!job) {
-      return res.status(404).json({ error: "Job not found" });
+      res.status(404).json({ error: "Job not found" });
+      return;
     }
 
     res.setHeader("Content-Type", "text/event-stream");
@@ -295,11 +299,12 @@ export function createApp(): express.Application {
   });
 
   // Get job status
-  app.get("/api/jobs/:jobId", (req: Request, res: Response) => {
+  app.get("/api/jobs/:jobId", (req: Request, res: Response): void => {
     const jobId = req.params.jobId as string;
     const job = jobs.get(jobId);
     if (!job) {
-      return res.status(404).json({ error: "Job not found" });
+      res.status(404).json({ error: "Job not found" });
+      return;
     }
 
     res.json({
@@ -311,16 +316,18 @@ export function createApp(): express.Application {
   });
 
   // Get generated file content
-  app.get("/api/jobs/:jobId/files/:filename", async (req: Request, res: Response) => {
+  app.get("/api/jobs/:jobId/files/:filename", async (req: Request, res: Response): Promise<void> => {
     const jobId = req.params.jobId as string;
     const filename = req.params.filename as string;
     const job = jobs.get(jobId);
     if (!job || !job.result) {
-      return res.status(404).json({ error: "Job or file not found" });
+      res.status(404).json({ error: "Job or file not found" });
+      return;
     }
 
     if (!job.result.files.includes(filename)) {
-      return res.status(404).json({ error: "File not found" });
+      res.status(404).json({ error: "File not found" });
+      return;
     }
 
     try {
