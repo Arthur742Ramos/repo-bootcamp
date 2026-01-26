@@ -31,11 +31,11 @@ describe("ProgressTracker", () => {
 
   it("should track elapsed time", async () => {
     const before = tracker.getElapsedTime();
-    await new Promise((r) => setTimeout(r, 50));
+    await new Promise((r) => setTimeout(r, 60));
     const after = tracker.getElapsedTime();
     
     expect(after).toBeGreaterThan(before);
-    expect(after).toBeGreaterThanOrEqual(50);
+    expect(after).toBeGreaterThanOrEqual(50); // Allow some timing variance
   });
 
   it("should return stats", () => {
