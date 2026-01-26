@@ -17,7 +17,7 @@
 [![Node.js](https://img.shields.io/badge/node-%3E%3D18-brightgreen)](https://nodejs.org/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.6-blue)](https://www.typescriptlang.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Tests](https://img.shields.io/badge/tests-195%20passing-brightgreen)](.)
+[![Tests](https://img.shields.io/badge/tests-205%20passing-brightgreen)](.)
 
 [Features](#features) • [Quick Start](#quick-start) • [How It Uses Copilot SDK](#how-it-uses-the-github-copilot-sdk) • [Examples](#example-output)
 
@@ -127,7 +127,7 @@ Onboarding Risk: 18/100 (A) 🟢
 1. **Powered by GitHub Copilot SDK** - Leverages the official SDK for agentic AI with tool-calling
 2. **Truly Agentic** - Claude autonomously explores codebases, not just template filling
 3. **Schema Validated** - All output is validated with Zod schemas and auto-retried on failures
-4. **Production Ready** - 195 tests, TypeScript, proper error handling
+4. **Production Ready** - 205 tests, TypeScript, proper error handling
 5. **Full Feature Set** - Interactive mode, web UI, GitHub integration, version diffing
 6. **Beautiful Output** - Mermaid diagrams, structured markdown, professional formatting
 
@@ -136,7 +136,7 @@ Onboarding Risk: 18/100 (A) 🟢
 | Metric | Value |
 |--------|-------|
 | Generated files | 12+ |
-| Test coverage | 195 tests |
+| Test coverage | 205 tests |
 | Source files | 18 modules |
 | Lines of code | 7,500+ |
 | Languages supported | 10+ |
@@ -375,6 +375,15 @@ bootcamp https://github.com/owner/repo \
   --stats
 ```
 
+### Fast Mode
+
+```bash
+# Generate bootcamp quickly (~15-30s instead of ~60s)
+bootcamp https://github.com/owner/repo --fast
+
+# Fast mode skips tool-calling and inlines key files directly
+```
+
 ### Interactive Q&A Mode
 
 ```bash
@@ -455,8 +464,10 @@ npm install -g @mermaid-js/mermaid-cli
 | `-c, --compare <ref>` | Compare with git ref, generate DIFF.md | - |
 | `--create-issues` | Create GitHub issues from FIRST_TASKS | false |
 | `--dry-run` | Preview issues without creating | false |
-| `--render-diagrams [format]` | Render Mermaid to SVG/PNG (requires mermaid-cli) | - |
+| `--render-diagrams [format]` | Render Mermaid to SVG/PNG (requires mermaid-cli) | `svg` |
 | `--json-only` | Only generate repo_facts.json | false |
+| `--no-clone` | Use GitHub API instead of cloning (faster but limited) | false |
+| `--fast` | Fast mode: inline key files, skip tools, much faster (~15-30s) | false |
 | `--keep-temp` | Keep temporary clone | false |
 | `--stats` | Show detailed statistics | false |
 | `-v, --verbose` | Show tool calls and reasoning | false |
@@ -566,7 +577,7 @@ npm install
 # Build
 npm run build
 
-# Run tests (195 tests)
+# Run tests (205 tests)
 npm test
 
 # Watch mode
@@ -597,7 +608,7 @@ Set `--model` to override.
 - **Runtime:** Node.js 18+
 - **Language:** TypeScript 5.6
 - **AI:** GitHub Copilot SDK with Claude
-- **Testing:** Vitest (195 tests)
+- **Testing:** Vitest (205 tests)
 - **CLI:** Commander.js
 - **Validation:** Zod schemas
 - **Web:** Express 5 with SSE
