@@ -553,6 +553,7 @@ program
   .option("--dry-run", "Preview issues without creating (use with --create-issues)")
   .option("-s, --style <style>", "Output style: startup, enterprise, oss, devops", "oss")
   .option("--render-diagrams [format]", "Render diagrams.mmd to SVG/PNG (requires mermaid-cli)", "svg")
+  .option("--fast", "Fast mode: inline key files, skip tools, much faster (~15-30s)")
   .action(async (repoUrl: string, opts) => {
     const options: BootcampOptions = {
       branch: opts.branch,
@@ -566,6 +567,7 @@ program
       keepTemp: opts.keepTemp || false,
       jsonOnly: opts.jsonOnly || false,
       stats: opts.stats || false,
+      fast: opts.fast || false,
       // New options
       interactive: opts.interactive || false,
       transcript: opts.transcript || false,

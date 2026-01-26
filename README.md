@@ -47,8 +47,7 @@ That's it. You get 12+ interconnected markdown files covering everything a new c
 
 <div align="center">
 
-<!-- Demo GIF: Generate with `vhs media/demo.tape` -->
-<!-- ![Repo Bootcamp Demo](https://raw.githubusercontent.com/Arthur742Ramos/repo-bootcamp/main/media/demo.gif) -->
+https://github.com/Arthur742Ramos/repo-bootcamp/raw/main/media/demo-sonnet.mp4
 
 *Generate comprehensive onboarding docs in under 60 seconds*
 

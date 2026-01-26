@@ -15,6 +15,7 @@ export interface BootcampOptions {
   keepTemp?: boolean;
   jsonOnly?: boolean;
   stats?: boolean;
+  fast?: boolean;
   // New features
   interactive?: boolean;
   transcript?: boolean;
