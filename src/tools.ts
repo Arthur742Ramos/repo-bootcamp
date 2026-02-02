@@ -264,7 +264,9 @@ function createRepoMetadataTool(context: ToolContext): Tool<any> {
             try {
               const stats = await stat(join(dir, entry.name));
               totalSize += stats.size;
-            } catch { }
+            } catch {
+              // Ignore unreadable files
+            }
           }
         }
       }
@@ -312,8 +314,7 @@ ${gitInfo}`;
 /**
  * Get all tools for session creation
  */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export function getRepoTools(context: ToolContext): Tool<any>[] {
+export function getRepoTools(context: ToolContext): Tool<unknown>[] {
   return [
     createReadFileTool(context),
     createListFilesTool(context),
