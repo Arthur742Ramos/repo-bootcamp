@@ -8,10 +8,11 @@ import { defineTool } from "@github/copilot-sdk";
 import type { Tool } from "@github/copilot-sdk";
 import { readFile, readdir, stat } from "fs/promises";
 import { join, relative } from "path";
-import { exec } from "child_process";
+import { exec, execFile } from "child_process";
 import { promisify } from "util";
 
 const execAsync = promisify(exec);
+const execFileAsync = promisify(execFile);
 
 /**
  * Context for tool execution
@@ -219,14 +220,13 @@ export const searchTool = defineTool("search", {
     toolContext.onToolCall?.("search", { pattern, path, filePattern });
 
     try {
-      // Build ripgrep command
-      let cmd = `rg --line-number --no-heading --max-count ${maxResults}`;
+      const rgArgs = ["--line-number", "--no-heading", "--max-count", String(maxResults)];
       if (filePattern) {
-        cmd += ` --glob "${filePattern}"`;
+        rgArgs.push("--glob", filePattern);
       }
-      cmd += ` "${pattern}" "${searchPath}"`;
+      rgArgs.push(pattern, searchPath);
 
-      const { stdout } = await execAsync(cmd, { timeout: 30000 });
+      const { stdout } = await execFileAsync("rg", rgArgs, { timeout: 30000 });
 
       // Make paths relative
       const lines = stdout.split("\n").filter(Boolean).map(line => {
