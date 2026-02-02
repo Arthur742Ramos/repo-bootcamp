@@ -62,7 +62,10 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Check TypeScript
+      - name: Run lint
+        run: npm run lint
+
+      - name: Run type check
         run: npm run build
 
   build:
