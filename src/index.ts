@@ -42,8 +42,9 @@ import {
   generateDiagrams,
 } from "./generator.js";
 import type { BootcampOptions, RepoFacts, ScanResult, RepoInfo, StylePack } from "./types.js";
+import pkg from "../package.json" with { type: "json" };
 
-const VERSION = "1.0.0";
+const VERSION = pkg.version;
 
 interface RunStats {
   cloneTime: number;
