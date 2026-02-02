@@ -8,7 +8,7 @@ import chalk from "chalk";
 import * as fs from "fs";
 import * as path from "path";
 import type { RepoFacts, ScanResult, RepoInfo, BootcampOptions } from "./types.js";
-import { getRepoTools, setToolContext, clearToolContext } from "./tools.js";
+import { getRepoTools } from "./tools.js";
 import { validateRepoFacts, getMissingFieldsSummary, type ValidatedRepoFacts } from "./schema.js";
 
 /**
@@ -547,7 +547,7 @@ export async function analyzeRepo(
   }
 
   // Standard mode with tools
-  setToolContext({
+  const tools = getRepoTools({
     repoPath,
     verbose: options.verbose,
     onToolCall: (name, args) => {
@@ -567,9 +567,6 @@ export async function analyzeRepo(
   });
 
   try {
-    // Get tools for the session
-    const tools = getRepoTools();
-
     // Create session with best available model and tools
     const { session, model } = await createSessionWithFallback(
       client,
@@ -706,12 +703,10 @@ No markdown, no explanations, just the JSON object starting with { and ending wi
     };
 
     await client.stop();
-    clearToolContext();
 
     return { facts, stats };
   } catch (error) {
     await client.stop();
-    clearToolContext();
     throw error;
   }
 }

@@ -13,7 +13,7 @@ import type {
   ChatMessage, 
   Transcript,
 } from "./types.js";
-import { getRepoTools, setToolContext, clearToolContext } from "./tools.js";
+import { getRepoTools } from "./tools.js";
 import { writeFile } from "fs/promises";
 import { join } from "path";
 
@@ -110,8 +110,7 @@ export class InteractiveSession {
    * Initialize the Copilot session
    */
   async initialize(): Promise<void> {
-    // Set up tool context
-    setToolContext({
+    const tools = getRepoTools({
       repoPath: this.repoPath,
       verbose: this.verbose,
       onToolCall: (name, args) => {
@@ -125,8 +124,6 @@ export class InteractiveSession {
         }
       },
     });
-
-    const tools = getRepoTools();
 
     // Create session
     this.session = await this.client.createSession({
@@ -219,7 +216,6 @@ export class InteractiveSession {
    * Stop the session
    */
   async stop(): Promise<void> {
-    clearToolContext();
     if (this.client) {
       await this.client.stop();
     }
