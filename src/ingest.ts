@@ -5,7 +5,7 @@
 
 import { exec, execFile } from "child_process";
 import { promisify } from "util";
-import { readdir, stat, readFile } from "fs/promises";
+import { readdir, stat, readFile, rm } from "fs/promises";
 import { join, basename } from "path";
 import type { RepoInfo, FileInfo, StackInfo, Command, CIWorkflow, ScanResult } from "./types.js";
 
@@ -54,7 +54,7 @@ export async function cloneRepo(
   cloneArgs.push(`${repoInfo.url}.git`, clonePath);
 
   try {
-    await execAsync(`rm -rf "${clonePath}"`);
+    await rm(clonePath, { recursive: true, force: true });
     await execFileAsync("git", cloneArgs, { timeout: 120000 });
 
     // Get the actual branch name
