@@ -3,13 +3,14 @@
  * Handles cloning repos and scanning files
  */
 
-import { exec } from "child_process";
+import { exec, execFile } from "child_process";
 import { promisify } from "util";
 import { readdir, stat, readFile } from "fs/promises";
 import { join, basename } from "path";
 import type { RepoInfo, FileInfo, StackInfo, Command, CIWorkflow, ScanResult } from "./types.js";
 
 const execAsync = promisify(exec);
+const execFileAsync = promisify(execFile);
 
 /**
  * Parse a GitHub URL into owner/repo components
@@ -46,14 +47,15 @@ export async function cloneRepo(
   branch?: string
 ): Promise<string> {
   const clonePath = join(targetDir, ".tmp", repoInfo.repo);
-  const branchArg = branch ? `--branch ${branch}` : "";
+  const cloneArgs = ["clone", "--depth", "1"];
+  if (branch) {
+    cloneArgs.push("--branch", branch);
+  }
+  cloneArgs.push(`${repoInfo.url}.git`, clonePath);
 
   try {
     await execAsync(`rm -rf "${clonePath}"`);
-    await execAsync(
-      `git clone --depth 1 ${branchArg} "${repoInfo.url}.git" "${clonePath}"`,
-      { timeout: 120000 }
-    );
+    await execFileAsync("git", cloneArgs, { timeout: 120000 });
 
     // Get the actual branch name
     const { stdout } = await execAsync("git rev-parse --abbrev-ref HEAD", {
