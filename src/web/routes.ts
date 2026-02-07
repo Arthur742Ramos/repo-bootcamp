@@ -9,6 +9,7 @@ import { readCache, writeCache } from "../cache.js";
 import { extractDependencies, generateDependencyDocs } from "../deps.js";
 import { analyzeSecurityPatterns, generateSecurityDocs, getSecurityGrade } from "../security.js";
 import { generateTechRadar, generateRadarDocs } from "../radar.js";
+import { buildImportGraph, analyzeChangeImpact, generateImpactDocs, getKeyFilesForImpact } from "../impact.js";
 import { applyOutputFormat, type OutputFormat } from "../formatter.js";
 import {
   generateBootcamp,
@@ -206,12 +207,22 @@ async function runAnalysis(job: AnalysisJob, options: Partial<BootcampOptions>):
       )
     );
 
+    const impactsPromise = buildImportGraph(repoPath, scanResult.files).then((importGraph) => {
+      const keyFiles = getKeyFilesForImpact(scanResult.files);
+      return Promise.all(
+        keyFiles.slice(0, 10).map((file) =>
+          analyzeChangeImpact(repoPath, scanResult.files, file, importGraph)
+        )
+      );
+    });
+
     const analysisPromise = Promise.all([
       depsPromise,
       securityPromise,
       radarPromise,
+      impactsPromise,
     ]);
-    const [deps, security, radar] = await analysisPromise;
+    const [deps, security, radar, impacts] = await analysisPromise;
 
     // Generate all docs
     const documents = [
@@ -231,6 +242,13 @@ async function runAnalysis(job: AnalysisJob, options: Partial<BootcampOptions>):
       documents.push({
         name: "DEPENDENCIES.md",
         content: generateDependencyDocs(deps, repoInfo.repo),
+      });
+    }
+
+    if (impacts.length > 0) {
+      documents.push({
+        name: "IMPACT.md",
+        content: generateImpactDocs(impacts, repoInfo.repo),
       });
     }
 
