@@ -68,9 +68,15 @@ export async function cloneRepo(
     });
     repoInfo.branch = stdout.trim();
 
+    // Get the commit SHA for caching
+    const { stdout: sha } = await execAsync("git rev-parse HEAD", {
+      cwd: clonePath,
+    });
+    repoInfo.commitSha = sha.trim();
+
     return clonePath;
-  } catch (error: any) {
-    throw new Error(`Failed to clone repository: ${error.message}`);
+  } catch (error: unknown) {
+    throw new Error(`Failed to clone repository: ${(error as Error).message}`);
   }
 }
 

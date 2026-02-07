@@ -322,7 +322,7 @@ export async function runInteractiveMode(
           console.log(chalk.gray("\nAssistant: "));
           await session.ask(question);
           console.log();
-        } catch (error: any) {
+        } catch (error: unknown) {
           console.error(chalk.red(`Error: ${error.message}`));
         }
 
@@ -331,7 +331,7 @@ export async function runInteractiveMode(
     };
 
     askQuestion();
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error(chalk.red(`Failed to initialize session: ${error.message}`));
     await session.stop();
     throw error;

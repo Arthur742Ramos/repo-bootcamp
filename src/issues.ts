@@ -42,7 +42,7 @@ export async function checkGhAuth(): Promise<{ available: boolean; authenticated
   try {
     await execFileAsync("gh", ["auth", "status"]);
     return { available: true, authenticated: true };
-  } catch (error: any) {
+  } catch (error: unknown) {
     return { 
       available: true, 
       authenticated: false, 
@@ -143,7 +143,7 @@ async function createIssue(
       url,
       payload,
     };
-  } catch (error: any) {
+  } catch (error: unknown) {
     return {
       success: false,
       error: error.message,

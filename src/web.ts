@@ -211,7 +211,7 @@ async function runAnalysis(job: AnalysisJob, options: Partial<BootcampOptions>):
       data: job.result,
     });
 
-  } catch (error: any) {
+  } catch (error: unknown) {
     job.status = "error";
     job.completedAt = Date.now();
     job.error = error.message;
@@ -254,7 +254,7 @@ export function createApp(): express.Application {
 
     try {
       parseGitHubUrl(repoUrl); // Validate URL
-    } catch (error: any) {
+    } catch (error: unknown) {
       res.status(400).json({ error: error.message });
       return;
     }
@@ -349,7 +349,7 @@ export function createApp(): express.Application {
       const content = await readFile(join(job.result.outputDir, filename), "utf-8");
       res.setHeader("Content-Type", filename.endsWith(".json") ? "application/json" : "text/markdown");
       res.send(content);
-    } catch (error: any) {
+    } catch (error: unknown) {
       res.status(500).json({ error: error.message });
     }
   });

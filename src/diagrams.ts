@@ -152,7 +152,7 @@ export async function renderDiagram(
     await execFileAsync(cmd, fullArgs, { timeout: 30000 });
 
     return { success: true };
-  } catch (error: any) {
+  } catch (error: unknown) {
     return {
       success: false,
       error: error.message || "Unknown error rendering diagram",
@@ -216,7 +216,7 @@ export async function renderMermaidFile(
         result.success = false;
       }
     }
-  } catch (error: any) {
+  } catch (error: unknown) {
     result.success = false;
     result.error = error.message;
   }

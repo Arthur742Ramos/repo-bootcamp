@@ -26,12 +26,14 @@ import { extractDependencies, generateDependencyDocs } from "./deps.js";
 import { analyzeSecurityPatterns, generateSecurityDocs, getSecurityGrade } from "./security.js";
 import { generateTechRadar, generateRadarDocs, getRiskEmoji } from "./radar.js";
 import { buildImportGraph, analyzeChangeImpact, generateImpactDocs, getKeyFilesForImpact } from "./impact.js";
-import { runInteractiveMode, quickAsk } from "./interactive.js";
+import { runInteractiveMode } from "./interactive.js";
 import { createIssuesFromTasks, generateIssuePreview } from "./issues.js";
 import { analyzeDiff, generateDiffDocs } from "./diff.js";
 import { startServer } from "./web.js";
-import { loadConfig, getStyleConfig, loadPlugins, runPlugins, STYLE_PACKS } from "./plugins.js";
-import { renderOutputDiagrams, isMermaidCliAvailable, DiagramFormat } from "./diagrams.js";
+import { startWatch } from "./watch.js";
+import { loadConfig, getStyleConfig, loadPlugins, runPlugins } from "./plugins.js";
+import { renderOutputDiagrams, DiagramFormat } from "./diagrams.js";
+import { readCache, writeCache } from "./cache.js";
 import {
   generateBootcamp,
   generateOnboarding,
@@ -101,8 +103,8 @@ async function run(repoUrl: string, options: BootcampOptions): Promise<void> {
     repoInfo = parseGitHubUrl(repoUrl);
     console.log(chalk.white(`Target: ${chalk.bold(repoInfo.fullName)}`));
     console.log();
-  } catch (error: any) {
-    console.error(chalk.red(`Invalid URL: ${error.message}`));
+  } catch (error: unknown) {
+    console.error(chalk.red(`Invalid URL: ${(error as Error).message}`));
     process.exit(1);
   }
 
@@ -117,8 +119,8 @@ async function run(repoUrl: string, options: BootcampOptions): Promise<void> {
     repoPath = await cloneRepo(repoInfo, process.cwd(), options.branch, options.fullClone);
     runStats.cloneTime = Date.now() - cloneStart;
     progress.succeed(`Cloned ${repoInfo.fullName} (branch: ${repoInfo.branch})`);
-  } catch (error: any) {
-    progress.fail(`Clone failed: ${error.message}`);
+  } catch (error: unknown) {
+    progress.fail(`Clone failed: ${(error as Error).message}`);
     process.exit(1);
   }
 
@@ -131,8 +133,8 @@ async function run(repoUrl: string, options: BootcampOptions): Promise<void> {
     runStats.scanTime = Date.now() - scanStart;
     runStats.filesScanned = scanResult.files.length;
     progress.succeed(`Scanned ${scanResult.files.length} files (${scanResult.keySourceFiles.size} key files read)`);
-  } catch (error: any) {
-    progress.fail(`Scan failed: ${error.message}`);
+  } catch (error: unknown) {
+    progress.fail(`Scan failed: ${(error as Error).message}`);
     process.exit(1);
   }
 
@@ -148,35 +150,71 @@ async function run(repoUrl: string, options: BootcampOptions): Promise<void> {
   // Analyze with Copilot SDK
   const analysisStart = Date.now();
   progress.startPhase("analyze");
-  let facts: RepoFacts;
-  let analysisStats: AnalysisStats;
-  try {
-    const result = await analyzeRepo(repoPath, repoInfo, scanResult, options, (msg) => {
-      // Track tool calls
-      if (msg.startsWith("Tool:")) {
-        const toolName = msg.replace("Tool:", "").trim();
-        progress.recordToolCall(toolName);
+  let facts!: RepoFacts;
+  let analysisStats!: AnalysisStats;
+
+  // Check cache first
+  const useCache = !options.noCache && !!repoInfo.commitSha;
+  let cacheHit = false;
+
+  if (useCache) {
+    const cached = await readCache(repoInfo.fullName, repoInfo.commitSha!);
+    if (cached) {
+      facts = cached;
+      cacheHit = true;
+      analysisStats = {
+        model: "cached",
+        toolCalls: [],
+        totalEvents: 0,
+        responseLength: 0,
+        startTime: analysisStart,
+        endTime: Date.now(),
+      };
+      runStats.analysisTime = Date.now() - analysisStart;
+      runStats.toolCalls = 0;
+      runStats.model = "cached";
+      progress.succeed(`Analysis loaded from cache (${repoInfo.commitSha!.substring(0, 7)})`);
+    }
+  }
+
+  if (!cacheHit) {
+    try {
+      const result = await analyzeRepo(repoPath, repoInfo, scanResult, options, (msg) => {
+        // Track tool calls
+        if (msg.startsWith("Tool:")) {
+          const toolName = msg.replace("Tool:", "").trim();
+          progress.recordToolCall(toolName);
+        }
+        progress.update(msg);
+      });
+      facts = result.facts;
+      analysisStats = result.stats;
+      runStats.analysisTime = Date.now() - analysisStart;
+      runStats.toolCalls = analysisStats.toolCalls.length;
+      runStats.model = analysisStats.model;
+      progress.succeed(`Analysis complete`);
+
+      // Write to cache
+      if (useCache) {
+        try {
+          await writeCache(repoInfo.fullName, repoInfo.commitSha!, facts);
+        } catch {
+          // Cache write failure is non-fatal
+        }
       }
-      progress.update(msg);
-    });
-    facts = result.facts;
-    analysisStats = result.stats;
-    runStats.analysisTime = Date.now() - analysisStart;
-    runStats.toolCalls = analysisStats.toolCalls.length;
-    runStats.model = analysisStats.model;
-    progress.succeed(`Analysis complete`);
-  } catch (error: any) {
-    progress.fail(`Analysis failed: ${error.message}`);
-    console.log(chalk.yellow("\nTip: Make sure you're authenticated with GitHub Copilot"));
-    console.log(chalk.gray("Run: gh auth status"));
-    process.exit(1);
+    } catch (error: unknown) {
+      progress.fail(`Analysis failed: ${(error as Error).message}`);
+      console.log(chalk.yellow("\nTip: Make sure you're authenticated with GitHub Copilot"));
+      console.log(chalk.gray("Run: gh auth status"));
+      process.exit(1);
+    }
   }
 
   // Create output directory
   try {
     await mkdir(outputDir, { recursive: true });
-  } catch (error: any) {
-    console.error(chalk.red(`Failed to create output directory: ${error.message}`));
+  } catch (error: unknown) {
+    console.error(chalk.red(`Failed to create output directory: ${(error as Error).message}`));
     process.exit(1);
   }
 
@@ -231,8 +269,8 @@ async function run(repoUrl: string, options: BootcampOptions): Promise<void> {
       try {
         progress.update("Analyzing diff...");
         diffSummary = await analyzeDiff(repoPath, options.compare, "HEAD");
-      } catch (error: any) {
-        console.log(chalk.yellow(`  Warning: Could not generate diff: ${error.message}`));
+      } catch (error: unknown) {
+        console.log(chalk.yellow(`  Warning: Could not generate diff: ${(error as Error).message}`));
       }
     }
 
@@ -355,8 +393,8 @@ async function run(repoUrl: string, options: BootcampOptions): Promise<void> {
       }
     }
 
-  } catch (error: any) {
-    progress.fail(`Document generation failed: ${error.message}`);
+  } catch (error: unknown) {
+    progress.fail(`Document generation failed: ${(error as Error).message}`);
     process.exit(1);
   }
 
@@ -364,8 +402,8 @@ async function run(repoUrl: string, options: BootcampOptions): Promise<void> {
   const interactiveRepoPath = repoPath;
   const interactiveScanResult = scanResult;
 
-  // Cleanup temporary clone (unless keeping for interactive mode)
-  if (!options.keepTemp && !options.interactive) {
+  // Cleanup temporary clone (unless keeping for interactive or watch mode)
+  if (!options.keepTemp && !options.interactive && !options.watch) {
     progress.startPhase("cleanup");
     try {
       await rm(repoPath, { recursive: true, force: true });
@@ -437,6 +475,58 @@ async function run(repoUrl: string, options: BootcampOptions): Promise<void> {
   console.log(chalk.white("  🚀 ") + chalk.white.bold("Next step: ") + chalk.cyan(`open ${outputDir}/BOOTCAMP.md`));
   console.log();
 
+  // Start watch mode if requested
+  if (options.watch) {
+    const watchHandle = startWatch(repoPath, {
+      intervalSeconds: options.watchInterval || 30,
+      verbose: options.verbose,
+      onChangeDetected: async () => {
+        // Re-run scan → analyze → generate on the existing clone
+        const wp = new ProgressTracker(options.verbose);
+
+        wp.startPhase("scan", `max ${options.maxFiles} files`);
+        const newScan = await scanRepo(repoPath, options.maxFiles);
+        wp.succeed(`Scanned ${newScan.files.length} files`);
+
+        wp.startPhase("analyze");
+        const result = await analyzeRepo(repoPath, repoInfo, newScan, options, (msg) => {
+          wp.update(msg);
+        });
+        wp.succeed("Analysis complete");
+
+        wp.startPhase("generate");
+        const docs = [
+          { name: "BOOTCAMP.md", content: generateBootcamp(result.facts, options) },
+          { name: "ONBOARDING.md", content: generateOnboarding(result.facts) },
+          { name: "ARCHITECTURE.md", content: generateArchitecture(result.facts) },
+          { name: "CODEMAP.md", content: generateCodemap(result.facts) },
+          { name: "FIRST_TASKS.md", content: generateFirstTasks(result.facts) },
+          { name: "RUNBOOK.md", content: generateRunbook(result.facts) },
+          { name: "diagrams.mmd", content: generateDiagrams(result.facts) },
+          { name: "repo_facts.json", content: JSON.stringify(result.facts, null, 2) },
+        ];
+        for (const doc of docs) {
+          await writeFile(join(outputDir, doc.name), doc.content, "utf-8");
+        }
+        wp.succeed(`Regenerated ${docs.length} files`);
+        wp.stop();
+      },
+    });
+
+    // Clean up on SIGINT/SIGTERM
+    const onSignal = () => {
+      watchHandle.stop();
+      console.log(chalk.dim("\n  Watch mode stopped."));
+      process.exit(0);
+    };
+    process.on("SIGINT", onSignal);
+    process.on("SIGTERM", onSignal);
+
+    // Block forever (watch timers keep the event loop alive)
+    await new Promise<void>(() => {});
+    return;
+  }
+
   // Start interactive mode if requested
   if (options.interactive) {
     await runInteractiveMode(
@@ -473,8 +563,8 @@ async function runAsk(repoUrl: string, options: { branch?: string; verbose?: boo
   try {
     repoInfo = parseGitHubUrl(repoUrl);
     console.log(chalk.gray(`Repository: ${repoInfo.fullName}`));
-  } catch (error: any) {
-    console.error(chalk.red(`Invalid URL: ${error.message}`));
+  } catch (error: unknown) {
+    console.error(chalk.red(`Invalid URL: ${(error as Error).message}`));
     process.exit(1);
   }
 
@@ -483,8 +573,8 @@ async function runAsk(repoUrl: string, options: { branch?: string; verbose?: boo
   let repoPath: string;
   try {
     repoPath = await cloneRepo(repoInfo, process.cwd(), options.branch, false);
-  } catch (error: any) {
-    console.error(chalk.red(`Clone failed: ${error.message}`));
+  } catch (error: unknown) {
+    console.error(chalk.red(`Clone failed: ${(error as Error).message}`));
     process.exit(1);
   }
 
@@ -493,8 +583,8 @@ async function runAsk(repoUrl: string, options: { branch?: string; verbose?: boo
   let scanResult: ScanResult;
   try {
     scanResult = await scanRepo(repoPath, 200);
-  } catch (error: any) {
-    console.error(chalk.red(`Scan failed: ${error.message}`));
+  } catch (error: unknown) {
+    console.error(chalk.red(`Scan failed: ${(error as Error).message}`));
     process.exit(1);
   }
 
@@ -556,6 +646,9 @@ program
   .option("--render-diagrams [format]", "Render diagrams.mmd to SVG/PNG (requires mermaid-cli)", "svg")
   .option("--fast", "Fast mode: inline key files, skip tools, much faster (~15-30s)")
   .option("--full-clone", "Perform a full clone instead of shallow clone (slower but includes full history)")
+  .option("--no-cache", "Skip reading/writing analysis cache")
+  .option("-w, --watch", "Watch mode: re-run analysis when target repo gets new commits")
+  .option("--watch-interval <seconds>", "Polling interval for watch mode in seconds", "30")
   .action(async (repoUrl: string, opts) => {
     const options: BootcampOptions = {
       branch: opts.branch,
@@ -580,6 +673,9 @@ program
       renderDiagrams: opts.renderDiagrams !== undefined,
       diagramFormat: (opts.renderDiagrams === true ? "svg" : opts.renderDiagrams) as DiagramFormat,
       fullClone: opts.fullClone || false,
+      noCache: opts.cache === false,
+      watch: opts.watch || false,
+      watchInterval: parseInt(opts.watchInterval, 10),
     };
 
     if (!["onboarding", "architecture", "contributing", "all"].includes(options.focus)) {

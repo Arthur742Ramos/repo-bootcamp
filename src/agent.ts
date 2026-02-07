@@ -365,7 +365,7 @@ function parseAndValidateRepoFacts(
   if (jsonMatch) {
     try {
       parsed = JSON.parse(jsonMatch[1]);
-    } catch (e: any) {
+    } catch (e: unknown) {
       if (verbose) {
         console.error("Failed to parse JSON from code block:", e.message);
       }
@@ -378,7 +378,7 @@ function parseAndValidateRepoFacts(
     if (jsonObjectMatch) {
       try {
         parsed = JSON.parse(jsonObjectMatch[0]);
-      } catch (e: any) {
+      } catch (e: unknown) {
         if (verbose) {
           console.error("Failed to parse extracted JSON object:", e.message);
         }
@@ -390,7 +390,7 @@ function parseAndValidateRepoFacts(
   if (!parsed) {
     try {
       parsed = JSON.parse(response);
-    } catch (e: any) {
+    } catch (e: unknown) {
       if (verbose) {
         console.error("Failed to parse response as JSON:", e.message);
       }
@@ -445,7 +445,7 @@ async function createSessionWithFallback(
         model,
       });
       return { session, model };
-    } catch (error: any) {
+    } catch (error: unknown) {
       // If model not available, try next one
       if (error.message?.includes("model") || error.message?.includes("not available")) {
         continue;
@@ -541,7 +541,7 @@ export async function analyzeRepo(
       }
 
       return { facts: facts as RepoFacts, stats };
-    } catch (error: any) {
+    } catch (error: unknown) {
       throw new Error(`Fast analysis failed: ${error.message}`);
     }
   }

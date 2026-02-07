@@ -27,6 +27,9 @@ export interface BootcampOptions {
   style?: "startup" | "enterprise" | "oss" | "devops";
   web?: boolean;
   fullClone?: boolean;
+  watch?: boolean;
+  watchInterval?: number;
+  noCache?: boolean;
 }
 
 // Template style pack
@@ -101,6 +104,7 @@ export interface RepoInfo {
   url: string;
   branch: string;
   fullName: string;
+  commitSha?: string;
 }
 
 // Stack detection results
