@@ -4,7 +4,7 @@
  * Cache location: ~/.cache/repo-bootcamp/
  */
 
-import { mkdir, readFile, writeFile, readdir, rm } from "fs/promises";
+import { mkdir, readFile, writeFile, readdir, rm, stat } from "fs/promises";
 import { join } from "path";
 import { homedir } from "os";
 import { createHash } from "crypto";
@@ -100,6 +100,34 @@ export async function clearCache(): Promise<number> {
       jsonFiles.map((f) => rm(join(CACHE_DIR, f), { force: true }))
     );
     return jsonFiles.length;
+  } catch {
+    return 0;
+  }
+}
+
+/**
+ * Prune cache files older than maxAgeMs milliseconds
+ * Returns the number of files deleted
+ */
+export async function pruneCache(maxAgeMs: number): Promise<number> {
+  try {
+    const files = await readdir(CACHE_DIR);
+    const jsonFiles = files.filter((f) => f.endsWith(".json"));
+    const now = Date.now();
+    let pruned = 0;
+
+    await Promise.all(
+      jsonFiles.map(async (f) => {
+        const filePath = join(CACHE_DIR, f);
+        const fileStat = await stat(filePath);
+        if (now - fileStat.mtimeMs > maxAgeMs) {
+          await rm(filePath, { force: true });
+          pruned++;
+        }
+      })
+    );
+
+    return pruned;
   } catch {
     return 0;
   }

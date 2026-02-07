@@ -37,7 +37,7 @@ import { startWatch } from "./watch.js";
 import { loadConfig, getStyleConfig, loadPlugins, runPlugins, type BootcampConfig } from "./plugins.js";
 import { renderOutputDiagrams, DiagramFormat } from "./diagrams.js";
 import { applyOutputFormat, formatDocName, type OutputFormat } from "./formatter.js";
-import { readCache, writeCache } from "./cache.js";
+import { readCache, writeCache, pruneCache, getCacheDir, clearCache } from "./cache.js";
 import {
   generateBootcamp,
   generateOnboarding,
@@ -472,6 +472,9 @@ async function run(repoUrl: string, options: BootcampOptions): Promise<void> {
   let cacheHit = false;
 
   if (useCache) {
+    // Auto-prune stale cache entries (older than 7 days)
+    pruneCache(7 * 24 * 60 * 60 * 1000).catch(() => {});
+
     const cached = await readCache(repoInfo.fullName, repoInfo.commitSha!);
     if (cached) {
       facts = cached;
@@ -931,6 +934,31 @@ program
   .option("-v, --verbose", "Show detailed output")
   .action(async (repoUrl: string, opts) => {
     await runDocsCommand(repoUrl, opts);
+  });
+
+// Cache subcommand
+const cacheCommand = program
+  .command("cache")
+  .description("Manage the analysis cache");
+
+cacheCommand
+  .command("prune")
+  .description("Remove cache entries older than a given age")
+  .option("--max-age <days>", "Maximum age in days", "7")
+  .action(async (opts) => {
+    const days = parseFloat(opts.maxAge);
+    const maxAgeMs = days * 24 * 60 * 60 * 1000;
+    console.log(chalk.dim(`Pruning cache entries older than ${days} day(s)...`));
+    const pruned = await pruneCache(maxAgeMs);
+    console.log(chalk.green(`Pruned ${pruned} cache file(s) from ${getCacheDir()}`));
+  });
+
+cacheCommand
+  .command("clear")
+  .description("Remove all cache entries")
+  .action(async () => {
+    const cleared = await clearCache();
+    console.log(chalk.green(`Cleared ${cleared} cache file(s) from ${getCacheDir()}`));
   });
 
 /**
