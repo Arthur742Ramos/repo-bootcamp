@@ -214,8 +214,8 @@ async function runAnalysis(job: AnalysisJob, options: Partial<BootcampOptions>):
   } catch (error: unknown) {
     job.status = "error";
     job.completedAt = Date.now();
-    job.error = error.message;
-    emit({ type: "error", message: error.message });
+    job.error = (error as Error).message;
+    emit({ type: "error", message: (error as Error).message });
   }
 }
 
@@ -255,7 +255,7 @@ export function createApp(): express.Application {
     try {
       parseGitHubUrl(repoUrl); // Validate URL
     } catch (error: unknown) {
-      res.status(400).json({ error: error.message });
+      res.status(400).json({ error: (error as Error).message });
       return;
     }
 
@@ -350,7 +350,7 @@ export function createApp(): express.Application {
       res.setHeader("Content-Type", filename.endsWith(".json") ? "application/json" : "text/markdown");
       res.send(content);
     } catch (error: unknown) {
-      res.status(500).json({ error: error.message });
+      res.status(500).json({ error: (error as Error).message });
     }
   });
 

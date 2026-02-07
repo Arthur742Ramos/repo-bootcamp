@@ -155,7 +155,7 @@ export async function renderDiagram(
   } catch (error: unknown) {
     return {
       success: false,
-      error: error.message || "Unknown error rendering diagram",
+      error: (error as Error).message || "Unknown error rendering diagram",
     };
   } finally {
     // Cleanup temp file
@@ -218,7 +218,7 @@ export async function renderMermaidFile(
     }
   } catch (error: unknown) {
     result.success = false;
-    result.error = error.message;
+    result.error = (error as Error).message;
   }
 
   return result;

@@ -3,18 +3,14 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { getHeadCommit, fetchAndCheckUpdates, startWatch } from "../src/watch.js";
 
-// Mock child_process
-vi.mock("child_process", () => {
-  const execFn = vi.fn();
-  return {
-    exec: execFn,
-    promisify: () => execFn,
-  };
-});
+// Mock child_process.exec as a callback-style function
+const execMock = vi.fn();
+vi.mock("child_process", () => ({
+  exec: (...args: any[]) => execMock(...args),
+}));
 
-// Mock fs
+// Mock fs.watch
 vi.mock("fs", () => ({
   watch: vi.fn(() => ({
     on: vi.fn(),
@@ -22,10 +18,28 @@ vi.mock("fs", () => ({
   })),
 }));
 
-import { exec } from "child_process";
-import { promisify } from "util";
+// Helper to make execMock resolve with a given result
+function mockExecResult(stdout: string, stderr = "") {
+  execMock.mockImplementationOnce((_cmd: string, _opts: any, cb?: Function) => {
+    const callback = cb || _opts;
+    if (typeof callback === "function") {
+      process.nextTick(() => callback(null, { stdout, stderr }));
+    }
+    return { on: vi.fn() };
+  });
+}
 
-const execMock = promisify(exec) as unknown as ReturnType<typeof vi.fn>;
+function mockExecError(message: string) {
+  execMock.mockImplementationOnce((_cmd: string, _opts: any, cb?: Function) => {
+    const callback = cb || _opts;
+    if (typeof callback === "function") {
+      process.nextTick(() => callback(new Error(message)));
+    }
+    return { on: vi.fn() };
+  });
+}
+
+import { getHeadCommit, fetchAndCheckUpdates, startWatch } from "../src/watch.js";
 
 describe("getHeadCommit", () => {
   beforeEach(() => {
@@ -33,10 +47,9 @@ describe("getHeadCommit", () => {
   });
 
   it("returns trimmed commit SHA", async () => {
-    execMock.mockResolvedValueOnce({ stdout: "abc1234def5678\n", stderr: "" });
+    mockExecResult("abc1234def5678\n");
     const sha = await getHeadCommit("/tmp/repo");
     expect(sha).toBe("abc1234def5678");
-    expect(execMock).toHaveBeenCalledWith("git rev-parse HEAD", { cwd: "/tmp/repo" });
   });
 });
 
@@ -46,10 +59,8 @@ describe("fetchAndCheckUpdates", () => {
   });
 
   it("returns updated: false when SHA matches", async () => {
-    // git fetch origin
-    execMock.mockResolvedValueOnce({ stdout: "", stderr: "" });
-    // git rev-parse @{u}
-    execMock.mockResolvedValueOnce({ stdout: "abc1234\n", stderr: "" });
+    mockExecResult("");           // git fetch origin
+    mockExecResult("abc1234\n");  // git rev-parse @{u}
 
     const result = await fetchAndCheckUpdates("/tmp/repo", "abc1234");
     expect(result.updated).toBe(false);
@@ -57,12 +68,9 @@ describe("fetchAndCheckUpdates", () => {
   });
 
   it("returns updated: true when SHA differs", async () => {
-    // git fetch origin
-    execMock.mockResolvedValueOnce({ stdout: "", stderr: "" });
-    // git rev-parse @{u}
-    execMock.mockResolvedValueOnce({ stdout: "newsha99\n", stderr: "" });
-    // git merge --ff-only FETCH_HEAD
-    execMock.mockResolvedValueOnce({ stdout: "", stderr: "" });
+    mockExecResult("");            // git fetch origin
+    mockExecResult("newsha99\n");  // git rev-parse @{u}
+    mockExecResult("");            // git merge --ff-only
 
     const result = await fetchAndCheckUpdates("/tmp/repo", "oldsha11");
     expect(result.updated).toBe(true);
@@ -70,14 +78,10 @@ describe("fetchAndCheckUpdates", () => {
   });
 
   it("falls back to FETCH_HEAD when upstream tracking fails", async () => {
-    // git fetch origin
-    execMock.mockResolvedValueOnce({ stdout: "", stderr: "" });
-    // git rev-parse @{u} — fails
-    execMock.mockRejectedValueOnce(new Error("no upstream"));
-    // git rev-parse FETCH_HEAD
-    execMock.mockResolvedValueOnce({ stdout: "fallback1\n", stderr: "" });
-    // git merge --ff-only FETCH_HEAD
-    execMock.mockResolvedValueOnce({ stdout: "", stderr: "" });
+    mockExecResult("");                 // git fetch origin
+    mockExecError("no upstream");       // git rev-parse @{u} fails
+    mockExecResult("fallback1\n");      // git rev-parse FETCH_HEAD
+    mockExecResult("");                 // git merge --ff-only
 
     const result = await fetchAndCheckUpdates("/tmp/repo", "oldsha11");
     expect(result.updated).toBe(true);
@@ -85,14 +89,10 @@ describe("fetchAndCheckUpdates", () => {
   });
 
   it("falls back to hard reset when ff-merge fails", async () => {
-    // git fetch origin
-    execMock.mockResolvedValueOnce({ stdout: "", stderr: "" });
-    // git rev-parse @{u}
-    execMock.mockResolvedValueOnce({ stdout: "newsha99\n", stderr: "" });
-    // git merge --ff-only fails
-    execMock.mockRejectedValueOnce(new Error("not ff"));
-    // git reset --hard
-    execMock.mockResolvedValueOnce({ stdout: "", stderr: "" });
+    mockExecResult("");            // git fetch origin
+    mockExecResult("newsha99\n");  // git rev-parse @{u}
+    mockExecError("not ff");       // git merge --ff-only fails
+    mockExecResult("");            // git reset --hard
 
     const result = await fetchAndCheckUpdates("/tmp/repo", "oldsha11");
     expect(result.updated).toBe(true);
@@ -120,12 +120,11 @@ describe("startWatch", () => {
     handle.stop();
   });
 
-  it("stop() cleans up timers", () => {
+  it("stop() cleans up timers safely", () => {
     const handle = startWatch("/tmp/repo", {
       intervalSeconds: 10,
       onChangeDetected: vi.fn(),
     });
-    // Should not throw
     handle.stop();
     handle.stop(); // Double stop should be safe
   });

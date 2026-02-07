@@ -49,7 +49,7 @@ async function getChangedFiles(
 
     return { added, removed, modified };
   } catch (error: unknown) {
-    throw new Error(`Failed to get diff: ${error.message}`);
+    throw new Error(`Failed to get diff: ${(error as Error).message}`);
   }
 }
 

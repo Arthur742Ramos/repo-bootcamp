@@ -323,7 +323,7 @@ export async function runInteractiveMode(
           await session.ask(question);
           console.log();
         } catch (error: unknown) {
-          console.error(chalk.red(`Error: ${error.message}`));
+          console.error(chalk.red(`Error: ${(error as Error).message}`));
         }
 
         askQuestion();
@@ -332,7 +332,7 @@ export async function runInteractiveMode(
 
     askQuestion();
   } catch (error: unknown) {
-    console.error(chalk.red(`Failed to initialize session: ${error.message}`));
+    console.error(chalk.red(`Failed to initialize session: ${(error as Error).message}`));
     await session.stop();
     throw error;
   }

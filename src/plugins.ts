@@ -215,7 +215,7 @@ export async function loadPlugins(pluginPaths: string[]): Promise<BootcampPlugin
         console.log(`Loaded plugin: ${plugin.name} v${plugin.version || "1.0.0"}`);
       }
     } catch (error: unknown) {
-      console.warn(`Failed to load plugin ${path}: ${error.message}`);
+      console.warn(`Failed to load plugin ${path}: ${(error as Error).message}`);
     }
   }
 
@@ -256,7 +256,7 @@ export async function runPlugins(
         extraData[plugin.name] = output.extraData;
       }
     } catch (error: unknown) {
-      console.warn(`Plugin ${plugin.name} failed: ${error.message}`);
+      console.warn(`Plugin ${plugin.name} failed: ${(error as Error).message}`);
     }
   }
 

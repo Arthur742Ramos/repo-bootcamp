@@ -146,7 +146,7 @@ async function createIssue(
   } catch (error: unknown) {
     return {
       success: false,
-      error: error.message,
+      error: (error as Error).message,
       payload,
     };
   }

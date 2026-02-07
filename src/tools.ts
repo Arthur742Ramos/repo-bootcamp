@@ -61,7 +61,7 @@ function createReadFileTool(context: ToolContext): Tool<any> {
       context.onToolResult?.("read_file", `Read ${lines.length} lines from ${path}`);
       return { textResultForLlm: result, resultType: "success" as const };
     } catch (error: unknown) {
-      const errorMsg = `Error reading file ${path}: ${error.message}`;
+      const errorMsg = `Error reading file ${path}: ${(error as Error).message}`;
       context.onToolResult?.("read_file", errorMsg);
       return { textResultForLlm: errorMsg, resultType: "failure" as const };
     }
@@ -154,7 +154,7 @@ function createListFilesTool(context: ToolContext): Tool<any> {
       context.onToolResult?.("list_files", `Found ${results.length} items`);
       return { textResultForLlm: result, resultType: "success" as const };
     } catch (error: unknown) {
-      const errorMsg = `Error listing files in ${path}: ${error.message}`;
+      const errorMsg = `Error listing files in ${path}: ${(error as Error).message}`;
       context.onToolResult?.("list_files", errorMsg);
       return { textResultForLlm: errorMsg, resultType: "failure" as const };
     }
@@ -223,7 +223,7 @@ function createSearchTool(context: ToolContext): Tool<any> {
         context.onToolResult?.("search", "No matches found");
         return { textResultForLlm: `No matches found for pattern: ${pattern}`, resultType: "success" as const };
       }
-      const errorMsg = `Error searching: ${error.message}`;
+      const errorMsg = `Error searching: ${(error as Error).message}`;
       context.onToolResult?.("search", errorMsg);
       return { textResultForLlm: errorMsg, resultType: "failure" as const };
     }
@@ -303,7 +303,7 @@ ${gitInfo}`;
       context.onToolResult?.("get_repo_metadata", `Collected metadata for ${totalFiles} files`);
       return { textResultForLlm: result, resultType: "success" as const };
     } catch (error: unknown) {
-      const errorMsg = `Error getting metadata: ${error.message}`;
+      const errorMsg = `Error getting metadata: ${(error as Error).message}`;
       context.onToolResult?.("get_repo_metadata", errorMsg);
       return { textResultForLlm: errorMsg, resultType: "failure" as const };
     }
