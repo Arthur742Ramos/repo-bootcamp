@@ -37,7 +37,7 @@ IMPORTANT:
 const CUSTOM_PROMPT_FILE = ".bootcamp-prompts.md";
 const CUSTOM_PROMPT_MAX_CHARS = 8000;
 
-function readCustomPrompt(repoPath: string): string | null {
+export function readCustomPrompt(repoPath: string): string | null {
   const promptPath = path.join(repoPath, CUSTOM_PROMPT_FILE);
   if (!fs.existsSync(promptPath)) {
     return null;
@@ -54,7 +54,7 @@ function readCustomPrompt(repoPath: string): string | null {
   }
 }
 
-function formatCustomPromptSection(customPrompt?: string | null): string {
+export function formatCustomPromptSection(customPrompt?: string | null): string {
   if (!customPrompt) {
     return "";
   }

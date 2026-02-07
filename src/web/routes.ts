@@ -206,11 +206,12 @@ async function runAnalysis(job: AnalysisJob, options: Partial<BootcampOptions>):
       )
     );
 
-    const [deps, security, radar] = await Promise.all([
+    const analysisPromise = Promise.all([
       depsPromise,
       securityPromise,
       radarPromise,
     ]);
+    const [deps, security, radar] = await analysisPromise;
 
     // Generate all docs
     const documents = [

@@ -182,8 +182,15 @@ async function runPullRequestDiff(prTarget: string, options: PullRequestDiffOpti
   progress.startPhase("diff", `PR #${targetInfo.prNumber}`);
   let diffSummary: DiffSummary;
   try {
-    const refs = await fetchPullRequestRefs(repoPath, targetInfo.prNumber);
+    const refs = await fetchPullRequestRefs(repoPath, repoInfo, targetInfo.prNumber);
     diffSummary = await analyzeDiff(repoPath, refs.baseRef, refs.headRef);
+    diffSummary = {
+      ...diffSummary,
+      baseRef: refs.baseName,
+      headRef: refs.headName
+        ? `PR #${targetInfo.prNumber} (${refs.headName})`
+        : `PR #${targetInfo.prNumber}`,
+    };
     progress.succeed(`Analyzed PR #${targetInfo.prNumber}`);
   } catch (error: unknown) {
     progress.fail(`Diff failed: ${(error as Error).message}`);
@@ -281,21 +288,22 @@ async function generateOutputs({
     )
   );
 
-  const keyFiles = getKeyFilesForImpact(scanResult.files);
-  const impactsPromise = buildImportGraph(repoPath, scanResult.files).then((importGraph) =>
-    Promise.all(
+  const impactsPromise = buildImportGraph(repoPath, scanResult.files).then((importGraph) => {
+    const keyFiles = getKeyFilesForImpact(scanResult.files);
+    return Promise.all(
       keyFiles.slice(0, 10).map(file =>
         analyzeChangeImpact(repoPath, scanResult.files, file, importGraph)
       )
-    )
-  );
+    );
+  });
 
-  const [deps, security, radar, impacts] = await Promise.all([
+  const analysisPromise = Promise.all([
     depsPromise,
     securityPromise,
     radarPromise,
     impactsPromise,
   ]);
+  const [deps, security, radar, impacts] = await analysisPromise;
 
   // Generate Diff if --compare is specified
   let diffSummary = null;

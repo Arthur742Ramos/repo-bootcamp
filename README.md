@@ -571,8 +571,8 @@ Create a `bootcamp.config.json` in your project root for custom settings:
 
 ### .bootcamp-prompts.md
 
-Add a `.bootcamp-prompts.md` file to the target repository to guide the analysis agent with repo-specific instructions (e.g., focus areas, terminology, tone).
-The contents are appended to the analysis prompt when generating docs.
+Add a `.bootcamp-prompts.md` file to the target repository to guide the analysis and interactive agents with repo-specific instructions (e.g., focus areas, terminology, tone).
+The contents are appended to the analysis prompt and interactive system prompt.
 
 ### Plugin System
 

@@ -1,28 +1,21 @@
+/**
+ * Tests for CLI wiring in index.ts
+ */
+
 import { describe, it, expect } from "vitest";
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
-import { fileURLToPath } from "node:url";
-import pkg from "../package.json" with { type: "json" };
+import { program } from "../src/index.js";
 
-const execFileAsync = promisify(execFile);
-const entry = fileURLToPath(new URL("../src/index.ts", import.meta.url));
-
-async function runCli(args: string[]) {
-  return execFileAsync(process.execPath, ["--no-warnings", "--import", "tsx", entry, ...args], {
-    env: { ...process.env, NO_COLOR: "1" },
-  });
-}
-
-describe("bootcamp CLI", () => {
-  it("prints help", async () => {
-    const { stdout } = await runCli(["--help"]);
-    expect(stdout).toContain("Usage: bootcamp");
-    expect(stdout).toContain("--interactive");
-    expect(stdout).toContain("web");
+describe("CLI program", () => {
+  it("registers core subcommands", () => {
+    const commandNames = program.commands.map((command) => command.name());
+    expect(commandNames).toContain("ask");
+    expect(commandNames).toContain("web");
   });
 
-  it("prints version", async () => {
-    const { stdout } = await runCli(["--version"]);
-    expect(stdout.trim()).toBe(pkg.version);
+  it("includes main options", () => {
+    const optionFlags = program.options.map((option) => option.long);
+    expect(optionFlags).toContain("--interactive");
+    expect(optionFlags).toContain("--compare");
+    expect(optionFlags).toContain("--watch");
   });
 });

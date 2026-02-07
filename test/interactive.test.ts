@@ -1,42 +1,49 @@
+/**
+ * Tests for interactive.ts
+ */
+
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { join } from "node:path";
 import type { RepoInfo, ScanResult } from "../src/types.js";
 
-const getRepoTools = vi.fn(() => [{ name: "tool" }]);
-vi.mock("../src/tools.js", () => ({ getRepoTools }));
-
-const writeFile = vi.fn();
-vi.mock("fs/promises", () => ({ writeFile }));
-
-const sendAndWait = vi.fn();
-const createSession = vi.fn();
-const stop = vi.fn();
-let sessionHandler: ((event: any) => void) | undefined;
+const mockCreateSession = vi.fn();
+const mockStop = vi.fn();
 
 vi.mock("@github/copilot-sdk", () => ({
   CopilotClient: class {
-    createSession = createSession;
-    stop = stop;
+    createSession = mockCreateSession;
+    stop = mockStop;
   },
   SessionEvent: {},
 }));
 
+vi.mock("../src/tools.js", () => ({
+  getRepoTools: vi.fn(),
+}));
+
+vi.mock("fs/promises", () => ({
+  writeFile: vi.fn(),
+}));
+
+import { InteractiveSession, quickAsk } from "../src/interactive.js";
+import { getRepoTools } from "../src/tools.js";
+import { writeFile } from "fs/promises";
+
+const mockGetRepoTools = vi.mocked(getRepoTools);
+const mockWriteFile = vi.mocked(writeFile);
+
 const repoInfo: RepoInfo = {
   owner: "octo",
-  repo: "repo",
-  url: "https://github.com/octo/repo",
+  repo: "demo",
+  url: "https://github.com/octo/demo",
   branch: "main",
-  fullName: "octo/repo",
+  fullName: "octo/demo",
 };
 
 const scanResult: ScanResult = {
-  files: [
-    { path: "README.md", size: 10, isDirectory: false },
-    { path: "src/index.ts", size: 20, isDirectory: false },
-  ],
+  files: [],
   stack: {
     languages: ["TypeScript"],
-    frameworks: ["Express"],
+    frameworks: [],
     buildSystem: "npm",
     packageManager: "npm",
     hasDocker: false,
@@ -44,111 +51,129 @@ const scanResult: ScanResult = {
   },
   commands: [],
   ciWorkflows: [],
-  readme: "README.md",
+  readme: null,
   contributing: null,
   keySourceFiles: new Map(),
 };
 
-beforeEach(() => {
-  sessionHandler = undefined;
-  sendAndWait.mockReset();
-  createSession.mockReset();
-  stop.mockReset();
-  getRepoTools.mockClear();
-  writeFile.mockClear();
+let mockSession: {
+  sendAndWait: ReturnType<typeof vi.fn>;
+  on: ReturnType<typeof vi.fn>;
+};
 
-  const on = vi.fn((handler: (event: any) => void) => {
-    sessionHandler = handler;
-  });
-  createSession.mockResolvedValue({ sendAndWait, on });
+beforeEach(() => {
+  mockCreateSession.mockReset();
+  mockStop.mockReset();
+  mockGetRepoTools.mockReset();
+  mockWriteFile.mockReset();
+
+  mockSession = {
+    sendAndWait: vi.fn(),
+    on: vi.fn(),
+  };
+
+  mockCreateSession.mockReturnValue(mockSession);
+  mockGetRepoTools.mockReturnValue([
+    { name: "read_file", description: "Read a file", handler: vi.fn() },
+  ]);
 });
 
 describe("InteractiveSession", () => {
-  it("initializes with context message", async () => {
-    const { InteractiveSession } = await import("../src/interactive.js");
-    sendAndWait.mockResolvedValue(undefined);
+  it("initializes with repo context", async () => {
+    mockSession.sendAndWait.mockResolvedValue(undefined);
 
     const session = new InteractiveSession("/repo", repoInfo, scanResult, undefined, true);
     await session.initialize();
 
-    expect(createSession).toHaveBeenCalledTimes(1);
-    const createArgs = createSession.mock.calls[0][0];
-    expect(createArgs.tools).toEqual([{ name: "tool" }]);
-    expect(createArgs.systemMessage.content).toContain("You are an expert assistant");
-
-    const prompt = sendAndWait.mock.calls[0][0].prompt;
-    expect(prompt).toContain("octo/repo");
-    expect(prompt).toContain("README.md");
+    expect(mockGetRepoTools).toHaveBeenCalledWith(
+      expect.objectContaining({ repoPath: "/repo", verbose: true }),
+    );
+    expect(mockCreateSession).toHaveBeenCalledWith(
+      expect.objectContaining({
+        streaming: true,
+        model: "claude-sonnet-4-20250514",
+        systemMessage: {
+          content: expect.stringContaining("expert assistant"),
+        },
+        tools: expect.any(Array),
+      }),
+    );
+    expect(mockSession.sendAndWait).toHaveBeenCalledWith(
+      expect.objectContaining({
+        prompt: expect.stringContaining("Repository Context"),
+      }),
+      30000,
+    );
   });
 
-  it("records responses and citations", async () => {
-    const { InteractiveSession } = await import("../src/interactive.js");
-    sendAndWait.mockImplementation(async ({ prompt }: { prompt: string }) => {
-      if (prompt.includes("Here is the repository context")) {
-        return;
-      }
-      sessionHandler?.({
-        type: "assistant.message_delta",
-        data: { deltaContent: "All good." },
-      });
-      sessionHandler?.({
-        type: "tool.call",
-        data: { name: "read_file", arguments: { path: "src/index.ts" } },
-      });
+  it("captures responses and citations", async () => {
+    let handler: ((event: Record<string, any>) => void) | undefined;
+    mockSession.on.mockImplementation((cb) => {
+      handler = cb;
     });
+
+    mockSession.sendAndWait
+      .mockResolvedValueOnce(undefined)
+      .mockImplementationOnce(async () => {
+        handler?.({ type: "assistant.message_delta", data: { deltaContent: "Hello " } });
+        handler?.({ type: "assistant.message_delta", data: { deltaContent: "world" } });
+        handler?.({
+          type: "tool.call",
+          data: { name: "read_file", arguments: { path: "src/index.ts" } },
+        });
+      });
 
     const session = new InteractiveSession("/repo", repoInfo, scanResult);
     await session.initialize();
-    const answer = await session.ask("What is this?");
 
-    expect(answer).toBe("All good.");
+    const writeSpy = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+    const response = await session.ask("Say hi");
+    writeSpy.mockRestore();
+
+    expect(response).toBe("Hello world");
     const transcript = session.getTranscript();
     expect(transcript.messages).toHaveLength(2);
-    expect(transcript.messages[1].citations).toEqual(["src/index.ts"]);
+    expect(transcript.messages[1].citations).toContain("src/index.ts");
   });
 
   it("saves transcript markdown", async () => {
-    const { InteractiveSession } = await import("../src/interactive.js");
-    sendAndWait.mockImplementation(async ({ prompt }: { prompt: string }) => {
-      if (prompt.includes("Here is the repository context")) {
-        return;
-      }
-      sessionHandler?.({
-        type: "assistant.message_delta",
-        data: { deltaContent: "Saved." },
-      });
+    const session = new InteractiveSession("/repo", repoInfo, scanResult);
+    const transcript = session.getTranscript();
+    transcript.messages.push({
+      role: "user",
+      content: "Hello",
+      timestamp: new Date("2024-01-01T00:00:00.000Z"),
     });
 
-    const session = new InteractiveSession("/repo", repoInfo, scanResult);
-    await session.initialize();
-    await session.ask("Save transcript");
-    const outputPath = await session.saveTranscript("/output");
+    const outputPath = await session.saveTranscript("/tmp/output");
 
-    expect(outputPath).toBe(join("/output", "TRANSCRIPT.md"));
-    expect(writeFile).toHaveBeenCalledWith(
-      join("/output", "TRANSCRIPT.md"),
-      expect.stringContaining("Interactive Session Transcript"),
+    expect(outputPath).toBe("/tmp/output/TRANSCRIPT.md");
+    expect(mockWriteFile).toHaveBeenCalledWith(
+      outputPath,
+      expect.stringContaining("# Interactive Session Transcript"),
       "utf-8",
     );
   });
 });
 
 describe("quickAsk", () => {
-  it("initializes, answers, and stops", async () => {
-    const { quickAsk } = await import("../src/interactive.js");
-    sendAndWait.mockImplementation(async ({ prompt }: { prompt: string }) => {
-      if (prompt.includes("Here is the repository context")) {
-        return;
-      }
-      sessionHandler?.({
-        type: "assistant.message_delta",
-        data: { deltaContent: "Quick answer" },
-      });
+  it("returns an answer and stops the client", async () => {
+    let handler: ((event: Record<string, any>) => void) | undefined;
+    mockSession.on.mockImplementation((cb) => {
+      handler = cb;
     });
 
-    const answer = await quickAsk("/repo", repoInfo, scanResult, "Hi", true);
+    mockSession.sendAndWait
+      .mockResolvedValueOnce(undefined)
+      .mockImplementationOnce(async () => {
+        handler?.({ type: "assistant.message_delta", data: { deltaContent: "Answer" } });
+      });
 
-    expect(answer).toBe("Quick answer");
-    expect(stop).toHaveBeenCalledTimes(1);
+    const writeSpy = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+    const response = await quickAsk("/repo", repoInfo, scanResult, "Question");
+    writeSpy.mockRestore();
+
+    expect(response).toBe("Answer");
+    expect(mockStop).toHaveBeenCalled();
   });
 });

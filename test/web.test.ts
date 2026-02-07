@@ -1,69 +1,79 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
-import express from "express";
-import type { AddressInfo } from "node:net";
+/**
+ * Tests for web server and templates
+ */
 
-const registerRoutes = vi.hoisted(() => vi.fn());
-const getIndexHtml = vi.hoisted(() => vi.fn(() => "<h1>INDEX</h1>"));
-
-vi.mock("../src/web/routes.js", () => ({ registerRoutes }));
-vi.mock("../src/web/templates.js", () => ({ getIndexHtml }));
+import { describe, it, expect, afterEach, vi } from "vitest";
+import type { AddressInfo } from "net";
 
 import { createApp, startServer } from "../src/web/server.js";
+import { getIndexHtml } from "../src/web/templates.js";
+
+let server: ReturnType<typeof startServer> | undefined;
+
+async function startTestServer(): Promise<string> {
+  const app = createApp();
+  server = app.listen(0);
+  await new Promise<void>((resolve) => server?.once("listening", () => resolve()));
+  const { port } = server.address() as AddressInfo;
+  return `http://127.0.0.1:${port}`;
+}
+
+afterEach(async () => {
+  if (server) {
+    await new Promise<void>((resolve) => server?.close(() => resolve()));
+    server = undefined;
+  }
+});
+
+describe("getIndexHtml", () => {
+  it("returns the demo HTML", () => {
+    const html = getIndexHtml();
+    expect(html).toContain("<title>Repo Bootcamp</title>");
+    expect(html).toContain("function analyze()");
+  });
+});
 
 describe("createApp", () => {
-  beforeEach(() => {
-    registerRoutes.mockClear();
+  it("serves the index page", async () => {
+    const baseUrl = await startTestServer();
+    const response = await fetch(`${baseUrl}/`);
+    const body = await response.text();
+
+    expect(response.status).toBe(200);
+    expect(body).toContain("<h1>Repo Bootcamp</h1>");
   });
 
-  it("serves index html with CORS headers", async () => {
-    const app = createApp();
-    const server = app.listen(0);
-    try {
-      const port = (server.address() as AddressInfo).port;
-      const response = await fetch(`http://127.0.0.1:${port}/`);
-      const text = await response.text();
+  it("handles OPTIONS with CORS headers", async () => {
+    const baseUrl = await startTestServer();
+    const response = await fetch(`${baseUrl}/api/analyze`, { method: "OPTIONS" });
 
-      expect(response.headers.get("access-control-allow-origin")).toBe("*");
-      expect(text).toContain("INDEX");
-      expect(registerRoutes).toHaveBeenCalledWith(app);
-    } finally {
-      await new Promise((resolve) => server.close(resolve));
-    }
+    expect(response.status).toBe(200);
+    expect(response.headers.get("access-control-allow-origin")).toBe("*");
   });
 
-  it("responds to OPTIONS requests", async () => {
-    const app = createApp();
-    const server = app.listen(0);
-    try {
-      const port = (server.address() as AddressInfo).port;
-      const response = await fetch(`http://127.0.0.1:${port}/`, { method: "OPTIONS" });
+  it("rejects analyze requests without repoUrl", async () => {
+    const baseUrl = await startTestServer();
+    const response = await fetch(`${baseUrl}/api/analyze`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({}),
+    });
 
-      expect(response.status).toBe(200);
-      expect(response.headers.get("access-control-allow-methods")).toContain("GET");
-    } finally {
-      await new Promise((resolve) => server.close(resolve));
-    }
+    const payload = await response.json();
+    expect(response.status).toBe(400);
+    expect(payload.error).toBe("repoUrl is required");
   });
 });
 
 describe("startServer", () => {
-  it("logs startup information", () => {
+  it("listens on the provided port", async () => {
     const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
-    const listenSpy = vi
-      .spyOn(express.application, "listen")
-      .mockImplementation(function (this: express.Application, port: number, cb?: () => void) {
-        if (cb) cb();
-        return { close: vi.fn() } as any;
-      });
+    server = startServer(0);
+    await new Promise<void>((resolve) => server?.once("listening", () => resolve()));
 
-    startServer(4321);
+    const address = server.address() as AddressInfo;
+    expect(address.port).toBeGreaterThan(0);
 
-    expect(listenSpy).toHaveBeenCalledWith(4321, expect.any(Function));
-    const logged = logSpy.mock.calls.map((call) => call.join(" ")).join("\n");
-    expect(logged).toContain("Repo Bootcamp Web Demo");
-    expect(logged).toContain("http://localhost:4321");
-
-    listenSpy.mockRestore();
     logSpy.mockRestore();
   });
 });

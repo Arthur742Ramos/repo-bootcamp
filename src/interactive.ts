@@ -13,6 +13,7 @@ import type {
   Transcript,
 } from "./types.js";
 import { getRepoTools } from "./tools.js";
+import { readCustomPrompt, formatCustomPromptSection } from "./agent.js";
 import { writeFile } from "fs/promises";
 import { join } from "path";
 
@@ -125,9 +126,12 @@ export class InteractiveSession {
     });
 
     // Create session
+    const customPrompt = readCustomPrompt(this.repoPath);
+    const systemPrompt = `${INTERACTIVE_SYSTEM_PROMPT}${formatCustomPromptSection(customPrompt)}`;
+
     this.session = await this.client.createSession({
       streaming: true,
-      systemMessage: { content: INTERACTIVE_SYSTEM_PROMPT },
+      systemMessage: { content: systemPrompt },
       tools,
       model: "claude-sonnet-4-20250514",
     });

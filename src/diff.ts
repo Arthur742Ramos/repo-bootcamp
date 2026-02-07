@@ -5,7 +5,7 @@
 
 import { exec } from "child_process";
 import { promisify } from "util";
-import type { DiffSummary } from "./types.js";
+import type { DiffSummary, RepoInfo } from "./types.js";
 
 const execAsync = promisify(exec);
 
@@ -312,18 +312,62 @@ async function detectBreakingChanges(
   return breakingChanges;
 }
 
+interface PullRequestApiResponse {
+  base?: { ref?: string; sha?: string };
+  head?: { ref?: string; sha?: string };
+  title?: string;
+  html_url?: string;
+}
+
+export interface PullRequestRefs {
+  baseRef: string;
+  headRef: string;
+  baseName: string;
+  headName: string;
+  title?: string;
+  url?: string;
+}
+
+async function fetchPullRequestInfo(repoInfo: RepoInfo, prNumber: number): Promise<PullRequestApiResponse> {
+  const response = await fetch(
+    `https://api.github.com/repos/${repoInfo.fullName}/pulls/${prNumber}`,
+    {
+      headers: {
+        "Accept": "application/vnd.github+json",
+        "User-Agent": "repo-bootcamp",
+      },
+    }
+  );
+
+  if (!response.ok) {
+    throw new Error(`GitHub API error (${response.status}): ${response.statusText}`);
+  }
+
+  return await response.json() as PullRequestApiResponse;
+}
+
 /**
  * Fetch GitHub PR base/head refs into the local repo.
  */
 export async function fetchPullRequestRefs(
   repoPath: string,
+  repoInfo: RepoInfo,
   prNumber: number
-): Promise<{ baseRef: string; headRef: string }> {
+): Promise<PullRequestRefs> {
+  const prInfo = await fetchPullRequestInfo(repoInfo, prNumber);
+  const baseRefName = prInfo.base?.ref;
+  const headRefName = prInfo.head?.ref;
+  const baseSha = prInfo.base?.sha;
+
+  if (!baseRefName || !headRefName || !baseSha) {
+    throw new Error("GitHub API response missing pull request refs.");
+  }
+
   const baseRef = `pr-${prNumber}-base`;
   const headRef = `pr-${prNumber}-head`;
 
   try {
-    await execAsync(`git fetch --quiet origin pull/${prNumber}/base:${baseRef}`, {
+    await execAsync(`git fetch --quiet origin ${baseSha}:${baseRef}`, {
       cwd: repoPath,
       maxBuffer: 5 * 1024 * 1024,
     });
@@ -340,7 +384,14 @@ export async function fetchPullRequestRefs(
     throw new Error(`Failed to fetch PR head ref: ${(error as Error).message}`);
   }
 
-  return { baseRef, headRef };
+  return {
+    baseRef,
+    headRef,
+    baseName: baseRefName,
+    headName: headRefName,
+    title: prInfo.title,
+    url: prInfo.html_url,
+  };
 }
 
 /**
