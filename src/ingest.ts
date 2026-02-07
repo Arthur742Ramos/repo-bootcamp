@@ -8,6 +8,7 @@ import { promisify } from "util";
 import { readdir, stat, readFile, rm } from "fs/promises";
 import { join, basename } from "path";
 import type { RepoInfo, FileInfo, StackInfo, Command, CIWorkflow, ScanResult } from "./types.js";
+import frameworkMaps from "./data/framework-maps.json" with { type: "json" };
 
 const execAsync = promisify(exec);
 const execFileAsync = promisify(execFile);
@@ -44,10 +45,14 @@ export function parseGitHubUrl(url: string): RepoInfo {
 export async function cloneRepo(
   repoInfo: RepoInfo,
   targetDir: string,
-  branch?: string
+  branch?: string,
+  fullClone?: boolean
 ): Promise<string> {
   const clonePath = join(targetDir, ".tmp", repoInfo.repo);
-  const cloneArgs = ["clone", "--depth", "1"];
+  const cloneArgs = ["clone"];
+  if (!fullClone) {
+    cloneArgs.push("--filter=blob:none", "--depth", "1");
+  }
   if (branch) {
     cloneArgs.push("--branch", branch);
   }
@@ -144,28 +149,9 @@ function detectStack(files: FileInfo[]): StackInfo {
   };
 
   // Language detection
-  const langPatterns: Record<string, RegExp> = {
-    TypeScript: /\.tsx?$/,
-    JavaScript: /\.jsx?$/,
-    Python: /\.py$/,
-    Go: /\.go$/,
-    Rust: /\.rs$/,
-    Java: /\.java$/,
-    "C#": /\.cs$/,
-    Ruby: /\.rb$/,
-    PHP: /\.php$/,
-    Swift: /\.swift$/,
-    Kotlin: /\.kt$/,
-    Lean: /\.lean$/,
-    Haskell: /\.hs$/,
-    OCaml: /\.ml$/,
-    Scala: /\.scala$/,
-    Elixir: /\.ex$/,
-    Clojure: /\.clj$/,
-    C: /\.[ch]$/,
-    "C++": /\.(cpp|cc|cxx|hpp)$/,
-    Zig: /\.zig$/,
-  };
+  const langPatterns: Record<string, RegExp> = Object.fromEntries(
+    Object.entries(frameworkMaps.langPatterns).map(([lang, pat]) => [lang, new RegExp(pat)])
+  );
 
   for (const [lang, pattern] of Object.entries(langPatterns)) {
     if (filePaths.some((p) => pattern.test(p))) {
@@ -177,46 +163,19 @@ function detectStack(files: FileInfo[]): StackInfo {
   // NOTE: Frameworks like React, Express, Flask are NOT detected by file path patterns
   // as that causes false positives. They should be detected via dependency analysis (deps.ts).
   // Only config files that definitively indicate framework usage are listed here.
-  const configPatterns: Record<string, { file: RegExp | string; type: "framework" | "build" | "pm" }> = {
-    "Next.js": { file: "next.config.js", type: "framework" },
-    "Next.js (mjs)": { file: "next.config.mjs", type: "framework" },
-    "Next.js (ts)": { file: "next.config.ts", type: "framework" },
-    Vue: { file: "vue.config.js", type: "framework" },
-    "Nuxt.js": { file: "nuxt.config.js", type: "framework" },
-    "Nuxt.js (ts)": { file: "nuxt.config.ts", type: "framework" },
-    Angular: { file: "angular.json", type: "framework" },
-    Django: { file: "manage.py", type: "framework" },
-    Rails: { file: "Gemfile", type: "framework" },
-    Astro: { file: "astro.config.mjs", type: "framework" },
-    "Astro (ts)": { file: "astro.config.ts", type: "framework" },
-    Remix: { file: "remix.config.js", type: "framework" },
-    SvelteKit: { file: "svelte.config.js", type: "framework" },
-    Vite: { file: "vite.config.ts", type: "build" },
-    "Vite (js)": { file: "vite.config.js", type: "build" },
-    npm: { file: "package-lock.json", type: "pm" },
-    yarn: { file: "yarn.lock", type: "pm" },
-    pnpm: { file: "pnpm-lock.yaml", type: "pm" },
-    bun: { file: "bun.lockb", type: "pm" },
-    pip: { file: "requirements.txt", type: "pm" },
-    poetry: { file: "pyproject.toml", type: "pm" },
-    cargo: { file: "Cargo.toml", type: "build" },
-    maven: { file: "pom.xml", type: "build" },
-    gradle: { file: "build.gradle", type: "build" },
-    "gradle (kts)": { file: "build.gradle.kts", type: "build" },
-    make: { file: "Makefile", type: "build" },
-    Lake: { file: "lakefile.toml", type: "build" },
-    "Lake (lean)": { file: "lakefile.lean", type: "build" },
-    stack: { file: "stack.yaml", type: "build" },
-    cabal: { file: /\.cabal$/, type: "build" },
-    mix: { file: "mix.exs", type: "build" },
-    sbt: { file: "build.sbt", type: "build" },
-    CMake: { file: "CMakeLists.txt", type: "build" },
-    zig: { file: "build.zig", type: "build" },
-    Webpack: { file: "webpack.config.js", type: "build" },
-    Rollup: { file: "rollup.config.js", type: "build" },
-    esbuild: { file: "esbuild.config.js", type: "build" },
-    tsup: { file: "tsup.config.ts", type: "build" },
-  };
+  const configPatterns: Record<string, { file: RegExp | string; type: "framework" | "build" | "pm" }> =
+    Object.fromEntries(
+      Object.entries(frameworkMaps.configPatterns).map(([name, entry]) => {
+        const e = entry as { file: string; type: string; isRegex?: boolean };
+        return [
+          name,
+          {
+            file: e.isRegex ? new RegExp(e.file) : e.file,
+            type: e.type as "framework" | "build" | "pm",
+          },
+        ];
+      })
+    );
 
   for (const [name, { file, type }] of Object.entries(configPatterns)) {
     const matches =
@@ -564,51 +523,7 @@ export function listFilesByPattern(files: FileInfo[], pattern: string): string[]
  * Known frameworks that can be detected from dependencies
  * Maps dependency name to display name
  */
-const DEPENDENCY_FRAMEWORKS: Record<string, string> = {
-  // JavaScript/TypeScript frameworks
-  "react": "React",
-  "react-dom": "React",
-  "vue": "Vue",
-  "angular": "Angular",
-  "@angular/core": "Angular",
-  "svelte": "Svelte",
-  "solid-js": "Solid",
-  "preact": "Preact",
-  "express": "Express",
-  "fastify": "Fastify",
-  "hono": "Hono",
-  "koa": "Koa",
-  "hapi": "Hapi",
-  "@hapi/hapi": "Hapi",
-  "nest": "NestJS",
-  "@nestjs/core": "NestJS",
-  "next": "Next.js",
-  "gatsby": "Gatsby",
-  "nuxt": "Nuxt.js",
-  "remix": "Remix",
-  "@remix-run/node": "Remix",
-  "astro": "Astro",
-  "electron": "Electron",
-  // Python frameworks
-  "flask": "Flask",
-  "django": "Django",
-  "fastapi": "FastAPI",
-  "tornado": "Tornado",
-  "pyramid": "Pyramid",
-  "bottle": "Bottle",
-  // Go frameworks (from go.mod require)
-  "github.com/gin-gonic/gin": "Gin",
-  "github.com/gorilla/mux": "Gorilla Mux",
-  "github.com/labstack/echo": "Echo",
-  "github.com/gofiber/fiber": "Fiber",
-  // Ruby frameworks
-  "rails": "Rails",
-  "sinatra": "Sinatra",
-  // Rust frameworks
-  "actix-web": "Actix Web",
-  "rocket": "Rocket",
-  "axum": "Axum",
-};
+const DEPENDENCY_FRAMEWORKS: Record<string, string> = frameworkMaps.dependencyFrameworks;
 
 /**
  * Detect frameworks from dependency list

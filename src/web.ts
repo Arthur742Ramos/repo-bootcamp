@@ -51,11 +51,24 @@ interface AnalysisJob {
     stats: any;
   };
   error?: string;
+  completedAt?: number;
   emitter: EventEmitter;
 }
 
 // In-memory job storage
 const jobs = new Map<string, AnalysisJob>();
+
+const JOB_TTL_MS = 30 * 60 * 1000; // 30 minutes
+
+// Prune completed/errored jobs older than TTL
+setInterval(() => {
+  const now = Date.now();
+  for (const [id, job] of jobs) {
+    if (job.completedAt && now - job.completedAt > JOB_TTL_MS) {
+      jobs.delete(id);
+    }
+  }
+}, JOB_TTL_MS).unref();
 
 /**
  * Generate unique job ID
@@ -83,7 +96,7 @@ async function runAnalysis(job: AnalysisJob, options: Partial<BootcampOptions>):
 
     // Clone
     emit({ type: "phase", phase: "clone", message: `Cloning ${repoInfo.fullName}...` });
-    const repoPath = await cloneRepo(repoInfo, process.cwd(), options.branch);
+    const repoPath = await cloneRepo(repoInfo, process.cwd(), options.branch, false);
     emit({ type: "progress", message: `Cloned (branch: ${repoInfo.branch})` });
 
     // Scan
@@ -177,6 +190,7 @@ async function runAnalysis(job: AnalysisJob, options: Partial<BootcampOptions>):
 
     // Complete
     job.status = "complete";
+    job.completedAt = Date.now();
     job.result = {
       outputDir,
       files: documents.map(d => d.name),
@@ -199,6 +213,7 @@ async function runAnalysis(job: AnalysisJob, options: Partial<BootcampOptions>):
 
   } catch (error: any) {
     job.status = "error";
+    job.completedAt = Date.now();
     job.error = error.message;
     emit({ type: "error", message: error.message });
   }

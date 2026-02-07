@@ -6,106 +6,12 @@
 import type { TechRadar, RadarSignal, StackInfo, FileInfo } from "./types.js";
 import type { DependencyAnalysis } from "./deps.js";
 import type { SecurityAnalysis } from "./security.js";
+import radarSignals from "./data/radar-signals.json" with { type: "json" };
 
-/**
- * Modern/recommended patterns and tools
- */
-const MODERN_SIGNALS: Record<string, string> = {
-  // Build tools
-  "vite": "Modern build tool with fast HMR",
-  "esbuild": "Blazing fast bundler",
-  "swc": "Rust-based fast compiler",
-  "bun": "Modern JavaScript runtime",
-  "turbo": "High-performance build system",
-  "tsup": "Zero-config TypeScript bundler",
-  // Frameworks
-  "next": "Modern React meta-framework",
-  "@remix-run": "Full-stack web framework",
-  "astro": "Modern static site builder",
-  "solid-js": "Fine-grained reactive framework",
-  "svelte": "Compile-time reactive framework",
-  // State management
-  "zustand": "Lightweight state management",
-  "jotai": "Atomic state management",
-  "@tanstack/react-query": "Modern data fetching",
-  "trpc": "End-to-end typesafe APIs",
-  // Testing
-  "vitest": "Fast Vite-native test runner",
-  "playwright": "Modern E2E testing",
-  // Backend
-  "hono": "Ultra-fast web framework",
-  "drizzle-orm": "TypeScript-first ORM",
-  "prisma": "Modern database toolkit",
-  // Validation
-  "zod": "TypeScript-first schema validation",
-  // Package managers
-  "pnpm": "Fast, disk space efficient package manager",
-};
-
-/**
- * Legacy/outdated patterns
- */
-const LEGACY_SIGNALS: Record<string, string> = {
-  // Build tools
-  "webpack": "Consider migrating to Vite or esbuild",
-  "gulp": "Legacy task runner",
-  "grunt": "Legacy task runner",
-  "bower": "Deprecated package manager",
-  // Frameworks
-  "create-react-app": "Deprecated; use Vite or Next.js",
-  "angular.js": "Legacy Angular (v1)",
-  // State management
-  "redux": "Consider lighter alternatives like Zustand",
-  "mobx": "Consider lighter alternatives",
-  // Testing
-  "mocha": "Consider Vitest for faster tests",
-  "jasmine": "Consider modern alternatives",
-  "karma": "Legacy test runner",
-  "enzyme": "Deprecated; use React Testing Library",
-  // Backend
-  "express": "Stable but consider Hono or Fastify",
-  // Database
-  "mongoose": "Consider Prisma or Drizzle for type safety",
-  "sequelize": "Consider Prisma or Drizzle for type safety",
-  // Utilities
-  "moment": "Use date-fns or dayjs instead",
-  "lodash": "Many methods now native; use sparingly",
-  "request": "Deprecated; use fetch or got",
-  "axios": "Consider fetch or ky",
-};
-
-/**
- * Risky signals (security/maintenance concerns)
- */
-const RISKY_SIGNALS: Record<string, string> = {
-  "node-sass": "Deprecated; use sass (dart-sass)",
-  "tslint": "Deprecated; use ESLint with typescript-eslint",
-  "husky": "Ensure v5+ (v4 has breaking changes)",
-  "left-pad": "Infamous npm incident package",
-  "event-stream": "Had security incident",
-  "colors": "Had protestware incident",
-  "faker": "Unmaintained; use @faker-js/faker",
-  "core-js": "Ensure updated (security patches)",
-};
-
-/**
- * Stable/recommended signals
- */
-const STABLE_SIGNALS: Record<string, string> = {
-  "typescript": "Industry standard type system",
-  "eslint": "Standard linting tool",
-  "prettier": "Standard code formatter",
-  "react": "Stable UI library",
-  "vue": "Stable UI framework",
-  "fastify": "Fast and low overhead web framework",
-  "jest": "Well-established test runner",
-  "@testing-library/react": "Recommended React testing",
-  "helmet": "Security headers middleware",
-  "cors": "CORS middleware",
-  "dotenv": "Environment variable management",
-  "winston": "Production-grade logging",
-  "pino": "Fast JSON logger",
-};
+const MODERN_SIGNALS: Record<string, string> = radarSignals.modern;
+const LEGACY_SIGNALS: Record<string, string> = radarSignals.legacy;
+const RISKY_SIGNALS: Record<string, string> = radarSignals.risky;
+const STABLE_SIGNALS: Record<string, string> = radarSignals.stable;
 
 /**
  * Analyze dependencies for radar signals

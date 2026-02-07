@@ -1,0 +1,160 @@
+{
+  "concernPatterns": [
+    {
+      "pattern": "eval\\s*\\(",
+      "title": "Use of eval()",
+      "severity": "high",
+      "category": "Code Injection",
+      "description": "eval() can execute arbitrary code and is a security risk",
+      "recommendation": "Use safer alternatives like JSON.parse() or Function constructor with validation"
+    },
+    {
+      "pattern": "innerHTML\\s*=",
+      "title": "Direct innerHTML assignment",
+      "severity": "medium",
+      "category": "XSS",
+      "description": "Direct innerHTML assignment can lead to XSS vulnerabilities",
+      "recommendation": "Use textContent or sanitize HTML before assignment"
+    },
+    {
+      "pattern": "dangerouslySetInnerHTML",
+      "title": "dangerouslySetInnerHTML usage",
+      "severity": "medium",
+      "category": "XSS",
+      "description": "React's dangerouslySetInnerHTML can introduce XSS vulnerabilities",
+      "recommendation": "Ensure content is sanitized before use"
+    },
+    {
+      "pattern": "process\\.env\\.[A-Z_]+",
+      "title": "Environment variable usage",
+      "severity": "info",
+      "category": "Configuration",
+      "description": "Environment variables are used for configuration",
+      "recommendation": "Ensure sensitive values are not logged or exposed"
+    },
+    {
+      "pattern": "\\$\\{.*\\}.*(?:SELECT|INSERT|UPDATE|DELETE)",
+      "flags": "i",
+      "title": "Potential SQL injection",
+      "severity": "critical",
+      "category": "SQL Injection",
+      "description": "Template literals in SQL queries may be vulnerable to injection",
+      "recommendation": "Use parameterized queries or an ORM"
+    },
+    {
+      "pattern": "exec\\s*\\(\\s*['\"`].*\\$\\{",
+      "title": "Command injection risk",
+      "severity": "critical",
+      "category": "Command Injection",
+      "description": "Executing shell commands with user input is dangerous",
+      "recommendation": "Use child_process.spawn with an array of arguments"
+    },
+    {
+      "pattern": "password\\s*[=:]\\s*['\"][^'\"]+['\"]",
+      "flags": "i",
+      "title": "Hardcoded password",
+      "severity": "critical",
+      "category": "Secrets",
+      "description": "Passwords should not be hardcoded in source code",
+      "recommendation": "Use environment variables or a secrets manager"
+    },
+    {
+      "pattern": "api[_-]?key\\s*[=:]\\s*['\"][A-Za-z0-9]{20,}['\"]",
+      "flags": "i",
+      "title": "Potential hardcoded API key",
+      "severity": "high",
+      "category": "Secrets",
+      "description": "API keys should not be hardcoded in source code",
+      "recommendation": "Use environment variables or a secrets manager"
+    },
+    {
+      "pattern": "secret\\s*[=:]\\s*['\"][^'\"]{10,}['\"]",
+      "flags": "i",
+      "title": "Potential hardcoded secret",
+      "severity": "high",
+      "category": "Secrets",
+      "description": "Secrets should not be hardcoded in source code",
+      "recommendation": "Use environment variables or a secrets manager"
+    },
+    {
+      "pattern": "disable.*ssl|ssl.*false|verify.*false",
+      "flags": "i",
+      "title": "SSL verification disabled",
+      "severity": "high",
+      "category": "Transport Security",
+      "description": "Disabling SSL verification makes connections vulnerable to MITM attacks",
+      "recommendation": "Enable SSL verification in production"
+    },
+    {
+      "pattern": "cors\\(\\s*\\)",
+      "title": "CORS with default (permissive) settings",
+      "severity": "medium",
+      "category": "CORS",
+      "description": "Default CORS allows all origins",
+      "recommendation": "Configure specific allowed origins"
+    },
+    {
+      "pattern": "\\.createReadStream\\s*\\([^)]*\\+",
+      "title": "Path traversal risk",
+      "severity": "high",
+      "category": "Path Traversal",
+      "description": "User input in file paths can lead to path traversal",
+      "recommendation": "Validate and sanitize file paths, use path.resolve()"
+    }
+  ],
+  "authPatterns": [
+    {
+      "pattern": "passport\\.authenticate",
+      "type": "Session-based (Passport.js)",
+      "library": "passport",
+      "description": "Uses Passport.js middleware for authentication"
+    },
+    {
+      "pattern": "jwt\\.sign|jwt\\.verify|jsonwebtoken",
+      "type": "JWT",
+      "library": "jsonwebtoken",
+      "description": "Uses JSON Web Tokens for stateless auth"
+    },
+    {
+      "pattern": "NextAuth|getServerSession",
+      "type": "NextAuth.js",
+      "library": "next-auth",
+      "description": "Uses NextAuth.js for Next.js authentication"
+    },
+    {
+      "pattern": "useAuth|AuthProvider|authContext",
+      "flags": "i",
+      "type": "Custom Auth Context",
+      "description": "Uses React context for auth state management"
+    },
+    {
+      "pattern": "OAuth2|oauth2Client",
+      "flags": "i",
+      "type": "OAuth2",
+      "description": "Implements OAuth2 authentication flow"
+    },
+    {
+      "pattern": "supabase\\.auth",
+      "type": "Supabase Auth",
+      "library": "@supabase/supabase-js",
+      "description": "Uses Supabase authentication"
+    },
+    {
+      "pattern": "firebase\\.auth|getAuth\\(\\)",
+      "type": "Firebase Auth",
+      "library": "firebase",
+      "description": "Uses Firebase authentication"
+    },
+    {
+      "pattern": "bcrypt\\.hash|bcrypt\\.compare|argon2\\.hash",
+      "type": "Password hashing",
+      "description": "Implements secure password hashing"
+    },
+    {
+      "pattern": "session\\s*[=:]",
+      "flags": "i",
+      "type": "Session-based",
+      "description": "Uses session-based authentication"
+    }
+  ]
+}

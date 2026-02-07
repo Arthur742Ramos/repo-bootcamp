@@ -6,44 +6,25 @@
 import { readFile } from "fs/promises";
 import { join, dirname, basename, relative } from "path";
 import type { FileInfo, ChangeImpact } from "./types.js";
+import importPatternsJson from "./data/import-patterns.json" with { type: "json" };
 
 /**
- * Import pattern matchers for different languages
+ * Import pattern matchers for different languages (loaded from JSON, compiled to RegExp)
  */
-const IMPORT_PATTERNS: Record<string, RegExp[]> = {
-  typescript: [
-    /import\s+(?:(?:\{[^}]*\}|\*\s+as\s+\w+|\w+)\s+from\s+)?['"]([^'"]+)['"]/g,
-    /require\s*\(\s*['"]([^'"]+)['"]\s*\)/g,
-    /export\s+(?:\*|\{[^}]*\})\s+from\s+['"]([^'"]+)['"]/g,
-  ],
-  javascript: [
-    /import\s+(?:(?:\{[^}]*\}|\*\s+as\s+\w+|\w+)\s+from\s+)?['"]([^'"]+)['"]/g,
-    /require\s*\(\s*['"]([^'"]+)['"]\s*\)/g,
-    /export\s+(?:\*|\{[^}]*\})\s+from\s+['"]([^'"]+)['"]/g,
-  ],
-  python: [
-    /^import\s+(\S+)/gm,
-    /^from\s+(\S+)\s+import/gm,
-  ],
-  go: [
-    /import\s+(?:\w+\s+)?["']([^"']+)["']/g,
-    /import\s+\(\s*(?:[\s\S]*?["']([^"']+)["'])+\s*\)/g,
-  ],
-};
+const IMPORT_PATTERNS: Record<string, RegExp[]> = Object.fromEntries(
+  Object.entries(importPatternsJson.importPatterns).map(([lang, patterns]) => [
+    lang,
+    (patterns as string[]).map(p => {
+      const isMultiline = lang === "python";
+      return new RegExp(p, isMultiline ? "gm" : "g");
+    }),
+  ])
+);
 
 /**
  * File extension to language mapping
  */
-const EXT_TO_LANG: Record<string, string> = {
-  ".ts": "typescript",
-  ".tsx": "typescript",
-  ".js": "javascript",
-  ".jsx": "javascript",
-  ".mjs": "javascript",
-  ".cjs": "javascript",
-  ".py": "python",
-  ".go": "go",
-};
+const EXT_TO_LANG: Record<string, string> = importPatternsJson.extToLang;
 
 /**
  * Extract imports from a file

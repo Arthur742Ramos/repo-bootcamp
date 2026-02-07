@@ -68,61 +68,14 @@ export interface SecurityAnalysis {
   hasSqlInjectionPrevention: boolean;
 }
 
-/**
- * Security-related npm packages
- */
-const SECURITY_PACKAGES: Record<string, SecurityDependency> = {
-  // Auth
-  "passport": { name: "passport", purpose: "Authentication middleware", type: "auth" },
-  "passport-local": { name: "passport-local", purpose: "Local authentication strategy", type: "auth" },
-  "passport-jwt": { name: "passport-jwt", purpose: "JWT authentication strategy", type: "auth" },
-  "passport-oauth2": { name: "passport-oauth2", purpose: "OAuth2 authentication", type: "auth" },
-  "jsonwebtoken": { name: "jsonwebtoken", purpose: "JWT signing and verification", type: "auth" },
-  "jose": { name: "jose", purpose: "Modern JWT/JWE/JWS library", type: "auth" },
-  "next-auth": { name: "next-auth", purpose: "Next.js authentication", type: "auth" },
-  "@auth/core": { name: "@auth/core", purpose: "Auth.js core", type: "auth" },
-  "lucia": { name: "lucia", purpose: "Session-based auth library", type: "auth" },
-  "@clerk/nextjs": { name: "@clerk/nextjs", purpose: "Clerk authentication", type: "auth" },
-  "auth0": { name: "auth0", purpose: "Auth0 SDK", type: "auth" },
-  "@supabase/supabase-js": { name: "@supabase/supabase-js", purpose: "Supabase (includes auth)", type: "auth" },
-  "firebase": { name: "firebase", purpose: "Firebase (includes auth)", type: "auth" },
+import securityPackagesJson from "./data/security-packages.json" with { type: "json" };
+import securityPatternsJson from "./data/security-patterns.json" with { type: "json" };
 
-  // Crypto
-  "bcrypt": { name: "bcrypt", purpose: "Password hashing", type: "crypto" },
-  "bcryptjs": { name: "bcryptjs", purpose: "Password hashing (JS)", type: "crypto" },
-  "argon2": { name: "argon2", purpose: "Password hashing (Argon2)", type: "crypto" },
-  "crypto-js": { name: "crypto-js", purpose: "Cryptographic functions", type: "crypto" },
-  "node-forge": { name: "node-forge", purpose: "TLS/crypto utilities", type: "crypto" },
-
-  // Validation
-  "zod": { name: "zod", purpose: "Schema validation", type: "validation" },
-  "yup": { name: "yup", purpose: "Schema validation", type: "validation" },
-  "joi": { name: "joi", purpose: "Schema validation", type: "validation" },
-  "ajv": { name: "ajv", purpose: "JSON schema validation", type: "validation" },
-  "class-validator": { name: "class-validator", purpose: "Decorator-based validation", type: "validation" },
-  "express-validator": { name: "express-validator", purpose: "Express request validation", type: "validation" },
-  "validator": { name: "validator", purpose: "String validation", type: "validation" },
-
-  // Security headers
-  "helmet": { name: "helmet", purpose: "Security headers middleware", type: "security-header" },
-  "cors": { name: "cors", purpose: "CORS configuration", type: "security-header" },
-  "csurf": { name: "csurf", purpose: "CSRF protection", type: "security-header" },
-
-  // Rate limiting
-  "express-rate-limit": { name: "express-rate-limit", purpose: "Rate limiting", type: "rate-limit" },
-  "rate-limiter-flexible": { name: "rate-limiter-flexible", purpose: "Rate limiting", type: "rate-limit" },
-  "@upstash/ratelimit": { name: "@upstash/ratelimit", purpose: "Serverless rate limiting", type: "rate-limit" },
-
-  // Other
-  "xss": { name: "xss", purpose: "XSS sanitization", type: "other" },
-  "dompurify": { name: "dompurify", purpose: "HTML sanitization", type: "other" },
-  "sanitize-html": { name: "sanitize-html", purpose: "HTML sanitization", type: "other" },
-  "hpp": { name: "hpp", purpose: "HTTP parameter pollution prevention", type: "other" },
-  "sql-template-strings": { name: "sql-template-strings", purpose: "SQL injection prevention", type: "other" },
-};
+const SECURITY_PACKAGES: Record<string, SecurityDependency> =
+  securityPackagesJson as Record<string, SecurityDependency>;
 
 /**
- * Patterns that might indicate security issues
+ * Patterns that might indicate security issues (loaded from JSON, compiled to RegExp)
  */
 const CONCERN_PATTERNS: Array<{
   pattern: RegExp;
@@ -131,165 +84,24 @@ const CONCERN_PATTERNS: Array<{
   category: string;
   description: string;
   recommendation: string;
-}> = [
-  {
-    pattern: /eval\s*\(/,
-    title: "Use of eval()",
-    severity: "high",
-    category: "Code Injection",
-    description: "eval() can execute arbitrary code and is a security risk",
-    recommendation: "Use safer alternatives like JSON.parse() or Function constructor with validation",
-  },
-  {
-    pattern: /innerHTML\s*=/,
-    title: "Direct innerHTML assignment",
-    severity: "medium",
-    category: "XSS",
-    description: "Direct innerHTML assignment can lead to XSS vulnerabilities",
-    recommendation: "Use textContent or sanitize HTML before assignment",
-  },
-  {
-    pattern: /dangerouslySetInnerHTML/,
-    title: "dangerouslySetInnerHTML usage",
-    severity: "medium",
-    category: "XSS",
-    description: "React's dangerouslySetInnerHTML can introduce XSS vulnerabilities",
-    recommendation: "Ensure content is sanitized before use",
-  },
-  {
-    pattern: /process\.env\.[A-Z_]+/,
-    title: "Environment variable usage",
-    severity: "info",
-    category: "Configuration",
-    description: "Environment variables are used for configuration",
-    recommendation: "Ensure sensitive values are not logged or exposed",
-  },
-  {
-    pattern: /\$\{.*\}.*(?:SELECT|INSERT|UPDATE|DELETE)/i,
-    title: "Potential SQL injection",
-    severity: "critical",
-    category: "SQL Injection",
-    description: "Template literals in SQL queries may be vulnerable to injection",
-    recommendation: "Use parameterized queries or an ORM",
-  },
-  {
-    pattern: /exec\s*\(\s*['"`].*\$\{/,
-    title: "Command injection risk",
-    severity: "critical",
-    category: "Command Injection",
-    description: "Executing shell commands with user input is dangerous",
-    recommendation: "Use child_process.spawn with an array of arguments",
-  },
-  {
-    pattern: /password\s*[=:]\s*['"][^'"]+['"]/i,
-    title: "Hardcoded password",
-    severity: "critical",
-    category: "Secrets",
-    description: "Passwords should not be hardcoded in source code",
-    recommendation: "Use environment variables or a secrets manager",
-  },
-  {
-    pattern: /api[_-]?key\s*[=:]\s*['"][A-Za-z0-9]{20,}['"]/i,
-    title: "Potential hardcoded API key",
-    severity: "high",
-    category: "Secrets",
-    description: "API keys should not be hardcoded in source code",
-    recommendation: "Use environment variables or a secrets manager",
-  },
-  {
-    pattern: /secret\s*[=:]\s*['"][^'"]{10,}['"]/i,
-    title: "Potential hardcoded secret",
-    severity: "high",
-    category: "Secrets",
-    description: "Secrets should not be hardcoded in source code",
-    recommendation: "Use environment variables or a secrets manager",
-  },
-  {
-    pattern: /disable.*ssl|ssl.*false|verify.*false/i,
-    title: "SSL verification disabled",
-    severity: "high",
-    category: "Transport Security",
-    description: "Disabling SSL verification makes connections vulnerable to MITM attacks",
-    recommendation: "Enable SSL verification in production",
-  },
-  {
-    pattern: /cors\(\s*\)/,
-    title: "CORS with default (permissive) settings",
-    severity: "medium",
-    category: "CORS",
-    description: "Default CORS allows all origins",
-    recommendation: "Configure specific allowed origins",
-  },
-  {
-    pattern: /\.createReadStream\s*\([^)]*\+/,
-    title: "Path traversal risk",
-    severity: "high",
-    category: "Path Traversal",
-    description: "User input in file paths can lead to path traversal",
-    recommendation: "Validate and sanitize file paths, use path.resolve()",
-  },
-];
+}> = securityPatternsJson.concernPatterns.map(p => ({
+  ...p,
+  pattern: new RegExp(p.pattern, (p as { flags?: string }).flags),
+  severity: p.severity as Severity,
+}));
 
 /**
- * Auth pattern detection rules
+ * Auth pattern detection rules (loaded from JSON, compiled to RegExp)
  */
 const AUTH_PATTERNS: Array<{
   pattern: RegExp;
   type: string;
   library?: string;
   description: string;
-}> = [
-  {
-    pattern: /passport\.authenticate/,
-    type: "Session-based (Passport.js)",
-    library: "passport",
-    description: "Uses Passport.js middleware for authentication",
-  },
-  {
-    pattern: /jwt\.sign|jwt\.verify|jsonwebtoken/,
-    type: "JWT",
-    library: "jsonwebtoken",
-    description: "Uses JSON Web Tokens for stateless auth",
-  },
-  {
-    pattern: /NextAuth|getServerSession/,
-    type: "NextAuth.js",
-    library: "next-auth",
-    description: "Uses NextAuth.js for Next.js authentication",
-  },
-  {
-    pattern: /useAuth|AuthProvider|authContext/i,
-    type: "Custom Auth Context",
-    description: "Uses React context for auth state management",
-  },
-  {
-    pattern: /OAuth2|oauth2Client/i,
-    type: "OAuth2",
-    description: "Implements OAuth2 authentication flow",
-  },
-  {
-    pattern: /supabase\.auth/,
-    type: "Supabase Auth",
-    library: "@supabase/supabase-js",
-    description: "Uses Supabase authentication",
-  },
-  {
-    pattern: /firebase\.auth|getAuth\(\)/,
-    type: "Firebase Auth",
-    library: "firebase",
-    description: "Uses Firebase authentication",
-  },
-  {
-    pattern: /bcrypt\.hash|bcrypt\.compare|argon2\.hash/,
-    type: "Password hashing",
-    description: "Implements secure password hashing",
-  },
-  {
-    pattern: /session\s*[=:]/i,
-    type: "Session-based",
-    description: "Uses session-based authentication",
-  },
-];
+}> = securityPatternsJson.authPatterns.map(p => ({
+  ...p,
+  pattern: new RegExp(p.pattern, (p as { flags?: string }).flags),
+}));
 
 /**
  * Analyze a repository for security patterns and concerns

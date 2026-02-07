@@ -26,6 +26,7 @@ export interface BootcampOptions {
   diagramFormat?: "svg" | "png" | "pdf";
   style?: "startup" | "enterprise" | "oss" | "devops";
   web?: boolean;
+  fullClone?: boolean;
 }
 
 // Template style pack

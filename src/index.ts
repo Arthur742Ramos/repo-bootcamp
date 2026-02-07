@@ -114,7 +114,7 @@ async function run(repoUrl: string, options: BootcampOptions): Promise<void> {
   progress.startPhase("clone", repoInfo.fullName);
   let repoPath: string;
   try {
-    repoPath = await cloneRepo(repoInfo, process.cwd(), options.branch);
+    repoPath = await cloneRepo(repoInfo, process.cwd(), options.branch, options.fullClone);
     runStats.cloneTime = Date.now() - cloneStart;
     progress.succeed(`Cloned ${repoInfo.fullName} (branch: ${repoInfo.branch})`);
   } catch (error: any) {
@@ -482,7 +482,7 @@ async function runAsk(repoUrl: string, options: { branch?: string; verbose?: boo
   console.log(chalk.gray("Cloning repository..."));
   let repoPath: string;
   try {
-    repoPath = await cloneRepo(repoInfo, process.cwd(), options.branch);
+    repoPath = await cloneRepo(repoInfo, process.cwd(), options.branch, false);
   } catch (error: any) {
     console.error(chalk.red(`Clone failed: ${error.message}`));
     process.exit(1);
@@ -555,6 +555,7 @@ program
   .option("-s, --style <style>", "Output style: startup, enterprise, oss, devops", "oss")
   .option("--render-diagrams [format]", "Render diagrams.mmd to SVG/PNG (requires mermaid-cli)", "svg")
   .option("--fast", "Fast mode: inline key files, skip tools, much faster (~15-30s)")
+  .option("--full-clone", "Perform a full clone instead of shallow clone (slower but includes full history)")
   .action(async (repoUrl: string, opts) => {
     const options: BootcampOptions = {
       branch: opts.branch,
@@ -578,6 +579,7 @@ program
       style: opts.style as StylePack,
       renderDiagrams: opts.renderDiagrams !== undefined,
       diagramFormat: (opts.renderDiagrams === true ? "svg" : opts.renderDiagrams) as DiagramFormat,
+      fullClone: opts.fullClone || false,
     };
 
     if (!["onboarding", "architecture", "contributing", "all"].includes(options.focus)) {

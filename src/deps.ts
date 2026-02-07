@@ -5,6 +5,7 @@
 
 import { readFile } from "fs/promises";
 import { join } from "path";
+import categoryPatternsJson from "./data/category-patterns.json" with { type: "json" };
 
 /**
  * Dependency information
@@ -37,57 +38,14 @@ export interface DependencyAnalysis {
 }
 
 /**
- * Known dependency categories for smart grouping
+ * Known dependency categories for smart grouping (loaded from JSON, compiled to RegExp)
  */
-const CATEGORY_PATTERNS: Record<string, RegExp[]> = {
-  "Testing": [
-    /jest/, /vitest/, /mocha/, /chai/, /testing-library/, /cypress/, /playwright/,
-    /supertest/, /nock/, /msw/, /faker/, /sinon/, /enzyme/,
-  ],
-  "Build & Bundling": [
-    /webpack/, /vite/, /rollup/, /esbuild/, /parcel/, /babel/, /swc/, /tsup/, /tsc/,
-    /terser/, /uglify/,
-  ],
-  "TypeScript": [
-    /typescript/, /^@types\//, /ts-node/, /tsx/,
-  ],
-  "Linting & Formatting": [
-    /eslint/, /prettier/, /stylelint/, /husky/, /lint-staged/, /commitlint/,
-  ],
-  "React Ecosystem": [
-    /^react$/, /^react-dom$/, /^react-router/, /^@tanstack\/react/, /^react-query/,
-    /redux/, /zustand/, /jotai/, /recoil/, /mobx/,
-  ],
-  "Vue Ecosystem": [
-    /^vue$/, /^vue-router$/, /vuex/, /pinia/, /^@vue\//,
-  ],
-  "API & HTTP": [
-    /axios/, /^ky$/, /node-fetch/, /got/, /superagent/, /undici/, /graphql/,
-    /apollo/, /trpc/, /openapi/,
-  ],
-  "Database": [
-    /prisma/, /sequelize/, /typeorm/, /mongoose/, /knex/, /drizzle/,
-    /^pg$/, /^mysql/, /^sqlite/, /redis/, /mongodb/,
-  ],
-  "Authentication": [
-    /passport/, /jsonwebtoken/, /^jwt/, /bcrypt/, /argon2/, /oauth/, /auth0/,
-    /next-auth/, /lucia/, /clerk/,
-  ],
-  "CLI": [
-    /commander/, /yargs/, /meow/, /inquirer/, /prompts/, /chalk/, /ora/,
-    /cli-table/, /boxen/, /figlet/,
-  ],
-  "Utilities": [
-    /lodash/, /underscore/, /ramda/, /date-fns/, /dayjs/, /moment/,
-    /uuid/, /nanoid/, /zod/, /yup/, /joi/, /ajv/,
-  ],
-  "Logging & Monitoring": [
-    /winston/, /pino/, /bunyan/, /debug/, /sentry/, /datadog/, /newrelic/,
-  ],
-  "Documentation": [
-    /typedoc/, /jsdoc/, /storybook/, /docusaurus/, /nextra/,
-  ],
-};
+const CATEGORY_PATTERNS: Record<string, RegExp[]> = Object.fromEntries(
+  Object.entries(categoryPatternsJson).map(([cat, patterns]) => [
+    cat,
+    (patterns as string[]).map(p => new RegExp(p)),
+  ])
+);
 
 /**
  * Categorize a dependency based on its name

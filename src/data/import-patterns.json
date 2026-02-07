@@ -1,0 +1,32 @@
+{
+  "importPatterns": {
+    "typescript": [
+      "import\\s+(?:(?:\\{[^}]*\\}|\\*\\s+as\\s+\\w+|\\w+)\\s+from\\s+)?['\"]([^'\"]+)['\"]",
+      "require\\s*\\(\\s*['\"]([^'\"]+)['\"]\\s*\\)",
+      "export\\s+(?:\\*|\\{[^}]*\\})\\s+from\\s+['\"]([^'\"]+)['\"]"
+    ],
+    "javascript": [
+      "import\\s+(?:(?:\\{[^}]*\\}|\\*\\s+as\\s+\\w+|\\w+)\\s+from\\s+)?['\"]([^'\"]+)['\"]",
+      "require\\s*\\(\\s*['\"]([^'\"]+)['\"]\\s*\\)",
+      "export\\s+(?:\\*|\\{[^}]*\\})\\s+from\\s+['\"]([^'\"]+)['\"]"
+    ],
+    "python": [
+      "^import\\s+(\\S+)",
+      "^from\\s+(\\S+)\\s+import"
+    ],
+    "go": [
+      "import\\s+(?:\\w+\\s+)?[\"']([^\"']+)[\"']",
+      "import\\s+\\(\\s*(?:[\\s\\S]*?[\"']([^\"']+)[\"'])+\\s*\\)"
+    ]
+  },
+  "extToLang": {
+    ".ts": "typescript",
+    ".tsx": "typescript",
+    ".js": "javascript",
+    ".jsx": "javascript",
+    ".mjs": "javascript",
+    ".cjs": "javascript",
+    ".py": "python",
+    ".go": "go"
+  }
+}
