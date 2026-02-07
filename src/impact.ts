@@ -361,6 +361,18 @@ export function getKeyFilesForImpact(files: FileInfo[]): string[] {
     /^src\/[^/]+\.(ts|js)$/, // Top-level src files
     /^source\/[^/]+\.(ts|js)$/, // Top-level source files
     /^lib\/[^/]+\.(ts|js)$/, // Top-level lib files
+    // Terraform IaC key files (root-level only)
+    /^main\.tf$/,
+    /^variables\.tf$/,
+    /^outputs\.tf$/,
+    /^providers\.tf$/,
+    /^versions\.tf$/,
+    /^backend\.tf$/,
+    /^terragrunt\.hcl$/,
+    /^\.terraform\.lock\.hcl$/,
+    // Bicep IaC key files (root-level only)
+    /^main\.bicep$/,
+    /^modules\.bicep$/,
   ];
 
   const keyFiles: string[] = [];
@@ -369,10 +381,10 @@ export function getKeyFilesForImpact(files: FileInfo[]): string[] {
     for (const file of files) {
       if (!file.isDirectory && pattern.test(file.path) && !keyFiles.includes(file.path)) {
         keyFiles.push(file.path);
-        if (keyFiles.length >= 10) break;
+        if (keyFiles.length >= 20) break;
       }
     }
-    if (keyFiles.length >= 10) break;
+    if (keyFiles.length >= 20) break;
   }
 
   return keyFiles;

@@ -32,14 +32,14 @@ describe("Change Impact Map", () => {
       expect(found.length).toBeGreaterThan(0);
     });
 
-    it("should limit to 10 files", () => {
+    it("should limit to 20 files", () => {
       const manyFiles: FileInfo[] = [];
-      for (let i = 0; i < 20; i++) {
+      for (let i = 0; i < 30; i++) {
         manyFiles.push({ path: `src/file${i}.ts`, size: 100, isDirectory: false });
       }
 
       const keyFiles = getKeyFilesForImpact(manyFiles);
-      expect(keyFiles.length).toBeLessThanOrEqual(10);
+      expect(keyFiles.length).toBeLessThanOrEqual(20);
     });
 
     it("should skip directories", () => {

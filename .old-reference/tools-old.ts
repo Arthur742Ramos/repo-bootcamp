@@ -24,10 +24,7 @@ export interface ToolContext {
   onToolResult?: (name: string, result: string) => void;
 }
 
-/**
- * Validates that a target path stays within the repository root to prevent path traversal.
- */
-export function safePath(repoPath: string, targetPath: string): string {
+function safePath(repoPath: string, targetPath: string): string {
   const resolvedRepoPath = resolve(repoPath);
   const resolvedPath = resolve(resolvedRepoPath, targetPath);
   const relativePath = relative(resolvedRepoPath, resolvedPath);
@@ -61,11 +58,11 @@ function createReadFileTool(context: ToolContext): Tool<any> {
   },
   handler: async (args: { path: string; maxLines?: number }) => {
     const { path, maxLines = 500 } = args;
-    const fullPath = safePath(context.repoPath, path);
 
     context.onToolCall?.("read_file", { path });
 
     try {
+      const fullPath = safePath(context.repoPath, path);
       const content = await readFile(fullPath, "utf-8");
       const lines = content.split("\n");
       const truncated = lines.slice(0, maxLines).join("\n");
@@ -75,8 +72,8 @@ function createReadFileTool(context: ToolContext): Tool<any> {
 
       context.onToolResult?.("read_file", `Read ${lines.length} lines from ${path}`);
       return { textResultForLlm: result, resultType: "success" as const };
-    } catch (error: unknown) {
-      const errorMsg = `Error reading file ${path}: ${(error as Error).message}`;
+    } catch (error: any) {
+      const errorMsg = `Error reading file ${path}: ${error.message}`;
       context.onToolResult?.("read_file", errorMsg);
       return { textResultForLlm: errorMsg, resultType: "failure" as const };
     }
@@ -113,11 +110,11 @@ function createListFilesTool(context: ToolContext): Tool<any> {
   },
   handler: async (args: { path?: string; pattern?: string; recursive?: boolean; maxResults?: number }) => {
     const { path = "", pattern, recursive = false, maxResults = 100 } = args;
-    const fullPath = safePath(context.repoPath, path);
 
     context.onToolCall?.("list_files", { path, pattern, recursive });
 
     try {
+      const fullPath = safePath(context.repoPath, path);
       const results: string[] = [];
 
       async function scanDir(dir: string, depth: number = 0): Promise<void> {
@@ -168,8 +165,8 @@ function createListFilesTool(context: ToolContext): Tool<any> {
 
       context.onToolResult?.("list_files", `Found ${results.length} items`);
       return { textResultForLlm: result, resultType: "success" as const };
-    } catch (error: unknown) {
-      const errorMsg = `Error listing files in ${path}: ${(error as Error).message}`;
+    } catch (error: any) {
+      const errorMsg = `Error listing files in ${path}: ${error.message}`;
       context.onToolResult?.("list_files", errorMsg);
       return { textResultForLlm: errorMsg, resultType: "failure" as const };
     }
@@ -207,11 +204,11 @@ function createSearchTool(context: ToolContext): Tool<any> {
   },
   handler: async (args: { pattern: string; path?: string; filePattern?: string; maxResults?: number }) => {
     const { pattern, path = "", filePattern, maxResults = 50 } = args;
-    const searchPath = safePath(context.repoPath, path);
 
     context.onToolCall?.("search", { pattern, path, filePattern });
 
     try {
+      const searchPath = safePath(context.repoPath, path);
       const rgArgs = ["--line-number", "--no-heading", "--max-count", String(maxResults)];
       if (filePattern) {
         rgArgs.push("--glob", filePattern);
@@ -232,13 +229,13 @@ function createSearchTool(context: ToolContext): Tool<any> {
 
       context.onToolResult?.("search", `Found ${lines.length} matches`);
       return { textResultForLlm: result, resultType: "success" as const };
-    } catch (error: unknown) {
+    } catch (error: any) {
       // ripgrep returns exit code 1 when no matches found
-      if ((error as { code?: number }).code === 1) {
+      if (error.code === 1) {
         context.onToolResult?.("search", "No matches found");
         return { textResultForLlm: `No matches found for pattern: ${pattern}`, resultType: "success" as const };
       }
-      const errorMsg = `Error searching: ${(error as Error).message}`;
+      const errorMsg = `Error searching: ${error.message}`;
       context.onToolResult?.("search", errorMsg);
       return { textResultForLlm: errorMsg, resultType: "failure" as const };
     }
@@ -317,8 +314,8 @@ ${gitInfo}`;
 
       context.onToolResult?.("get_repo_metadata", `Collected metadata for ${totalFiles} files`);
       return { textResultForLlm: result, resultType: "success" as const };
-    } catch (error: unknown) {
-      const errorMsg = `Error getting metadata: ${(error as Error).message}`;
+    } catch (error: any) {
+      const errorMsg = `Error getting metadata: ${error.message}`;
       context.onToolResult?.("get_repo_metadata", errorMsg);
       return { textResultForLlm: errorMsg, resultType: "failure" as const };
     }
@@ -329,7 +326,7 @@ ${gitInfo}`;
 /**
  * Get all tools for session creation
  */
-export function getRepoTools(context: ToolContext): Tool<any>[] {
+export function getRepoTools(context: ToolContext): Tool<unknown>[] {
   return [
     createReadFileTool(context),
     createListFilesTool(context),
