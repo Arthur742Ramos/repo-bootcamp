@@ -98,14 +98,6 @@ async function getReadme(repoPath: string): Promise<string | null> {
 }
 
 /**
- * Extract version patterns from text
- */
-function extractVersions(text: string, pattern: RegExp): string[] {
-  const matches = text.match(pattern);
-  return matches || [];
-}
-
-/**
  * Analyze version mismatches between docs and package.json
  */
 export async function analyzeVersionMismatches(repoPath: string): Promise<VersionMismatch[]> {

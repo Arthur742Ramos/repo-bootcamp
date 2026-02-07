@@ -81,10 +81,14 @@ async function createFixtureRepo(baseDir: string): Promise<string> {
   );
 
   // Init a git repo so scanRepo works in a realistic context
-  execSync("git init && git add -A && git commit -m init --no-gpg-sign", {
-    cwd: repoDir,
-    stdio: "ignore",
-  });
+  // Set git config locally for CI environments where user.name/email aren't configured
+  execSync(
+    'git init && git config user.email "test@example.com" && git config user.name "Test User" && git add -A && git commit -m init --no-gpg-sign',
+    {
+      cwd: repoDir,
+      stdio: "ignore",
+    },
+  );
 
   return repoDir;
 }

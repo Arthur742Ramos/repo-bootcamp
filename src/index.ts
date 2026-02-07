@@ -18,7 +18,7 @@
 
 import { Command } from "commander";
 import chalk from "chalk";
-import { mkdir, writeFile, rm, readFile } from "fs/promises";
+import { mkdir, writeFile, rm } from "fs/promises";
 import { join, basename, resolve } from "path";
 import { pathToFileURL } from "url";
 
