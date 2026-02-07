@@ -9,7 +9,7 @@ import chalk from "chalk";
 /**
  * Progress phases for the bootcamp generation
  */
-export type ProgressPhase = "clone" | "scan" | "analyze" | "generate" | "cleanup";
+export type ProgressPhase = "clone" | "scan" | "analyze" | "generate" | "cleanup" | "diff";
 
 const PHASE_LABELS: Record<ProgressPhase, string> = {
   clone: "Cloning repository",
@@ -17,6 +17,7 @@ const PHASE_LABELS: Record<ProgressPhase, string> = {
   analyze: "Analyzing with AI",
   generate: "Generating docs",
   cleanup: "Cleaning up",
+  diff: "Analyzing diff",
 };
 
 const PHASE_ICONS: Record<ProgressPhase, string> = {
@@ -25,6 +26,7 @@ const PHASE_ICONS: Record<ProgressPhase, string> = {
   analyze: "🤖",
   generate: "📝",
   cleanup: "🧹",
+  diff: "🔀",
 };
 
 /**

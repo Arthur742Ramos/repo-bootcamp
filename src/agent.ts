@@ -34,13 +34,41 @@ IMPORTANT:
 - After gathering basics, produce output - don't over-research
 - Always return valid JSON as the final output`;
 
+const CUSTOM_PROMPT_FILE = ".bootcamp-prompts.md";
+const CUSTOM_PROMPT_MAX_CHARS = 8000;
+
+function readCustomPrompt(repoPath: string): string | null {
+  const promptPath = path.join(repoPath, CUSTOM_PROMPT_FILE);
+  if (!fs.existsSync(promptPath)) {
+    return null;
+  }
+
+  try {
+    const content = fs.readFileSync(promptPath, "utf-8").trim();
+    if (!content) {
+      return null;
+    }
+    return content.substring(0, CUSTOM_PROMPT_MAX_CHARS);
+  } catch {
+    return null;
+  }
+}
+
+function formatCustomPromptSection(customPrompt?: string | null): string {
+  if (!customPrompt) {
+    return "";
+  }
+  return `\n## Repository Guidance (.bootcamp-prompts.md)\n${customPrompt}\n`;
+}
+
 /**
  * Create the analysis prompt with scan results
  */
 function createAnalysisPrompt(
   repoInfo: RepoInfo,
   scanResult: ScanResult,
-  options: BootcampOptions
+  options: BootcampOptions,
+  customPrompt?: string | null
 ): string {
   const fileList = scanResult.files
     .filter((f) => !f.isDirectory)
@@ -49,6 +77,8 @@ function createAnalysisPrompt(
     .join("\n");
 
   const cmdList = scanResult.commands.map((c) => `- ${c.name}: ${c.command}`).join("\n");
+
+  const customSection = formatCustomPromptSection(customPrompt);
 
   return `Analyze this GitHub repository and produce a comprehensive onboarding kit.
 
@@ -155,6 +185,7 @@ Return a JSON object with this exact structure. Include "sources" arrays citing 
 
 Focus: ${options.focus}
 Target audience: ${options.audience}
+${customSection}
 
 Provide at least 8-10 first tasks of varying difficulty. Be specific about file paths.
 Set runbook.applicable = false for libraries/tools that aren't deployed as services.
@@ -170,7 +201,8 @@ function createFastAnalysisPrompt(
   repoPath: string,
   repoInfo: RepoInfo,
   scanResult: ScanResult,
-  options: BootcampOptions
+  options: BootcampOptions,
+  customPrompt?: string | null
 ): string {
   // Read key files inline
   const keyFiles = ["README.md", "readme.md", "package.json", "pyproject.toml", "Cargo.toml", "go.mod"];
@@ -210,6 +242,8 @@ function createFastAnalysisPrompt(
     .join("\n");
 
   const cmdList = scanResult.commands.map((c) => `- ${c.name}: ${c.command}`).join("\n");
+
+  const customSection = formatCustomPromptSection(customPrompt);
 
   return `Analyze this repository and produce a comprehensive onboarding kit.
 
@@ -332,6 +366,7 @@ Based on the above information, produce a JSON object. Follow this EXACT structu
 
 Focus: ${options.focus}
 Target audience: ${options.audience}
+${customSection}
 
 INSTRUCTIONS:
 1. Replace the example values above with actual data from this repository
@@ -490,6 +525,7 @@ export async function analyzeRepo(
   };
 
   const client = new CopilotClient();
+  const customPrompt = readCustomPrompt(repoPath);
 
   // Fast mode: no tools, inline file contents
   if (options.fast) {
@@ -509,7 +545,7 @@ export async function analyzeRepo(
       console.log(chalk.blue(`\nUsing model: ${model}`));
       console.log(chalk.yellow(`⚡ Fast mode: no tools, inline file contents\n`));
 
-      const prompt = createFastAnalysisPrompt(repoPath, repoInfo, scanResult, options);
+      const prompt = createFastAnalysisPrompt(repoPath, repoInfo, scanResult, options, customPrompt);
       let fullResponse = "";
 
       session.on((event: SessionEvent) => {
@@ -583,7 +619,7 @@ export async function analyzeRepo(
     console.log(chalk.blue(`\nUsing model: ${model}`));
     console.log(chalk.gray(`Tools available: ${tools.map((t) => t.name).join(", ")}\n`));
 
-    const prompt = createAnalysisPrompt(repoInfo, scanResult, options);
+    const prompt = createAnalysisPrompt(repoInfo, scanResult, options, customPrompt);
     let fullResponse = "";
 
     // Set up event handlers

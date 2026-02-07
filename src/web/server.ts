@@ -43,13 +43,15 @@ export function createApp(): express.Application {
 /**
  * Start the server
  */
-export function startServer(port: number = DEFAULT_PORT): void {
+export function startServer(port: number = DEFAULT_PORT): ReturnType<express.Application["listen"]> {
   const app = createApp();
 
-  app.listen(port, () => {
+  const server = app.listen(port, () => {
     console.log(chalk.bold.cyan("\n=== Repo Bootcamp Web Demo ===\n"));
     console.log(chalk.white(`Server running at: ${chalk.underline(`http://localhost:${port}`)}`));
     console.log(chalk.gray("\nOpen your browser to analyze a repository.\n"));
     console.log(chalk.gray("Press Ctrl+C to stop the server.\n"));
   });
+
+  return server;
 }

@@ -313,6 +313,37 @@ async function detectBreakingChanges(
 }
 
 /**
+ * Fetch GitHub PR base/head refs into the local repo.
+ */
+export async function fetchPullRequestRefs(
+  repoPath: string,
+  prNumber: number
+): Promise<{ baseRef: string; headRef: string }> {
+  const baseRef = `pr-${prNumber}-base`;
+  const headRef = `pr-${prNumber}-head`;
+
+  try {
+    await execAsync(`git fetch --quiet origin pull/${prNumber}/base:${baseRef}`, {
+      cwd: repoPath,
+      maxBuffer: 5 * 1024 * 1024,
+    });
+  } catch (error: unknown) {
+    throw new Error(`Failed to fetch PR base ref: ${(error as Error).message}`);
+  }
+
+  try {
+    await execAsync(`git fetch --quiet origin pull/${prNumber}/head:${headRef}`, {
+      cwd: repoPath,
+      maxBuffer: 5 * 1024 * 1024,
+    });
+  } catch (error: unknown) {
+    throw new Error(`Failed to fetch PR head ref: ${(error as Error).message}`);
+  }
+
+  return { baseRef, headRef };
+}
+
+/**
  * Analyze diff between two refs
  */
 export async function analyzeDiff(

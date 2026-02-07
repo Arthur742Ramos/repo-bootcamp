@@ -33,6 +33,7 @@ export interface BootcampOptions {
   watch?: boolean;
   watchInterval?: number;
   noCache?: boolean;
+  repoPrompts?: string;
 }
 
 // Template style pack

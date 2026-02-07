@@ -405,6 +405,16 @@ bootcamp https://github.com/owner/repo --compare v1.0.0
 # See what changed for onboarding (new deps, env vars, commands)
 ```
 
+### PR Diff Mode
+
+```bash
+# Analyze onboarding impact of a pull request
+bootcamp diff owner/repo#123
+
+# Or with a PR URL
+bootcamp diff https://github.com/owner/repo/pull/123
+```
+
 ### Watch Mode
 
 ```bash
@@ -493,6 +503,7 @@ npm install -g @mermaid-js/mermaid-cli
 |---------|-------------|
 | `bootcamp <url>` | Generate full bootcamp documentation |
 | `bootcamp ask <url>` | Interactive Q&A without full generation |
+| `bootcamp diff <owner/repo#pr>` | Generate onboarding diff for a PR |
 | `bootcamp web` | Start local web demo server |
 
 ## Architecture
@@ -557,6 +568,11 @@ Create a `bootcamp.config.json` in your project root for custom settings:
   }
 }
 ```
+
+### .bootcamp-prompts.md
+
+Add a `.bootcamp-prompts.md` file to the target repository to guide the analysis agent with repo-specific instructions (e.g., focus areas, terminology, tone).
+The contents are appended to the analysis prompt when generating docs.
 
 ### Plugin System
 

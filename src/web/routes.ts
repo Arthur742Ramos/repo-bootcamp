@@ -3,7 +3,7 @@ import { EventEmitter } from "events";
 import { mkdir, writeFile, rm, readFile } from "fs/promises";
 import { join } from "path";
 
-import { parseGitHubUrl, cloneRepo, scanRepo } from "../ingest.js";
+import { parseGitHubUrl, cloneRepo, scanRepo, mergeFrameworksFromDeps } from "../ingest.js";
 import { analyzeRepo, type AnalysisStats } from "../agent.js";
 import { readCache, writeCache } from "../cache.js";
 import { extractDependencies, generateDependencyDocs } from "../deps.js";
@@ -173,28 +173,44 @@ async function runAnalysis(job: AnalysisJob, options: Partial<BootcampOptions>):
     const outputDir = join(process.cwd(), `.bootcamp-output`, repoInfo.repo);
     await mkdir(outputDir, { recursive: true });
 
-    // Dependencies
-    const deps = await extractDependencies(repoPath);
-    
-    // Security
-    let packageJson: Record<string, unknown> | undefined;
-    try {
-      const pkgContent = await readFile(join(repoPath, "package.json"), "utf-8");
-      packageJson = JSON.parse(pkgContent);
-    } catch {
-      // No package.json
-    }
-    const security = await analyzeSecurityPatterns(repoPath, scanResult.files, packageJson);
+    const depsPromise = extractDependencies(repoPath).then((deps) => {
+      if (deps) {
+        const allDepNames = [
+          ...deps.runtime.map(d => d.name),
+          ...deps.dev.map(d => d.name),
+        ];
+        mergeFrameworksFromDeps(scanResult.stack, allDepNames);
+      }
+      return deps;
+    });
 
-    // Tech Radar
-    const radar = generateTechRadar(
-      scanResult.stack,
-      scanResult.files,
-      deps,
-      security,
-      !!scanResult.readme,
-      !!scanResult.contributing
+    const packageJsonPromise: Promise<Record<string, unknown> | undefined> = readFile(
+      join(repoPath, "package.json"),
+      "utf-8"
+    )
+      .then((pkgContent) => JSON.parse(pkgContent) as Record<string, unknown>)
+      .catch(() => undefined);
+
+    const securityPromise = packageJsonPromise.then((packageJson) =>
+      analyzeSecurityPatterns(repoPath, scanResult.files, packageJson)
     );
+
+    const radarPromise = Promise.all([depsPromise, securityPromise]).then(([deps, security]) =>
+      generateTechRadar(
+        scanResult.stack,
+        scanResult.files,
+        deps,
+        security,
+        !!scanResult.readme,
+        !!scanResult.contributing
+      )
+    );
+
+    const [deps, security, radar] = await Promise.all([
+      depsPromise,
+      securityPromise,
+      radarPromise,
+    ]);
 
     // Generate all docs
     const documents = [

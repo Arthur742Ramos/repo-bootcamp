@@ -11,6 +11,7 @@
  *   bootcamp https://github.com/owner/repo --interactive
  *   bootcamp https://github.com/owner/repo --compare v1.0.0
  *   bootcamp https://github.com/owner/repo --watch
+ *   bootcamp diff owner/repo#123
  *   bootcamp ask https://github.com/owner/repo
  *   bootcamp --web
  */
@@ -18,7 +19,8 @@
 import { Command } from "commander";
 import chalk from "chalk";
 import { mkdir, writeFile, rm, readFile } from "fs/promises";
-import { join, basename } from "path";
+import { join, basename, resolve } from "path";
+import { pathToFileURL } from "url";
 
 import { parseGitHubUrl, cloneRepo, scanRepo, mergeFrameworksFromDeps } from "./ingest.js";
 import { analyzeRepo, AnalysisStats } from "./agent.js";
@@ -29,7 +31,7 @@ import { generateTechRadar, generateRadarDocs, getRiskEmoji } from "./radar.js";
 import { buildImportGraph, analyzeChangeImpact, generateImpactDocs, getKeyFilesForImpact } from "./impact.js";
 import { runInteractiveMode } from "./interactive.js";
 import { createIssuesFromTasks, generateIssuePreview } from "./issues.js";
-import { analyzeDiff, generateDiffDocs } from "./diff.js";
+import { analyzeDiff, generateDiffDocs, fetchPullRequestRefs } from "./diff.js";
 import { startServer } from "./web/server.js";
 import { startWatch } from "./watch.js";
 import { loadConfig, getStyleConfig, loadPlugins, runPlugins, type BootcampConfig } from "./plugins.js";
@@ -45,7 +47,15 @@ import {
   generateRunbook,
   generateDiagrams,
 } from "./generator.js";
-import type { BootcampOptions, RepoFacts, ScanResult, RepoInfo, StylePack, TechRadar } from "./types.js";
+import type {
+  BootcampOptions,
+  RepoFacts,
+  ScanResult,
+  RepoInfo,
+  StylePack,
+  TechRadar,
+  DiffSummary,
+} from "./types.js";
 import pkg from "../package.json" with { type: "json" };
 
 const VERSION = pkg.version;
@@ -73,6 +83,14 @@ interface GenerationResult {
   deps: DependencyAnalysis | null;
 }
 
+interface PullRequestDiffOptions {
+  output?: string;
+  format?: string;
+  fullClone?: boolean;
+  keepTemp?: boolean;
+  verbose?: boolean;
+}
+
 interface GenerateOutputsParams {
   repoPath: string;
   repoInfo: RepoInfo;
@@ -84,6 +102,138 @@ interface GenerateOutputsParams {
   outputFormat: OutputFormat;
   progress: ProgressTracker;
   allowIssueCreation?: boolean;
+}
+
+function parsePullRequestTarget(target: string): { repoUrl: string; prNumber: number } {
+  const urlMatch = target.match(/github\.com\/([^/]+)\/([^/]+)\/pull\/(\d+)/i);
+  if (urlMatch) {
+    return {
+      repoUrl: `https://github.com/${urlMatch[1]}/${urlMatch[2].replace(/\.git$/, "")}`,
+      prNumber: parseInt(urlMatch[3], 10),
+    };
+  }
+
+  const shortMatch = target.match(/^([^/\s#]+)\/([^/\s#]+)#(\d+)$/);
+  if (shortMatch) {
+    return {
+      repoUrl: `https://github.com/${shortMatch[1]}/${shortMatch[2].replace(/\.git$/, "")}`,
+      prNumber: parseInt(shortMatch[3], 10),
+    };
+  }
+
+  const pathMatch = target.match(/^([^/\s#]+)\/([^/\s#]+)\/pull\/(\d+)$/);
+  if (pathMatch) {
+    return {
+      repoUrl: `https://github.com/${pathMatch[1]}/${pathMatch[2].replace(/\.git$/, "")}`,
+      prNumber: parseInt(pathMatch[3], 10),
+    };
+  }
+
+  throw new Error("Invalid PR reference. Use owner/repo#123 or https://github.com/owner/repo/pull/123");
+}
+
+async function runPullRequestDiff(prTarget: string, options: PullRequestDiffOptions): Promise<void> {
+  console.log(chalk.bold.blue("\n=== Repo Bootcamp - PR Diff ===\n"));
+
+  let targetInfo: { repoUrl: string; prNumber: number };
+  try {
+    targetInfo = parsePullRequestTarget(prTarget);
+  } catch (error: unknown) {
+    console.error(chalk.red((error as Error).message));
+    process.exit(1);
+  }
+
+  let repoInfo: RepoInfo;
+  try {
+    repoInfo = parseGitHubUrl(targetInfo.repoUrl);
+  } catch (error: unknown) {
+    console.error(chalk.red(`Invalid repo: ${(error as Error).message}`));
+    process.exit(1);
+  }
+
+  const format = options.format || "markdown";
+  if (!["markdown", "html", "pdf"].includes(format)) {
+    console.error(chalk.red(`Invalid format: ${format}. Use: markdown, html, pdf`));
+    process.exit(1);
+  }
+  const outputFormat = format as OutputFormat;
+  const outputDir = options.output || `./bootcamp-${repoInfo.repo}-pr-${targetInfo.prNumber}`;
+
+  console.log(chalk.dim("─".repeat(50)));
+  console.log(chalk.white(`  Repository:  ${chalk.cyan(repoInfo.fullName)}`));
+  console.log(chalk.white(`  Pull Request:${chalk.cyan(` #${targetInfo.prNumber}`)}`));
+  console.log(chalk.white(`  Format:      ${chalk.cyan(outputFormat)}`));
+  console.log(chalk.white(`  Output:      ${chalk.cyan(outputDir)}`));
+  console.log(chalk.dim("─".repeat(50)));
+  console.log();
+
+  const progress = new ProgressTracker(options.verbose || false);
+  let repoPath: string;
+
+  progress.startPhase("clone", repoInfo.fullName);
+  try {
+    repoPath = await cloneRepo(repoInfo, process.cwd(), undefined, options.fullClone);
+    progress.succeed(`Cloned ${repoInfo.fullName}`);
+  } catch (error: unknown) {
+    progress.fail(`Clone failed: ${(error as Error).message}`);
+    process.exit(1);
+  }
+
+  progress.startPhase("diff", `PR #${targetInfo.prNumber}`);
+  let diffSummary: DiffSummary;
+  try {
+    const refs = await fetchPullRequestRefs(repoPath, targetInfo.prNumber);
+    diffSummary = await analyzeDiff(repoPath, refs.baseRef, refs.headRef);
+    progress.succeed(`Analyzed PR #${targetInfo.prNumber}`);
+  } catch (error: unknown) {
+    progress.fail(`Diff failed: ${(error as Error).message}`);
+    process.exit(1);
+  }
+
+  try {
+    await mkdir(outputDir, { recursive: true });
+  } catch (error: unknown) {
+    console.error(chalk.red(`Failed to create output directory: ${(error as Error).message}`));
+    process.exit(1);
+  }
+
+  progress.startPhase("generate", "DIFF.md");
+  try {
+    const formattedDocs = applyOutputFormat(
+      [{ name: "DIFF.md", content: generateDiffDocs(diffSummary, repoInfo.repo) }],
+      outputFormat
+    );
+    for (const doc of formattedDocs) {
+      await writeFile(join(outputDir, doc.name), doc.content, "utf-8");
+    }
+    progress.succeed(`Generated ${formattedDocs.length} file${formattedDocs.length === 1 ? "" : "s"}`);
+  } catch (error: unknown) {
+    progress.fail(`Write failed: ${(error as Error).message}`);
+    process.exit(1);
+  }
+
+  if (!options.keepTemp) {
+    progress.startPhase("cleanup");
+    try {
+      await rm(repoPath, { recursive: true, force: true });
+      progress.succeed("Cleanup complete");
+    } catch {
+      progress.warn("Could not clean up temporary files");
+    }
+  } else {
+    console.log(chalk.gray(`Temporary clone kept at: ${repoPath}`));
+  }
+
+  progress.stop();
+
+  console.log();
+  console.log(chalk.green("  ╔══════════════════════════════════════════════════════╗"));
+  console.log(chalk.green("  ║") + chalk.white.bold("        ✓ PR Diff Generated Successfully!           ") + chalk.green("║"));
+  console.log(chalk.green("  ╚══════════════════════════════════════════════════════╝"));
+  console.log();
+  console.log(chalk.white(`  📁 Output: ${chalk.cyan.bold(outputDir + "/")}`));
+  console.log(chalk.white(`  📄 File:   ${chalk.cyan(formatDocName("DIFF.md", outputFormat))}`));
+  console.log();
 }
 
 async function generateOutputs({
@@ -98,46 +248,54 @@ async function generateOutputs({
   progress,
   allowIssueCreation = true,
 }: GenerateOutputsParams): Promise<GenerationResult> {
-  // Extract dependencies
-  const deps = await extractDependencies(repoPath);
+  const depsPromise = extractDependencies(repoPath).then((deps) => {
+    if (deps) {
+      const allDepNames = [
+        ...deps.runtime.map(d => d.name),
+        ...deps.dev.map(d => d.name),
+      ];
+      mergeFrameworksFromDeps(scanResult.stack, allDepNames);
+    }
+    return deps;
+  });
 
-  // Merge frameworks detected from dependencies into stack info
-  if (deps) {
-    const allDepNames = [
-      ...deps.runtime.map(d => d.name),
-      ...deps.dev.map(d => d.name),
-    ];
-    mergeFrameworksFromDeps(scanResult.stack, allDepNames);
-  }
+  const packageJsonPromise: Promise<Record<string, unknown> | undefined> = readFile(
+    join(repoPath, "package.json"),
+    "utf-8"
+  )
+    .then((pkgContent) => JSON.parse(pkgContent) as Record<string, unknown>)
+    .catch(() => undefined);
 
-  // Analyze security (read package.json for deps check)
-  let packageJson: Record<string, unknown> | undefined;
-  try {
-    const pkgContent = await readFile(join(repoPath, "package.json"), "utf-8");
-    packageJson = JSON.parse(pkgContent);
-  } catch {
-    // No package.json
-  }
-  const security = await analyzeSecurityPatterns(repoPath, scanResult.files, packageJson);
-
-  // Generate Tech Radar
-  const radar = generateTechRadar(
-    scanResult.stack,
-    scanResult.files,
-    deps,
-    security,
-    !!scanResult.readme,
-    !!scanResult.contributing
+  const securityPromise = packageJsonPromise.then((packageJson) =>
+    analyzeSecurityPatterns(repoPath, scanResult.files, packageJson)
   );
 
-  // Generate Change Impact Map
-  const keyFiles = getKeyFilesForImpact(scanResult.files);
-  const importGraph = await buildImportGraph(repoPath, scanResult.files);
-  const impacts = await Promise.all(
-    keyFiles.slice(0, 10).map(file => 
-      analyzeChangeImpact(repoPath, scanResult.files, file, importGraph)
+  const radarPromise = Promise.all([depsPromise, securityPromise]).then(([deps, security]) =>
+    generateTechRadar(
+      scanResult.stack,
+      scanResult.files,
+      deps,
+      security,
+      !!scanResult.readme,
+      !!scanResult.contributing
     )
   );
+
+  const keyFiles = getKeyFilesForImpact(scanResult.files);
+  const impactsPromise = buildImportGraph(repoPath, scanResult.files).then((importGraph) =>
+    Promise.all(
+      keyFiles.slice(0, 10).map(file =>
+        analyzeChangeImpact(repoPath, scanResult.files, file, importGraph)
+      )
+    )
+  );
+
+  const [deps, security, radar, impacts] = await Promise.all([
+    depsPromise,
+    securityPromise,
+    radarPromise,
+    impactsPromise,
+  ]);
 
   // Generate Diff if --compare is specified
   let diffSummary = null;
@@ -782,6 +940,25 @@ program
     await runAsk(repoUrl, opts);
   });
 
+// Diff subcommand
+program
+  .command("diff <repo-pr>")
+  .description("Generate onboarding diff for a GitHub PR")
+  .option("-o, --output <dir>", "Output directory")
+  .option("--format <format>", "Output format: markdown, html, pdf", "markdown")
+  .option("--full-clone", "Perform a full clone instead of shallow clone (slower but includes full history)")
+  .option("--keep-temp", "Keep temporary clone directory")
+  .option("-v, --verbose", "Show detailed output")
+  .action(async (repoPr: string, opts) => {
+    await runPullRequestDiff(repoPr, {
+      output: opts.output,
+      format: opts.format,
+      fullClone: opts.fullClone || false,
+      keepTemp: opts.keepTemp || false,
+      verbose: opts.verbose || false,
+    });
+  });
+
 // Web subcommand
 program
   .command("web")
@@ -792,4 +969,11 @@ program
     startServer(parseInt(opts.port, 10));
   });
 
-program.parse();
+const isCliEntry = Boolean(process.argv[1]) &&
+  import.meta.url === pathToFileURL(resolve(process.argv[1])).href;
+
+if (isCliEntry) {
+  program.parse();
+}
+
+export { program };
