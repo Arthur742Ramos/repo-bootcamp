@@ -1,8 +1,42 @@
 import { describe, it, expect } from "vitest";
-import { generateDiffDocs } from "../src/diff.js";
+import { generateDiffDocs, parsePullRequestTarget } from "../src/diff.js";
 import type { DiffSummary } from "../src/types.js";
 
 describe("Diff/Compare Mode", () => {
+  describe("parsePullRequestTarget", () => {
+    it("should parse owner/repo#123 format", () => {
+      const result = parsePullRequestTarget("facebook/react#456");
+      expect(result.repoUrl).toBe("https://github.com/facebook/react");
+      expect(result.prNumber).toBe(456);
+    });
+
+    it("should parse full GitHub PR URL", () => {
+      const result = parsePullRequestTarget("https://github.com/owner/repo/pull/789");
+      expect(result.repoUrl).toBe("https://github.com/owner/repo");
+      expect(result.prNumber).toBe(789);
+    });
+
+    it("should parse owner/repo/pull/123 path format", () => {
+      const result = parsePullRequestTarget("owner/repo/pull/42");
+      expect(result.repoUrl).toBe("https://github.com/owner/repo");
+      expect(result.prNumber).toBe(42);
+    });
+
+    it("should strip .git suffix from repo name", () => {
+      const result = parsePullRequestTarget("owner/repo.git#10");
+      expect(result.repoUrl).toBe("https://github.com/owner/repo");
+      expect(result.prNumber).toBe(10);
+    });
+
+    it("should throw on invalid format", () => {
+      expect(() => parsePullRequestTarget("not-valid")).toThrow("Invalid PR reference");
+    });
+
+    it("should throw on missing PR number", () => {
+      expect(() => parsePullRequestTarget("owner/repo")).toThrow("Invalid PR reference");
+    });
+  });
+
   describe("generateDiffDocs", () => {
     const mockDiff: DiffSummary = {
       baseRef: "v1.0.0",
@@ -134,6 +168,31 @@ describe("Diff/Compare Mode", () => {
       const docs = generateDiffDocs(manyFilesDiff, "test-repo");
 
       expect(docs).toContain("... and 20 more");
+    });
+
+    it("should display PR title and link when available", () => {
+      const prDiff: DiffSummary = {
+        ...mockDiff,
+        prNumber: 42,
+        prTitle: "Add authentication middleware",
+        prUrl: "https://github.com/owner/repo/pull/42",
+      };
+
+      const docs = generateDiffDocs(prDiff, "test-repo");
+
+      expect(docs).toContain("[PR #42](https://github.com/owner/repo/pull/42)");
+      expect(docs).toContain("Add authentication middleware");
+    });
+
+    it("should display PR number without link when URL is missing", () => {
+      const prDiff: DiffSummary = {
+        ...mockDiff,
+        prNumber: 99,
+      };
+
+      const docs = generateDiffDocs(prDiff, "test-repo");
+
+      expect(docs).toContain("PR #99");
     });
   });
 });

@@ -31,6 +31,37 @@ describe("getIndexHtml", () => {
     expect(html).toContain("<title>Repo Bootcamp</title>");
     expect(html).toContain("function analyze()");
   });
+
+  it("contains required UI elements", () => {
+    const html = getIndexHtml();
+    expect(html).toContain('id="repoUrl"');
+    expect(html).toContain('id="analyzeBtn"');
+    expect(html).toContain('id="progress"');
+    expect(html).toContain('id="results"');
+    expect(html).toContain('id="modal"');
+  });
+
+  it("includes CSS styles", () => {
+    const html = getIndexHtml();
+    expect(html).toContain("<style>");
+    expect(html).toContain("</style>");
+  });
+
+  it("includes JavaScript functions", () => {
+    const html = getIndexHtml();
+    expect(html).toContain("function streamProgress");
+    expect(html).toContain("function showResults");
+    expect(html).toContain("function viewFile");
+    expect(html).toContain("function closeModal");
+  });
+
+  it("has file description mappings", () => {
+    const html = getIndexHtml();
+    expect(html).toContain("BOOTCAMP");
+    expect(html).toContain("ONBOARDING");
+    expect(html).toContain("ARCHITECTURE");
+    expect(html).toContain("SECURITY");
+  });
 });
 
 describe("createApp", () => {
@@ -51,6 +82,14 @@ describe("createApp", () => {
     expect(response.headers.get("access-control-allow-origin")).toBe("*");
   });
 
+  it("sets CORS headers on regular requests", async () => {
+    const baseUrl = await startTestServer();
+    const response = await fetch(`${baseUrl}/`);
+
+    expect(response.headers.get("access-control-allow-origin")).toBe("*");
+    expect(response.headers.get("access-control-allow-methods")).toBe("GET, POST, OPTIONS");
+  });
+
   it("rejects analyze requests without repoUrl", async () => {
     const baseUrl = await startTestServer();
     const response = await fetch(`${baseUrl}/api/analyze`, {
@@ -63,6 +102,57 @@ describe("createApp", () => {
     expect(response.status).toBe(400);
     expect(payload.error).toBe("repoUrl is required");
   });
+
+  it("rejects analyze requests with invalid repoUrl", async () => {
+    const baseUrl = await startTestServer();
+    const response = await fetch(`${baseUrl}/api/analyze`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ repoUrl: "not-a-url" }),
+    });
+
+    const payload = await response.json();
+    expect(response.status).toBe(400);
+    expect(payload.error).toBeTruthy();
+  });
+
+  it("returns 404 for unknown job status", async () => {
+    const baseUrl = await startTestServer();
+    const response = await fetch(`${baseUrl}/api/jobs/nonexistent`);
+
+    const payload = await response.json();
+    expect(response.status).toBe(404);
+    expect(payload.error).toBe("Job not found");
+  });
+
+  it("returns 404 for unknown job stream", async () => {
+    const baseUrl = await startTestServer();
+    const response = await fetch(`${baseUrl}/api/jobs/nonexistent/stream`);
+
+    expect(response.status).toBe(404);
+  });
+
+  it("returns 404 for unknown job file", async () => {
+    const baseUrl = await startTestServer();
+    const response = await fetch(`${baseUrl}/api/jobs/nonexistent/files/test.md`);
+
+    const payload = await response.json();
+    expect(response.status).toBe(404);
+    expect(payload.error).toContain("not found");
+  });
+
+  it("registers API routes on the app", async () => {
+    const baseUrl = await startTestServer();
+    // Verify that POST to /api/analyze exists (returns 400 not 404 without body)
+    const response = await fetch(`${baseUrl}/api/analyze`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({}),
+    });
+
+    // 400 means the route exists but input is invalid
+    expect(response.status).toBe(400);
+  });
 });
 
 describe("startServer", () => {
@@ -73,6 +163,18 @@ describe("startServer", () => {
 
     const address = server.address() as AddressInfo;
     expect(address.port).toBeGreaterThan(0);
+
+    logSpy.mockRestore();
+  });
+
+  it("creates a working Express app", async () => {
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+    server = startServer(0);
+    await new Promise<void>((resolve) => server?.once("listening", () => resolve()));
+
+    const address = server.address() as AddressInfo;
+    const response = await fetch(`http://127.0.0.1:${address.port}/`);
+    expect(response.status).toBe(200);
 
     logSpy.mockRestore();
   });

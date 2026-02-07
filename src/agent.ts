@@ -37,8 +37,10 @@ IMPORTANT:
 const CUSTOM_PROMPT_FILE = ".bootcamp-prompts.md";
 const CUSTOM_PROMPT_MAX_CHARS = 8000;
 
-export function readCustomPrompt(repoPath: string): string | null {
-  const promptPath = path.join(repoPath, CUSTOM_PROMPT_FILE);
+export function readCustomPrompt(repoPath: string, overridePath?: string): string | null {
+  const promptPath = overridePath
+    ? path.resolve(overridePath)
+    : path.join(repoPath, CUSTOM_PROMPT_FILE);
   if (!fs.existsSync(promptPath)) {
     return null;
   }
@@ -525,7 +527,12 @@ export async function analyzeRepo(
   };
 
   const client = new CopilotClient();
-  const customPrompt = readCustomPrompt(repoPath);
+  const customPrompt = readCustomPrompt(repoPath, options.repoPrompts);
+
+  if (customPrompt) {
+    const source = options.repoPrompts || path.join(repoPath, CUSTOM_PROMPT_FILE);
+    console.log(chalk.cyan(`📋 Custom prompts loaded from ${source} (${customPrompt.length} chars)`));
+  }
 
   // Fast mode: no tools, inline file contents
   if (options.fast) {

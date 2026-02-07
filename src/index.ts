@@ -31,7 +31,7 @@ import { generateTechRadar, generateRadarDocs, getRiskEmoji } from "./radar.js";
 import { buildImportGraph, analyzeChangeImpact, generateImpactDocs, getKeyFilesForImpact } from "./impact.js";
 import { runInteractiveMode } from "./interactive.js";
 import { createIssuesFromTasks, generateIssuePreview } from "./issues.js";
-import { analyzeDiff, generateDiffDocs, fetchPullRequestRefs } from "./diff.js";
+import { analyzeDiff, generateDiffDocs, fetchPullRequestRefs, parsePullRequestTarget } from "./diff.js";
 import { startServer } from "./web/server.js";
 import { startWatch } from "./watch.js";
 import { loadConfig, getStyleConfig, loadPlugins, runPlugins, type BootcampConfig } from "./plugins.js";
@@ -76,6 +76,13 @@ interface GeneratedDoc {
   content: string;
 }
 
+interface ParallelAnalysisResult {
+  deps: DependencyAnalysis | null;
+  security: SecurityAnalysis;
+  radar: TechRadar;
+  impacts: import("./types.js").ChangeImpact[];
+}
+
 interface GenerationResult {
   documentCount: number;
   security: SecurityAnalysis;
@@ -104,33 +111,6 @@ interface GenerateOutputsParams {
   allowIssueCreation?: boolean;
 }
 
-function parsePullRequestTarget(target: string): { repoUrl: string; prNumber: number } {
-  const urlMatch = target.match(/github\.com\/([^/]+)\/([^/]+)\/pull\/(\d+)/i);
-  if (urlMatch) {
-    return {
-      repoUrl: `https://github.com/${urlMatch[1]}/${urlMatch[2].replace(/\.git$/, "")}`,
-      prNumber: parseInt(urlMatch[3], 10),
-    };
-  }
-
-  const shortMatch = target.match(/^([^/\s#]+)\/([^/\s#]+)#(\d+)$/);
-  if (shortMatch) {
-    return {
-      repoUrl: `https://github.com/${shortMatch[1]}/${shortMatch[2].replace(/\.git$/, "")}`,
-      prNumber: parseInt(shortMatch[3], 10),
-    };
-  }
-
-  const pathMatch = target.match(/^([^/\s#]+)\/([^/\s#]+)\/pull\/(\d+)$/);
-  if (pathMatch) {
-    return {
-      repoUrl: `https://github.com/${pathMatch[1]}/${pathMatch[2].replace(/\.git$/, "")}`,
-      prNumber: parseInt(pathMatch[3], 10),
-    };
-  }
-
-  throw new Error("Invalid PR reference. Use owner/repo#123 or https://github.com/owner/repo/pull/123");
-}
 
 async function runPullRequestDiff(prTarget: string, options: PullRequestDiffOptions): Promise<void> {
   console.log(chalk.bold.blue("\n=== Repo Bootcamp - PR Diff ===\n"));
@@ -190,6 +170,9 @@ async function runPullRequestDiff(prTarget: string, options: PullRequestDiffOpti
       headRef: refs.headName
         ? `PR #${targetInfo.prNumber} (${refs.headName})`
         : `PR #${targetInfo.prNumber}`,
+      prNumber: targetInfo.prNumber,
+      prTitle: refs.title,
+      prUrl: refs.url,
     };
     progress.succeed(`Analyzed PR #${targetInfo.prNumber}`);
   } catch (error: unknown) {
@@ -243,18 +226,19 @@ async function runPullRequestDiff(prTarget: string, options: PullRequestDiffOpti
   console.log();
 }
 
-async function generateOutputs({
-  repoPath,
-  repoInfo,
-  scanResult,
-  facts,
-  options,
-  config,
-  outputDir,
-  outputFormat,
-  progress,
-  allowIssueCreation = true,
-}: GenerateOutputsParams): Promise<GenerationResult> {
+/**
+ * Run security, radar, impact, and deps analyzers concurrently.
+ * Each analyzer starts as early as its dependencies allow; independent
+ * branches (deps, security, impacts) execute in parallel via Promise.all.
+ */
+export async function runParallelAnalysis(
+  repoPath: string,
+  scanResult: ScanResult,
+  progress?: ProgressTracker,
+): Promise<ParallelAnalysisResult> {
+  progress?.update("Running analyzers in parallel…");
+
+  // --- independent branches, kicked off immediately ---
   const depsPromise = extractDependencies(repoPath).then((deps) => {
     if (deps) {
       const allDepNames = [
@@ -263,6 +247,7 @@ async function generateOutputs({
       ];
       mergeFrameworksFromDeps(scanResult.stack, allDepNames);
     }
+    progress?.update("deps ✓");
     return deps;
   });
 
@@ -275,18 +260,10 @@ async function generateOutputs({
 
   const securityPromise = packageJsonPromise.then((packageJson) =>
     analyzeSecurityPatterns(repoPath, scanResult.files, packageJson)
-  );
-
-  const radarPromise = Promise.all([depsPromise, securityPromise]).then(([deps, security]) =>
-    generateTechRadar(
-      scanResult.stack,
-      scanResult.files,
-      deps,
-      security,
-      !!scanResult.readme,
-      !!scanResult.contributing
-    )
-  );
+  ).then((security) => {
+    progress?.update("security ✓");
+    return security;
+  });
 
   const impactsPromise = buildImportGraph(repoPath, scanResult.files).then((importGraph) => {
     const keyFiles = getKeyFilesForImpact(scanResult.files);
@@ -295,15 +272,53 @@ async function generateOutputs({
         analyzeChangeImpact(repoPath, scanResult.files, file, importGraph)
       )
     );
+  }).then((impacts) => {
+    progress?.update("impact ✓");
+    return impacts;
   });
 
-  const analysisPromise = Promise.all([
+  // radar depends on deps + security, but runs as soon as both resolve
+  const radarPromise = Promise.all([depsPromise, securityPromise]).then(([deps, security]) => {
+    const radar = generateTechRadar(
+      scanResult.stack,
+      scanResult.files,
+      deps,
+      security,
+      !!scanResult.readme,
+      !!scanResult.contributing
+    );
+    progress?.update("radar ✓");
+    return radar;
+  });
+
+  // wait for all four analyzers concurrently
+  const [deps, security, radar, impacts] = await Promise.all([
     depsPromise,
     securityPromise,
     radarPromise,
     impactsPromise,
   ]);
-  const [deps, security, radar, impacts] = await analysisPromise;
+
+  return { deps, security, radar, impacts };
+}
+
+async function generateOutputs({
+  repoPath,
+  repoInfo,
+  scanResult,
+  facts,
+  options,
+  config,
+  outputDir,
+  outputFormat,
+  progress,
+  allowIssueCreation = true,
+}: GenerateOutputsParams): Promise<GenerationResult> {
+  const { deps, security, radar, impacts } = await runParallelAnalysis(
+    repoPath,
+    scanResult,
+    progress,
+  );
 
   // Generate Diff if --compare is specified
   let diffSummary = null;
@@ -879,6 +894,7 @@ program
   .option("-s, --style <style>", "Output style: startup, enterprise, oss, devops", "oss")
   .option("--render-diagrams [format]", "Render diagrams.mmd to SVG/PNG (requires mermaid-cli)", "svg")
   .option("--fast", "Fast mode: inline key files, skip tools, much faster (~15-30s)")
+  .option("--repo-prompts <path>", "Path to custom prompts file (default: .bootcamp-prompts.md in target repo)")
   .option("--full-clone", "Perform a full clone instead of shallow clone (slower but includes full history)")
   .option("--no-cache", "Skip reading/writing analysis cache")
   .option("-w, --watch", "Watch mode: re-run analysis when target repo gets new commits")
@@ -911,6 +927,7 @@ program
       noCache: opts.cache === false,
       watch: opts.watch || false,
       watchInterval: parseInt(opts.watchInterval, 10),
+      repoPrompts: opts.repoPrompts,
     };
 
     if (!["onboarding", "architecture", "contributing", "all"].includes(options.focus)) {

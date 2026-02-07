@@ -84,6 +84,9 @@ export interface DiffSummary {
     newCommands: string[];
     breakingChanges: string[];
   };
+  prNumber?: number;
+  prTitle?: string;
+  prUrl?: string;
 }
 
 // Interactive session message

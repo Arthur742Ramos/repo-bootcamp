@@ -312,6 +312,38 @@ async function detectBreakingChanges(
   return breakingChanges;
 }
 
+/**
+ * Parse a PR target string into repo URL and PR number.
+ * Supports: owner/repo#123, owner/repo/pull/123, https://github.com/owner/repo/pull/123
+ */
+export function parsePullRequestTarget(target: string): { repoUrl: string; prNumber: number } {
+  const urlMatch = target.match(/github\.com\/([^/]+)\/([^/]+)\/pull\/(\d+)/i);
+  if (urlMatch) {
+    return {
+      repoUrl: `https://github.com/${urlMatch[1]}/${urlMatch[2].replace(/\.git$/, "")}`,
+      prNumber: parseInt(urlMatch[3], 10),
+    };
+  }
+
+  const shortMatch = target.match(/^([^/\s#]+)\/([^/\s#]+)#(\d+)$/);
+  if (shortMatch) {
+    return {
+      repoUrl: `https://github.com/${shortMatch[1]}/${shortMatch[2].replace(/\.git$/, "")}`,
+      prNumber: parseInt(shortMatch[3], 10),
+    };
+  }
+
+  const pathMatch = target.match(/^([^/\s#]+)\/([^/\s#]+)\/pull\/(\d+)$/);
+  if (pathMatch) {
+    return {
+      repoUrl: `https://github.com/${pathMatch[1]}/${pathMatch[2].replace(/\.git$/, "")}`,
+      prNumber: parseInt(pathMatch[3], 10),
+    };
+  }
+
+  throw new Error("Invalid PR reference. Use owner/repo#123 or https://github.com/owner/repo/pull/123");
+}
+
 interface PullRequestApiResponse {
   base?: { ref?: string; sha?: string };
   head?: { ref?: string; sha?: string };
@@ -437,6 +469,16 @@ export function generateDiffDocs(diff: DiffSummary, projectName: string): string
 
   lines.push("# Change Summary");
   lines.push("");
+
+  if (diff.prNumber) {
+    const titlePart = diff.prTitle ? ` — ${diff.prTitle}` : "";
+    const linkPart = diff.prUrl
+      ? `[PR #${diff.prNumber}](${diff.prUrl})`
+      : `PR #${diff.prNumber}`;
+    lines.push(`${linkPart}${titlePart}`);
+    lines.push("");
+  }
+
   lines.push(`Comparison for **${projectName}**: \`${diff.baseRef}\` → \`${diff.headRef}\``);
   lines.push("");
 

@@ -572,7 +572,29 @@ Create a `bootcamp.config.json` in your project root for custom settings:
 ### .bootcamp-prompts.md
 
 Add a `.bootcamp-prompts.md` file to the target repository to guide the analysis and interactive agents with repo-specific instructions (e.g., focus areas, terminology, tone).
-The contents are appended to the analysis prompt and interactive system prompt.
+The contents are appended to the analysis prompt and interactive system prompt (max 8KB).
+
+You can also specify an external prompts file with `--repo-prompts <path>`:
+
+```bash
+bootcamp https://github.com/owner/repo --repo-prompts ./my-prompts.md
+```
+
+Example `.bootcamp-prompts.md`:
+
+```markdown
+## Focus Areas
+- Pay special attention to the plugin architecture in src/plugins/
+- The event bus in src/events/ is central to the system
+
+## Terminology
+- "Widget" refers to UI components in our domain
+- "Pipeline" is our term for the data processing chain
+
+## Onboarding Notes
+- New developers should start with the src/core/ module
+- Ignore the legacy/ directory — it is scheduled for removal
+```
 
 ### Plugin System
 

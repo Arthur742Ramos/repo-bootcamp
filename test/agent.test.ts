@@ -1242,6 +1242,27 @@ describe("prompt construction", () => {
     expect(prompt).toContain("Repository Guidance");
     expect(prompt).toContain("Custom guidance here");
   });
+
+  it("uses repoPrompts option as override path", async () => {
+    const existsSyncMock = fs.existsSync as Mock;
+    existsSyncMock.mockImplementation((p: string) => {
+      return p.endsWith("/custom/my-prompts.md");
+    });
+    (fs.readFileSync as Mock).mockReturnValue("Override prompt content");
+
+    const mockSession = configureSessionResponse(VALID_REPO_FACTS_JSON);
+
+    await analyzeRepo(
+      "/tmp/repo",
+      makeMockRepoInfo(),
+      makeMockScanResult(),
+      makeMockOptions({ repoPrompts: "/custom/my-prompts.md" })
+    );
+
+    const prompt = mockSession.sendAndWait.mock.calls[0][0].prompt;
+    expect(prompt).toContain("Repository Guidance");
+    expect(prompt).toContain("Override prompt content");
+  });
 });
 
 // ─── readCustomPrompt ───────────────────────────────────────────────────────
@@ -1291,6 +1312,21 @@ describe("readCustomPrompt", () => {
     });
 
     expect(readCustomPrompt("/some/repo")).toBeNull();
+  });
+
+  it("uses override path when provided", () => {
+    (fs.existsSync as Mock).mockImplementation((p: string) =>
+      p.endsWith("/custom/prompts.md")
+    );
+    (fs.readFileSync as Mock).mockReturnValue("Override guidance");
+
+    expect(readCustomPrompt("/some/repo", "/custom/prompts.md")).toBe("Override guidance");
+  });
+
+  it("returns null when override path does not exist", () => {
+    (fs.existsSync as Mock).mockReturnValue(false);
+
+    expect(readCustomPrompt("/some/repo", "/missing/prompts.md")).toBeNull();
   });
 });
 

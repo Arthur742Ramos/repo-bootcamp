@@ -19,6 +19,7 @@ import { extractDependencies, generateDependencyDocs } from "../src/deps.js";
 import { analyzeSecurityPatterns, generateSecurityDocs } from "../src/security.js";
 import { generateTechRadar, generateRadarDocs } from "../src/radar.js";
 import { buildImportGraph, analyzeChangeImpact, generateImpactDocs, getKeyFilesForImpact } from "../src/impact.js";
+import { runParallelAnalysis } from "../src/index.js";
 import {
   generateBootcamp,
   generateOnboarding,
@@ -225,31 +226,8 @@ describe("E2E smoke test", () => {
     const scan = await scanRepo(repoPath, 200);
     const facts = buildMockFacts();
 
-    // Extract dependencies
-    const deps = await extractDependencies(repoPath);
-    if (deps) {
-      const allDepNames = [...deps.runtime.map((d) => d.name), ...deps.dev.map((d) => d.name)];
-      mergeFrameworksFromDeps(scan.stack, allDepNames);
-    }
-
-    // Security analysis
-    let packageJson: Record<string, unknown> | undefined;
-    try {
-      packageJson = JSON.parse(await readFile(join(repoPath, "package.json"), "utf-8"));
-    } catch {
-      // no-op
-    }
-    const security = await analyzeSecurityPatterns(repoPath, scan.files, packageJson);
-
-    // Tech radar
-    const radar = generateTechRadar(scan.stack, scan.files, deps ?? undefined, security, !!scan.readme, !!scan.contributing);
-
-    // Import graph & impact
-    const keyFiles = getKeyFilesForImpact(scan.files);
-    const importGraph = await buildImportGraph(repoPath, scan.files);
-    const impacts = await Promise.all(
-      keyFiles.slice(0, 5).map((f) => analyzeChangeImpact(repoPath, scan.files, f, importGraph)),
-    );
+    // Run all analyzers concurrently via runParallelAnalysis
+    const { deps, security, radar, impacts } = await runParallelAnalysis(repoPath, scan);
 
     const repoInfo: RepoInfo = {
       owner: "test",
