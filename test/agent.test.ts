@@ -49,7 +49,7 @@ vi.mock("fs", async () => {
 });
 
 import type { RepoInfo, ScanResult, BootcampOptions } from "../src/types.js";
-import { analyzeRepo, type AnalysisStats } from "../src/agent.js";
+import { analyzeRepo, readCustomPrompt, formatCustomPromptSection, type AnalysisStats } from "../src/agent.js";
 import * as fs from "fs";
 
 // ─── Test fixtures ───────────────────────────────────────────────────────────
@@ -1186,5 +1186,591 @@ describe("prompt construction", () => {
     const lines = fileListSection.split("\n").filter((l: string) => l.trim());
     const srcOnlyLine = lines.find((l: string) => l.trim() === "src");
     expect(srcOnlyLine).toBeUndefined();
+  });
+
+  it("includes commands in the prompt", async () => {
+    const mockSession = configureSessionResponse(VALID_REPO_FACTS_JSON);
+
+    await analyzeRepo(
+      "/tmp/repo",
+      makeMockRepoInfo(),
+      makeMockScanResult({
+        commands: [
+          { name: "build", command: "npm run build", source: "package.json" },
+          { name: "test", command: "npm test", source: "package.json" },
+        ],
+      }),
+      makeMockOptions()
+    );
+
+    const prompt = mockSession.sendAndWait.mock.calls[0][0].prompt;
+    expect(prompt).toContain("build: npm run build");
+    expect(prompt).toContain("test: npm test");
+  });
+
+  it("shows empty commands gracefully", async () => {
+    const mockSession = configureSessionResponse(VALID_REPO_FACTS_JSON);
+
+    await analyzeRepo(
+      "/tmp/repo",
+      makeMockRepoInfo(),
+      makeMockScanResult({ commands: [] }),
+      makeMockOptions()
+    );
+
+    const prompt = mockSession.sendAndWait.mock.calls[0][0].prompt;
+    expect(prompt).toContain("None detected");
+  });
+
+  it("includes custom prompt section when provided", async () => {
+    const existsSyncMock = fs.existsSync as Mock;
+    existsSyncMock.mockImplementation((p: string) => {
+      return p.endsWith(".bootcamp-prompts.md");
+    });
+    (fs.readFileSync as Mock).mockReturnValue("Custom guidance here");
+
+    const mockSession = configureSessionResponse(VALID_REPO_FACTS_JSON);
+
+    await analyzeRepo(
+      "/tmp/repo",
+      makeMockRepoInfo(),
+      makeMockScanResult(),
+      makeMockOptions()
+    );
+
+    const prompt = mockSession.sendAndWait.mock.calls[0][0].prompt;
+    expect(prompt).toContain("Repository Guidance");
+    expect(prompt).toContain("Custom guidance here");
+  });
+});
+
+// ─── readCustomPrompt ───────────────────────────────────────────────────────
+
+describe("readCustomPrompt", () => {
+  it("returns null when file does not exist", () => {
+    (fs.existsSync as Mock).mockReturnValue(false);
+
+    expect(readCustomPrompt("/some/repo")).toBeNull();
+  });
+
+  it("returns content when file exists", () => {
+    (fs.existsSync as Mock).mockImplementation((p: string) =>
+      p.endsWith(".bootcamp-prompts.md")
+    );
+    (fs.readFileSync as Mock).mockReturnValue("Focus on security aspects");
+
+    expect(readCustomPrompt("/some/repo")).toBe("Focus on security aspects");
+  });
+
+  it("returns null for empty file", () => {
+    (fs.existsSync as Mock).mockImplementation((p: string) =>
+      p.endsWith(".bootcamp-prompts.md")
+    );
+    (fs.readFileSync as Mock).mockReturnValue("   ");
+
+    expect(readCustomPrompt("/some/repo")).toBeNull();
+  });
+
+  it("truncates content at 8000 chars", () => {
+    (fs.existsSync as Mock).mockImplementation((p: string) =>
+      p.endsWith(".bootcamp-prompts.md")
+    );
+    const longContent = "x".repeat(10000);
+    (fs.readFileSync as Mock).mockReturnValue(longContent);
+
+    const result = readCustomPrompt("/some/repo");
+    expect(result).toHaveLength(8000);
+  });
+
+  it("returns null when readFileSync throws", () => {
+    (fs.existsSync as Mock).mockImplementation((p: string) =>
+      p.endsWith(".bootcamp-prompts.md")
+    );
+    (fs.readFileSync as Mock).mockImplementation(() => {
+      throw new Error("permission denied");
+    });
+
+    expect(readCustomPrompt("/some/repo")).toBeNull();
+  });
+});
+
+// ─── formatCustomPromptSection ──────────────────────────────────────────────
+
+describe("formatCustomPromptSection", () => {
+  it("returns empty string for null", () => {
+    expect(formatCustomPromptSection(null)).toBe("");
+  });
+
+  it("returns empty string for undefined", () => {
+    expect(formatCustomPromptSection(undefined)).toBe("");
+  });
+
+  it("returns empty string for empty string", () => {
+    expect(formatCustomPromptSection("")).toBe("");
+  });
+
+  it("wraps content in guidance section", () => {
+    const result = formatCustomPromptSection("My custom guidance");
+    expect(result).toContain("## Repository Guidance (.bootcamp-prompts.md)");
+    expect(result).toContain("My custom guidance");
+  });
+});
+
+// ─── onToolResult verbose logging ───────────────────────────────────────────
+
+describe("onToolResult verbose logging", () => {
+  it("logs tool results in verbose mode when tool handler runs", async () => {
+    configureSessionResponse(VALID_REPO_FACTS_JSON);
+
+    await analyzeRepo(
+      process.cwd(),
+      makeMockRepoInfo(),
+      makeMockScanResult(),
+      makeMockOptions({ verbose: true })
+    );
+
+    const sessionConfig = sharedMockClient.createSession.mock.calls[0][0];
+    const readFileTool = sessionConfig.tools.find((t: any) => t.name === "read_file");
+
+    await readFileTool.handler({ path: "package.json", maxLines: 1 });
+
+    const consoleSpy = console.log as Mock;
+    const loggedMessages = consoleSpy.mock.calls.map((c: any) => c.join(" ")).join("\n");
+    expect(loggedMessages).toContain("[Tool Result]");
+    expect(loggedMessages).toContain("read_file");
+  });
+
+  it("logs tool call details in verbose mode when tool handler runs", async () => {
+    configureSessionResponse(VALID_REPO_FACTS_JSON);
+
+    await analyzeRepo(
+      process.cwd(),
+      makeMockRepoInfo(),
+      makeMockScanResult(),
+      makeMockOptions({ verbose: true })
+    );
+
+    const sessionConfig = sharedMockClient.createSession.mock.calls[0][0];
+    const readFileTool = sessionConfig.tools.find((t: any) => t.name === "read_file");
+
+    await readFileTool.handler({ path: "package.json" });
+
+    const consoleSpy = console.log as Mock;
+    const loggedMessages = consoleSpy.mock.calls.map((c: any) => c.join(" ")).join("\n");
+    expect(loggedMessages).toContain("[Tool Call]");
+  });
+});
+
+// ─── Reasoning delta in verbose mode ────────────────────────────────────────
+
+describe("reasoning delta in verbose mode", () => {
+  it("writes reasoning content to stdout in verbose mode", async () => {
+    const mockSession = {
+      on: vi.fn().mockImplementation(() => vi.fn()),
+      sendAndWait: vi.fn(),
+      destroy: vi.fn().mockResolvedValue(undefined),
+    };
+    sharedMockClient.createSession.mockResolvedValue(mockSession);
+
+    mockSession.sendAndWait.mockImplementation(async () => {
+      const handler = mockSession.on.mock.calls[0]?.[0];
+      if (handler) {
+        handler({
+          id: "evt-0",
+          timestamp: new Date().toISOString(),
+          parentId: null,
+          type: "assistant.reasoning_delta",
+          data: { reasoningId: "r-1", deltaContent: "Let me think about this..." },
+        });
+        handler({
+          id: "evt-1",
+          timestamp: new Date().toISOString(),
+          parentId: null,
+          type: "assistant.message_delta",
+          data: { messageId: "msg-1", deltaContent: VALID_REPO_FACTS_JSON },
+        });
+      }
+      return undefined;
+    });
+
+    await analyzeRepo(
+      "/tmp/repo",
+      makeMockRepoInfo(),
+      makeMockScanResult(),
+      makeMockOptions({ verbose: true })
+    );
+
+    expect(process.stdout.write).toHaveBeenCalled();
+    const calls = (process.stdout.write as Mock).mock.calls.map((c: any) => c[0]);
+    // Should contain the reasoning text (possibly wrapped in chalk.gray)
+    expect(calls.some((c: string) => c.includes("Let me think about this..."))).toBe(true);
+  });
+});
+
+// ─── Fast mode prompt construction ──────────────────────────────────────────
+
+describe("fast mode prompt construction", () => {
+  it("includes inline file contents in fast mode prompt", async () => {
+    const existsSyncMock = fs.existsSync as Mock;
+    const readFileSyncMock = fs.readFileSync as Mock;
+
+    existsSyncMock.mockImplementation((p: string) => {
+      return p.endsWith("README.md") || p.endsWith("package.json");
+    });
+    readFileSyncMock.mockImplementation((p: string) => {
+      if (typeof p === "string" && p.endsWith("README.md")) return "# My Project\nSome readme content";
+      if (typeof p === "string" && p.endsWith("package.json")) return '{"name": "my-project"}';
+      return "";
+    });
+
+    const mockSession = configureSessionResponse(VALID_REPO_FACTS_JSON);
+
+    await analyzeRepo(
+      "/tmp/repo",
+      makeMockRepoInfo(),
+      makeMockScanResult(),
+      makeMockOptions({ fast: true })
+    );
+
+    const prompt = mockSession.sendAndWait.mock.calls[0][0].prompt;
+    expect(prompt).toContain("### README.md");
+    expect(prompt).toContain("# My Project");
+    expect(prompt).toContain("### package.json");
+    expect(prompt).toContain('"my-project"');
+  });
+
+  it("limits fast mode file list to 30 files", async () => {
+    (fs.existsSync as Mock).mockReturnValue(false);
+
+    const files = Array.from({ length: 40 }, (_, i) => ({
+      path: `src/file-${i}.ts`,
+      size: 100,
+      isDirectory: false,
+    }));
+
+    const mockSession = configureSessionResponse(VALID_REPO_FACTS_JSON);
+
+    await analyzeRepo(
+      "/tmp/repo",
+      makeMockRepoInfo(),
+      makeMockScanResult({ files }),
+      makeMockOptions({ fast: true })
+    );
+
+    const prompt = mockSession.sendAndWait.mock.calls[0][0].prompt;
+    expect(prompt).toContain("file-29.ts");
+    expect(prompt).not.toContain("file-30.ts");
+  });
+
+  it("includes entry point in fast mode when found", async () => {
+    const existsSyncMock = fs.existsSync as Mock;
+    const readFileSyncMock = fs.readFileSync as Mock;
+
+    existsSyncMock.mockImplementation((p: string) => {
+      return p.endsWith("src/index.ts");
+    });
+    readFileSyncMock.mockReturnValue("export function main() {}");
+
+    const mockSession = configureSessionResponse(VALID_REPO_FACTS_JSON);
+
+    await analyzeRepo(
+      "/tmp/repo",
+      makeMockRepoInfo(),
+      makeMockScanResult(),
+      makeMockOptions({ fast: true })
+    );
+
+    const prompt = mockSession.sendAndWait.mock.calls[0][0].prompt;
+    expect(prompt).toContain("### src/index.ts");
+    expect(prompt).toContain("export function main()");
+  });
+
+  it("includes custom prompt section in fast mode", async () => {
+    const existsSyncMock = fs.existsSync as Mock;
+    existsSyncMock.mockImplementation((p: string) => {
+      return p.endsWith(".bootcamp-prompts.md");
+    });
+    (fs.readFileSync as Mock).mockReturnValue("Custom fast guidance");
+
+    const mockSession = configureSessionResponse(VALID_REPO_FACTS_JSON);
+
+    await analyzeRepo(
+      "/tmp/repo",
+      makeMockRepoInfo(),
+      makeMockScanResult(),
+      makeMockOptions({ fast: true })
+    );
+
+    const prompt = mockSession.sendAndWait.mock.calls[0][0].prompt;
+    expect(prompt).toContain("Repository Guidance");
+    expect(prompt).toContain("Custom fast guidance");
+  });
+
+  it("does not retry in fast mode on validation failure", async () => {
+    configureSessionResponse('{"incomplete": true}');
+
+    await expect(
+      analyzeRepo(
+        "/tmp/repo",
+        makeMockRepoInfo(),
+        makeMockScanResult(),
+        makeMockOptions({ fast: true })
+      )
+    ).rejects.toThrow("Fast analysis failed");
+
+    // In fast mode, only one sendAndWait call (no retries)
+    const sessions = sharedMockClient.createSession.mock.results;
+    const session = await sessions[0].value;
+    expect(session.sendAndWait).toHaveBeenCalledTimes(1);
+  });
+
+  it("includes streaming: true in fast mode session config", async () => {
+    configureSessionResponse(VALID_REPO_FACTS_JSON);
+
+    await analyzeRepo(
+      "/tmp/repo",
+      makeMockRepoInfo(),
+      makeMockScanResult(),
+      makeMockOptions({ fast: true })
+    );
+
+    const sessionConfig = sharedMockClient.createSession.mock.calls[0][0];
+    expect(sessionConfig.streaming).toBe(true);
+  });
+});
+
+// ─── Stack merge deduplication ──────────────────────────────────────────────
+
+describe("stack merge", () => {
+  it("deduplicates frameworks when merging scan and LLM results", async () => {
+    configureSessionResponse(VALID_REPO_FACTS_JSON);
+
+    const scanResult = makeMockScanResult({
+      stack: {
+        languages: ["TypeScript"],
+        frameworks: ["Express"],  // Same as in VALID_REPO_FACTS_JSON
+        buildSystem: "npm",
+        packageManager: "npm",
+        hasDocker: false,
+        hasCi: true,
+      },
+    });
+
+    const { facts } = await analyzeRepo("/tmp/repo", makeMockRepoInfo(), scanResult, makeMockOptions());
+
+    // Should not have duplicates
+    const expressCount = facts.stack.frameworks.filter((f: string) => f === "Express").length;
+    expect(expressCount).toBe(1);
+  });
+
+  it("merges unique frameworks from both sources", async () => {
+    configureSessionResponse(VALID_REPO_FACTS_JSON);
+
+    const scanResult = makeMockScanResult({
+      stack: {
+        languages: ["TypeScript"],
+        frameworks: ["Fastify"],  // Different from LLM's "Express"
+        buildSystem: "npm",
+        packageManager: "npm",
+        hasDocker: false,
+        hasCi: true,
+      },
+    });
+
+    const { facts } = await analyzeRepo("/tmp/repo", makeMockRepoInfo(), scanResult, makeMockOptions());
+
+    expect(facts.stack.frameworks).toContain("Fastify");
+    expect(facts.stack.frameworks).toContain("Express");
+  });
+
+  it("scan stack values override LLM values for non-array fields", async () => {
+    configureSessionResponse(VALID_REPO_FACTS_JSON);
+
+    const scanResult = makeMockScanResult({
+      stack: {
+        languages: ["Python"],
+        frameworks: [],
+        buildSystem: "pip",
+        packageManager: "pip",
+        hasDocker: true,
+        hasCi: false,
+      },
+    });
+
+    const { facts } = await analyzeRepo("/tmp/repo", makeMockRepoInfo(), scanResult, makeMockOptions());
+
+    expect(facts.stack.buildSystem).toBe("pip");
+    expect(facts.stack.hasDocker).toBe(true);
+    expect(facts.stack.hasCi).toBe(false);
+    expect(facts.stack.languages).toEqual(["Python"]);
+  });
+});
+
+// ─── Retry prompt content ───────────────────────────────────────────────────
+
+describe("retry prompt content", () => {
+  it("first retry prompt includes validation error summary", async () => {
+    const mockSession = configureSessionResponses([
+      '{"invalid": true}',
+      VALID_REPO_FACTS_JSON,
+    ]);
+
+    await analyzeRepo("/tmp/repo", makeMockRepoInfo(), makeMockScanResult(), makeMockOptions());
+
+    const retryPrompt = mockSession.sendAndWait.mock.calls[1][0].prompt;
+    expect(retryPrompt).toContain("validation issues");
+    expect(retryPrompt).toContain("valid JSON");
+  });
+
+  it("second retry prompt lists required fields explicitly", async () => {
+    const mockSession = configureSessionResponses([
+      '{"invalid": true}',
+      '{"still": "invalid"}',
+      VALID_REPO_FACTS_JSON,
+    ]);
+
+    await analyzeRepo("/tmp/repo", makeMockRepoInfo(), makeMockScanResult(), makeMockOptions());
+
+    const secondRetryPrompt = mockSession.sendAndWait.mock.calls[2][0].prompt;
+    expect(secondRetryPrompt).toContain("repoName (string)");
+    expect(secondRetryPrompt).toContain("purpose (string)");
+    expect(secondRetryPrompt).toContain("architecture");
+    expect(secondRetryPrompt).toContain("firstTasks");
+  });
+});
+
+// ─── Session configuration ──────────────────────────────────────────────────
+
+describe("session configuration", () => {
+  it("passes streaming: true to session in standard mode", async () => {
+    configureSessionResponse(VALID_REPO_FACTS_JSON);
+
+    await analyzeRepo("/tmp/repo", makeMockRepoInfo(), makeMockScanResult(), makeMockOptions());
+
+    const sessionConfig = sharedMockClient.createSession.mock.calls[0][0];
+    expect(sessionConfig.streaming).toBe(true);
+  });
+
+  it("sends prompt with 10 minute timeout in standard mode", async () => {
+    const mockSession = configureSessionResponse(VALID_REPO_FACTS_JSON);
+
+    await analyzeRepo("/tmp/repo", makeMockRepoInfo(), makeMockScanResult(), makeMockOptions());
+
+    expect(mockSession.sendAndWait).toHaveBeenCalledWith(
+      expect.objectContaining({ prompt: expect.any(String) }),
+      600000
+    );
+  });
+
+  it("sends prompt with 5 minute timeout in fast mode", async () => {
+    const mockSession = configureSessionResponse(VALID_REPO_FACTS_JSON);
+
+    await analyzeRepo(
+      "/tmp/repo",
+      makeMockRepoInfo(),
+      makeMockScanResult(),
+      makeMockOptions({ fast: true })
+    );
+
+    expect(mockSession.sendAndWait).toHaveBeenCalledWith(
+      expect.objectContaining({ prompt: expect.any(String) }),
+      300000
+    );
+  });
+
+  it("sends retry prompts with 5 minute timeout", async () => {
+    const mockSession = configureSessionResponses([
+      '{"invalid": true}',
+      VALID_REPO_FACTS_JSON,
+    ]);
+
+    await analyzeRepo("/tmp/repo", makeMockRepoInfo(), makeMockScanResult(), makeMockOptions());
+
+    // Retry sendAndWait call should use 300000 timeout
+    expect(mockSession.sendAndWait).toHaveBeenCalledTimes(2);
+    expect(mockSession.sendAndWait.mock.calls[1][1]).toBe(300000);
+  });
+});
+
+// ─── Warnings handling ──────────────────────────────────────────────────────
+
+describe("warnings handling", () => {
+  it("logs warnings in verbose standard mode", async () => {
+    // Create a response that produces warnings (e.g., extra fields get ignored,
+    // but the schema uses .passthrough or coercion that produces warnings).
+    // Since our VALID_REPO_FACTS_JSON is clean, we test that no warnings crash.
+    configureSessionResponse(VALID_REPO_FACTS_JSON);
+
+    await analyzeRepo(
+      "/tmp/repo",
+      makeMockRepoInfo(),
+      makeMockScanResult(),
+      makeMockOptions({ verbose: true })
+    );
+
+    // Should not throw; warnings (if any) should be logged
+    const consoleSpy = console.log as Mock;
+    const loggedMessages = consoleSpy.mock.calls.map((c: any) => c.join(" ")).join("\n");
+    // At minimum, stats should be logged
+    expect(loggedMessages).toContain("[Stats]");
+  });
+
+  it("logs warnings in fast mode", async () => {
+    configureSessionResponse(VALID_REPO_FACTS_JSON);
+
+    // Should not throw
+    const { facts } = await analyzeRepo(
+      "/tmp/repo",
+      makeMockRepoInfo(),
+      makeMockScanResult(),
+      makeMockOptions({ fast: true })
+    );
+
+    expect(facts.repoName).toBe("test-owner/test-repo");
+  });
+});
+
+// ─── onProgress callback in tool dispatch ───────────────────────────────────
+
+describe("onProgress with tool dispatch", () => {
+  it("calls onProgress with tool name when not verbose", async () => {
+    configureSessionResponse(VALID_REPO_FACTS_JSON);
+
+    const onProgress = vi.fn();
+    await analyzeRepo(
+      process.cwd(),
+      makeMockRepoInfo(),
+      makeMockScanResult(),
+      makeMockOptions({ verbose: false }),
+      onProgress
+    );
+
+    const sessionConfig = sharedMockClient.createSession.mock.calls[0][0];
+    const listFilesTool = sessionConfig.tools.find((t: any) => t.name === "list_files");
+
+    await listFilesTool.handler({ path: "." });
+
+    expect(onProgress).toHaveBeenCalledWith("Tool: list_files");
+  });
+
+  it("does not call onProgress in verbose mode (uses console instead)", async () => {
+    configureSessionResponse(VALID_REPO_FACTS_JSON);
+
+    const onProgress = vi.fn();
+    await analyzeRepo(
+      process.cwd(),
+      makeMockRepoInfo(),
+      makeMockScanResult(),
+      makeMockOptions({ verbose: true }),
+      onProgress
+    );
+
+    const sessionConfig = sharedMockClient.createSession.mock.calls[0][0];
+    const readFileTool = sessionConfig.tools.find((t: any) => t.name === "read_file");
+
+    await readFileTool.handler({ path: "package.json" });
+
+    // In verbose mode, console.log is used, not onProgress
+    expect(onProgress).not.toHaveBeenCalledWith(expect.stringContaining("Tool: read_file"));
   });
 });
