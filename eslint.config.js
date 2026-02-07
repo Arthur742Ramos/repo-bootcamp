@@ -27,8 +27,8 @@ export default [
       "no-undef": "off",
 
       // Allow flexibility for small CLIs; keep TS strictness handled by tsc.
-      "@typescript-eslint/no-explicit-any": "off",
-      "@typescript-eslint/no-unused-vars": "off",
+      "@typescript-eslint/no-explicit-any": "warn",
+      "@typescript-eslint/no-unused-vars": "error",
     },
   },
 

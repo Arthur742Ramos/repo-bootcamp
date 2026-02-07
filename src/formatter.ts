@@ -68,18 +68,22 @@ export function markdownToHtml(md: string): string {
   let inList = false;
   let inOrderedList = false;
   let inTable = false;
+  const placeholderPrefix = "\x00CODEBLOCK_";
+  const placeholderSuffix = "\x00";
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
 
     // Restore code block placeholders
-    const placeholderMatch = line.match(/^\x00CODEBLOCK_(\d+)\x00$/);
-    if (placeholderMatch) {
-      if (inList) { html.push("</ul>"); inList = false; }
-      if (inOrderedList) { html.push("</ol>"); inOrderedList = false; }
-      if (inTable) { html.push("</table>"); inTable = false; }
-      html.push(codeBlockPlaceholders[parseInt(placeholderMatch[1], 10)]);
-      continue;
+    if (line.startsWith(placeholderPrefix) && line.endsWith(placeholderSuffix)) {
+      const indexText = line.slice(placeholderPrefix.length, -placeholderSuffix.length);
+      if (/^\d+$/.test(indexText)) {
+        if (inList) { html.push("</ul>"); inList = false; }
+        if (inOrderedList) { html.push("</ol>"); inOrderedList = false; }
+        if (inTable) { html.push("</table>"); inTable = false; }
+        html.push(codeBlockPlaceholders[parseInt(indexText, 10)]);
+        continue;
+      }
     }
 
     // Passthrough HTML tags (e.g. <details>, <summary>)

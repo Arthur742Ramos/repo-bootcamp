@@ -29,7 +29,7 @@ import { buildImportGraph, analyzeChangeImpact, generateImpactDocs, getKeyFilesF
 import { runInteractiveMode } from "./interactive.js";
 import { createIssuesFromTasks, generateIssuePreview } from "./issues.js";
 import { analyzeDiff, generateDiffDocs } from "./diff.js";
-import { startServer } from "./web.js";
+import { startServer } from "./web/server.js";
 import { startWatch } from "./watch.js";
 import { loadConfig, getStyleConfig, loadPlugins, runPlugins } from "./plugins.js";
 import { renderOutputDiagrams, DiagramFormat } from "./diagrams.js";

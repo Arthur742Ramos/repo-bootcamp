@@ -111,7 +111,6 @@ export class ProgressTracker {
     if (!this.currentPhase) return;
 
     const elapsed = formatElapsed(Date.now() - this.phaseStartTime);
-    const _totalElapsed = formatElapsed(Date.now() - this.startTime);
     const icon = PHASE_ICONS[this.currentPhase];
     const label = PHASE_LABELS[this.currentPhase];
 
@@ -173,8 +172,6 @@ export class ProgressTracker {
     this.stopInterval();
 
     const elapsed = formatElapsed(Date.now() - this.phaseStartTime);
-    const _icon = this.currentPhase ? PHASE_ICONS[this.currentPhase] : "✓";
-
     let text = message || (this.currentPhase ? PHASE_LABELS[this.currentPhase] : "Done");
 
     if (this.currentPhase === "analyze") {

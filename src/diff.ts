@@ -236,7 +236,7 @@ async function extractCommandChanges(
       // No package.json at head
     }
 
-    for (const [name, _command] of Object.entries(headScripts)) {
+    for (const name of Object.keys(headScripts)) {
       if (!baseScripts[name]) {
         newCommands.push(`npm run ${name}`);
       }

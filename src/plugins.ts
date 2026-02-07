@@ -290,6 +290,7 @@ export const examplePlugin: BootcampPlugin = {
   name: "example-plugin",
   version: "1.0.0",
   analyze: async (repoPath, scanResult, facts, _options) => {
+    void _options;
     // Example: Generate a custom doc
     const content = `# Custom Analysis
 

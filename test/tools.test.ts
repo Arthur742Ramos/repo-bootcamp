@@ -221,6 +221,7 @@ describe("list_files tool", () => {
       pattern: undefined,
       recursive: false,
     });
+    expect(ctx.onToolResult).toHaveBeenCalledWith("list_files", "Found 3 items");
   });
 
   it("lists files in a subdirectory", async () => {
@@ -432,6 +433,7 @@ describe("search tool", () => {
       path: "",
       filePattern: undefined,
     });
+    expect(ctx.onToolResult).toHaveBeenCalledWith("search", "Found 2 matches");
   });
 
   it("passes file pattern to ripgrep as --glob", async () => {
@@ -607,6 +609,10 @@ describe("get_repo_metadata tool", () => {
     expect(text).toContain("Commits: 42");
     expect(text).toContain("origin");
     expect(ctx.onToolCall).toHaveBeenCalledWith("get_repo_metadata", {});
+    expect(ctx.onToolResult).toHaveBeenCalledWith(
+      "get_repo_metadata",
+      "Collected metadata for 2 files",
+    );
   });
 
   it("handles git info unavailable", async () => {
