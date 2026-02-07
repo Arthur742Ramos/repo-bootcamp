@@ -449,6 +449,10 @@ bootcamp web --port 8080
 # Then open http://localhost:3000 in your browser
 ```
 
+![Web Dashboard](media/screenshot-web-dashboard.png)
+
+The web interface allows you to analyze repositories interactively through your browser.
+
 ### Template Packs
 
 ```bash
