@@ -3,13 +3,14 @@ import { EventEmitter } from "events";
 import { mkdir, writeFile, rm, readFile } from "fs/promises";
 import { join } from "path";
 
-import { parseGitHubUrl, cloneRepo, scanRepo, mergeFrameworksFromDeps } from "../ingest.js";
+import { parseGitHubUrl, cloneRepo, scanRepo } from "../ingest.js";
 import { analyzeRepo, type AnalysisStats } from "../agent.js";
 import { readCache, writeCache } from "../cache.js";
-import { extractDependencies, generateDependencyDocs } from "../deps.js";
-import { analyzeSecurityPatterns, generateSecurityDocs, getSecurityGrade } from "../security.js";
-import { generateTechRadar, generateRadarDocs } from "../radar.js";
-import { buildImportGraph, analyzeChangeImpact, generateImpactDocs, getKeyFilesForImpact } from "../impact.js";
+import { generateDependencyDocs } from "../deps.js";
+import { generateSecurityDocs, getSecurityGrade } from "../security.js";
+import { generateRadarDocs } from "../radar.js";
+import { generateImpactDocs } from "../impact.js";
+import { runParallelAnalysis } from "../analysis.js";
 import { applyOutputFormat, type OutputFormat } from "../formatter.js";
 import {
   generateBootcamp,
@@ -174,55 +175,10 @@ async function runAnalysis(job: AnalysisJob, options: Partial<BootcampOptions>):
     const outputDir = join(process.cwd(), `.bootcamp-output`, repoInfo.repo);
     await mkdir(outputDir, { recursive: true });
 
-    const depsPromise = extractDependencies(repoPath).then((deps) => {
-      if (deps) {
-        const allDepNames = [
-          ...deps.runtime.map(d => d.name),
-          ...deps.dev.map(d => d.name),
-        ];
-        mergeFrameworksFromDeps(scanResult.stack, allDepNames);
-      }
-      return deps;
-    });
-
-    const packageJsonPromise: Promise<Record<string, unknown> | undefined> = readFile(
-      join(repoPath, "package.json"),
-      "utf-8"
-    )
-      .then((pkgContent) => JSON.parse(pkgContent) as Record<string, unknown>)
-      .catch(() => undefined);
-
-    const securityPromise = packageJsonPromise.then((packageJson) =>
-      analyzeSecurityPatterns(repoPath, scanResult.files, packageJson)
+    const { deps, security, radar, impacts } = await runParallelAnalysis(
+      repoPath,
+      scanResult,
     );
-
-    const radarPromise = Promise.all([depsPromise, securityPromise]).then(([deps, security]) =>
-      generateTechRadar(
-        scanResult.stack,
-        scanResult.files,
-        deps,
-        security,
-        !!scanResult.readme,
-        !!scanResult.contributing
-      )
-    );
-
-    const impactsPromise = buildImportGraph(repoPath, scanResult.files).then((importGraph) => {
-      const keyFiles = getKeyFilesForImpact(scanResult.files);
-      return Promise.all(
-        keyFiles.slice(0, 10).map((file) =>
-          analyzeChangeImpact(repoPath, scanResult.files, file, importGraph)
-        )
-      );
-    });
-
-    const analysisPromise = Promise.all([
-      depsPromise,
-      securityPromise,
-      radarPromise,
-      impactsPromise,
-    ]);
-    const [deps, security, radar, impacts] = await analysisPromise;
 
     // Generate all docs
     const documents = [

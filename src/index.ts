@@ -22,13 +22,13 @@ import { mkdir, writeFile, rm, readFile } from "fs/promises";
 import { join, basename, resolve } from "path";
 import { pathToFileURL } from "url";
 
-import { parseGitHubUrl, cloneRepo, scanRepo, mergeFrameworksFromDeps } from "./ingest.js";
+import { parseGitHubUrl, cloneRepo, scanRepo } from "./ingest.js";
 import { analyzeRepo, AnalysisStats } from "./agent.js";
 import { ProgressTracker } from "./progress.js";
-import { extractDependencies, generateDependencyDocs, type DependencyAnalysis } from "./deps.js";
-import { analyzeSecurityPatterns, generateSecurityDocs, getSecurityGrade, type SecurityAnalysis } from "./security.js";
-import { generateTechRadar, generateRadarDocs, getRiskEmoji } from "./radar.js";
-import { buildImportGraph, analyzeChangeImpact, generateImpactDocs, getKeyFilesForImpact } from "./impact.js";
+import { generateDependencyDocs, type DependencyAnalysis } from "./deps.js";
+import { generateSecurityDocs, getSecurityGrade, type SecurityAnalysis } from "./security.js";
+import { generateRadarDocs, getRiskEmoji } from "./radar.js";
+import { generateImpactDocs } from "./impact.js";
 import { runInteractiveMode } from "./interactive.js";
 import { createIssuesFromTasks, generateIssuePreview } from "./issues.js";
 import { analyzeDiff, generateDiffDocs, fetchPullRequestRefs, parsePullRequestTarget } from "./diff.js";
@@ -76,12 +76,7 @@ interface GeneratedDoc {
   content: string;
 }
 
-interface ParallelAnalysisResult {
-  deps: DependencyAnalysis | null;
-  security: SecurityAnalysis;
-  radar: TechRadar;
-  impacts: import("./types.js").ChangeImpact[];
-}
+
 
 interface GenerationResult {
   documentCount: number;
@@ -159,59 +154,61 @@ async function runPullRequestDiff(prTarget: string, options: PullRequestDiffOpti
     process.exit(1);
   }
 
-  progress.startPhase("diff", `PR #${targetInfo.prNumber}`);
-  let diffSummary: DiffSummary;
   try {
-    const refs = await fetchPullRequestRefs(repoPath, repoInfo, targetInfo.prNumber);
-    diffSummary = await analyzeDiff(repoPath, refs.baseRef, refs.headRef);
-    diffSummary = {
-      ...diffSummary,
-      baseRef: refs.baseName,
-      headRef: refs.headName
-        ? `PR #${targetInfo.prNumber} (${refs.headName})`
-        : `PR #${targetInfo.prNumber}`,
-      prNumber: targetInfo.prNumber,
-      prTitle: refs.title,
-      prUrl: refs.url,
-    };
-    progress.succeed(`Analyzed PR #${targetInfo.prNumber}`);
-  } catch (error: unknown) {
-    progress.fail(`Diff failed: ${(error as Error).message}`);
-    process.exit(1);
-  }
-
-  try {
-    await mkdir(outputDir, { recursive: true });
-  } catch (error: unknown) {
-    console.error(chalk.red(`Failed to create output directory: ${(error as Error).message}`));
-    process.exit(1);
-  }
-
-  progress.startPhase("generate", "DIFF.md");
-  try {
-    const formattedDocs = applyOutputFormat(
-      [{ name: "DIFF.md", content: generateDiffDocs(diffSummary, repoInfo.repo) }],
-      outputFormat
-    );
-    for (const doc of formattedDocs) {
-      await writeFile(join(outputDir, doc.name), doc.content, "utf-8");
-    }
-    progress.succeed(`Generated ${formattedDocs.length} file${formattedDocs.length === 1 ? "" : "s"}`);
-  } catch (error: unknown) {
-    progress.fail(`Write failed: ${(error as Error).message}`);
-    process.exit(1);
-  }
-
-  if (!options.keepTemp) {
-    progress.startPhase("cleanup");
+    progress.startPhase("diff", `PR #${targetInfo.prNumber}`);
+    let diffSummary: DiffSummary;
     try {
-      await rm(repoPath, { recursive: true, force: true });
-      progress.succeed("Cleanup complete");
-    } catch {
-      progress.warn("Could not clean up temporary files");
+      const refs = await fetchPullRequestRefs(repoPath, repoInfo, targetInfo.prNumber);
+      diffSummary = await analyzeDiff(repoPath, refs.baseRef, refs.headRef);
+      diffSummary = {
+        ...diffSummary,
+        baseRef: refs.baseName,
+        headRef: refs.headName
+          ? `PR #${targetInfo.prNumber} (${refs.headName})`
+          : `PR #${targetInfo.prNumber}`,
+        prNumber: targetInfo.prNumber,
+        prTitle: refs.title,
+        prUrl: refs.url,
+      };
+      progress.succeed(`Analyzed PR #${targetInfo.prNumber}`);
+    } catch (error: unknown) {
+      progress.fail(`Diff failed: ${(error as Error).message}`);
+      process.exit(1);
     }
-  } else {
-    console.log(chalk.gray(`Temporary clone kept at: ${repoPath}`));
+
+    try {
+      await mkdir(outputDir, { recursive: true });
+    } catch (error: unknown) {
+      console.error(chalk.red(`Failed to create output directory: ${(error as Error).message}`));
+      process.exit(1);
+    }
+
+    progress.startPhase("generate", "DIFF.md");
+    try {
+      const formattedDocs = applyOutputFormat(
+        [{ name: "DIFF.md", content: generateDiffDocs(diffSummary, repoInfo.repo) }],
+        outputFormat
+      );
+      for (const doc of formattedDocs) {
+        await writeFile(join(outputDir, doc.name), doc.content, "utf-8");
+      }
+      progress.succeed(`Generated ${formattedDocs.length} file${formattedDocs.length === 1 ? "" : "s"}`);
+    } catch (error: unknown) {
+      progress.fail(`Write failed: ${(error as Error).message}`);
+      process.exit(1);
+    }
+  } finally {
+    if (!options.keepTemp) {
+      progress.startPhase("cleanup");
+      try {
+        await rm(repoPath, { recursive: true, force: true });
+        progress.succeed("Cleanup complete");
+      } catch {
+        progress.warn("Could not clean up temporary files");
+      }
+    } else {
+      console.log(chalk.gray(`Temporary clone kept at: ${repoPath}`));
+    }
   }
 
   progress.stop();
@@ -226,81 +223,8 @@ async function runPullRequestDiff(prTarget: string, options: PullRequestDiffOpti
   console.log();
 }
 
-/**
- * Run security, radar, impact, and deps analyzers concurrently.
- * Each analyzer starts as early as its dependencies allow; independent
- * branches (deps, security, impacts) execute in parallel via Promise.all.
- */
-export async function runParallelAnalysis(
-  repoPath: string,
-  scanResult: ScanResult,
-  progress?: ProgressTracker,
-): Promise<ParallelAnalysisResult> {
-  progress?.update("Running analyzers in parallel…");
-
-  // --- independent branches, kicked off immediately ---
-  const depsPromise = extractDependencies(repoPath).then((deps) => {
-    if (deps) {
-      const allDepNames = [
-        ...deps.runtime.map(d => d.name),
-        ...deps.dev.map(d => d.name),
-      ];
-      mergeFrameworksFromDeps(scanResult.stack, allDepNames);
-    }
-    progress?.update("deps ✓");
-    return deps;
-  });
-
-  const packageJsonPromise: Promise<Record<string, unknown> | undefined> = readFile(
-    join(repoPath, "package.json"),
-    "utf-8"
-  )
-    .then((pkgContent) => JSON.parse(pkgContent) as Record<string, unknown>)
-    .catch(() => undefined);
-
-  const securityPromise = packageJsonPromise.then((packageJson) =>
-    analyzeSecurityPatterns(repoPath, scanResult.files, packageJson)
-  ).then((security) => {
-    progress?.update("security ✓");
-    return security;
-  });
-
-  const impactsPromise = buildImportGraph(repoPath, scanResult.files).then((importGraph) => {
-    const keyFiles = getKeyFilesForImpact(scanResult.files);
-    return Promise.all(
-      keyFiles.slice(0, 10).map(file =>
-        analyzeChangeImpact(repoPath, scanResult.files, file, importGraph)
-      )
-    );
-  }).then((impacts) => {
-    progress?.update("impact ✓");
-    return impacts;
-  });
-
-  // radar depends on deps + security, but runs as soon as both resolve
-  const radarPromise = Promise.all([depsPromise, securityPromise]).then(([deps, security]) => {
-    const radar = generateTechRadar(
-      scanResult.stack,
-      scanResult.files,
-      deps,
-      security,
-      !!scanResult.readme,
-      !!scanResult.contributing
-    );
-    progress?.update("radar ✓");
-    return radar;
-  });
-
-  // wait for all four analyzers concurrently
-  const [deps, security, radar, impacts] = await Promise.all([
-    depsPromise,
-    securityPromise,
-    radarPromise,
-    impactsPromise,
-  ]);
-
-  return { deps, security, radar, impacts };
-}
+import { runParallelAnalysis } from "./analysis.js";
+export { runParallelAnalysis } from "./analysis.js";
 
 async function generateOutputs({
   repoPath,

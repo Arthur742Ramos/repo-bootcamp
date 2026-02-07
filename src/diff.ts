@@ -361,14 +361,19 @@ export interface PullRequestRefs {
 }
 
 async function fetchPullRequestInfo(repoInfo: RepoInfo, prNumber: number): Promise<PullRequestApiResponse> {
+  const headers: Record<string, string> = {
+    "Accept": "application/vnd.github+json",
+    "User-Agent": "repo-bootcamp",
+  };
+
+  const token = process.env.GITHUB_TOKEN;
+  if (token) {
+    headers["Authorization"] = `Bearer ${token}`;
+  }
+
   const response = await fetch(
     `https://api.github.com/repos/${repoInfo.fullName}/pulls/${prNumber}`,
-    {
-      headers: {
-        "Accept": "application/vnd.github+json",
-        "User-Agent": "repo-bootcamp",
-      },
-    }
+    { headers }
   );
 
   if (!response.ok) {
@@ -395,13 +400,26 @@ export async function fetchPullRequestRefs(
     throw new Error("GitHub API response missing pull request refs.");
   }
 
+  if (!/^[0-9a-f]{40}$/.test(baseSha)) {
+    throw new Error("Invalid base SHA format.");
+  }
+
   const baseRef = `pr-${prNumber}-base`;
   const headRef = `pr-${prNumber}-head`;
+
+  const token = process.env.GITHUB_TOKEN;
+  const fetchEnv = token
+    ? { ...process.env, GIT_ASKPASS: "echo", GIT_TERMINAL_PROMPT: "0",
+        GIT_CONFIG_COUNT: "1",
+        GIT_CONFIG_KEY_0: "http.https://github.com/.extraheader",
+        GIT_CONFIG_VALUE_0: `Authorization: basic ${Buffer.from(`x-access-token:${token}`).toString("base64")}` }
+    : undefined;
 
   try {
     await execAsync(`git fetch --quiet origin ${baseSha}:${baseRef}`, {
       cwd: repoPath,
       maxBuffer: 5 * 1024 * 1024,
+      env: fetchEnv,
     });
   } catch (error: unknown) {
     throw new Error(`Failed to fetch PR base ref: ${(error as Error).message}`);
@@ -411,6 +429,7 @@ export async function fetchPullRequestRefs(
     await execAsync(`git fetch --quiet origin pull/${prNumber}/head:${headRef}`, {
       cwd: repoPath,
       maxBuffer: 5 * 1024 * 1024,
+      env: fetchEnv,
     });
   } catch (error: unknown) {
     throw new Error(`Failed to fetch PR head ref: ${(error as Error).message}`);
