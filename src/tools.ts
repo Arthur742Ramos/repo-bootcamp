@@ -27,7 +27,7 @@ export interface ToolContext {
 /**
  * Read a file from the repository
  */
-function createReadFileTool(context: ToolContext): Tool {
+function createReadFileTool(context: ToolContext): Tool<any> {
   return defineTool("read_file", {
     description: "Read the contents of a file from the repository. Use this to examine source code, configuration files, and documentation.",
     parameters: {
@@ -72,7 +72,7 @@ function createReadFileTool(context: ToolContext): Tool {
 /**
  * List files in a directory
  */
-function createListFilesTool(context: ToolContext): Tool {
+function createListFilesTool(context: ToolContext): Tool<any> {
   return defineTool("list_files", {
   description: "List files and directories in a path. Use this to explore the repository structure.",
   parameters: {
@@ -165,7 +165,7 @@ function createListFilesTool(context: ToolContext): Tool {
 /**
  * Search for text in files
  */
-function createSearchTool(context: ToolContext): Tool {
+function createSearchTool(context: ToolContext): Tool<any> {
   return defineTool("search", {
   description: "Search for a pattern in repository files using ripgrep. Use this to find specific code patterns, function definitions, imports, etc.",
   parameters: {
@@ -219,7 +219,7 @@ function createSearchTool(context: ToolContext): Tool {
       return { textResultForLlm: result, resultType: "success" as const };
     } catch (error: unknown) {
       // ripgrep returns exit code 1 when no matches found
-      if (error.code === 1) {
+      if ((error as { code?: number }).code === 1) {
         context.onToolResult?.("search", "No matches found");
         return { textResultForLlm: `No matches found for pattern: ${pattern}`, resultType: "success" as const };
       }
@@ -234,7 +234,7 @@ function createSearchTool(context: ToolContext): Tool {
 /**
  * Get repository metadata
  */
-function createRepoMetadataTool(context: ToolContext): Tool {
+function createRepoMetadataTool(context: ToolContext): Tool<any> {
   return defineTool("get_repo_metadata", {
   description: "Get metadata about the repository including detected stack, available commands, and file statistics.",
   parameters: {
@@ -314,7 +314,7 @@ ${gitInfo}`;
 /**
  * Get all tools for session creation
  */
-export function getRepoTools(context: ToolContext): Tool<unknown>[] {
+export function getRepoTools(context: ToolContext): Tool<any>[] {
   return [
     createReadFileTool(context),
     createListFilesTool(context),
