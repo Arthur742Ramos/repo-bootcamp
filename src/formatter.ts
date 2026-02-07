@@ -308,3 +308,22 @@ export function formatContent(
   if (format === "pdf") return convertToPdf(content, title);
   return content;
 }
+
+export function formatDocName(name: string, format: OutputFormat): string {
+  if (format === "markdown" || !name.endsWith(".md")) return name;
+  return formatFileName(name, format);
+}
+
+export function applyOutputFormat(
+  documents: { name: string; content: string }[],
+  format: OutputFormat
+): { name: string; content: string }[] {
+  if (format === "markdown") return documents;
+  return documents.map((doc) => {
+    if (!doc.name.endsWith(".md")) return doc;
+    return {
+      name: formatFileName(doc.name, format),
+      content: formatContent(doc.content, doc.name, format),
+    };
+  });
+}

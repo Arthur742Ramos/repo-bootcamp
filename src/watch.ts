@@ -8,7 +8,7 @@
 
 import { exec } from "child_process";
 import { promisify } from "util";
-import { watch as fsWatch, type FSWatcher } from "fs";
+import { watch as fsWatch, type FSWatcher, type WatchOptions as FsWatchOptions } from "fs";
 import { join } from "path";
 import chalk from "chalk";
 
@@ -68,7 +68,7 @@ export async function fetchAndCheckUpdates(repoPath: string, lastSha: string): P
  *
  * Uses two strategies:
  * 1. Periodic polling via `git fetch` (primary)
- * 2. `fs.watch` on `.git/refs` for local ref changes (supplementary)
+ * 2. `fs.watch` on git refs/HEAD files for local ref changes (supplementary)
  */
 export function startWatch(
   repoPath: string,
@@ -78,7 +78,7 @@ export function startWatch(
   let running = false;
   let stopped = false;
   let pollTimer: ReturnType<typeof setTimeout> | null = null;
-  let fsWatcher: FSWatcher | null = null;
+  const fsWatchers: FSWatcher[] = [];
 
   const log = (msg: string) => {
     if (opts.verbose) {
@@ -132,21 +132,30 @@ export function startWatch(
     }, opts.intervalSeconds * 1000);
   };
 
-  // Start fs.watch on .git/refs as supplementary trigger
-  try {
-    const refsPath = join(repoPath, ".git", "refs");
-    fsWatcher = fsWatch(refsPath, { recursive: true }, () => {
-      if (!running && !stopped) {
-        log("Local ref change detected, checking...");
-        check();
-      }
-    });
-    fsWatcher.on("error", () => {
-      // Ignore fs.watch errors (not critical)
-    });
-  } catch {
-    // fs.watch not available or path doesn't exist
-  }
+  const triggerCheck = () => {
+    if (!running && !stopped) {
+      log("Local git ref change detected, checking...");
+      check();
+    }
+  };
+
+  const addFsWatch = (watchPath: string, options?: FsWatchOptions) => {
+    try {
+      const watcher = fsWatch(watchPath, options ?? {}, triggerCheck);
+      watcher.on("error", () => {
+        // Ignore fs.watch errors (not critical)
+      });
+      fsWatchers.push(watcher);
+    } catch {
+      // fs.watch not available or path doesn't exist
+    }
+  };
+
+  // Start fs.watch on git refs and metadata as supplementary triggers
+  addFsWatch(join(repoPath, ".git", "refs"), { recursive: true });
+  addFsWatch(join(repoPath, ".git", "HEAD"));
+  addFsWatch(join(repoPath, ".git", "packed-refs"));
+  addFsWatch(join(repoPath, ".git", "FETCH_HEAD"));
 
   // Print initial watch message
   console.log(
@@ -162,10 +171,10 @@ export function startWatch(
     stop: () => {
       stopped = true;
       if (pollTimer) clearTimeout(pollTimer);
-      if (fsWatcher) {
-        fsWatcher.close();
-        fsWatcher = null;
+      for (const watcher of fsWatchers) {
+        watcher.close();
       }
+      fsWatchers.length = 0;
     },
   };
 }

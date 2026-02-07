@@ -405,6 +405,16 @@ bootcamp https://github.com/owner/repo --compare v1.0.0
 # See what changed for onboarding (new deps, env vars, commands)
 ```
 
+### Watch Mode
+
+```bash
+# Re-run analysis when new commits land
+bootcamp https://github.com/owner/repo --watch
+
+# Custom polling interval (seconds)
+bootcamp https://github.com/owner/repo --watch --watch-interval 60
+```
+
 ### Auto-Create GitHub Issues
 
 ```bash
@@ -458,6 +468,7 @@ npm install -g @mermaid-js/mermaid-cli
 | `-f, --focus <focus>` | Focus: onboarding, architecture, contributing, all | `all` |
 | `-a, --audience <type>` | Target: new-hire, oss-contributor, internal-dev | `oss-contributor` |
 | `-o, --output <dir>` | Output directory | `./bootcamp-{repo}` |
+| `--format <format>` | Output format: markdown, html, pdf | `markdown` |
 | `-m, --max-files <n>` | Maximum files to scan | `200` |
 | `--model <model>` | Override model selection | auto |
 | `-s, --style <style>` | Output style: startup, enterprise, oss, devops | `oss` |
@@ -471,6 +482,8 @@ npm install -g @mermaid-js/mermaid-cli
 | `--no-clone` | Use GitHub API instead of cloning (faster but limited) | false |
 | `--fast` | Fast mode: inline key files, skip tools, much faster (~15-30s) | false |
 | `--keep-temp` | Keep temporary clone | false |
+| `-w, --watch` | Watch mode: re-run analysis on new commits | false |
+| `--watch-interval <seconds>` | Polling interval for watch mode in seconds | `30` |
 | `--stats` | Show detailed statistics | false |
 | `-v, --verbose` | Show tool calls and reasoning | false |
 
@@ -507,7 +520,7 @@ npm install -g @mermaid-js/mermaid-cli
 ┌──────────────┐    ┌──────────────┐    ┌──────────────────┐
 │   Analyzers  │    │   Web/CLI    │    │   Integrations   │
 │              │    │              │    │                  │
-│ • radar.ts   │    │ • web.ts     │    │ • issues.ts      │
+│ • radar.ts   │    │ • web/server.ts │    │ • issues.ts      │
 │ • impact.ts  │    │ • interactive│    │ • diff.ts        │
 │ • security.ts│    │ • plugins.ts │    │ • deps.ts        │
 └──────────────┘    └──────────────┘    └──────────────────┘

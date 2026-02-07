@@ -10,6 +10,7 @@
  *   bootcamp https://github.com/owner/repo --output ./my-bootcamp
  *   bootcamp https://github.com/owner/repo --interactive
  *   bootcamp https://github.com/owner/repo --compare v1.0.0
+ *   bootcamp https://github.com/owner/repo --watch
  *   bootcamp ask https://github.com/owner/repo
  *   bootcamp --web
  */
@@ -22,8 +23,8 @@ import { join, basename } from "path";
 import { parseGitHubUrl, cloneRepo, scanRepo, mergeFrameworksFromDeps } from "./ingest.js";
 import { analyzeRepo, AnalysisStats } from "./agent.js";
 import { ProgressTracker } from "./progress.js";
-import { extractDependencies, generateDependencyDocs } from "./deps.js";
-import { analyzeSecurityPatterns, generateSecurityDocs, getSecurityGrade } from "./security.js";
+import { extractDependencies, generateDependencyDocs, type DependencyAnalysis } from "./deps.js";
+import { analyzeSecurityPatterns, generateSecurityDocs, getSecurityGrade, type SecurityAnalysis } from "./security.js";
 import { generateTechRadar, generateRadarDocs, getRiskEmoji } from "./radar.js";
 import { buildImportGraph, analyzeChangeImpact, generateImpactDocs, getKeyFilesForImpact } from "./impact.js";
 import { runInteractiveMode } from "./interactive.js";
@@ -31,8 +32,9 @@ import { createIssuesFromTasks, generateIssuePreview } from "./issues.js";
 import { analyzeDiff, generateDiffDocs } from "./diff.js";
 import { startServer } from "./web/server.js";
 import { startWatch } from "./watch.js";
-import { loadConfig, getStyleConfig, loadPlugins, runPlugins } from "./plugins.js";
+import { loadConfig, getStyleConfig, loadPlugins, runPlugins, type BootcampConfig } from "./plugins.js";
 import { renderOutputDiagrams, DiagramFormat } from "./diagrams.js";
+import { applyOutputFormat, formatDocName, type OutputFormat } from "./formatter.js";
 import { readCache, writeCache } from "./cache.js";
 import {
   generateBootcamp,
@@ -43,7 +45,7 @@ import {
   generateRunbook,
   generateDiagrams,
 } from "./generator.js";
-import type { BootcampOptions, RepoFacts, ScanResult, RepoInfo, StylePack } from "./types.js";
+import type { BootcampOptions, RepoFacts, ScanResult, RepoInfo, StylePack, TechRadar } from "./types.js";
 import pkg from "../package.json" with { type: "json" };
 
 const VERSION = pkg.version;
@@ -59,6 +61,208 @@ interface RunStats {
   model: string;
 }
 
+interface GeneratedDoc {
+  name: string;
+  content: string;
+}
+
+interface GenerationResult {
+  documentCount: number;
+  security: SecurityAnalysis;
+  radar: TechRadar;
+  deps: DependencyAnalysis | null;
+}
+
+interface GenerateOutputsParams {
+  repoPath: string;
+  repoInfo: RepoInfo;
+  scanResult: ScanResult;
+  facts: RepoFacts;
+  options: BootcampOptions;
+  config: BootcampConfig | null;
+  outputDir: string;
+  outputFormat: OutputFormat;
+  progress: ProgressTracker;
+  allowIssueCreation?: boolean;
+}
+
+async function generateOutputs({
+  repoPath,
+  repoInfo,
+  scanResult,
+  facts,
+  options,
+  config,
+  outputDir,
+  outputFormat,
+  progress,
+  allowIssueCreation = true,
+}: GenerateOutputsParams): Promise<GenerationResult> {
+  // Extract dependencies
+  const deps = await extractDependencies(repoPath);
+
+  // Merge frameworks detected from dependencies into stack info
+  if (deps) {
+    const allDepNames = [
+      ...deps.runtime.map(d => d.name),
+      ...deps.dev.map(d => d.name),
+    ];
+    mergeFrameworksFromDeps(scanResult.stack, allDepNames);
+  }
+
+  // Analyze security (read package.json for deps check)
+  let packageJson: Record<string, unknown> | undefined;
+  try {
+    const pkgContent = await readFile(join(repoPath, "package.json"), "utf-8");
+    packageJson = JSON.parse(pkgContent);
+  } catch {
+    // No package.json
+  }
+  const security = await analyzeSecurityPatterns(repoPath, scanResult.files, packageJson);
+
+  // Generate Tech Radar
+  const radar = generateTechRadar(
+    scanResult.stack,
+    scanResult.files,
+    deps,
+    security,
+    !!scanResult.readme,
+    !!scanResult.contributing
+  );
+
+  // Generate Change Impact Map
+  const keyFiles = getKeyFilesForImpact(scanResult.files);
+  const importGraph = await buildImportGraph(repoPath, scanResult.files);
+  const impacts = await Promise.all(
+    keyFiles.slice(0, 10).map(file => 
+      analyzeChangeImpact(repoPath, scanResult.files, file, importGraph)
+    )
+  );
+
+  // Generate Diff if --compare is specified
+  let diffSummary = null;
+  if (options.compare) {
+    try {
+      progress.update("Analyzing diff...");
+      diffSummary = await analyzeDiff(repoPath, options.compare, "HEAD");
+    } catch (error: unknown) {
+      console.log(chalk.yellow(`  Warning: Could not generate diff: ${(error as Error).message}`));
+    }
+  }
+
+  // Build document list
+  const documents: GeneratedDoc[] = [
+    { name: "BOOTCAMP.md", content: generateBootcamp(facts, options) },
+    { name: "ONBOARDING.md", content: generateOnboarding(facts) },
+    { name: "ARCHITECTURE.md", content: generateArchitecture(facts) },
+    { name: "CODEMAP.md", content: generateCodemap(facts) },
+    { name: "FIRST_TASKS.md", content: generateFirstTasks(facts) },
+    { name: "RUNBOOK.md", content: generateRunbook(facts) },
+    { name: "diagrams.mmd", content: generateDiagrams(facts) },
+    { name: "repo_facts.json", content: JSON.stringify(facts, null, 2) },
+    { name: "SECURITY.md", content: generateSecurityDocs(security, repoInfo.repo) },
+    { name: "RADAR.md", content: generateRadarDocs(radar, repoInfo.repo) },
+  ];
+
+  // Add dependency docs if we have deps
+  if (deps) {
+    documents.push({
+      name: "DEPENDENCIES.md",
+      content: generateDependencyDocs(deps, repoInfo.repo),
+    });
+  }
+
+  // Add impact docs if we have impacts
+  if (impacts.length > 0) {
+    documents.push({
+      name: "IMPACT.md",
+      content: generateImpactDocs(impacts, repoInfo.repo),
+    });
+  }
+
+  // Add diff docs if generated
+  if (diffSummary) {
+    documents.push({
+      name: "DIFF.md",
+      content: generateDiffDocs(diffSummary, repoInfo.repo),
+    });
+  }
+
+  // Load and run plugins if configured
+  if (config?.plugins && config.plugins.length > 0) {
+    progress.update("Running plugins...");
+    const plugins = await loadPlugins(config.plugins);
+    const pluginOutput = await runPlugins(plugins, repoPath, scanResult, facts, options);
+    
+    // Add plugin docs
+    for (const doc of pluginOutput.docs) {
+      documents.push(doc);
+    }
+
+    // Merge extra data into facts JSON
+    if (Object.keys(pluginOutput.extraData).length > 0) {
+      const factsWithPlugins = {
+        ...facts,
+        plugins: pluginOutput.extraData,
+      };
+      const factsDoc = documents.find(d => d.name === "repo_facts.json");
+      if (factsDoc) {
+        factsDoc.content = JSON.stringify(factsWithPlugins, null, 2);
+      }
+    }
+  }
+
+  const formattedDocuments = applyOutputFormat(documents, outputFormat);
+
+  // Only write if not json-only mode
+  if (!options.jsonOnly) {
+    for (const doc of formattedDocuments) {
+      progress.update(doc.name);
+      await writeFile(join(outputDir, doc.name), doc.content, "utf-8");
+    }
+  } else {
+    // Just write the JSON
+    await writeFile(join(outputDir, "repo_facts.json"), JSON.stringify(facts, null, 2), "utf-8");
+  }
+
+  // Create issues if requested
+  if (allowIssueCreation && options.createIssues && facts.firstTasks.length > 0) {
+    console.log();
+    if (options.dryRun) {
+      const preview = generateIssuePreview(facts.firstTasks, repoInfo);
+      const [previewDoc] = applyOutputFormat(
+        [{ name: "ISSUES_PREVIEW.md", content: preview }],
+        outputFormat
+      );
+      await writeFile(join(outputDir, previewDoc.name), previewDoc.content, "utf-8");
+      console.log(chalk.yellow(`Issue preview saved to ${previewDoc.name}`));
+    }
+    await createIssuesFromTasks(facts.firstTasks, repoInfo, {
+      dryRun: options.dryRun,
+      verbose: options.verbose,
+    });
+  }
+
+  // Render diagrams if requested
+  if (options.renderDiagrams && !options.jsonOnly) {
+    progress.update("Rendering diagrams...");
+    const format = options.diagramFormat || "svg";
+    const renderResult = await renderOutputDiagrams(outputDir, format);
+    if (renderResult.rendered) {
+      console.log(chalk.cyan("\nDiagrams rendered: ") + chalk.white(renderResult.files.map(f => basename(f)).join(", ")));
+    } else if (renderResult.error) {
+      console.log(chalk.yellow(`\nDiagram rendering skipped: ${renderResult.error}`));
+    }
+  }
+
+  return {
+    documentCount: options.jsonOnly ? 1 : formattedDocuments.length,
+    security,
+    radar,
+    deps,
+  };
+}
+
 async function run(repoUrl: string, options: BootcampOptions): Promise<void> {
   const progress = new ProgressTracker(options.verbose);
   const runStats: Partial<RunStats> = {};
@@ -70,6 +274,7 @@ async function run(repoUrl: string, options: BootcampOptions): Promise<void> {
     options.style || config?.style,
     config?.customStyle
   );
+  const outputFormat: OutputFormat = options.format || "markdown";
 
   // ASCII art banner
   console.log(chalk.cyan(`
@@ -85,6 +290,7 @@ async function run(repoUrl: string, options: BootcampOptions): Promise<void> {
   console.log(chalk.white(`  Focus:       ${chalk.cyan(options.focus)}`));
   console.log(chalk.white(`  Audience:    ${chalk.cyan(options.audience)}`));
   console.log(chalk.white(`  Style:       ${chalk.cyan(styleConfig.name)}`));
+  console.log(chalk.white(`  Format:      ${chalk.cyan(outputFormat)}`));
   if (options.model) {
     console.log(chalk.white(`  Model:       ${chalk.cyan(options.model)}`));
   }
@@ -222,133 +428,20 @@ async function run(repoUrl: string, options: BootcampOptions): Promise<void> {
   const generateStart = Date.now();
   progress.startPhase("generate", options.jsonOnly ? "JSON only" : "12+ files");
   try {
-    // Extract dependencies
-    const deps = await extractDependencies(repoPath);
-    
-    // Merge frameworks detected from dependencies into stack info
-    if (deps) {
-      const allDepNames = [
-        ...deps.runtime.map(d => d.name),
-        ...deps.dev.map(d => d.name),
-      ];
-      mergeFrameworksFromDeps(scanResult.stack, allDepNames);
-    }
-    
-    // Analyze security (read package.json for deps check)
-    let packageJson: Record<string, unknown> | undefined;
-    try {
-      const pkgContent = await readFile(join(repoPath, "package.json"), "utf-8");
-      packageJson = JSON.parse(pkgContent);
-    } catch {
-      // No package.json
-    }
-    const security = await analyzeSecurityPatterns(repoPath, scanResult.files, packageJson);
-
-    // Generate Tech Radar
-    const radar = generateTechRadar(
-      scanResult.stack,
-      scanResult.files,
-      deps,
-      security,
-      !!scanResult.readme,
-      !!scanResult.contributing
-    );
-
-    // Generate Change Impact Map
-    const keyFiles = getKeyFilesForImpact(scanResult.files);
-    const importGraph = await buildImportGraph(repoPath, scanResult.files);
-    const impacts = await Promise.all(
-      keyFiles.slice(0, 10).map(file => 
-        analyzeChangeImpact(repoPath, scanResult.files, file, importGraph)
-      )
-    );
-
-    // Generate Diff if --compare is specified
-    let diffSummary = null;
-    if (options.compare) {
-      try {
-        progress.update("Analyzing diff...");
-        diffSummary = await analyzeDiff(repoPath, options.compare, "HEAD");
-      } catch (error: unknown) {
-        console.log(chalk.yellow(`  Warning: Could not generate diff: ${(error as Error).message}`));
-      }
-    }
-
-    // Build document list
-    const documents = [
-      { name: "BOOTCAMP.md", content: generateBootcamp(facts, options) },
-      { name: "ONBOARDING.md", content: generateOnboarding(facts) },
-      { name: "ARCHITECTURE.md", content: generateArchitecture(facts) },
-      { name: "CODEMAP.md", content: generateCodemap(facts) },
-      { name: "FIRST_TASKS.md", content: generateFirstTasks(facts) },
-      { name: "RUNBOOK.md", content: generateRunbook(facts) },
-      { name: "diagrams.mmd", content: generateDiagrams(facts) },
-      { name: "repo_facts.json", content: JSON.stringify(facts, null, 2) },
-      { name: "SECURITY.md", content: generateSecurityDocs(security, repoInfo.repo) },
-      { name: "RADAR.md", content: generateRadarDocs(radar, repoInfo.repo) },
-    ];
-
-    // Add dependency docs if we have deps
-    if (deps) {
-      documents.push({
-        name: "DEPENDENCIES.md",
-        content: generateDependencyDocs(deps, repoInfo.repo),
-      });
-    }
-
-    // Add impact docs if we have impacts
-    if (impacts.length > 0) {
-      documents.push({
-        name: "IMPACT.md",
-        content: generateImpactDocs(impacts, repoInfo.repo),
-      });
-    }
-
-    // Add diff docs if generated
-    if (diffSummary) {
-      documents.push({
-        name: "DIFF.md",
-        content: generateDiffDocs(diffSummary, repoInfo.repo),
-      });
-    }
-
-    // Load and run plugins if configured
-    if (config?.plugins && config.plugins.length > 0) {
-      progress.update("Running plugins...");
-      const plugins = await loadPlugins(config.plugins);
-      const pluginOutput = await runPlugins(plugins, repoPath, scanResult, facts, options);
-      
-      // Add plugin docs
-      for (const doc of pluginOutput.docs) {
-        documents.push(doc);
-      }
-
-      // Merge extra data into facts JSON
-      if (Object.keys(pluginOutput.extraData).length > 0) {
-        const factsWithPlugins = {
-          ...facts,
-          plugins: pluginOutput.extraData,
-        };
-        const factsDoc = documents.find(d => d.name === "repo_facts.json");
-        if (factsDoc) {
-          factsDoc.content = JSON.stringify(factsWithPlugins, null, 2);
-        }
-      }
-    }
-
-    // Only write if not json-only mode
-    if (!options.jsonOnly) {
-      for (const doc of documents) {
-        progress.update(doc.name);
-        await writeFile(join(outputDir, doc.name), doc.content, "utf-8");
-      }
-    } else {
-      // Just write the JSON
-      await writeFile(join(outputDir, "repo_facts.json"), JSON.stringify(facts, null, 2), "utf-8");
-    }
+    const { documentCount, security, radar, deps } = await generateOutputs({
+      repoPath,
+      repoInfo,
+      scanResult,
+      facts,
+      options,
+      config,
+      outputDir,
+      outputFormat,
+      progress,
+    });
 
     runStats.generateTime = Date.now() - generateStart;
-    progress.succeed(`Generated ${options.jsonOnly ? 1 : documents.length} files`);
+    progress.succeed(`Generated ${documentCount} files`);
 
     // Show security score
     if (!options.jsonOnly) {
@@ -364,32 +457,6 @@ async function run(repoUrl: string, options: BootcampOptions): Promise<void> {
 
       if (deps) {
         console.log(chalk.cyan("Dependencies: ") + chalk.white(`${deps.totalCount} total (${deps.runtime.length} runtime, ${deps.dev.length} dev)`));
-      }
-    }
-
-    // Create issues if requested
-    if (options.createIssues && facts.firstTasks.length > 0) {
-      console.log();
-      if (options.dryRun) {
-        const preview = generateIssuePreview(facts.firstTasks, repoInfo);
-        await writeFile(join(outputDir, "ISSUES_PREVIEW.md"), preview, "utf-8");
-        console.log(chalk.yellow("Issue preview saved to ISSUES_PREVIEW.md"));
-      }
-      await createIssuesFromTasks(facts.firstTasks, repoInfo, {
-        dryRun: options.dryRun,
-        verbose: options.verbose,
-      });
-    }
-
-    // Render diagrams if requested
-    if (options.renderDiagrams && !options.jsonOnly) {
-      progress.update("Rendering diagrams...");
-      const format = options.diagramFormat || "svg";
-      const renderResult = await renderOutputDiagrams(outputDir, format);
-      if (renderResult.rendered) {
-        console.log(chalk.cyan("\nDiagrams rendered: ") + chalk.white(renderResult.files.map(f => basename(f)).join(", ")));
-      } else if (renderResult.error) {
-        console.log(chalk.yellow(`\nDiagram rendering skipped: ${renderResult.error}`));
       }
     }
 
@@ -430,19 +497,20 @@ async function run(repoUrl: string, options: BootcampOptions): Promise<void> {
   console.log();
 
   if (!options.jsonOnly) {
+    const formatName = (name: string) => formatDocName(name, outputFormat);
     console.log(chalk.dim("  Generated files:"));
-    console.log(chalk.white("  ├── ") + chalk.cyan("BOOTCAMP.md") + chalk.dim("      → 1-page overview (start here!)"));
-    console.log(chalk.white("  ├── ") + chalk.cyan("ONBOARDING.md") + chalk.dim("    → Full setup guide"));
-    console.log(chalk.white("  ├── ") + chalk.cyan("ARCHITECTURE.md") + chalk.dim("  → System design & diagrams"));
-    console.log(chalk.white("  ├── ") + chalk.cyan("CODEMAP.md") + chalk.dim("       → Directory tour"));
-    console.log(chalk.white("  ├── ") + chalk.cyan("FIRST_TASKS.md") + chalk.dim("   → Starter issues"));
-    console.log(chalk.white("  ├── ") + chalk.cyan("RUNBOOK.md") + chalk.dim("       → Operations guide"));
-    console.log(chalk.white("  ├── ") + chalk.cyan("DEPENDENCIES.md") + chalk.dim("  → Dependency graph"));
-    console.log(chalk.white("  ├── ") + chalk.cyan("SECURITY.md") + chalk.dim("      → Security findings"));
-    console.log(chalk.white("  ├── ") + chalk.cyan("RADAR.md") + chalk.dim("         → Tech radar & risk score"));
-    console.log(chalk.white("  ├── ") + chalk.cyan("IMPACT.md") + chalk.dim("        → Change impact analysis"));
+    console.log(chalk.white("  ├── ") + chalk.cyan(formatName("BOOTCAMP.md")) + chalk.dim("      → 1-page overview (start here!)"));
+    console.log(chalk.white("  ├── ") + chalk.cyan(formatName("ONBOARDING.md")) + chalk.dim("    → Full setup guide"));
+    console.log(chalk.white("  ├── ") + chalk.cyan(formatName("ARCHITECTURE.md")) + chalk.dim("  → System design & diagrams"));
+    console.log(chalk.white("  ├── ") + chalk.cyan(formatName("CODEMAP.md")) + chalk.dim("       → Directory tour"));
+    console.log(chalk.white("  ├── ") + chalk.cyan(formatName("FIRST_TASKS.md")) + chalk.dim("   → Starter issues"));
+    console.log(chalk.white("  ├── ") + chalk.cyan(formatName("RUNBOOK.md")) + chalk.dim("       → Operations guide"));
+    console.log(chalk.white("  ├── ") + chalk.cyan(formatName("DEPENDENCIES.md")) + chalk.dim("  → Dependency graph"));
+    console.log(chalk.white("  ├── ") + chalk.cyan(formatName("SECURITY.md")) + chalk.dim("      → Security findings"));
+    console.log(chalk.white("  ├── ") + chalk.cyan(formatName("RADAR.md")) + chalk.dim("         → Tech radar & risk score"));
+    console.log(chalk.white("  ├── ") + chalk.cyan(formatName("IMPACT.md")) + chalk.dim("        → Change impact analysis"));
     if (options.compare) {
-      console.log(chalk.white("  ├── ") + chalk.cyan("DIFF.md") + chalk.dim("          → Version comparison"));
+      console.log(chalk.white("  ├── ") + chalk.cyan(formatName("DIFF.md")) + chalk.dim("          → Version comparison"));
     }
     console.log(chalk.white("  ├── ") + chalk.cyan("diagrams.mmd") + chalk.dim("     → Mermaid diagrams"));
     console.log(chalk.white("  └── ") + chalk.cyan("repo_facts.json") + chalk.dim("  → Structured data"));
@@ -472,7 +540,7 @@ async function run(repoUrl: string, options: BootcampOptions): Promise<void> {
     }
   }
 
-  console.log(chalk.white("  🚀 ") + chalk.white.bold("Next step: ") + chalk.cyan(`open ${outputDir}/BOOTCAMP.md`));
+  console.log(chalk.white("  🚀 ") + chalk.white.bold("Next step: ") + chalk.cyan(`open ${outputDir}/${formatDocName("BOOTCAMP.md", outputFormat)}`));
   console.log();
 
   // Start watch mode if requested
@@ -494,21 +562,20 @@ async function run(repoUrl: string, options: BootcampOptions): Promise<void> {
         });
         wp.succeed("Analysis complete");
 
-        wp.startPhase("generate");
-        const docs = [
-          { name: "BOOTCAMP.md", content: generateBootcamp(result.facts, options) },
-          { name: "ONBOARDING.md", content: generateOnboarding(result.facts) },
-          { name: "ARCHITECTURE.md", content: generateArchitecture(result.facts) },
-          { name: "CODEMAP.md", content: generateCodemap(result.facts) },
-          { name: "FIRST_TASKS.md", content: generateFirstTasks(result.facts) },
-          { name: "RUNBOOK.md", content: generateRunbook(result.facts) },
-          { name: "diagrams.mmd", content: generateDiagrams(result.facts) },
-          { name: "repo_facts.json", content: JSON.stringify(result.facts, null, 2) },
-        ];
-        for (const doc of docs) {
-          await writeFile(join(outputDir, doc.name), doc.content, "utf-8");
-        }
-        wp.succeed(`Regenerated ${docs.length} files`);
+        wp.startPhase("generate", options.jsonOnly ? "JSON only" : "12+ files");
+        const { documentCount } = await generateOutputs({
+          repoPath,
+          repoInfo,
+          scanResult: newScan,
+          facts: result.facts,
+          options,
+          config,
+          outputDir,
+          outputFormat,
+          progress: wp,
+          allowIssueCreation: false,
+        });
+        wp.succeed(`Regenerated ${documentCount} files`);
         wp.stop();
       },
     });
@@ -629,6 +696,7 @@ program
     "oss-contributor"
   )
   .option("-o, --output <dir>", "Output directory")
+  .option("--format <format>", "Output format: markdown, html, pdf", "markdown")
   .option("-m, --max-files <number>", "Maximum files to scan", "200")
   .option("--model <model>", "Override model selection (e.g., claude-opus-4-5)")
   .option("--no-clone", "Use GitHub API instead of cloning (faster but limited)")
@@ -655,6 +723,7 @@ program
       focus: opts.focus as BootcampOptions["focus"],
       audience: opts.audience as BootcampOptions["audience"],
       output: opts.output,
+      format: opts.format as OutputFormat,
       maxFiles: parseInt(opts.maxFiles, 10),
       noClone: opts.clone === false,
       verbose: opts.verbose || false,
@@ -692,6 +761,13 @@ program
       console.error(chalk.red(`Invalid style: ${options.style}. Use: startup, enterprise, oss, devops`));
       process.exit(1);
     }
+
+    const format = options.format || "markdown";
+    if (!["markdown", "html", "pdf"].includes(format)) {
+      console.error(chalk.red(`Invalid format: ${options.format}. Use: markdown, html, pdf`));
+      process.exit(1);
+    }
+    options.format = format as OutputFormat;
 
     await run(repoUrl, options);
   });

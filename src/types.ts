@@ -2,6 +2,8 @@
  * Types for Repo Bootcamp Generator
  */
 
+import type { OutputFormat } from "./formatter.js";
+
 // CLI Options
 export interface BootcampOptions {
   branch: string;
@@ -22,6 +24,7 @@ export interface BootcampOptions {
   compare?: string;
   createIssues?: boolean;
   dryRun?: boolean;
+  format?: OutputFormat;
   renderDiagrams?: boolean;
   diagramFormat?: "svg" | "png" | "pdf";
   style?: "startup" | "enterprise" | "oss" | "devops";

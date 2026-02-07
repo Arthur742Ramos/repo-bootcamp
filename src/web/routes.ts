@@ -4,10 +4,12 @@ import { mkdir, writeFile, rm, readFile } from "fs/promises";
 import { join } from "path";
 
 import { parseGitHubUrl, cloneRepo, scanRepo } from "../ingest.js";
-import { analyzeRepo } from "../agent.js";
+import { analyzeRepo, type AnalysisStats } from "../agent.js";
+import { readCache, writeCache } from "../cache.js";
 import { extractDependencies, generateDependencyDocs } from "../deps.js";
 import { analyzeSecurityPatterns, generateSecurityDocs, getSecurityGrade } from "../security.js";
 import { generateTechRadar, generateRadarDocs } from "../radar.js";
+import { applyOutputFormat, type OutputFormat } from "../formatter.js";
 import {
   generateBootcamp,
   generateOnboarding,
@@ -17,7 +19,7 @@ import {
   generateRunbook,
   generateDiagrams,
 } from "../generator.js";
-import type { BootcampOptions } from "../types.js";
+import type { BootcampOptions, RepoFacts } from "../types.js";
 
 /**
  * Progress event for SSE
@@ -80,6 +82,10 @@ async function runAnalysis(job: AnalysisJob, options: Partial<BootcampOptions>):
 
   try {
     job.status = "running";
+    const outputFormat = (options.format || "markdown") as OutputFormat;
+    if (!["markdown", "html", "pdf"].includes(outputFormat)) {
+      throw new Error(`Invalid format: ${options.format}. Use: markdown, html, pdf`);
+    }
 
     // Parse URL
     emit({ type: "phase", phase: "parse", message: "Parsing repository URL..." });
@@ -108,17 +114,58 @@ async function runAnalysis(job: AnalysisJob, options: Partial<BootcampOptions>):
       noClone: false,
       verbose: false,
       ...options,
+      format: outputFormat,
     };
 
-    let toolCallCount = 0;
-    const result = await analyzeRepo(repoPath, repoInfo, scanResult, fullOptions, (msg) => {
-      if (msg.startsWith("Tool:")) {
-        toolCallCount++;
-        emit({ type: "progress", message: `Tool call ${toolCallCount}: ${msg}` });
+    const analysisStart = Date.now();
+    const useCache = !fullOptions.noCache && !!repoInfo.commitSha;
+    let cacheHit = false;
+    let facts!: RepoFacts;
+    let analysisStats!: AnalysisStats;
+
+    if (useCache) {
+      const cached = await readCache(repoInfo.fullName, repoInfo.commitSha!);
+      if (cached) {
+        facts = cached;
+        cacheHit = true;
+        analysisStats = {
+          model: "cached",
+          toolCalls: [],
+          totalEvents: 0,
+          responseLength: 0,
+          startTime: analysisStart,
+          endTime: Date.now(),
+        };
+        emit({
+          type: "progress",
+          message: `Analysis loaded from cache (${repoInfo.commitSha!.substring(0, 7)})`,
+        });
       }
-    });
-    const facts = result.facts;
-    emit({ type: "progress", message: `Analysis complete (${result.stats.toolCalls.length} tool calls)` });
+    }
+
+    if (!cacheHit) {
+      let toolCallCount = 0;
+      const result = await analyzeRepo(repoPath, repoInfo, scanResult, fullOptions, (msg) => {
+        if (msg.startsWith("Tool:")) {
+          toolCallCount++;
+          emit({ type: "progress", message: `Tool call ${toolCallCount}: ${msg}` });
+        }
+      });
+      facts = result.facts;
+      analysisStats = result.stats;
+      emit({
+        type: "progress",
+        message: `Analysis complete (${analysisStats.toolCalls.length} tool calls)`,
+      });
+
+      if (useCache) {
+        try {
+          await writeCache(repoInfo.fullName, repoInfo.commitSha!, facts);
+        } catch {
+          // Cache write failure is non-fatal
+        }
+      }
+    }
 
     // Generate docs
     emit({ type: "phase", phase: "generate", message: "Generating documentation..." });
@@ -170,11 +217,13 @@ async function runAnalysis(job: AnalysisJob, options: Partial<BootcampOptions>):
       });
     }
 
-    for (const doc of documents) {
+    const formattedDocuments = applyOutputFormat(documents, outputFormat);
+
+    for (const doc of formattedDocuments) {
       await writeFile(join(outputDir, doc.name), doc.content, "utf-8");
     }
 
-    emit({ type: "progress", message: `Generated ${documents.length} files` });
+    emit({ type: "progress", message: `Generated ${formattedDocuments.length} files` });
 
     // Cleanup
     emit({ type: "phase", phase: "cleanup", message: "Cleaning up..." });
@@ -185,10 +234,10 @@ async function runAnalysis(job: AnalysisJob, options: Partial<BootcampOptions>):
     job.completedAt = Date.now();
     job.result = {
       outputDir,
-      files: documents.map(d => d.name),
+      files: formattedDocuments.map(d => d.name),
       stats: {
-        toolCalls: result.stats.toolCalls.length,
-        model: result.stats.model,
+        toolCalls: analysisStats.toolCalls.length,
+        model: analysisStats.model,
         securityScore: security.score,
         securityGrade: getSecurityGrade(security.score),
         riskScore: radar.onboardingRisk.score,
@@ -316,7 +365,12 @@ export function registerRoutes(app: Application): void {
 
     try {
       const content = await readFile(join(job.result.outputDir, filename), "utf-8");
-      res.setHeader("Content-Type", filename.endsWith(".json") ? "application/json" : "text/markdown");
+      const contentType = filename.endsWith(".json")
+        ? "application/json"
+        : filename.endsWith(".html")
+          ? "text/html"
+          : "text/markdown";
+      res.setHeader("Content-Type", contentType);
       res.send(content);
     } catch (error: unknown) {
       res.status(500).json({ error: (error as Error).message });

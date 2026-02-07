@@ -175,18 +175,27 @@ export function getIndexHtml(): string {
     let currentJobId = null;
 
     const fileDescriptions = {
-      'BOOTCAMP.md': 'One-page overview',
-      'ONBOARDING.md': 'Setup guide',
-      'ARCHITECTURE.md': 'System design',
-      'CODEMAP.md': 'Directory tour',
-      'FIRST_TASKS.md': 'Starter issues',
-      'RUNBOOK.md': 'Operations guide',
-      'DEPENDENCIES.md': 'Dependency graph',
-      'SECURITY.md': 'Security analysis',
-      'RADAR.md': 'Tech radar',
-      'diagrams.mmd': 'Mermaid diagrams',
+      'BOOTCAMP': 'One-page overview',
+      'ONBOARDING': 'Setup guide',
+      'ARCHITECTURE': 'System design',
+      'CODEMAP': 'Directory tour',
+      'FIRST_TASKS': 'Starter issues',
+      'RUNBOOK': 'Operations guide',
+      'DEPENDENCIES': 'Dependency graph',
+      'SECURITY': 'Security analysis',
+      'RADAR': 'Tech radar',
+      'diagrams': 'Mermaid diagrams',
       'repo_facts.json': 'Structured data',
     };
+
+    function getFileKey(filename) {
+      if (filename === 'repo_facts.json') return filename;
+      if (filename.endsWith('.pdf.html')) return filename.slice(0, -'.pdf.html'.length);
+      if (filename.endsWith('.html')) return filename.slice(0, -'.html'.length);
+      if (filename.endsWith('.md')) return filename.slice(0, -'.md'.length);
+      if (filename.endsWith('.mmd')) return filename.slice(0, -'.mmd'.length);
+      return filename;
+    }
 
     async function analyze() {
       const repoUrl = document.getElementById('repoUrl').value.trim();
@@ -271,7 +280,7 @@ export function getIndexHtml(): string {
       files.innerHTML = data.files.map(f => \`
         <div class="file" onclick="viewFile('\${f}')">
           <div class="file-name">\${f}</div>
-          <div class="file-desc">\${fileDescriptions[f] || ''}</div>
+          <div class="file-desc">\${fileDescriptions[getFileKey(f)] || ''}</div>
         </div>
       \`).join('');
 
