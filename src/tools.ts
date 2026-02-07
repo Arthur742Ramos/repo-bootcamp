@@ -27,7 +27,7 @@ export interface ToolContext {
 /**
  * Read a file from the repository
  */
-function createReadFileTool(context: ToolContext): Tool<any> {
+function createReadFileTool(context: ToolContext): Tool {
   return defineTool("read_file", {
     description: "Read the contents of a file from the repository. Use this to examine source code, configuration files, and documentation.",
     parameters: {
@@ -72,7 +72,7 @@ function createReadFileTool(context: ToolContext): Tool<any> {
 /**
  * List files in a directory
  */
-function createListFilesTool(context: ToolContext): Tool<any> {
+function createListFilesTool(context: ToolContext): Tool {
   return defineTool("list_files", {
   description: "List files and directories in a path. Use this to explore the repository structure.",
   parameters: {
@@ -165,7 +165,7 @@ function createListFilesTool(context: ToolContext): Tool<any> {
 /**
  * Search for text in files
  */
-function createSearchTool(context: ToolContext): Tool<any> {
+function createSearchTool(context: ToolContext): Tool {
   return defineTool("search", {
   description: "Search for a pattern in repository files using ripgrep. Use this to find specific code patterns, function definitions, imports, etc.",
   parameters: {
@@ -234,7 +234,7 @@ function createSearchTool(context: ToolContext): Tool<any> {
 /**
  * Get repository metadata
  */
-function createRepoMetadataTool(context: ToolContext): Tool<any> {
+function createRepoMetadataTool(context: ToolContext): Tool {
   return defineTool("get_repo_metadata", {
   description: "Get metadata about the repository including detected stack, available commands, and file statistics.",
   parameters: {

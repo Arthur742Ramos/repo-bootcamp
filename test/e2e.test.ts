@@ -1,7 +1,7 @@
 /**
  * E2E smoke test
  *
- * Creates a minimal test fixture repo on disk, runs the full pipeline
+ * Creates a minimal test fixture repo on disk, clones it, runs the full pipeline
  * (scan → generate), and verifies all expected output files are produced.
  *
  * The Copilot SDK analysis step is bypassed by providing mock RepoFacts,
@@ -32,7 +32,7 @@ import type { RepoFacts, BootcampOptions, RepoInfo } from "../src/types.js";
 
 /** Minimal fixture repo layout */
 async function createFixtureRepo(baseDir: string): Promise<string> {
-  const repoDir = join(baseDir, "fixture-repo");
+  const repoDir = join(baseDir, "fixture-source");
   await mkdir(repoDir, { recursive: true });
 
   // package.json
@@ -86,6 +86,15 @@ async function createFixtureRepo(baseDir: string): Promise<string> {
   });
 
   return repoDir;
+}
+
+function cloneFixtureRepo(baseDir: string, sourceRepoPath: string): string {
+  const cloneDir = join(baseDir, "fixture-repo");
+  execSync(`git clone --quiet "${sourceRepoPath}" "${cloneDir}"`, {
+    cwd: baseDir,
+    stdio: "ignore",
+  });
+  return cloneDir;
 }
 
 /** Realistic mock facts matching the fixture repo */
@@ -184,7 +193,8 @@ describe("E2E smoke test", () => {
 
   beforeAll(async () => {
     tmpDir = await mkdtemp(join(tmpdir(), "bootcamp-e2e-"));
-    repoPath = await createFixtureRepo(tmpDir);
+    const sourceRepoPath = await createFixtureRepo(tmpDir);
+    repoPath = cloneFixtureRepo(tmpDir, sourceRepoPath);
     outputDir = join(tmpDir, "output");
     await mkdir(outputDir, { recursive: true });
   }, 30_000);

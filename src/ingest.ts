@@ -341,7 +341,7 @@ interface FilePriority {
  */
 function scoreFile(filePath: string, size: number): FilePriority {
   const fileName = basename(filePath);
-  const ext = filePath.split(".").pop() || "";
+  const _ext = filePath.split(".").pop() || "";
   let score = 0;
   let category: FilePriority["category"] = "other";
 

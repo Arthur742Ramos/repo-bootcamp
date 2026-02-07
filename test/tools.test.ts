@@ -288,6 +288,22 @@ describe("list_files tool", () => {
     expect(lines).toHaveLength(3);
   });
 
+  it("stops recursion when maxResults is reached", async () => {
+    const ctx = makeContext();
+    const tool = getTool(ctx, "list_files");
+
+    mockReaddir.mockResolvedValueOnce([
+      makeDirent("src", true),
+    ] as any);
+    mockReaddir.mockRejectedValueOnce(new Error("should not be called"));
+
+    const result = await tool.handler({ recursive: true, maxResults: 1 }, {} as any);
+
+    expect((result as any).resultType).toBe("success");
+    expect((result as any).textResultForLlm).toContain("[dir]  src");
+    expect(mockReaddir).toHaveBeenCalledTimes(1);
+  });
+
   it("returns message when no files match", async () => {
     const ctx = makeContext();
     const tool = getTool(ctx, "list_files");

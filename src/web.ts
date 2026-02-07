@@ -13,7 +13,7 @@ import { parseGitHubUrl, cloneRepo, scanRepo } from "./ingest.js";
 import { analyzeRepo } from "./agent.js";
 import { extractDependencies, generateDependencyDocs } from "./deps.js";
 import { analyzeSecurityPatterns, generateSecurityDocs, getSecurityGrade } from "./security.js";
-import { generateTechRadar, generateRadarDocs, getRiskEmoji } from "./radar.js";
+import { generateTechRadar, generateRadarDocs } from "./radar.js";
 import {
   generateBootcamp,
   generateOnboarding,
@@ -23,7 +23,7 @@ import {
   generateRunbook,
   generateDiagrams,
 } from "./generator.js";
-import type { BootcampOptions, RepoFacts, ScanResult, RepoInfo } from "./types.js";
+import type { BootcampOptions } from "./types.js";
 
 const DEFAULT_PORT = 3000;
 
@@ -34,7 +34,7 @@ interface ProgressEvent {
   type: "phase" | "progress" | "complete" | "error";
   phase?: string;
   message: string;
-  data?: any;
+  data?: unknown;
 }
 
 /**
@@ -48,7 +48,7 @@ interface AnalysisJob {
   result?: {
     outputDir: string;
     files: string[];
-    stats: any;
+    stats: unknown;
   };
   error?: string;
   completedAt?: number;

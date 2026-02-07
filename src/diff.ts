@@ -86,8 +86,8 @@ async function extractDependencyChanges(
 
   try {
     // Get package.json at both refs
-    let basePkg: any = {};
-    let headPkg: any = {};
+    let basePkg: Record<string, unknown> = {};
+    let headPkg: Record<string, unknown> = {};
 
     try {
       const { stdout: baseContent } = await execAsync(
@@ -236,7 +236,7 @@ async function extractCommandChanges(
       // No package.json at head
     }
 
-    for (const [name, command] of Object.entries(headScripts)) {
+    for (const [name, _command] of Object.entries(headScripts)) {
       if (!baseScripts[name]) {
         newCommands.push(`npm run ${name}`);
       }

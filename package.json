@@ -10,6 +10,7 @@
   "files": [
     "dist/**/*.js",
     "dist/**/*.d.ts",
+    "dist/**/*.json",
     "README.md",
     "LICENSE"
   ],
@@ -35,7 +36,8 @@
     "url": "https://github.com/Arthur742Ramos/repo-bootcamp/issues"
   },
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && npm run copy:data",
+    "copy:data": "node --input-type=module -e \"import { cpSync } from 'node:fs'; cpSync('src/data','dist/data',{ recursive: true, force: true });\"",
     "start": "tsx src/index.ts",
     "dev": "tsx watch src/index.ts",
     "lint": "eslint \"src/**/*.{ts,tsx}\"",

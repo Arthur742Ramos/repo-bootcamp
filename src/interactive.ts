@@ -10,7 +10,6 @@ import type {
   ScanResult, 
   RepoInfo, 
   RepoFacts, 
-  ChatMessage, 
   Transcript,
 } from "./types.js";
 import { getRepoTools } from "./tools.js";
@@ -169,12 +168,13 @@ export class InteractiveSession {
       }
 
       // Extract citations from tool calls
-      const eventAny = event as any;
+      const eventAny = event as Record<string, unknown>;
       if (eventAny.type === "tool.call") {
-        const toolName = eventAny.data?.name;
-        const args = eventAny.data?.arguments;
+        const data = eventAny.data as Record<string, unknown> | undefined;
+        const toolName = data?.name as string | undefined;
+        const args = data?.arguments as Record<string, unknown> | undefined;
         if (toolName === "read_file" && args?.path) {
-          citations.push(args.path);
+          citations.push(args.path as string);
         }
       }
     });

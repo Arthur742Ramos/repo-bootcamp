@@ -330,6 +330,49 @@ describe("model fallback", () => {
     const firstCall = sharedMockClient.createSession.mock.calls[0][0];
     expect(firstCall.model).toBe("gpt-4o");
   });
+
+  it("falls back from override model when unavailable", async () => {
+    let callCount = 0;
+    const mockSession = {
+      on: vi.fn().mockImplementation(() => vi.fn()),
+      sendAndWait: vi.fn(),
+      destroy: vi.fn().mockResolvedValue(undefined),
+    };
+
+    sharedMockClient.createSession.mockImplementation(async () => {
+      callCount++;
+      if (callCount === 1) {
+        throw new Error("model not available");
+      }
+      return mockSession;
+    });
+
+    mockSession.sendAndWait.mockImplementation(async () => {
+      const handler = mockSession.on.mock.calls[0]?.[0];
+      if (handler) {
+        handler({
+          id: "evt-1",
+          timestamp: new Date().toISOString(),
+          parentId: null,
+          type: "assistant.message_delta",
+          data: { messageId: "msg-1", deltaContent: VALID_REPO_FACTS_JSON },
+        });
+      }
+      return undefined;
+    });
+
+    const { stats } = await analyzeRepo(
+      "/tmp/repo",
+      makeMockRepoInfo(),
+      makeMockScanResult(),
+      makeMockOptions({ model: "gpt-4o" })
+    );
+
+    expect(sharedMockClient.createSession).toHaveBeenCalledTimes(2);
+    expect(sharedMockClient.createSession.mock.calls[0][0].model).toBe("gpt-4o");
+    expect(sharedMockClient.createSession.mock.calls[1][0].model).toBe("claude-opus-4-5");
+    expect(stats.model).toBe("claude-opus-4-5");
+  });
 });
 
 // ─── Standard mode (with tools) ─────────────────────────────────────────────
@@ -928,6 +971,29 @@ describe("tool dispatching", () => {
 
     // Tools should have been passed to the session
     expect(capturedTools.length).toBe(4);
+  });
+
+  it("updates stats and progress when tool handlers run", async () => {
+    configureSessionResponse(VALID_REPO_FACTS_JSON);
+
+    const onProgress = vi.fn();
+    const { stats } = await analyzeRepo(
+      process.cwd(),
+      makeMockRepoInfo(),
+      makeMockScanResult(),
+      makeMockOptions(),
+      onProgress
+    );
+
+    const sessionConfig = sharedMockClient.createSession.mock.calls[0][0];
+    const readFileTool = sessionConfig.tools.find((t: any) => t.name === "read_file");
+
+    await readFileTool.handler({ path: "README.md", maxLines: 1 });
+
+    expect(stats.toolCalls.length).toBe(1);
+    expect(stats.toolCalls[0].name).toBe("read_file");
+    expect(stats.toolCalls[0].args).toContain("README.md");
+    expect(onProgress).toHaveBeenCalledWith("Tool: read_file");
   });
 
   it("passes repoPath context to tools", async () => {

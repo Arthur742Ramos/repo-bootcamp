@@ -4,7 +4,7 @@
  */
 
 import { readFile } from "fs/promises";
-import { join, dirname, basename, relative } from "path";
+import { join, dirname, basename } from "path";
 import type { FileInfo, ChangeImpact } from "./types.js";
 import importPatternsJson from "./data/import-patterns.json" with { type: "json" };
 

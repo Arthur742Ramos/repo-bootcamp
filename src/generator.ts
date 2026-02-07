@@ -36,7 +36,7 @@ ${sources.map(s => `- \`${s}\``).join("\n")}
 /**
  * Generate BOOTCAMP.md - the main 1-page overview
  */
-export function generateBootcamp(facts: RepoFacts, options: BootcampOptions): string {
+export function generateBootcamp(facts: RepoFacts, _options: BootcampOptions): string {
   const prereqs = facts.quickstart.prerequisites.map((p) => `- ${p}`).join("\n");
   const steps = facts.quickstart.steps.map((s, i) => `${i + 1}. ${s}`).join("\n");
   const commands = facts.quickstart.commands

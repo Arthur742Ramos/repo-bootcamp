@@ -182,7 +182,7 @@ function createFastAnalysisPrompt(
       try {
         const content = fs.readFileSync(filePath, "utf-8").substring(0, 5000);
         inlineContents.push(`### ${filename}\n\`\`\`\n${content}\n\`\`\``);
-      } catch (e) {
+      } catch {
         // Skip unreadable files
       }
     }
@@ -197,7 +197,7 @@ function createFastAnalysisPrompt(
         const content = fs.readFileSync(filePath, "utf-8").substring(0, 3000);
         inlineContents.push(`### ${entry}\n\`\`\`\n${content}\n\`\`\``);
         break; // Only include first found entry point
-      } catch (e) {
+      } catch {
         // Skip
       }
     }
@@ -589,7 +589,7 @@ export async function analyzeRepo(
     // Set up event handlers
     session.on((event: SessionEvent) => {
       stats.totalEvents++;
-      const eventAny = event as any;
+      const eventAny = event as Record<string, unknown>;
 
       // Stream deltas (actual response text)
       if (event.type === "assistant.message_delta") {
@@ -614,13 +614,15 @@ export async function analyzeRepo(
 
       // Log tool calls (handled by our tool handlers too)
       if (eventAny.type === "tool.call" && options.verbose) {
-        const toolName = eventAny.data?.name || "unknown";
+        const data = eventAny.data as Record<string, unknown> | undefined;
+        const toolName = data?.name || "unknown";
         console.log(chalk.yellow(`\n[SDK Tool Call] ${toolName}`));
       }
 
       // Final message (fallback if no deltas)
       if (event.type === "assistant.message") {
-        const content = eventAny.data?.content;
+        const data = eventAny.data as Record<string, unknown> | undefined;
+        const content = data?.content as string | undefined;
         if (content && !fullResponse) {
           fullResponse = content;
         }
