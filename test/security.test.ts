@@ -2,8 +2,11 @@
  * Tests for security analysis
  */
 
-import { describe, it, expect } from "vitest";
-import { generateSecurityDocs, getSecurityGrade, type SecurityAnalysis } from "../src/security.js";
+import { describe, it, expect, afterEach } from "vitest";
+import { generateSecurityDocs, getSecurityGrade, analyzeSecurityPatterns, type SecurityAnalysis } from "../src/security.js";
+import { mkdir, rm, writeFile } from "fs/promises";
+import { join } from "path";
+import type { FileInfo } from "../src/types.js";
 
 describe("getSecurityGrade", () => {
   it("should return A for 90+", () => {
@@ -384,5 +387,178 @@ describe("edge cases", () => {
     // Low severity is grouped as "Informational" 
     expect(docs).toContain("Informational");
     expect(docs).toContain("1 informational findings");
+  });
+});
+
+describe("analyzeSecurityPatterns", () => {
+  const testDir = "/tmp/test-security-analysis";
+
+  async function setupTestRepo(files: Record<string, string>): Promise<FileInfo[]> {
+    await rm(testDir, { recursive: true, force: true });
+    await mkdir(testDir, { recursive: true });
+
+    const fileInfos: FileInfo[] = [];
+    for (const [name, content] of Object.entries(files)) {
+      const dir = join(testDir, name.includes("/") ? name.substring(0, name.lastIndexOf("/")) : "");
+      await mkdir(dir, { recursive: true });
+      await writeFile(join(testDir, name), content);
+      fileInfos.push({ path: name, size: content.length, isDirectory: false });
+    }
+    return fileInfos;
+  }
+
+  afterEach(async () => {
+    await rm(testDir, { recursive: true, force: true });
+  });
+
+  it("detects helmet dependency as security header", async () => {
+    const files = await setupTestRepo({ "src/app.ts": "const app = express();" });
+    const result = await analyzeSecurityPatterns(testDir, files, {
+      dependencies: { helmet: "^7.0.0" },
+    });
+
+    expect(result.headers.hasHelmet).toBe(true);
+    expect(result.securityDeps.some(d => d.name === "helmet")).toBe(true);
+  });
+
+  it("detects ORM as SQL injection prevention", async () => {
+    const files = await setupTestRepo({ "src/db.ts": "import { PrismaClient } from '@prisma/client';" });
+    const result = await analyzeSecurityPatterns(testDir, files, {
+      dependencies: { "@prisma/client": "^5.0.0" },
+    });
+
+    expect(result.hasSqlInjectionPrevention).toBe(true);
+  });
+
+  it("detects rate limiting package", async () => {
+    const files = await setupTestRepo({ "src/app.ts": "const app = express();" });
+    const result = await analyzeSecurityPatterns(testDir, files, {
+      dependencies: { "express-rate-limit": "^7.0.0" },
+    });
+
+    expect(result.hasRateLimiting).toBe(true);
+  });
+
+  it("detects .env files in secrets handling", async () => {
+    const files: FileInfo[] = [
+      { path: ".env", size: 100, isDirectory: false },
+      { path: ".env.local", size: 50, isDirectory: false },
+      { path: ".env.example", size: 30, isDirectory: false },
+      { path: "src/app.ts", size: 200, isDirectory: false },
+    ];
+    await setupTestRepo({ "src/app.ts": "console.log('hello');" });
+
+    const result = await analyzeSecurityPatterns(testDir, files);
+
+    expect(result.secretsHandling.envFiles).toContain(".env");
+    expect(result.secretsHandling.envFiles).toContain(".env.local");
+    expect(result.secretsHandling.hasEnvExample).toBe(true);
+    // .env.example should NOT be in envFiles
+    expect(result.secretsHandling.envFiles).not.toContain(".env.example");
+  });
+
+  it("detects gitignore secrets patterns", async () => {
+    const files = await setupTestRepo({
+      ".gitignore": ".env\n*.pem\nsecrets/\nnode_modules/",
+      "src/app.ts": "console.log('safe');",
+    });
+
+    const result = await analyzeSecurityPatterns(testDir, files);
+
+    expect(result.secretsHandling.gitignoreSecrets).toBe(true);
+  });
+
+  it("starts with score 100 for clean repo with no deps", async () => {
+    const files = await setupTestRepo({
+      "src/clean.ts": "export function add(a: number, b: number) { return a + b; }",
+    });
+
+    const result = await analyzeSecurityPatterns(testDir, files);
+
+    expect(result.score).toBe(100);
+  });
+
+  it("deducts score for security findings", async () => {
+    const files = await setupTestRepo({
+      "src/bad.ts": 'const password = "hardcoded123";',
+    });
+
+    const result = await analyzeSecurityPatterns(testDir, files);
+
+    expect(result.score).toBeLessThan(100);
+  });
+
+  it("skips test files for security concerns", async () => {
+    const files = await setupTestRepo({
+      "src/app.test.ts": 'const password = "test123"; // test fixture',
+    });
+
+    const result = await analyzeSecurityPatterns(testDir, files);
+
+    expect(result.findings.length).toBe(0);
+  });
+
+  it("skips comment lines for security concerns", async () => {
+    const files = await setupTestRepo({
+      "src/app.ts": '// const password = "old_password";\nconst x = 1;',
+    });
+
+    const result = await analyzeSecurityPatterns(testDir, files);
+
+    const passwordFindings = result.findings.filter(f => f.title.toLowerCase().includes("password"));
+    expect(passwordFindings.length).toBe(0);
+  });
+
+  it("handles missing .gitignore gracefully", async () => {
+    const files = await setupTestRepo({
+      "src/app.ts": "export const x = 1;",
+    });
+
+    const result = await analyzeSecurityPatterns(testDir, files);
+
+    expect(result.secretsHandling.gitignoreSecrets).toBe(false);
+  });
+
+  it("clamps score between 0 and 100", async () => {
+    const files = await setupTestRepo({
+      ".gitignore": ".env\n*.pem",
+      "src/app.ts": "export const x = 1;",
+    });
+
+    const result = await analyzeSecurityPatterns(testDir, files, {
+      dependencies: {
+        helmet: "^7.0.0",
+        cors: "^2.0.0",
+        "express-rate-limit": "^7.0.0",
+        zod: "^3.0.0",
+        "@prisma/client": "^5.0.0",
+      },
+    });
+
+    expect(result.score).toBeLessThanOrEqual(100);
+    expect(result.score).toBeGreaterThanOrEqual(0);
+  });
+
+  it("detects CSP in source files", async () => {
+    const files = await setupTestRepo({
+      "src/server.ts": 'res.setHeader("Content-Security-Policy", "default-src \'self\'");',
+    });
+
+    const result = await analyzeSecurityPatterns(testDir, files);
+
+    expect(result.headers.hasCSP).toBe(true);
+  });
+
+  it("filters non-source files from scanning", async () => {
+    const files: FileInfo[] = [
+      { path: "README.md", size: 500, isDirectory: false },
+      { path: "image.png", size: 10000, isDirectory: false },
+      { path: "data.csv", size: 2000, isDirectory: false },
+    ];
+    await setupTestRepo({ "README.md": "# Docs" });
+
+    const result = await analyzeSecurityPatterns(testDir, files);
+
+    expect(result.findings.length).toBe(0);
   });
 });

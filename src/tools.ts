@@ -10,6 +10,7 @@ import { readFile, readdir, stat } from "fs/promises";
 import { isAbsolute, join, relative, resolve } from "path";
 import { exec, execFile } from "child_process";
 import { promisify } from "util";
+import { SKIP_DIRS } from "./utils.js";
 
 const execAsync = promisify(exec);
 const execFileAsync = promisify(execFile);
@@ -129,11 +130,7 @@ function createListFilesTool(context: ToolContext): Tool<any> {
           if (results.length >= maxResults) break;
 
           // Skip common unimportant directories
-          if (entry.isDirectory() && [
-            "node_modules", ".git", "dist", "build", "out", ".next",
-            "__pycache__", ".venv", "venv", "vendor", ".idea", ".vscode",
-            "coverage", ".nyc_output", "target", ".gradle",
-          ].includes(entry.name)) {
+          if (entry.isDirectory() && SKIP_DIRS.has(entry.name)) {
             continue;
           }
 

@@ -237,6 +237,9 @@ export async function analyzeSecurityPatterns(
 
       // Check for security concerns
       const lines = content.split("\n");
+      const seenFindings = new Set<string>(
+        analysis.findings.map(f => `${f.title}::${f.file}`)
+      );
       for (let lineIdx = 0; lineIdx < lines.length; lineIdx++) {
         const line = lines[lineIdx];
         
@@ -246,11 +249,10 @@ export async function analyzeSecurityPatterns(
 
         for (const concern of CONCERN_PATTERNS) {
           if (concern.pattern.test(line)) {
-            // Avoid duplicates
-            const existingFinding = analysis.findings.find(f => 
-              f.title === concern.title && f.file === file.path
-            );
-            if (!existingFinding) {
+            // Avoid duplicates (O(1) Set lookup)
+            const key = `${concern.title}::${file.path}`;
+            if (!seenFindings.has(key)) {
+              seenFindings.add(key);
               analysis.findings.push({
                 category: concern.category,
                 title: concern.title,

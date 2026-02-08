@@ -6,6 +6,7 @@
 import { readFile } from "fs/promises";
 import { join, dirname, basename } from "path";
 import type { FileInfo, ChangeImpact } from "./types.js";
+import { escapeRegex } from "./utils.js";
 import importPatternsJson from "./data/import-patterns.json" with { type: "json" };
 
 /**
@@ -107,20 +108,25 @@ export async function buildImportGraph(
   const graph = new Map<string, { imports: string[]; importedBy: string[] }>();
   // Pre-build a Set of all file paths for O(1) lookups in resolveImport
   const filePathSet = new Set(files.filter(f => !f.isDirectory).map(f => f.path));
+  // Track importedBy entries with Sets for O(1) dedup
+  const importedBySets = new Map<string, Set<string>>();
 
   // Initialize all files
   for (const file of files) {
     if (!file.isDirectory) {
       graph.set(file.path, { imports: [], importedBy: [] });
+      importedBySets.set(file.path, new Set());
     }
   }
+
+  const MAX_FILE_SIZE_FOR_GRAPH = 100_000;
 
   // Parse source files
   const sourceFiles = files.filter(f => 
     !f.isDirectory &&
     /\.(ts|tsx|js|jsx|mjs|cjs|py|go)$/.test(f.path) &&
     !f.path.includes("node_modules") &&
-    f.size < 100000
+    f.size < MAX_FILE_SIZE_FOR_GRAPH
   );
 
   // Parse source files in parallel batches for performance
@@ -149,10 +155,14 @@ export async function buildImportGraph(
         if (resolved) {
           resolvedImports.push(resolved);
           
-          // Update importedBy for the target
+          // Update importedBy for the target (Set for O(1) dedup)
           const targetNode = graph.get(resolved);
-          if (targetNode && !targetNode.importedBy.includes(file.path)) {
-            targetNode.importedBy.push(file.path);
+          if (targetNode) {
+            const ibSet = importedBySets.get(resolved)!;
+            if (!ibSet.has(file.path)) {
+              ibSet.add(file.path);
+              targetNode.importedBy.push(file.path);
+            }
           }
         }
       }
@@ -167,12 +177,6 @@ export async function buildImportGraph(
   return graph;
 }
 
-/**
- * Escape special regex characters in a string
- */
-function escapeRegex(str: string): string {
-  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
 
 /**
  * Find tests related to a file
@@ -222,7 +226,7 @@ function findRelatedDocs(filePath: string, files: FileInfo[]): string[] {
       );
     })
     .map(f => f.path)
-    .slice(0, 5); // Limit to 5
+    .slice(0, 5); // Max related docs per file
 }
 
 /**

@@ -258,11 +258,17 @@ export function getIndexHtml(): string {
       };
     }
 
+    function escapeHtml(s) {
+      const div = document.createElement('div');
+      div.textContent = s;
+      return div.innerHTML;
+    }
+
     function addProgressItem(message, type = '') {
       const progress = document.getElementById('progress');
       const item = document.createElement('div');
       item.className = 'progress-item ' + type;
-      item.innerHTML = (type === 'phase' ? '▶ ' : type === 'success' ? '✓ ' : type === 'error' ? '✗ ' : '  ') + message;
+      item.textContent = (type === 'phase' ? '▶ ' : type === 'success' ? '✓ ' : type === 'error' ? '✗ ' : '  ') + message;
       progress.appendChild(item);
       progress.scrollTop = progress.scrollHeight;
     }
@@ -270,17 +276,17 @@ export function getIndexHtml(): string {
     function showResults(data) {
       const stats = document.getElementById('stats');
       stats.innerHTML = \`
-        <div class="stat"><div class="stat-value">\${data.stats.securityScore}</div><div class="stat-label">Security Score (\${data.stats.securityGrade})</div></div>
-        <div class="stat"><div class="stat-value">\${data.stats.riskScore}</div><div class="stat-label">Onboarding Risk (\${data.stats.riskGrade})</div></div>
-        <div class="stat"><div class="stat-value">\${data.stats.dependencies}</div><div class="stat-label">Dependencies</div></div>
-        <div class="stat"><div class="stat-value">\${data.stats.toolCalls}</div><div class="stat-label">Tool Calls</div></div>
+        <div class="stat"><div class="stat-value">\${escapeHtml(String(data.stats.securityScore))}</div><div class="stat-label">Security Score (\${escapeHtml(String(data.stats.securityGrade))})</div></div>
+        <div class="stat"><div class="stat-value">\${escapeHtml(String(data.stats.riskScore))}</div><div class="stat-label">Onboarding Risk (\${escapeHtml(String(data.stats.riskGrade))})</div></div>
+        <div class="stat"><div class="stat-value">\${escapeHtml(String(data.stats.dependencies))}</div><div class="stat-label">Dependencies</div></div>
+        <div class="stat"><div class="stat-value">\${escapeHtml(String(data.stats.toolCalls))}</div><div class="stat-label">Tool Calls</div></div>
       \`;
 
       const files = document.getElementById('files');
       files.innerHTML = data.files.map(f => \`
-        <div class="file" onclick="viewFile('\${f}')">
-          <div class="file-name">\${f}</div>
-          <div class="file-desc">\${fileDescriptions[getFileKey(f)] || ''}</div>
+        <div class="file" onclick="viewFile(this.dataset.file)" data-file="\${escapeHtml(f)}">
+          <div class="file-name">\${escapeHtml(f)}</div>
+          <div class="file-desc">\${escapeHtml(fileDescriptions[getFileKey(f)] || '')}</div>
         </div>
       \`).join('');
 
@@ -288,7 +294,7 @@ export function getIndexHtml(): string {
     }
 
     async function viewFile(filename) {
-      const content = await fetch('/api/jobs/' + currentJobId + '/files/' + filename).then(r => r.text());
+      const content = await fetch('/api/jobs/' + currentJobId + '/files/' + encodeURIComponent(filename)).then(r => r.text());
       document.getElementById('modalTitle').textContent = filename;
       document.getElementById('modalContent').textContent = content;
       document.getElementById('modal').classList.add('show');

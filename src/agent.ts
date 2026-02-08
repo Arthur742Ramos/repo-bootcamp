@@ -36,6 +36,12 @@ IMPORTANT:
 
 const CUSTOM_PROMPT_FILE = ".bootcamp-prompts.md";
 const CUSTOM_PROMPT_MAX_CHARS = 8000;
+const MAX_FILE_LIST_ITEMS = 50;
+const MAX_FAST_FILE_LIST_ITEMS = 30;
+const MAX_KEY_FILE_CHARS = 5000;
+const MAX_ENTRY_POINT_CHARS = 3000;
+const FAST_MODE_TIMEOUT_MS = 300_000; // 5 minutes
+const STANDARD_MODE_TIMEOUT_MS = 600_000; // 10 minutes
 
 export function readCustomPrompt(repoPath: string, overridePath?: string): string | null {
   const promptPath = overridePath
@@ -74,7 +80,7 @@ function createAnalysisPrompt(
 ): string {
   const fileList = scanResult.files
     .filter((f) => !f.isDirectory)
-    .slice(0, 50)
+    .slice(0, MAX_FILE_LIST_ITEMS)
     .map((f) => f.path)
     .join("\n");
 
@@ -214,7 +220,7 @@ function createFastAnalysisPrompt(
     const filePath = path.join(repoPath, filename);
     if (fs.existsSync(filePath)) {
       try {
-        const content = fs.readFileSync(filePath, "utf-8").substring(0, 5000);
+        const content = fs.readFileSync(filePath, "utf-8").substring(0, MAX_KEY_FILE_CHARS);
         inlineContents.push(`### ${filename}\n\`\`\`\n${content}\n\`\`\``);
       } catch {
         // Skip unreadable files
@@ -228,7 +234,7 @@ function createFastAnalysisPrompt(
     const filePath = path.join(repoPath, entry);
     if (fs.existsSync(filePath)) {
       try {
-        const content = fs.readFileSync(filePath, "utf-8").substring(0, 3000);
+        const content = fs.readFileSync(filePath, "utf-8").substring(0, MAX_ENTRY_POINT_CHARS);
         inlineContents.push(`### ${entry}\n\`\`\`\n${content}\n\`\`\``);
         break; // Only include first found entry point
       } catch {
@@ -239,7 +245,7 @@ function createFastAnalysisPrompt(
 
   const fileList = scanResult.files
     .filter((f) => !f.isDirectory)
-    .slice(0, 30)
+    .slice(0, MAX_FAST_FILE_LIST_ITEMS)
     .map((f) => f.path)
     .join("\n");
 
@@ -568,7 +574,7 @@ export async function analyzeRepo(
         }
       });
 
-      await session.sendAndWait({ prompt }, 300000);
+      await session.sendAndWait({ prompt }, FAST_MODE_TIMEOUT_MS);
       stats.responseLength = fullResponse.length;
       stats.endTime = Date.now();
 
@@ -673,7 +679,7 @@ export async function analyzeRepo(
     });
 
     // Send the analysis prompt
-    await session.sendAndWait({ prompt }, 600000); // 10 minute timeout for tool-calling
+    await session.sendAndWait({ prompt }, STANDARD_MODE_TIMEOUT_MS); // 10 minute timeout for tool-calling
 
     stats.endTime = Date.now();
     stats.responseLength = fullResponse.length;

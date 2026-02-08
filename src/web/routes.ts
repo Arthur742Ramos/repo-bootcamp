@@ -211,9 +211,9 @@ async function runAnalysis(job: AnalysisJob, options: Partial<BootcampOptions>):
 
     const formattedDocuments = applyOutputFormat(documents, outputFormat);
 
-    for (const doc of formattedDocuments) {
-      await writeFile(join(outputDir, doc.name), doc.content, "utf-8");
-    }
+    await Promise.all(formattedDocuments.map(doc =>
+      writeFile(join(outputDir, doc.name), doc.content, "utf-8")
+    ));
 
     emit({ type: "progress", message: `Generated ${formattedDocuments.length} files` });
 
@@ -369,15 +369,16 @@ export function registerRoutes(app: Application): void {
   app.get("/api/jobs/:jobId/files/:filename", async (req: Request, res: Response): Promise<void> => {
     const jobId = req.params.jobId as string;
     const filename = req.params.filename as string;
-    const job = jobs.get(jobId);
-    if (!job || !job.result) {
-      res.status(404).json({ error: "Job or file not found" });
+
+    // Sanitize filename first — reject path traversal attempts before any lookups
+    if (filename.includes("..") || filename.includes("/") || filename.includes("\\")) {
+      res.status(400).json({ error: "Invalid filename" });
       return;
     }
 
-    // Sanitize filename — reject path traversal attempts
-    if (filename.includes("..") || filename.includes("/") || filename.includes("\\")) {
-      res.status(400).json({ error: "Invalid filename" });
+    const job = jobs.get(jobId);
+    if (!job || !job.result) {
+      res.status(404).json({ error: "Job or file not found" });
       return;
     }
 

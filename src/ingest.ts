@@ -3,14 +3,14 @@
  * Handles cloning repos and scanning files
  */
 
-import { exec, execFile } from "child_process";
+import { execFile } from "child_process";
 import { promisify } from "util";
 import { readdir, stat, readFile, rm } from "fs/promises";
-import { join, basename } from "path";
+import { join, basename, resolve, relative, isAbsolute } from "path";
 import type { RepoInfo, FileInfo, StackInfo, Command, CIWorkflow, ScanResult } from "./types.js";
+import { SKIP_DIRS } from "./utils.js";
 import frameworkMaps from "./data/framework-maps.json" with { type: "json" };
 
-const execAsync = promisify(exec);
 const execFileAsync = promisify(execFile);
 
 /**
@@ -66,13 +66,13 @@ export async function cloneRepo(
     await execFileAsync("git", cloneArgs, { timeout: CLONE_TIMEOUT_MS });
 
     // Get the actual branch name
-    const { stdout } = await execAsync("git rev-parse --abbrev-ref HEAD", {
+    const { stdout } = await execFileAsync("git", ["rev-parse", "--abbrev-ref", "HEAD"], {
       cwd: clonePath,
     });
     repoInfo.branch = stdout.trim();
 
     // Get the commit SHA for caching
-    const { stdout: sha } = await execAsync("git rev-parse HEAD", {
+    const { stdout: sha } = await execFileAsync("git", ["rev-parse", "HEAD"], {
       cwd: clonePath,
     });
     repoInfo.commitSha = sha.trim();
@@ -105,22 +105,7 @@ async function scanDirectory(
     // Skip common unimportant directories
     if (
       entry.isDirectory() &&
-      [
-        "node_modules",
-        ".git",
-        "dist",
-        "build",
-        "out",
-        ".next",
-        "__pycache__",
-        ".venv",
-        "venv",
-        "vendor",
-        ".idea",
-        ".vscode",
-        "coverage",
-        ".nyc_output",
-      ].includes(entry.name)
+      SKIP_DIRS.has(entry.name)
     ) {
       continue;
     }
@@ -488,9 +473,11 @@ export async function scanRepo(repoPath: string, maxFiles: number): Promise<Scan
   // Parse CI workflows
   const ciWorkflows = await parseWorkflows(repoPath, files);
 
-  // Read docs
-  const readme = await readDocFile(repoPath, "README");
-  const contributing = await readDocFile(repoPath, "CONTRIBUTING");
+  // Read docs in parallel
+  const [readme, contributing] = await Promise.all([
+    readDocFile(repoPath, "README"),
+    readDocFile(repoPath, "CONTRIBUTING"),
+  ]);
 
   // Read key source files
   const keySourceFiles = await readKeySourceFiles(repoPath, files);
@@ -510,7 +497,13 @@ export async function scanRepo(repoPath: string, maxFiles: number): Promise<Scan
  * Read a file from the cloned repo (for agent use)
  */
 export async function readRepoFile(repoPath: string, filePath: string): Promise<string> {
-  const fullPath = join(repoPath, filePath);
+  // Prevent path traversal attacks
+  const resolvedRepo = resolve(repoPath);
+  const fullPath = resolve(resolvedRepo, filePath);
+  const rel = relative(resolvedRepo, fullPath);
+  if (rel.startsWith("..") || isAbsolute(rel)) {
+    throw new Error("Path escapes repository root");
+  }
   return await readFile(fullPath, "utf-8");
 }
 
@@ -518,11 +511,11 @@ export async function readRepoFile(repoPath: string, filePath: string): Promise<
  * List files matching a glob pattern (simplified)
  */
 export function listFilesByPattern(files: FileInfo[], pattern: string): string[] {
-  // Simple glob matching
-  const regexPattern = pattern
-    .replace(/\*\*/g, ".*")
-    .replace(/\*/g, "[^/]*")
-    .replace(/\//g, "\\/");
+  // Escape regex special chars, then convert glob syntax
+  const escaped = pattern.replace(/[-+?^${}()|[\]\\\.]/g, "\\$&");
+  const regexPattern = escaped
+    .replace(/\\\*\\\*/g, ".*")
+    .replace(/\\\*/g, "[^/]*");
 
   const regex = new RegExp(`^${regexPattern}$`);
   return files.filter((f) => !f.isDirectory && regex.test(f.path)).map((f) => f.path);

@@ -4,10 +4,10 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
-// Mock child_process.exec as a callback-style function
-const execMock = vi.fn();
+// Mock child_process.execFile as a callback-style function
+const execFileMock = vi.fn();
 vi.mock("child_process", () => ({
-  exec: (...args: any[]) => execMock(...args),
+  execFile: (...args: any[]) => execFileMock(...args),
 }));
 
 // Mock fs.watch
@@ -18,22 +18,22 @@ vi.mock("fs", () => ({
   })),
 }));
 
-// Helper to make execMock resolve with a given result
+// Helper to make execFileMock resolve with a given result
 function mockExecResult(stdout: string, stderr = "") {
-  execMock.mockImplementationOnce((_cmd: string, _opts: any, cb?: Function) => {
-    const callback = cb || _opts;
-    if (typeof callback === "function") {
-      process.nextTick(() => callback(null, { stdout, stderr }));
+  execFileMock.mockImplementationOnce((...args: any[]) => {
+    const cb = args[args.length - 1];
+    if (typeof cb === "function") {
+      process.nextTick(() => cb(null, { stdout, stderr }));
     }
     return { on: vi.fn() };
   });
 }
 
 function mockExecError(message: string) {
-  execMock.mockImplementationOnce((_cmd: string, _opts: any, cb?: Function) => {
-    const callback = cb || _opts;
-    if (typeof callback === "function") {
-      process.nextTick(() => callback(new Error(message)));
+  execFileMock.mockImplementationOnce((...args: any[]) => {
+    const cb = args[args.length - 1];
+    if (typeof cb === "function") {
+      process.nextTick(() => cb(new Error(message)));
     }
     return { on: vi.fn() };
   });

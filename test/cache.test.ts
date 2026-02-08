@@ -4,7 +4,7 @@
 
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { readCache, writeCache, clearCache, getCacheDir, pruneCache } from "../src/cache.js";
-import { mkdir, rm, readdir, utimes } from "fs/promises";
+import { mkdir, rm, readdir, utimes, readFile, writeFile } from "fs/promises";
 import { join } from "path";
 import { tmpdir } from "os";
 import type { RepoFacts } from "../src/types.js";
@@ -56,6 +56,50 @@ describe("cache", () => {
     it("returns null for non-existent cache entry", async () => {
       const result = await readCache("nonexistent/repo", "abc123");
       expect(result).toBeNull();
+    });
+
+    it("returns null for corrupted cache file", async () => {
+      // Write a corrupted (non-JSON) cache file directly
+      const cacheDir = getCacheDir();
+      await mkdir(cacheDir, { recursive: true });
+      const { createHash } = await import("crypto");
+      const hash = createHash("sha256")
+        .update("corrupt/repo@sha123")
+        .digest("hex")
+        .substring(0, 16);
+      const filePath = join(cacheDir, `corrupt-repo-${hash}.json`);
+      await writeFile(filePath, "NOT VALID JSON {{{", "utf-8");
+
+      const result = await readCache("corrupt/repo", "sha123");
+      expect(result).toBeNull();
+
+      // Cleanup
+      await rm(filePath, { force: true });
+    });
+
+    it("returns null for cache with wrong version", async () => {
+      const testRepo = "version-test/repo";
+      const testSha = "abc123";
+      // Write valid cache first then read it back
+      await writeCache(testRepo, testSha, makeFacts());
+
+      // Overwrite with wrong version
+      const cacheDir = getCacheDir();
+      const { createHash } = await import("crypto");
+      const hash = createHash("sha256")
+        .update(`${testRepo}@${testSha}`)
+        .digest("hex")
+        .substring(0, 16);
+      const safeName = testRepo.replace(/\//g, "-");
+      const filePath = join(cacheDir, `${safeName}-${hash}.json`);
+      const data = JSON.parse(await readFile(filePath, "utf-8"));
+      data.version = 999;
+      await writeFile(filePath, JSON.stringify(data), "utf-8");
+
+      const result = await readCache(testRepo, testSha);
+      expect(result).toBeNull();
+
+      await rm(filePath, { force: true });
     });
   });
 

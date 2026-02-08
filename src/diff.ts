@@ -168,22 +168,29 @@ async function extractEnvVarChanges(
     f.includes(".env") || f.endsWith(".env.example")
   );
 
-  for (const file of envFiles) {
-    try {
-      const diff = await getFileDiff(repoPath, baseRef, headRef, file);
-
-      const addedLines = diff
-        .split("\n")
-        .filter(line => line.startsWith("+") && !line.startsWith("+++"));
-
-      for (const line of addedLines) {
-        const match = line.match(/^\+([A-Z][A-Z0-9_]+)\s*=/);
-        if (match) {
-          newEnvVars.add(match[1]);
-        }
+  // Fetch all env file diffs in parallel
+  const envDiffResults = await Promise.all(
+    envFiles.map(async (file) => {
+      try {
+        return await getFileDiff(repoPath, baseRef, headRef, file);
+      } catch (err) {
+        console.debug?.(`Env scan diff failed for ${file}: ${err instanceof Error ? err.message : err}`);
+        return null;
       }
-    } catch (err) {
-      console.debug?.(`Env scan diff failed for ${file}: ${err instanceof Error ? err.message : err}`);
+    })
+  );
+
+  for (const diff of envDiffResults) {
+    if (!diff) continue;
+    const addedLines = diff
+      .split("\n")
+      .filter(line => line.startsWith("+") && !line.startsWith("+++"));
+
+    for (const line of addedLines) {
+      const match = line.match(/^\+([A-Z][A-Z0-9_]+)\s*=/);
+      if (match) {
+        newEnvVars.add(match[1]);
+      }
     }
   }
 
@@ -192,22 +199,29 @@ async function extractEnvVarChanges(
     /\.(ts|js|tsx|jsx)$/.test(f)
   );
 
-  for (const file of codeFiles.slice(0, MAX_CODE_FILES_FOR_ENV_SCAN)) {
-    try {
-      const diff = await getFileDiff(repoPath, baseRef, headRef, file);
-
-      const addedLines = diff
-        .split("\n")
-        .filter(line => line.startsWith("+") && !line.startsWith("+++"));
-
-      for (const line of addedLines) {
-        const matches = line.matchAll(/process\.env\.([A-Z][A-Z0-9_]+)/g);
-        for (const match of matches) {
-          newEnvVars.add(match[1]);
-        }
+  // Fetch all code file diffs in parallel
+  const codeDiffResults = await Promise.all(
+    codeFiles.slice(0, MAX_CODE_FILES_FOR_ENV_SCAN).map(async (file) => {
+      try {
+        return await getFileDiff(repoPath, baseRef, headRef, file);
+      } catch (err) {
+        console.debug?.(`Code env scan failed for ${file}: ${err instanceof Error ? err.message : err}`);
+        return null;
       }
-    } catch (err) {
-      console.debug?.(`Code env scan failed for ${file}: ${err instanceof Error ? err.message : err}`);
+    })
+  );
+
+  for (const diff of codeDiffResults) {
+    if (!diff) continue;
+    const addedLines = diff
+      .split("\n")
+      .filter(line => line.startsWith("+") && !line.startsWith("+++"));
+
+    for (const line of addedLines) {
+      const matches = line.matchAll(/process\.env\.([A-Z][A-Z0-9_]+)/g);
+      for (const match of matches) {
+        newEnvVars.add(match[1]);
+      }
     }
   }
 

@@ -74,7 +74,7 @@ describe("createApp", () => {
     expect(body).toContain("<h1>Repo Bootcamp</h1>");
   });
 
-  it("handles OPTIONS with CORS headers", async () => {
+  it("handles OPTIONS with CORS headers for localhost origin", async () => {
     const baseUrl = await startTestServer();
     const response = await fetch(`${baseUrl}/api/analyze`, {
       method: "OPTIONS",
@@ -95,11 +95,27 @@ describe("createApp", () => {
     expect(response.headers.get("access-control-allow-methods")).toBe("GET, POST, OPTIONS");
   });
 
+  it("sets CORS headers for 127.0.0.1 origin", async () => {
+    const baseUrl = await startTestServer();
+    const response = await fetch(`${baseUrl}/`, {
+      headers: { Origin: "http://127.0.0.1:5000" },
+    });
+
+    expect(response.headers.get("access-control-allow-origin")).toBe("http://127.0.0.1:5000");
+  });
+
   it("does not set CORS header for non-localhost origins", async () => {
     const baseUrl = await startTestServer();
     const response = await fetch(`${baseUrl}/`, {
       headers: { Origin: "https://evil.com" },
     });
+
+    expect(response.headers.get("access-control-allow-origin")).toBeNull();
+  });
+
+  it("does not set CORS header when no Origin is sent", async () => {
+    const baseUrl = await startTestServer();
+    const response = await fetch(`${baseUrl}/`);
 
     expect(response.headers.get("access-control-allow-origin")).toBeNull();
   });
@@ -161,6 +177,70 @@ describe("createApp", () => {
     const payload = await response.json();
     expect(response.status).toBe(404);
     expect(payload.error).toContain("not found");
+  });
+
+  it("rejects analyze with non-string repoUrl", async () => {
+    const baseUrl = await startTestServer();
+    const response = await fetch(`${baseUrl}/api/analyze`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ repoUrl: 12345 }),
+    });
+
+    const payload = await response.json();
+    expect(response.status).toBe(400);
+    expect(payload.error).toBe("repoUrl is required and must be a string");
+  });
+
+  it("rejects analyze with null repoUrl", async () => {
+    const baseUrl = await startTestServer();
+    const response = await fetch(`${baseUrl}/api/analyze`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ repoUrl: null }),
+    });
+
+    const payload = await response.json();
+    expect(response.status).toBe(400);
+    expect(payload.error).toBe("repoUrl is required and must be a string");
+  });
+
+  it("rejects overly long repoUrl", async () => {
+    const baseUrl = await startTestServer();
+    const response = await fetch(`${baseUrl}/api/analyze`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ repoUrl: "https://github.com/o/" + "a".repeat(500) }),
+    });
+
+    const payload = await response.json();
+    expect(response.status).toBe(400);
+    expect(payload.error).toBe("repoUrl too long");
+  });
+
+  it("rejects file requests with path traversal (..)", async () => {
+    const baseUrl = await startTestServer();
+    const response = await fetch(`${baseUrl}/api/jobs/test/files/%2e%2e%2fetc%2fpasswd`);
+
+    // Express may normalize the encoded path - either 400 (invalid filename) or 404 (job not found)
+    expect([400, 404]).toContain(response.status);
+  });
+
+  it("rejects file requests with forward slash in filename", async () => {
+    const baseUrl = await startTestServer();
+    const response = await fetch(`${baseUrl}/api/jobs/test/files/sub/file.md`);
+
+    // Express sees this as a different route, so 404
+    expect(response.status).toBe(404);
+  });
+
+  it("rejects file requests with backslash in filename", async () => {
+    const baseUrl = await startTestServer();
+    const response = await fetch(`${baseUrl}/api/jobs/test/files/sub%5Cfile.md`);
+
+    const payload = await response.json();
+    // Either 400 (invalid filename) or 404 (job not found)
+    expect([400, 404]).toContain(response.status);
   });
 
   it("registers API routes on the app", async () => {

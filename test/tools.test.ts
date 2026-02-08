@@ -20,13 +20,45 @@ vi.mock("child_process", () => ({
 
 import { readFile, readdir, stat } from "fs/promises";
 import { exec, execFile } from "child_process";
-import { getRepoTools, type ToolContext } from "../src/tools.js";
+import { getRepoTools, safePath, type ToolContext } from "../src/tools.js";
 
 const mockReadFile = vi.mocked(readFile);
 const mockReaddir = vi.mocked(readdir);
 const mockStat = vi.mocked(stat);
 const mockExec = vi.mocked(exec);
 const mockExecFile = vi.mocked(execFile);
+
+describe("safePath", () => {
+  it("allows valid relative paths", () => {
+    expect(safePath("/repo", "src/index.ts")).toBe("/repo/src/index.ts");
+    expect(safePath("/repo", "package.json")).toBe("/repo/package.json");
+    expect(safePath("/repo", "src/deep/nested/file.ts")).toBe("/repo/src/deep/nested/file.ts");
+  });
+
+  it("rejects traversal with ..", () => {
+    expect(() => safePath("/repo", "../etc/passwd")).toThrow("Path escapes repository root");
+    expect(() => safePath("/repo", "src/../../etc/passwd")).toThrow("Path escapes repository root");
+    expect(() => safePath("/repo", "../../secret")).toThrow("Path escapes repository root");
+  });
+
+  it("rejects absolute paths", () => {
+    expect(() => safePath("/repo", "/etc/passwd")).toThrow("Path escapes repository root");
+    expect(() => safePath("/repo", "/tmp/evil")).toThrow("Path escapes repository root");
+  });
+
+  it("allows paths that contain .. but stay within root", () => {
+    expect(safePath("/repo", "src/../package.json")).toBe("/repo/package.json");
+  });
+
+  it("allows empty path (resolves to root)", () => {
+    expect(safePath("/repo", "")).toBe("/repo");
+  });
+
+  it("handles paths with encoded characters safely", () => {
+    // These are just regular directory names, not traversal
+    expect(safePath("/repo", "dir%2F..%2Fetc")).toBe("/repo/dir%2F..%2Fetc");
+  });
+});
 
 function makeContext(overrides?: Partial<ToolContext>): ToolContext {
   return {
@@ -168,6 +200,24 @@ describe("read_file tool", () => {
 
     expect((result as any).textResultForLlm).toBe("");
     expect((result as any).resultType).toBe("success");
+  });
+
+  it("rejects path traversal attempts", async () => {
+    const ctx = makeContext();
+    const tool = getTool(ctx, "read_file");
+
+    await expect(
+      tool.handler({ path: "../../../etc/passwd" }, {} as any)
+    ).rejects.toThrow("Path escapes repository root");
+  });
+
+  it("rejects absolute path attempts", async () => {
+    const ctx = makeContext();
+    const tool = getTool(ctx, "read_file");
+
+    await expect(
+      tool.handler({ path: "/etc/passwd" }, {} as any)
+    ).rejects.toThrow("Path escapes repository root");
   });
 
   it("works without callbacks", async () => {

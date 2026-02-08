@@ -6,13 +6,13 @@
  * Also watches local .git/refs via fs.watch as a supplementary trigger.
  */
 
-import { exec } from "child_process";
+import { execFile } from "child_process";
 import { promisify } from "util";
 import { watch as fsWatch, type FSWatcher, type WatchOptions as FsWatchOptions } from "fs";
 import { join } from "path";
 import chalk from "chalk";
 
-const execAsync = promisify(exec);
+const execFileAsync = promisify(execFile);
 
 export interface WatchOptions {
   /** Polling interval in seconds (default: 30) */
@@ -34,7 +34,7 @@ export interface WatchHandle {
  */
 export async function getHeadCommit(repoPath: string): Promise<string> {
   try {
-    const { stdout } = await execAsync("git rev-parse HEAD", { cwd: repoPath });
+    const { stdout } = await execFileAsync("git", ["rev-parse", "HEAD"], { cwd: repoPath });
     return stdout.trim();
   } catch {
     return "";
@@ -46,21 +46,21 @@ export async function getHeadCommit(repoPath: string): Promise<string> {
  * Returns whether new commits were found and the new SHA.
  */
 export async function fetchAndCheckUpdates(repoPath: string, lastSha: string): Promise<{ updated: boolean; newSha: string }> {
-  await execAsync("git fetch origin", { cwd: repoPath });
+  await execFileAsync("git", ["fetch", "origin"], { cwd: repoPath });
 
   let remoteSha: string;
   try {
-    const { stdout } = await execAsync("git rev-parse @{u}", { cwd: repoPath });
+    const { stdout } = await execFileAsync("git", ["rev-parse", "@{u}"], { cwd: repoPath });
     remoteSha = stdout.trim();
   } catch {
-    const { stdout } = await execAsync("git rev-parse FETCH_HEAD", { cwd: repoPath });
+    const { stdout } = await execFileAsync("git", ["rev-parse", "FETCH_HEAD"], { cwd: repoPath });
     remoteSha = stdout.trim();
   }
 
   if (remoteSha !== lastSha) {
     // Fast-forward to get the new commits locally
-    await execAsync("git merge --ff-only FETCH_HEAD", { cwd: repoPath }).catch(
-      () => execAsync(`git reset --hard ${remoteSha}`, { cwd: repoPath })
+    await execFileAsync("git", ["merge", "--ff-only", "FETCH_HEAD"], { cwd: repoPath }).catch(
+      () => execFileAsync("git", ["reset", "--hard", remoteSha], { cwd: repoPath })
     );
     return { updated: true, newSha: remoteSha };
   }

@@ -81,6 +81,44 @@ describe("parseGitHubUrl", () => {
     expect(result.owner).toBe("owner");
     expect(result.repo).toBe("repo");
   });
+
+  it("handles URL with query string", () => {
+    // Query string is captured in the regex; parseGitHubUrl extracts what it can
+    const result = parseGitHubUrl("https://github.com/owner/repo?tab=readme");
+    expect(result.owner).toBe("owner");
+    expect(result.repo).toBe("repo?tab=readme");
+  });
+
+  it("handles URL with fragment", () => {
+    const result = parseGitHubUrl("https://github.com/owner/repo#readme");
+    expect(result.owner).toBe("owner");
+    expect(result.repo).toBe("repo#readme");
+  });
+
+  it("handles http (non-https) URL", () => {
+    const result = parseGitHubUrl("http://github.com/owner/repo");
+    expect(result.owner).toBe("owner");
+    expect(result.repo).toBe("repo");
+  });
+
+  it("throws on non-GitHub URL with similar structure", () => {
+    expect(() => parseGitHubUrl("https://bitbucket.org/owner/repo")).toThrow("Invalid GitHub URL");
+  });
+
+  it("sets default branch to main", () => {
+    const result = parseGitHubUrl("https://github.com/owner/repo");
+    expect(result.branch).toBe("main");
+  });
+
+  it("constructs correct fullName", () => {
+    const result = parseGitHubUrl("https://github.com/facebook/react");
+    expect(result.fullName).toBe("facebook/react");
+  });
+
+  it("constructs correct URL format", () => {
+    const result = parseGitHubUrl("git@github.com:owner/repo.git");
+    expect(result.url).toBe("https://github.com/owner/repo");
+  });
 });
 
 describe("detectFrameworksFromDeps", () => {

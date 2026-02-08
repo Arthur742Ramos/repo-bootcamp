@@ -9,9 +9,10 @@
  * - Stale badge URLs
  */
 
-import { readFile, access } from "fs/promises";
+import { readFile } from "fs/promises";
 import { join } from "path";
-import { execSync } from "child_process";
+import { execFileSync } from "child_process";
+import { readFileSafe, README_NAMES } from "./utils.js";
 
 export interface VersionMismatch {
   type: "node" | "python" | "npm" | "other";
@@ -60,17 +61,7 @@ export interface DocsAnalysisResult {
   };
 }
 
-/**
- * Read file safely, returning null if not found
- */
-async function readFileSafe(path: string): Promise<string | null> {
-  try {
-    await access(path);
-    return await readFile(path, "utf-8");
-  } catch {
-    return null;
-  }
-}
+
 
 /**
  * Parse package.json from repo
@@ -89,8 +80,7 @@ async function getPackageJson(repoPath: string): Promise<Record<string, unknown>
  * Get README content
  */
 async function getReadme(repoPath: string): Promise<string | null> {
-  const names = ["README.md", "readme.md", "README.MD", "Readme.md"];
-  for (const name of names) {
+  for (const name of README_NAMES) {
     const content = await readFileSafe(join(repoPath, name));
     if (content) return content;
   }
@@ -283,16 +273,18 @@ export async function analyzeCLIDrift(repoPath: string): Promise<CLIDrift[]> {
 
     // Check if it's a TypeScript file, use tsx
     if (fullPath.endsWith(".ts")) {
-      helpOutput = execSync(`npx tsx "${fullPath}" --help 2>/dev/null`, {
+      helpOutput = execFileSync("npx", ["tsx", fullPath, "--help"], {
         cwd: repoPath,
         timeout: 10000,
         encoding: "utf-8",
+        stdio: ["pipe", "pipe", "ignore"],
       });
     } else {
-      helpOutput = execSync(`node "${fullPath}" --help 2>/dev/null`, {
+      helpOutput = execFileSync("node", [fullPath, "--help"], {
         cwd: repoPath,
         timeout: 10000,
         encoding: "utf-8",
+        stdio: ["pipe", "pipe", "ignore"],
       });
     }
   } catch {

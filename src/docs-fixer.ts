@@ -7,7 +7,7 @@
  * - Update CLI usage sections
  */
 
-import { readFile, writeFile, access } from "fs/promises";
+import { readFile, writeFile } from "fs/promises";
 import { join } from "path";
 import type {
   DocsAnalysisResult,
@@ -15,6 +15,7 @@ import type {
   FrameworkIssue,
   CLIDrift,
 } from "./docs-analyzer.js";
+import { readFileSafe, escapeRegex, README_NAMES } from "./utils.js";
 
 export interface FixResult {
   file: string;
@@ -29,23 +30,10 @@ export interface FixSummary {
 }
 
 /**
- * Read file safely, returning null if not found
- */
-async function readFileSafe(path: string): Promise<string | null> {
-  try {
-    await access(path);
-    return await readFile(path, "utf-8");
-  } catch {
-    return null;
-  }
-}
-
-/**
  * Get README path
  */
 async function getReadmePath(repoPath: string): Promise<string | null> {
-  const names = ["README.md", "readme.md", "README.MD", "Readme.md"];
-  for (const name of names) {
+  for (const name of README_NAMES) {
     const path = join(repoPath, name);
     const content = await readFileSafe(path);
     if (content !== null) return path;
@@ -117,12 +105,6 @@ export async function updateVersionNumbers(
   return result;
 }
 
-/**
- * Escape special regex characters
- */
-function escapeRegex(str: string): string {
-  return str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
 
 /**
  * Add missing framework mentions to README

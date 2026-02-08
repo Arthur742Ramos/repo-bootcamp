@@ -143,6 +143,50 @@ Paragraph text with **bold** and *italic*.`;
     expect(html).toContain("<hr />");
     expect(html).toContain("<strong>bold</strong>");
   });
+
+  it("escapes script tags in code blocks", () => {
+    const md = '```\n<script>alert("xss")</script>\n```';
+    const html = markdownToHtml(md);
+    expect(html).toContain("&lt;script&gt;");
+    expect(html).not.toContain("<script>");
+  });
+
+  it("handles nested formatting correctly", () => {
+    const html = markdownToHtml("**bold with `code` inside**");
+    expect(html).toContain("<strong>");
+    expect(html).toContain("<code>code</code>");
+  });
+
+  it("handles consecutive headings", () => {
+    const md = "# H1\n## H2\n### H3";
+    const html = markdownToHtml(md);
+    expect(html).toContain("<h1>H1</h1>");
+    expect(html).toContain("<h2>H2</h2>");
+    expect(html).toContain("<h3>H3</h3>");
+  });
+
+  it("handles whitespace-only input", () => {
+    const html = markdownToHtml("   \n  \n   ");
+    expect(typeof html).toBe("string");
+  });
+
+  it("handles links with special chars in URL", () => {
+    const html = markdownToHtml("[link](https://example.com/path?q=1&b=2)");
+    expect(html).toContain('href="https://example.com/path?q=1&b=2"');
+  });
+
+  it("handles markdown with only a heading and no body", () => {
+    const html = markdownToHtml("# Title");
+    expect(html).toContain("<h1>Title</h1>");
+  });
+
+  it("handles table with empty cells", () => {
+    const md = "| A | B |\n|---|---|\n| val | data |";
+    const html = markdownToHtml(md);
+    expect(html).toContain("<table>");
+    expect(html).toContain("<td>val</td>");
+    expect(html).toContain("<td>data</td>");
+  });
 });
 
 describe("convertToHtml", () => {

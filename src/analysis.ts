@@ -55,10 +55,12 @@ export async function runParallelAnalysis(
     return security;
   });
 
+  const MAX_KEY_FILES_FOR_IMPACT = 10;
+
   const impactsPromise = buildImportGraph(repoPath, scanResult.files).then((importGraph) => {
     const keyFiles = getKeyFilesForImpact(scanResult.files);
     return Promise.all(
-      keyFiles.slice(0, 10).map(file =>
+      keyFiles.slice(0, MAX_KEY_FILES_FOR_IMPACT).map(file =>
         analyzeChangeImpact(repoPath, scanResult.files, file, importGraph)
       )
     );
