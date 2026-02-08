@@ -59,7 +59,7 @@ function extractImports(content: string, filePath: string): string[] {
 function resolveImport(
   importPath: string,
   fromFile: string,
-  files: FileInfo[]
+  filePathSet: Set<string>
 ): string | null {
   // Skip external packages
   if (!importPath.startsWith(".") && !importPath.startsWith("/")) {
@@ -73,7 +73,7 @@ function resolveImport(
   resolved = resolved.replace(/\\/g, "/");
 
   // Try exact match first
-  if (files.some(f => f.path === resolved)) {
+  if (filePathSet.has(resolved)) {
     return resolved;
   }
 
@@ -81,7 +81,7 @@ function resolveImport(
   const extensions = [".ts", ".tsx", ".js", ".jsx", ".py", ".go"];
   for (const ext of extensions) {
     const withExt = resolved + ext;
-    if (files.some(f => f.path === withExt)) {
+    if (filePathSet.has(withExt)) {
       return withExt;
     }
   }
@@ -89,7 +89,7 @@ function resolveImport(
   // Try index files
   for (const ext of extensions) {
     const indexPath = join(resolved, `index${ext}`);
-    if (files.some(f => f.path === indexPath)) {
+    if (filePathSet.has(indexPath)) {
       return indexPath;
     }
   }
@@ -105,6 +105,8 @@ export async function buildImportGraph(
   files: FileInfo[]
 ): Promise<Map<string, { imports: string[]; importedBy: string[] }>> {
   const graph = new Map<string, { imports: string[]; importedBy: string[] }>();
+  // Pre-build a Set of all file paths for O(1) lookups in resolveImport
+  const filePathSet = new Set(files.filter(f => !f.isDirectory).map(f => f.path));
 
   // Initialize all files
   for (const file of files) {
@@ -121,14 +123,29 @@ export async function buildImportGraph(
     f.size < 100000
   );
 
-  for (const file of sourceFiles) {
-    try {
-      const content = await readFile(join(repoPath, file.path), "utf-8");
+  // Parse source files in parallel batches for performance
+  const BATCH_SIZE = 15;
+  for (let i = 0; i < sourceFiles.length; i += BATCH_SIZE) {
+    const batch = sourceFiles.slice(i, i + BATCH_SIZE);
+    const results = await Promise.all(
+      batch.map(async (file) => {
+        try {
+          const content = await readFile(join(repoPath, file.path), "utf-8");
+          return { file, content };
+        } catch {
+          return null;
+        }
+      })
+    );
+
+    for (const result of results) {
+      if (!result) continue;
+      const { file, content } = result;
       const imports = extractImports(content, file.path);
 
       const resolvedImports: string[] = [];
       for (const imp of imports) {
-        const resolved = resolveImport(imp, file.path, files);
+        const resolved = resolveImport(imp, file.path, filePathSet);
         if (resolved) {
           resolvedImports.push(resolved);
           
@@ -144,8 +161,6 @@ export async function buildImportGraph(
       if (node) {
         node.imports = resolvedImports;
       }
-    } catch {
-      // Skip unreadable files
     }
   }
 
@@ -240,12 +255,14 @@ export async function analyzeChangeImpact(
 
   // Find related tests
   const affectedTests = findRelatedTests(targetFile, files);
+  const affectedTestSet = new Set(affectedTests);
   
   // Also find tests for affected files
   for (const affected of affectedFiles) {
     const tests = findRelatedTests(affected, files);
     for (const test of tests) {
-      if (!affectedTests.includes(test)) {
+      if (!affectedTestSet.has(test)) {
+        affectedTestSet.add(test);
         affectedTests.push(test);
       }
     }

@@ -1,7 +1,7 @@
 import type { Application, Request, Response } from "express";
 import { EventEmitter } from "events";
 import { mkdir, writeFile, rm, readFile } from "fs/promises";
-import { join } from "path";
+import { join, resolve } from "path";
 
 import { parseGitHubUrl, cloneRepo, scanRepo } from "../ingest.js";
 import { analyzeRepo, type AnalysisStats } from "../agent.js";
@@ -55,6 +55,7 @@ interface AnalysisJob {
 const jobs = new Map<string, AnalysisJob>();
 
 const JOB_TTL_MS = 30 * 60 * 1000; // 30 minutes
+const MAX_JOBS = 100; // Prevent unbounded memory growth
 
 // Prune completed/errored jobs older than TTL
 setInterval(() => {
@@ -256,8 +257,14 @@ export function registerRoutes(app: Application): void {
   app.post("/api/analyze", async (req: Request, res: Response): Promise<void> => {
     const { repoUrl, options = {} } = req.body;
 
-    if (!repoUrl) {
-      res.status(400).json({ error: "repoUrl is required" });
+    if (!repoUrl || typeof repoUrl !== "string") {
+      res.status(400).json({ error: "repoUrl is required and must be a string" });
+      return;
+    }
+
+    // Limit URL length to prevent abuse
+    if (repoUrl.length > 500) {
+      res.status(400).json({ error: "repoUrl too long" });
       return;
     }
 
@@ -275,6 +282,25 @@ export function registerRoutes(app: Application): void {
       progress: [],
       emitter: new EventEmitter(),
     };
+
+    // Enforce max jobs cap — evict oldest completed jobs first
+    if (jobs.size >= MAX_JOBS) {
+      let oldestCompletedId: string | null = null;
+      let oldestTime = Infinity;
+      for (const [id, j] of jobs) {
+        if (j.completedAt && j.completedAt < oldestTime) {
+          oldestTime = j.completedAt;
+          oldestCompletedId = id;
+        }
+      }
+      if (oldestCompletedId) {
+        jobs.delete(oldestCompletedId);
+      } else {
+        // All jobs are still running — reject to prevent OOM
+        res.status(503).json({ error: "Server at capacity, try again later" });
+        return;
+      }
+    }
 
     jobs.set(job.id, job);
 
@@ -349,13 +375,25 @@ export function registerRoutes(app: Application): void {
       return;
     }
 
+    // Sanitize filename — reject path traversal attempts
+    if (filename.includes("..") || filename.includes("/") || filename.includes("\\")) {
+      res.status(400).json({ error: "Invalid filename" });
+      return;
+    }
+
     if (!job.result.files.includes(filename)) {
       res.status(404).json({ error: "File not found" });
       return;
     }
 
     try {
-      const content = await readFile(join(job.result.outputDir, filename), "utf-8");
+      const filePath = resolve(join(job.result.outputDir, filename));
+      const outputDirResolved = resolve(job.result.outputDir);
+      if (!filePath.startsWith(outputDirResolved + "/") && filePath !== outputDirResolved) {
+        res.status(400).json({ error: "Invalid filename" });
+        return;
+      }
+      const content = await readFile(filePath, "utf-8");
       const contentType = filename.endsWith(".json")
         ? "application/json"
         : filename.endsWith(".html")

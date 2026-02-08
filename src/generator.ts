@@ -5,6 +5,11 @@
 
 import type { RepoFacts, BootcampOptions } from "./types.js";
 
+/** Maximum items shown in summary sections of BOOTCAMP.md */
+const MAX_BOOTCAMP_SUMMARY_ITEMS = 5;
+/** Maximum beginner tasks shown in the quick-start section */
+const MAX_QUICK_TASKS = 3;
+
 /**
  * Format confidence as a badge
  */
@@ -41,18 +46,18 @@ export function generateBootcamp(facts: RepoFacts, _options: BootcampOptions): s
   const prereqs = facts.quickstart.prerequisites.map((p) => `- ${p}`).join("\n");
   const steps = facts.quickstart.steps.map((s, i) => `${i + 1}. ${s}`).join("\n");
   const commands = facts.quickstart.commands
-    .slice(0, 5)
+    .slice(0, MAX_BOOTCAMP_SUMMARY_ITEMS)
     .map((c) => `\`${c.command}\``)
     .join(", ");
 
   const keyDirs = facts.structure.keyDirs
-    .slice(0, 5)
+    .slice(0, MAX_BOOTCAMP_SUMMARY_ITEMS)
     .map((d) => `- \`${d.path}\` - ${d.purpose}`)
     .join("\n");
 
   const quickTasks = facts.firstTasks
     .filter((t) => t.difficulty === "beginner")
-    .slice(0, 3)
+    .slice(0, MAX_QUICK_TASKS)
     .map((t) => `- **${t.title}**: ${t.description}`)
     .join("\n");
 

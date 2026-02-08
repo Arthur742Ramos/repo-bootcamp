@@ -115,8 +115,7 @@ async function extractNpmDependencies(repoPath: string): Promise<DependencyAnaly
       peer,
       categories,
     };
-  } catch (err) {
-    console.debug?.(`npm dep extraction skipped: ${err instanceof Error ? err.message : err}`);
+  } catch {
     return null;
   }
 }
@@ -172,8 +171,7 @@ async function extractCargoDependencies(repoPath: string): Promise<DependencyAna
       peer: [],
       categories: [],
     };
-  } catch (err) {
-    console.debug?.(`Cargo dep extraction skipped: ${err instanceof Error ? err.message : err}`);
+  } catch {
     return null;
   }
 }

@@ -16,13 +16,20 @@ const DEFAULT_PORT = 3000;
  */
 export function createApp(): express.Application {
   const app = express();
-  app.use(express.json());
+  app.use(express.json({ limit: "1mb" }));
 
-  // CORS for local development
+  // CORS for local development — restrict to localhost origins only
   app.use((req, res, next) => {
-    res.header("Access-Control-Allow-Origin", "*");
+    const origin = req.headers.origin;
+    const allowedOriginPattern = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/;
+    if (origin && allowedOriginPattern.test(origin)) {
+      res.header("Access-Control-Allow-Origin", origin);
+    }
     res.header("Access-Control-Allow-Headers", "Content-Type");
     res.header("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+    // Basic security headers
+    res.header("X-Content-Type-Options", "nosniff");
+    res.header("X-Frame-Options", "DENY");
     if (req.method === "OPTIONS") {
       res.sendStatus(200);
       return;

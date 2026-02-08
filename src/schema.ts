@@ -140,7 +140,7 @@ const RunbookSchema = z.object({
   sources: z.array(z.string()).optional(),
 });
 
-// Main RepoFacts schema
+/** Zod schema for runtime validation of LLM-generated RepoFacts */
 export const RepoFactsSchema = z.object({
   repoName: z.string(),
   purpose: z.string(),
@@ -157,7 +157,7 @@ export const RepoFactsSchema = z.object({
   runbook: RunbookSchema.optional(),
 });
 
-// Type inference
+/** Inferred TypeScript type from the Zod schema */
 export type ValidatedRepoFacts = z.infer<typeof RepoFactsSchema>;
 
 /**

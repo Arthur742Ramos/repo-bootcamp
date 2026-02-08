@@ -195,14 +195,28 @@ export async function analyzeSecurityPatterns(
     /\.(ts|js|tsx|jsx|py|go|rs|java)$/.test(f.path) &&
     !f.path.includes("node_modules") &&
     !f.path.includes(".min.") &&
-    f.size < 100000
+    f.size < MAX_SECURITY_FILE_SIZE
   );
 
   const authPatternMap = new Map<string, AuthPattern>();
 
-  for (const file of sourceFiles.slice(0, 50)) { // Limit scanning
-    try {
-      const content = await readFile(join(repoPath, file.path), "utf-8");
+  // Read all source files in parallel batches for performance
+  const BATCH_SIZE = 10;
+  for (let i = 0; i < sourceFiles.length && i < MAX_SECURITY_SCAN_FILES; i += BATCH_SIZE) {
+    const batch = sourceFiles.slice(i, Math.min(i + BATCH_SIZE, MAX_SECURITY_SCAN_FILES));
+    const contents = await Promise.all(
+      batch.map(async (file) => {
+        try {
+          return { file, content: await readFile(join(repoPath, file.path), "utf-8") };
+        } catch {
+          return null;
+        }
+      })
+    );
+
+    for (const result of contents) {
+      if (!result) continue;
+      const { file, content } = result;
 
       // Check for auth patterns
       for (const { pattern, type, library, description } of AUTH_PATTERNS) {
@@ -223,8 +237,8 @@ export async function analyzeSecurityPatterns(
 
       // Check for security concerns
       const lines = content.split("\n");
-      for (let i = 0; i < lines.length; i++) {
-        const line = lines[i];
+      for (let lineIdx = 0; lineIdx < lines.length; lineIdx++) {
+        const line = lines[lineIdx];
         
         // Skip comments and test files
         if (line.trim().startsWith("//") || line.trim().startsWith("#")) continue;
@@ -243,7 +257,7 @@ export async function analyzeSecurityPatterns(
                 description: concern.description,
                 severity: concern.severity,
                 file: file.path,
-                line: i + 1,
+                line: lineIdx + 1,
                 recommendation: concern.recommendation,
               });
             }
@@ -256,8 +270,6 @@ export async function analyzeSecurityPatterns(
         analysis.headers.hasCSP = true;
       }
 
-    } catch {
-      // Skip unreadable files
     }
   }
 
@@ -270,6 +282,35 @@ export async function analyzeSecurityPatterns(
 }
 
 /**
+ * Scoring constants for security grade calculation
+ */
+const SEVERITY_PENALTIES: Record<Severity, number> = {
+  critical: 15,
+  high: 10,
+  medium: 5,
+  low: 2,
+  info: 0,
+};
+
+const SECURITY_BONUS = {
+  helmet: 5,
+  cors: 2,
+  csp: 5,
+  rateLimiting: 5,
+  inputValidation: 5,
+  sqlInjectionPrevention: 5,
+  gitignoreSecrets: 3,
+  envExample: 2,
+  noAuthCrypto: -5,
+} as const;
+
+/** Maximum number of source files to scan for security patterns */
+const MAX_SECURITY_SCAN_FILES = 50;
+
+/** Maximum file size (bytes) to scan for security patterns */
+const MAX_SECURITY_FILE_SIZE = 100_000;
+
+/**
  * Calculate a security score based on findings
  */
 function calculateSecurityScore(analysis: SecurityAnalysis): number {
@@ -277,29 +318,23 @@ function calculateSecurityScore(analysis: SecurityAnalysis): number {
 
   // Deduct for findings by severity
   for (const finding of analysis.findings) {
-    switch (finding.severity) {
-      case "critical": score -= 15; break;
-      case "high": score -= 10; break;
-      case "medium": score -= 5; break;
-      case "low": score -= 2; break;
-      // info doesn't affect score
-    }
+    score -= SEVERITY_PENALTIES[finding.severity];
   }
 
   // Bonus for security measures
-  if (analysis.headers.hasHelmet) score += 5;
-  if (analysis.headers.hasCors) score += 2;
-  if (analysis.headers.hasCSP) score += 5;
-  if (analysis.hasRateLimiting) score += 5;
-  if (analysis.hasInputValidation) score += 5;
-  if (analysis.hasSqlInjectionPrevention) score += 5;
-  if (analysis.secretsHandling.gitignoreSecrets) score += 3;
-  if (analysis.secretsHandling.hasEnvExample) score += 2;
+  if (analysis.headers.hasHelmet) score += SECURITY_BONUS.helmet;
+  if (analysis.headers.hasCors) score += SECURITY_BONUS.cors;
+  if (analysis.headers.hasCSP) score += SECURITY_BONUS.csp;
+  if (analysis.hasRateLimiting) score += SECURITY_BONUS.rateLimiting;
+  if (analysis.hasInputValidation) score += SECURITY_BONUS.inputValidation;
+  if (analysis.hasSqlInjectionPrevention) score += SECURITY_BONUS.sqlInjectionPrevention;
+  if (analysis.secretsHandling.gitignoreSecrets) score += SECURITY_BONUS.gitignoreSecrets;
+  if (analysis.secretsHandling.hasEnvExample) score += SECURITY_BONUS.envExample;
 
   // Deduct if no auth security deps but has auth patterns
   if (analysis.authPatterns.length > 0 && 
       !analysis.securityDeps.some(d => d.type === "crypto")) {
-    score -= 5;
+    score += SECURITY_BONUS.noAuthCrypto;
   }
 
   return Math.max(0, Math.min(100, score));

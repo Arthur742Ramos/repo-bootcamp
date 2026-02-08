@@ -58,9 +58,12 @@ export async function cloneRepo(
   }
   cloneArgs.push(`${repoInfo.url}.git`, clonePath);
 
+  /** Timeout for git clone operations (2 minutes) */
+  const CLONE_TIMEOUT_MS = 120_000;
+
   try {
     await rm(clonePath, { recursive: true, force: true });
-    await execFileAsync("git", cloneArgs, { timeout: 120000 });
+    await execFileAsync("git", cloneArgs, { timeout: CLONE_TIMEOUT_MS });
 
     // Get the actual branch name
     const { stdout } = await execAsync("git rev-parse --abbrev-ref HEAD", {
@@ -144,6 +147,7 @@ async function scanDirectory(
 function detectStack(files: FileInfo[]): StackInfo {
   const filePaths = files.map((f) => f.path);
   const fileNames = filePaths.map((p) => basename(p));
+  const fileNameSet = new Set(fileNames);
 
   const stack: StackInfo = {
     languages: [],
@@ -186,7 +190,7 @@ function detectStack(files: FileInfo[]): StackInfo {
   for (const [name, { file, type }] of Object.entries(configPatterns)) {
     const matches =
       typeof file === "string"
-        ? fileNames.includes(file)
+        ? fileNameSet.has(file)
         : filePaths.some((p) => file.test(p));
 
     if (matches) {
@@ -203,9 +207,7 @@ function detectStack(files: FileInfo[]): StackInfo {
   }
 
   // Docker detection
-  stack.hasDocker = fileNames.some(
-    (f) => f === "Dockerfile" || f === "docker-compose.yml" || f === "docker-compose.yaml"
-  );
+  stack.hasDocker = fileNameSet.has("Dockerfile") || fileNameSet.has("docker-compose.yml") || fileNameSet.has("docker-compose.yaml");
 
   // CI detection
   stack.hasCi = filePaths.some(
@@ -213,7 +215,7 @@ function detectStack(files: FileInfo[]): StackInfo {
   );
 
   // Set build system based on package.json if not set
-  if (!stack.buildSystem && fileNames.includes("package.json")) {
+  if (!stack.buildSystem && fileNameSet.has("package.json")) {
     stack.buildSystem = "npm";
   }
 
@@ -428,8 +430,10 @@ function scoreFile(filePath: string, size: number): FilePriority {
 async function readKeySourceFiles(
   repoPath: string,
   files: FileInfo[],
-  maxBytes: number = 100000 // 100KB default budget
+  maxBytes: number = 100_000 // 100KB default budget
 ): Promise<Map<string, string>> {
+  /** Maximum bytes from a single file to prevent one large file from dominating */
+  const MAX_BYTES_PER_FILE = 15_000;
   const sourceFiles = new Map<string, string>();
   let totalBytes = 0;
 
@@ -453,7 +457,7 @@ async function readKeySourceFiles(
     try {
       const content = await readFile(join(repoPath, file.path), "utf-8");
       // Truncate very long files
-      const maxFileBytes = Math.min(file.size, 15000); // 15KB max per file
+      const maxFileBytes = Math.min(file.size, MAX_BYTES_PER_FILE);
       const truncated = content.substring(0, maxFileBytes);
       
       sourceFiles.set(file.path, truncated);

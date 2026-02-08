@@ -3,11 +3,49 @@
  * Compares two refs to generate onboarding deltas
  */
 
-import { exec } from "child_process";
+import { execFile } from "child_process";
 import { promisify } from "util";
 import type { DiffSummary, RepoInfo } from "./types.js";
 
-const execAsync = promisify(exec);
+const execFileAsync = promisify(execFile);
+
+/** Maximum buffer size for git diff operations (10 MB) */
+const DIFF_MAX_BUFFER = 10 * 1024 * 1024;
+/** Maximum buffer size for individual file diffs (5 MB) */
+const FILE_DIFF_MAX_BUFFER = 5 * 1024 * 1024;
+/** Maximum number of code files to scan for environment variable changes */
+const MAX_CODE_FILES_FOR_ENV_SCAN = 20;
+/** Maximum index files to check for removed exports */
+const MAX_INDEX_FILES_FOR_BREAKING_SCAN = 5;
+/** Maximum removed export lines to report per file */
+const MAX_REMOVED_EXPORTS_PER_FILE = 3;
+/** Maximum files shown in diff docs listings */
+const MAX_DIFF_DOC_FILES = 30;
+const MAX_DIFF_DOC_MODIFIED = 50;
+
+/**
+ * Read package.json content at a specific git ref.
+ * Shared helper to avoid duplicated git-show logic across functions.
+ * @param repoPath - Path to the git repository
+ * @param ref - Git ref (tag, branch, commit hash)
+ * @returns Parsed package.json object, or empty object if unavailable
+ */
+async function getPackageJsonAtRef(
+  repoPath: string,
+  ref: string
+): Promise<Record<string, unknown>> {
+  try {
+    const { stdout } = await execFileAsync(
+      "git",
+      ["show", `${ref}:package.json`],
+      { cwd: repoPath }
+    );
+    return JSON.parse(stdout);
+  } catch (err) {
+    console.debug?.(`package.json not available at ref ${ref}: ${err instanceof Error ? err.message : err}`);
+    return {};
+  }
+}
 
 /**
  * Get list of changed files between two refs
@@ -18,9 +56,10 @@ async function getChangedFiles(
   headRef: string
 ): Promise<{ added: string[]; removed: string[]; modified: string[] }> {
   try {
-    const { stdout } = await execAsync(
-      `git diff --name-status ${baseRef}...${headRef}`,
-      { cwd: repoPath, maxBuffer: 10 * 1024 * 1024 }
+    const { stdout } = await execFileAsync(
+      "git",
+      ["diff", "--name-status", `${baseRef}...${headRef}`],
+      { cwd: repoPath, maxBuffer: DIFF_MAX_BUFFER }
     );
 
     const added: string[] = [];
@@ -30,7 +69,7 @@ async function getChangedFiles(
     for (const line of stdout.trim().split("\n")) {
       if (!line) continue;
       const [status, ...pathParts] = line.split("\t");
-      const path = pathParts.join("\t"); // Handle paths with tabs
+      const path = pathParts.join("\t");
 
       switch (status[0]) {
         case "A":
@@ -63,77 +102,51 @@ async function getFileDiff(
   filePath: string
 ): Promise<string> {
   try {
-    const { stdout } = await execAsync(
-      `git diff ${baseRef}...${headRef} -- "${filePath}"`,
-      { cwd: repoPath, maxBuffer: 5 * 1024 * 1024 }
+    const { stdout } = await execFileAsync(
+      "git",
+      ["diff", `${baseRef}...${headRef}`, "--", filePath],
+      { cwd: repoPath, maxBuffer: FILE_DIFF_MAX_BUFFER }
     );
     return stdout;
-  } catch {
+  } catch (err) {
+    console.debug?.(`git diff failed for ${filePath}: ${err instanceof Error ? err.message : err}`);
     return "";
   }
 }
 
 /**
- * Extract new dependencies from package.json diff
+ * Extract dependency changes from pre-read package.json objects.
+ * Synchronous — no git calls needed when basePkg/headPkg are pre-read.
+ * @param basePkg - Package.json at the base ref
+ * @param headPkg - Package.json at the head ref
+ * @returns Added and removed dependency names
  */
-async function extractDependencyChanges(
-  repoPath: string,
-  baseRef: string,
-  headRef: string
-): Promise<{ added: string[]; removed: string[] }> {
+function extractDependencyChanges(
+  basePkg: Record<string, unknown>,
+  headPkg: Record<string, unknown>
+): { added: string[]; removed: string[] } {
   const added: string[] = [];
   const removed: string[] = [];
 
   try {
-    // Get package.json at both refs
-    let basePkg: Record<string, unknown> = {};
-    let headPkg: Record<string, unknown> = {};
-
-    try {
-      const { stdout: baseContent } = await execAsync(
-        `git show ${baseRef}:package.json`,
-        { cwd: repoPath }
-      );
-      basePkg = JSON.parse(baseContent);
-    } catch {
-      // No package.json at base
-    }
-
-    try {
-      const { stdout: headContent } = await execAsync(
-        `git show ${headRef}:package.json`,
-        { cwd: repoPath }
-      );
-      headPkg = JSON.parse(headContent);
-    } catch {
-      // No package.json at head
-    }
-
     const baseDeps = new Set([
-      ...Object.keys(basePkg.dependencies || {}),
-      ...Object.keys(basePkg.devDependencies || {}),
+      ...Object.keys((basePkg.dependencies as Record<string, unknown>) || {}),
+      ...Object.keys((basePkg.devDependencies as Record<string, unknown>) || {}),
     ]);
 
     const headDeps = new Set([
-      ...Object.keys(headPkg.dependencies || {}),
-      ...Object.keys(headPkg.devDependencies || {}),
+      ...Object.keys((headPkg.dependencies as Record<string, unknown>) || {}),
+      ...Object.keys((headPkg.devDependencies as Record<string, unknown>) || {}),
     ]);
 
-    // Find added
     for (const dep of headDeps) {
-      if (!baseDeps.has(dep)) {
-        added.push(dep);
-      }
+      if (!baseDeps.has(dep)) added.push(dep);
     }
-
-    // Find removed
     for (const dep of baseDeps) {
-      if (!headDeps.has(dep)) {
-        removed.push(dep);
-      }
+      if (!headDeps.has(dep)) removed.push(dep);
     }
-  } catch {
-    // Ignore errors
+  } catch (err) {
+    console.debug?.(`Dependency comparison failed: ${err instanceof Error ? err.message : err}`);
   }
 
   return { added, removed };
@@ -151,15 +164,14 @@ async function extractEnvVarChanges(
   const newEnvVars: Set<string> = new Set();
 
   // Check for .env.example changes
-  const envFiles = changedFiles.filter(f => 
+  const envFiles = changedFiles.filter(f =>
     f.includes(".env") || f.endsWith(".env.example")
   );
 
   for (const file of envFiles) {
     try {
       const diff = await getFileDiff(repoPath, baseRef, headRef, file);
-      
-      // Find added lines with env var definitions
+
       const addedLines = diff
         .split("\n")
         .filter(line => line.startsWith("+") && !line.startsWith("+++"));
@@ -170,20 +182,20 @@ async function extractEnvVarChanges(
           newEnvVars.add(match[1]);
         }
       }
-    } catch {
-      // Ignore errors
+    } catch (err) {
+      console.debug?.(`Env scan diff failed for ${file}: ${err instanceof Error ? err.message : err}`);
     }
   }
 
   // Also scan code for new process.env references
-  const codeFiles = changedFiles.filter(f => 
+  const codeFiles = changedFiles.filter(f =>
     /\.(ts|js|tsx|jsx)$/.test(f)
   );
 
-  for (const file of codeFiles.slice(0, 20)) { // Limit to 20 files
+  for (const file of codeFiles.slice(0, MAX_CODE_FILES_FOR_ENV_SCAN)) {
     try {
       const diff = await getFileDiff(repoPath, baseRef, headRef, file);
-      
+
       const addedLines = diff
         .split("\n")
         .filter(line => line.startsWith("+") && !line.startsWith("+++"));
@@ -194,8 +206,8 @@ async function extractEnvVarChanges(
           newEnvVars.add(match[1]);
         }
       }
-    } catch {
-      // Ignore errors
+    } catch (err) {
+      console.debug?.(`Code env scan failed for ${file}: ${err instanceof Error ? err.message : err}`);
     }
   }
 
@@ -203,55 +215,48 @@ async function extractEnvVarChanges(
 }
 
 /**
- * Extract new npm scripts/commands
+ * Extract new npm scripts/commands from pre-read package.json objects.
+ * Synchronous — no git calls needed when basePkg/headPkg are pre-read.
+ * @param basePkg - Package.json at the base ref
+ * @param headPkg - Package.json at the head ref
+ * @returns Array of new command strings
  */
-async function extractCommandChanges(
-  repoPath: string,
-  baseRef: string,
-  headRef: string
-): Promise<string[]> {
+function extractCommandChanges(
+  basePkg: Record<string, unknown>,
+  headPkg: Record<string, unknown>
+): string[] {
   const newCommands: string[] = [];
 
   try {
-    let baseScripts: Record<string, string> = {};
-    let headScripts: Record<string, string> = {};
-
-    try {
-      const { stdout: baseContent } = await execAsync(
-        `git show ${baseRef}:package.json`,
-        { cwd: repoPath }
-      );
-      baseScripts = JSON.parse(baseContent).scripts || {};
-    } catch {
-      // No package.json at base
-    }
-
-    try {
-      const { stdout: headContent } = await execAsync(
-        `git show ${headRef}:package.json`,
-        { cwd: repoPath }
-      );
-      headScripts = JSON.parse(headContent).scripts || {};
-    } catch {
-      // No package.json at head
-    }
+    const baseScripts = (basePkg.scripts as Record<string, string>) || {};
+    const headScripts = (headPkg.scripts as Record<string, string>) || {};
 
     for (const name of Object.keys(headScripts)) {
       if (!baseScripts[name]) {
         newCommands.push(`npm run ${name}`);
       }
     }
-  } catch {
-    // Ignore errors
+  } catch (err) {
+    console.debug?.(`Command extraction failed: ${err instanceof Error ? err.message : err}`);
   }
 
   return newCommands;
 }
 
 /**
- * Detect potential breaking changes
+ * Detect potential breaking changes.
+ * Uses pre-read package.json for version checks, git only for export removal scan.
+ * @param basePkg - Package.json at the base ref
+ * @param headPkg - Package.json at the head ref
+ * @param repoPath - Path to the git repository
+ * @param baseRef - Base git ref
+ * @param headRef - Head git ref
+ * @param changedFiles - List of changed file paths
+ * @returns Array of breaking change descriptions
  */
 async function detectBreakingChanges(
+  basePkg: Record<string, unknown>,
+  headPkg: Record<string, unknown>,
   repoPath: string,
   baseRef: string,
   headRef: string,
@@ -259,53 +264,44 @@ async function detectBreakingChanges(
 ): Promise<string[]> {
   const breakingChanges: string[] = [];
 
-  // Check for major version bumps in package.json
+  // Check for major version bumps (uses pre-read pkg data)
   try {
-    const { stdout: baseContent } = await execAsync(
-      `git show ${baseRef}:package.json`,
-      { cwd: repoPath }
-    );
-    const { stdout: headContent } = await execAsync(
-      `git show ${headRef}:package.json`,
-      { cwd: repoPath }
-    );
+    const baseVersion = basePkg.version as string | undefined;
+    const headVersion = headPkg.version as string | undefined;
 
-    const basePkg = JSON.parse(baseContent);
-    const headPkg = JSON.parse(headContent);
-
-    if (basePkg.version && headPkg.version) {
-      const [baseMajor] = basePkg.version.split(".");
-      const [headMajor] = headPkg.version.split(".");
+    if (baseVersion && headVersion) {
+      const [baseMajor] = baseVersion.split(".");
+      const [headMajor] = headVersion.split(".");
       if (parseInt(headMajor) > parseInt(baseMajor)) {
-        breakingChanges.push(`Major version bump: ${basePkg.version} → ${headPkg.version}`);
+        breakingChanges.push(`Major version bump: ${baseVersion} → ${headVersion}`);
       }
     }
-  } catch {
-    // Ignore
+  } catch (err) {
+    console.debug?.(`Version comparison failed: ${err instanceof Error ? err.message : err}`);
   }
 
   // Check for removed exports in index files
-  const indexFiles = changedFiles.filter(f => 
+  const indexFiles = changedFiles.filter(f =>
     /index\.(ts|js)$/.test(f) || /^src\/[^/]+\.(ts|js)$/.test(f)
   );
 
-  for (const file of indexFiles.slice(0, 5)) {
+  for (const file of indexFiles.slice(0, MAX_INDEX_FILES_FOR_BREAKING_SCAN)) {
     try {
       const diff = await getFileDiff(repoPath, baseRef, headRef, file);
-      
+
       const removedExports = diff
         .split("\n")
         .filter(line => line.startsWith("-") && !line.startsWith("---"))
         .filter(line => /export\s+(const|function|class|type|interface)/.test(line));
 
-      for (const line of removedExports.slice(0, 3)) {
+      for (const line of removedExports.slice(0, MAX_REMOVED_EXPORTS_PER_FILE)) {
         const match = line.match(/export\s+(?:const|function|class|type|interface)\s+(\w+)/);
         if (match) {
           breakingChanges.push(`Removed export: ${match[1]} in ${file}`);
         }
       }
-    } catch {
-      // Ignore
+    } catch (err) {
+      console.debug?.(`Export removal check failed for ${file}: ${err instanceof Error ? err.message : err}`);
     }
   }
 
@@ -416,9 +412,9 @@ export async function fetchPullRequestRefs(
     : undefined;
 
   try {
-    await execAsync(`git fetch --quiet origin ${baseSha}:${baseRef}`, {
+    await execFileAsync("git", ["fetch", "--quiet", "origin", `${baseSha}:${baseRef}`], {
       cwd: repoPath,
-      maxBuffer: 5 * 1024 * 1024,
+      maxBuffer: FILE_DIFF_MAX_BUFFER,
       env: fetchEnv,
     });
   } catch (error: unknown) {
@@ -426,9 +422,9 @@ export async function fetchPullRequestRefs(
   }
 
   try {
-    await execAsync(`git fetch --quiet origin pull/${prNumber}/head:${headRef}`, {
+    await execFileAsync("git", ["fetch", "--quiet", "origin", `pull/${prNumber}/head:${headRef}`], {
       cwd: repoPath,
-      maxBuffer: 5 * 1024 * 1024,
+      maxBuffer: FILE_DIFF_MAX_BUFFER,
       env: fetchEnv,
     });
   } catch (error: unknown) {
@@ -446,7 +442,12 @@ export async function fetchPullRequestRefs(
 }
 
 /**
- * Analyze diff between two refs
+ * Analyze diff between two refs.
+ * Reads package.json once at each ref and shares with all consumers.
+ * @param repoPath - Path to the git repository
+ * @param baseRef - Base git ref to compare from
+ * @param headRef - Head git ref to compare to (default: "HEAD")
+ * @returns Full diff summary with onboarding-relevant changes
  */
 export async function analyzeDiff(
   repoPath: string,
@@ -457,11 +458,19 @@ export async function analyzeDiff(
   const { added, removed, modified } = await getChangedFiles(repoPath, baseRef, headRef);
   const allChanged = [...added, ...modified];
 
-  // Extract onboarding-relevant changes
-  const depChanges = await extractDependencyChanges(repoPath, baseRef, headRef);
-  const newEnvVars = await extractEnvVarChanges(repoPath, baseRef, headRef, allChanged);
-  const newCommands = await extractCommandChanges(repoPath, baseRef, headRef);
-  const breakingChanges = await detectBreakingChanges(repoPath, baseRef, headRef, allChanged);
+  // Read package.json at both refs ONCE (shared by dep, command, and breaking change analysis)
+  const [basePkg, headPkg] = await Promise.all([
+    getPackageJsonAtRef(repoPath, baseRef),
+    getPackageJsonAtRef(repoPath, headRef),
+  ]);
+
+  // Extract onboarding-relevant changes (using pre-read package.json)
+  const depChanges = extractDependencyChanges(basePkg, headPkg);
+  const newCommands = extractCommandChanges(basePkg, headPkg);
+  const [newEnvVars, breakingChanges] = await Promise.all([
+    extractEnvVarChanges(repoPath, baseRef, headRef, allChanged),
+    detectBreakingChanges(basePkg, headPkg, repoPath, baseRef, headRef, allChanged),
+  ]);
 
   return {
     baseRef,
@@ -584,11 +593,11 @@ export function generateDiffDocs(diff: DiffSummary, projectName: string): string
   if (diff.filesAdded.length > 0) {
     lines.push("## Files Added");
     lines.push("");
-    for (const file of diff.filesAdded.slice(0, 30)) {
+    for (const file of diff.filesAdded.slice(0, MAX_DIFF_DOC_FILES)) {
       lines.push(`- \`${file}\``);
     }
-    if (diff.filesAdded.length > 30) {
-      lines.push(`- ... and ${diff.filesAdded.length - 30} more`);
+    if (diff.filesAdded.length > MAX_DIFF_DOC_FILES) {
+      lines.push(`- ... and ${diff.filesAdded.length - MAX_DIFF_DOC_FILES} more`);
     }
     lines.push("");
   }
@@ -596,11 +605,11 @@ export function generateDiffDocs(diff: DiffSummary, projectName: string): string
   if (diff.filesRemoved.length > 0) {
     lines.push("## Files Removed");
     lines.push("");
-    for (const file of diff.filesRemoved.slice(0, 30)) {
+    for (const file of diff.filesRemoved.slice(0, MAX_DIFF_DOC_FILES)) {
       lines.push(`- \`${file}\``);
     }
-    if (diff.filesRemoved.length > 30) {
-      lines.push(`- ... and ${diff.filesRemoved.length - 30} more`);
+    if (diff.filesRemoved.length > MAX_DIFF_DOC_FILES) {
+      lines.push(`- ... and ${diff.filesRemoved.length - MAX_DIFF_DOC_FILES} more`);
     }
     lines.push("");
   }
@@ -608,11 +617,11 @@ export function generateDiffDocs(diff: DiffSummary, projectName: string): string
   if (diff.filesModified.length > 0) {
     lines.push("## Files Modified");
     lines.push("");
-    for (const file of diff.filesModified.slice(0, 50)) {
+    for (const file of diff.filesModified.slice(0, MAX_DIFF_DOC_MODIFIED)) {
       lines.push(`- \`${file}\``);
     }
-    if (diff.filesModified.length > 50) {
-      lines.push(`- ... and ${diff.filesModified.length - 50} more`);
+    if (diff.filesModified.length > MAX_DIFF_DOC_MODIFIED) {
+      lines.push(`- ... and ${diff.filesModified.length - MAX_DIFF_DOC_MODIFIED} more`);
     }
     lines.push("");
   }

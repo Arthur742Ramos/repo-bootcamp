@@ -124,8 +124,8 @@ export async function resolveRepo(
       if (!stats.isDirectory()) {
         throw new Error(`Path is not a directory: ${absolutePath}`);
       }
-    } catch (error: any) {
-      if (error.code === "ENOENT") {
+    } catch (error: unknown) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") {
         throw new Error(`Path does not exist: ${absolutePath}`);
       }
       throw error;

@@ -76,18 +76,40 @@ describe("createApp", () => {
 
   it("handles OPTIONS with CORS headers", async () => {
     const baseUrl = await startTestServer();
-    const response = await fetch(`${baseUrl}/api/analyze`, { method: "OPTIONS" });
+    const response = await fetch(`${baseUrl}/api/analyze`, {
+      method: "OPTIONS",
+      headers: { Origin: "http://localhost:3000" },
+    });
 
     expect(response.status).toBe(200);
-    expect(response.headers.get("access-control-allow-origin")).toBe("*");
+    expect(response.headers.get("access-control-allow-origin")).toBe("http://localhost:3000");
   });
 
-  it("sets CORS headers on regular requests", async () => {
+  it("sets CORS headers on regular requests from localhost", async () => {
+    const baseUrl = await startTestServer();
+    const response = await fetch(`${baseUrl}/`, {
+      headers: { Origin: "http://localhost:3000" },
+    });
+
+    expect(response.headers.get("access-control-allow-origin")).toBe("http://localhost:3000");
+    expect(response.headers.get("access-control-allow-methods")).toBe("GET, POST, OPTIONS");
+  });
+
+  it("does not set CORS header for non-localhost origins", async () => {
+    const baseUrl = await startTestServer();
+    const response = await fetch(`${baseUrl}/`, {
+      headers: { Origin: "https://evil.com" },
+    });
+
+    expect(response.headers.get("access-control-allow-origin")).toBeNull();
+  });
+
+  it("sets security headers", async () => {
     const baseUrl = await startTestServer();
     const response = await fetch(`${baseUrl}/`);
 
-    expect(response.headers.get("access-control-allow-origin")).toBe("*");
-    expect(response.headers.get("access-control-allow-methods")).toBe("GET, POST, OPTIONS");
+    expect(response.headers.get("x-content-type-options")).toBe("nosniff");
+    expect(response.headers.get("x-frame-options")).toBe("DENY");
   });
 
   it("rejects analyze requests without repoUrl", async () => {
@@ -100,7 +122,7 @@ describe("createApp", () => {
 
     const payload = await response.json();
     expect(response.status).toBe(400);
-    expect(payload.error).toBe("repoUrl is required");
+    expect(payload.error).toBe("repoUrl is required and must be a string");
   });
 
   it("rejects analyze requests with invalid repoUrl", async () => {

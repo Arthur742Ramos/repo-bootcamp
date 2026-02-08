@@ -30,10 +30,15 @@ export interface WatchHandle {
 
 /**
  * Get the current HEAD commit SHA of the cloned repo.
+ * Returns empty string if the repo is in an invalid state.
  */
 export async function getHeadCommit(repoPath: string): Promise<string> {
-  const { stdout } = await execAsync("git rev-parse HEAD", { cwd: repoPath });
-  return stdout.trim();
+  try {
+    const { stdout } = await execAsync("git rev-parse HEAD", { cwd: repoPath });
+    return stdout.trim();
+  } catch {
+    return "";
+  }
 }
 
 /**

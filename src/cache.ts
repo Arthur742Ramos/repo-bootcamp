@@ -118,11 +118,15 @@ export async function pruneCache(maxAgeMs: number): Promise<number> {
 
     await Promise.all(
       jsonFiles.map(async (f) => {
-        const filePath = join(CACHE_DIR, f);
-        const fileStat = await stat(filePath);
-        if (now - fileStat.mtimeMs > maxAgeMs) {
-          await rm(filePath, { force: true });
-          pruned++;
+        try {
+          const filePath = join(CACHE_DIR, f);
+          const fileStat = await stat(filePath);
+          if (now - fileStat.mtimeMs > maxAgeMs) {
+            await rm(filePath, { force: true });
+            pruned++;
+          }
+        } catch {
+          // File may have been removed concurrently — skip
         }
       })
     );
