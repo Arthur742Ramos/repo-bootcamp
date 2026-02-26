@@ -204,6 +204,10 @@ export async function runMainCommand(repoUrl: string, options: BootcampOptions):
       ...analysis.facts,
       firstTasks: analysis.facts.firstTasks.slice(0, styleConfig.firstTasksCount),
     };
+    // Merge scan-detected packageManager as fallback if AI didn't provide one
+    if (!facts.stack.packageManager && scanResult.stack.packageManager) {
+      facts.stack.packageManager = scanResult.stack.packageManager;
+    }
     analysisStats = analysis.analysisStats;
     runStats.analysisTime = analysis.durationMs;
     runStats.toolCalls = analysis.toolCalls;

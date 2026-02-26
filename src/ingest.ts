@@ -206,6 +206,17 @@ function detectStack(files: FileInfo[]): StackInfo {
     stack.buildSystem = "npm";
   }
 
+  // Infer package manager from package.json if not detected from lock files
+  if (!stack.packageManager && fileNameSet.has("package.json")) {
+    stack.packageManager = "npm";
+  }
+  if (!stack.packageManager && fileNameSet.has("pyproject.toml")) {
+    stack.packageManager = "pip";
+  }
+  if (!stack.packageManager && fileNameSet.has("Cargo.toml")) {
+    stack.packageManager = "cargo";
+  }
+
   return stack;
 }
 
