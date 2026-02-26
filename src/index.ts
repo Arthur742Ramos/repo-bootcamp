@@ -54,8 +54,8 @@ program
   )
   .option(
     "-a, --audience <audience>",
-    "Target audience: backend, frontend, sre",
-    "backend"
+    "Target audience: all, backend, frontend, sre",
+    "all"
   )
   .option("-o, --output <dir>", "Output directory")
   .option("--format <format>", "Output format: markdown, html, pdf", "markdown")
@@ -116,7 +116,7 @@ program
       process.exit(1);
     }
 
-    if (!["backend", "frontend", "sre"].includes(options.audience)) {
+    if (!["all", "backend", "frontend", "sre"].includes(options.audience)) {
       console.error(chalk.red(`Invalid audience: ${options.audience}`));
       process.exit(1);
     }

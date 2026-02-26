@@ -19,8 +19,10 @@ const execFileAsync = promisify(execFile);
 export function parseGitHubUrl(url: string): RepoInfo {
   // Handle various GitHub URL formats
   const patterns = [
-    /github\.com\/([^/]+)\/([^/.]+)/,
-    /github\.com:([^/]+)\/([^/.]+)/,
+    /github\.com\/([^/]+)\/([^/]+?)(?:\.git)?$/,
+    /github\.com\/([^/]+)\/([^/]+)/,
+    /github\.com:([^/]+)\/([^/]+?)(?:\.git)?$/,
+    /github\.com:([^/]+)\/([^/]+)/,
   ];
 
   for (const pattern of patterns) {

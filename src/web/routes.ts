@@ -112,7 +112,7 @@ async function runAnalysis(job: AnalysisJob, options: Partial<BootcampOptions>):
     const fullOptions: BootcampOptions = {
       branch: options.branch || "",
       focus: options.focus || "all",
-      audience: options.audience || "backend",
+      audience: options.audience || "all",
       output: "",
       maxFiles: options.maxFiles || 200,
       noClone: false,

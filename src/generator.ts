@@ -33,6 +33,22 @@ const AUDIENCE_PROFILES: Record<
     filePatterns: RegExp[];
   }
 > = {
+  all: {
+    label: "all engineers",
+    onboardingTitle: "Start Here",
+    onboardingDescription: "General onboarding — explore the codebase at your own pace.",
+    architectureTitle: "Architecture Focus",
+    architectureDescription: "Use this view to understand the overall system design.",
+    firstTaskTitle: "Recommended first tasks",
+    firstTaskDescription: "Starter tasks across different areas of the codebase.",
+    architectureChecklist: [
+      "Trace one key flow from entry point to output.",
+      "Identify the main abstractions and their relationships.",
+      "Run the test suite and understand how tests are structured.",
+    ],
+    categoryOrder: ["bug-fix", "test", "feature", "docs", "refactor"],
+    filePatterns: [/.*/],
+  },
   backend: {
     label: "backend engineers",
     onboardingTitle: "Backend Start Here",
@@ -483,7 +499,7 @@ ${mermaidDiagram}
 
 ${components}
 
-## ${profile.architectureTitle}
+${options?.audience && options.audience !== "all" ? `## ${profile.architectureTitle}
 
 ${profile.architectureDescription}
 
@@ -495,7 +511,7 @@ ${audienceComponents || "- _No role-specific components detected_"}
 ### Files to inspect first
 ${audienceFiles || "- _No role-specific files detected_"}
 
-${codeExamplesSection}## Data Flow
+` : ""}${codeExamplesSection}## Data Flow
 
 ${facts.architecture.dataFlow || "_Data flow not documented_"}
 

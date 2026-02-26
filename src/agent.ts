@@ -122,6 +122,10 @@ export function formatCustomPromptSection(customPrompt?: string | null): string 
 
 function getAudiencePromptGuidance(audience: BootcampOptions["audience"]): string {
   const guidance: Record<BootcampOptions["audience"], string> = {
+    all: `## Audience Guidance (general)
+- Cover the full codebase without bias toward any particular role.
+- In firstTasks, include a mix of categories accessible to various skill levels.
+- In architecture, focus on the overall system design and key abstractions.`,
     backend: `## Audience Guidance (backend)
 - Prioritize API, service, worker, database, and backend config files.
 - In firstTasks, emphasize endpoint behavior, data validation/persistence, and integration tests.
@@ -200,7 +204,7 @@ Return a JSON object with this exact structure. Include "sources" arrays citing 
 {
   "repoName": "${repoInfo.fullName}",
   "purpose": "one-line description",
-  "description": "2-3 sentence description",
+  "description": "2-3 sentence technical description (NO welcome/intro text — just describe the project)",
   "sources": ["README.md", "package.json"],
   "confidence": "high|medium|low",
   "stack": {
@@ -387,7 +391,7 @@ Based on the above information, produce a JSON object. Follow this EXACT structu
 {
   "repoName": "${repoInfo.fullName}",
   "purpose": "one-line description of what this repo does",
-  "description": "2-3 sentence detailed description",
+  "description": "2-3 sentence technical description (NO welcome/intro text — just describe the project)",
   "sources": ["README.md", "package.json"],
   "confidence": "high",
   "stack": {

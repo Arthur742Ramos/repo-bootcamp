@@ -8,7 +8,7 @@ import type { OutputFormat } from "./formatter.js";
 export interface BootcampOptions {
   branch: string;
   focus: "onboarding" | "architecture" | "contributing" | "all";
-  audience: "backend" | "frontend" | "sre";
+  audience: "all" | "backend" | "frontend" | "sre";
   output: string;
   maxFiles: number;
   /** When true, the main command expects a local repository path input instead of cloning. */
