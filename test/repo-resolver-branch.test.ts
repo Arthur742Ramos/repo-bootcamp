@@ -1,7 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const mockParseGitHubUrl = vi.fn();
-const mockCloneRepo = vi.fn();
+const { mockParseGitHubUrl, mockCloneRepo } = vi.hoisted(() => ({
+  mockParseGitHubUrl: vi.fn(),
+  mockCloneRepo: vi.fn(),
+}));
 
 vi.mock("../src/ingest.js", () => ({
   parseGitHubUrl: mockParseGitHubUrl,

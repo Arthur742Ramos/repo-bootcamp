@@ -160,13 +160,13 @@ describe("cache", () => {
         focus: "onboarding",
         style: "startup",
         model: "claude-sonnet-4-5",
-        audience: "new-hire",
+        audience: "frontend",
       };
       const architectureOptions = {
         focus: "architecture",
-        style: "enterprise",
+        style: "corporate",
         model: "claude-opus-4-5",
-        audience: "internal-dev",
+        audience: "sre",
       };
 
       await writeCache(testRepo, testSha, onboardingFacts, onboardingOptions);

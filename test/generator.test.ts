@@ -150,6 +150,16 @@ describe("generateBootcamp", () => {
     expect(result).toContain("ONBOARDING.md");
     expect(result).toContain("ARCHITECTURE.md");
   });
+
+  it("applies style-specific links and tone", () => {
+    const startup = generateBootcamp(mockFacts, { ...mockOptions, style: "startup" });
+    const minimal = generateBootcamp(mockFacts, { ...mockOptions, style: "minimal" });
+
+    expect(startup).toContain("Let's get you up and running fast");
+    expect(minimal).toContain("Concise onboarding essentials");
+    expect(minimal).not.toContain("SECURITY.md");
+    expect(minimal).not.toContain("RUNBOOK.md");
+  });
 });
 
 describe("generateOnboarding", () => {
@@ -252,6 +262,30 @@ describe("generateFirstTasks", () => {
     const result = generateFirstTasks(mockFacts, { audience: "backend" });
     expect(result).toContain("Backend-first task picks");
     expect(result).toContain("Add unit test");
+  });
+
+  it("limits and simplifies tasks for minimal style", () => {
+    const expandedFacts = {
+      ...mockFacts,
+      firstTasks: Array.from({ length: 6 }, (_, i) => ({
+        title: `Task ${i + 1}`,
+        description: `Description ${i + 1}`,
+        difficulty: (i % 3 === 0 ? "beginner" : i % 3 === 1 ? "intermediate" : "advanced") as
+          | "beginner"
+          | "intermediate"
+          | "advanced",
+        category: "docs" as const,
+        files: [`file-${i + 1}.ts`],
+        why: `Why ${i + 1}`,
+      })),
+    };
+
+    const minimal = generateFirstTasks(expandedFacts, { audience: "backend", style: "minimal" });
+    const corporate = generateFirstTasks(expandedFacts, { audience: "backend", style: "corporate" });
+
+    expect((minimal.match(/^### /gm) || []).length).toBe(3);
+    expect(minimal).not.toContain("Why this matters");
+    expect(corporate).toContain("Why this matters");
   });
 });
 

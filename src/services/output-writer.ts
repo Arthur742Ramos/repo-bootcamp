@@ -34,6 +34,7 @@ export async function writeGeneratedOutputs({
   progress,
   allowIssueCreation = true,
 }: WriteGeneratedOutputsParams): Promise<WriteGeneratedOutputsResult> {
+  const factsDoc = documents.find((doc) => doc.name === "repo_facts.json");
   const formattedDocuments = applyOutputFormat(documents, outputFormat);
 
   if (!options.jsonOnly) {
@@ -42,7 +43,11 @@ export async function writeGeneratedOutputs({
       await writeFile(join(outputDir, doc.name), doc.content, "utf-8");
     }
   } else {
-    await writeFile(join(outputDir, "repo_facts.json"), JSON.stringify(facts, null, 2), "utf-8");
+    await writeFile(
+      join(outputDir, "repo_facts.json"),
+      factsDoc?.content || JSON.stringify(facts, null, 2),
+      "utf-8"
+    );
   }
 
   if (allowIssueCreation && options.createIssues && facts.firstTasks.length > 0) {

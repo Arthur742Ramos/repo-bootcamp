@@ -63,7 +63,7 @@ async function generateOutputs({
   progress,
   allowIssueCreation = true,
 }: GenerateOutputsParams): Promise<GenerationResult> {
-  const { documents, security, radar, deps } = await prepareOutputDocuments({
+  const { documents, facts: preparedFacts, security, radar, deps } = await prepareOutputDocuments({
     repoPath,
     repoInfo,
     scanResult,
@@ -77,7 +77,7 @@ async function generateOutputs({
   const { documentCount } = await writeGeneratedOutputs({
     documents,
     repoInfo,
-    facts,
+    facts: preparedFacts,
     options,
     outputDir,
     outputFormat,

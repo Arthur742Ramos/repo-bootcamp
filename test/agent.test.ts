@@ -1193,6 +1193,24 @@ describe("prompt construction", () => {
     expect(prompt).toContain("Audience Guidance (frontend)");
   });
 
+  it("injects style-pack guidance into system and analysis prompts", async () => {
+    const mockSession = configureSessionResponse(VALID_REPO_FACTS_JSON);
+
+    await analyzeRepo(
+      "/tmp/repo",
+      makeMockRepoInfo(),
+      makeMockScanResult(),
+      makeMockOptions({ style: "minimal" })
+    );
+
+    const sessionConfig = sharedMockClient.createSession.mock.calls[0][0];
+    const prompt = mockSession.sendAndWait.mock.calls[0][0].prompt;
+    expect(sessionConfig.systemMessage.content).toContain("STYLE PACK (minimal)");
+    expect(sessionConfig.systemMessage.content).toContain("Target exactly 3 firstTasks");
+    expect(prompt).toContain("Style Pack Requirements (minimal)");
+    expect(prompt).toContain("First tasks target: exactly 3");
+  });
+
   it("excludes directories from file list", async () => {
     const files = [
       { path: "src", size: 0, isDirectory: true },
@@ -1569,6 +1587,22 @@ describe("fast mode prompt construction", () => {
     const prompt = mockSession.sendAndWait.mock.calls[0][0].prompt;
     expect(prompt).toContain("Repository Guidance");
     expect(prompt).toContain("Custom fast guidance");
+  });
+
+  it("uses style-specific first-task targets in fast mode prompt", async () => {
+    const mockSession = configureSessionResponse(VALID_REPO_FACTS_JSON);
+
+    await analyzeRepo(
+      "/tmp/repo",
+      makeMockRepoInfo(),
+      makeMockScanResult(),
+      makeMockOptions({ fast: true, style: "corporate" })
+    );
+
+    const sessionConfig = sharedMockClient.createSession.mock.calls[0][0];
+    const prompt = mockSession.sendAndWait.mock.calls[0][0].prompt;
+    expect(sessionConfig.systemMessage.content).toContain("STYLE PACK (corporate)");
+    expect(prompt).toContain("Provide exactly 10 firstTasks");
   });
 
   it("does not retry in fast mode on validation failure", async () => {

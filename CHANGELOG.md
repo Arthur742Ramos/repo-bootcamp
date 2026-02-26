@@ -32,7 +32,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `--focus` - Focus on onboarding, architecture, contributing, or all
   - `--audience` - Target backend, frontend, or sre
   - `--output` - Custom output directory
-  - `--style` - Output styles: startup, enterprise, oss, devops
+  - `--style` - Output styles: corporate, startup, oss, academic, minimal
   - `--interactive` - Start Q&A mode after generation
   - `--compare` - Compare with git ref for version diffing
   - `--create-issues` - Create GitHub issues from starter tasks

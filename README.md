@@ -468,10 +468,11 @@ The web interface allows you to analyze repositories interactively through your 
 
 ```bash
 # Use different output styles
+bootcamp https://github.com/owner/repo --style corporate  # Formal, comprehensive
 bootcamp https://github.com/owner/repo --style startup    # Fast, casual, emoji
-bootcamp https://github.com/owner/repo --style enterprise # Formal, comprehensive
 bootcamp https://github.com/owner/repo --style oss        # Community-friendly (default)
-bootcamp https://github.com/owner/repo --style devops     # Infrastructure-focused
+bootcamp https://github.com/owner/repo --style academic   # Technical, research-oriented
+bootcamp https://github.com/owner/repo --style minimal    # Lean and concise
 ```
 
 ### Diagram Rendering
@@ -498,7 +499,7 @@ npm install -g @mermaid-js/mermaid-cli
 | `--format <format>` | Output format: markdown, html, pdf | `markdown` |
 | `-m, --max-files <n>` | Maximum files to scan | `200` |
 | `--model <model>` | Override model selection | auto |
-| `-s, --style <style>` | Output style: startup, enterprise, oss, devops | `oss` |
+| `-s, --style <style>` | Output style: corporate, startup, oss, academic, minimal | `oss` |
 | `-i, --interactive` | Start Q&A mode after generation | false |
 | `--transcript` | Save Q&A session to TRANSCRIPT.md | false |
 | `-c, --compare <ref>` | Compare with git ref, generate DIFF.md | - |
@@ -572,7 +573,7 @@ Create a `bootcamp.config.json` in your project root for custom settings:
 
 ```json
 {
-  "style": "enterprise",
+  "style": "corporate",
   "customStyle": {
     "emoji": false,
     "firstTasksCount": 15
