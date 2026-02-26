@@ -30,7 +30,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **CLI Options**
   - `--branch` - Analyze specific branch
   - `--focus` - Focus on onboarding, architecture, contributing, or all
-  - `--audience` - Target new-hire, oss-contributor, or internal-dev
+  - `--audience` - Target backend, frontend, or sre
   - `--output` - Custom output directory
   - `--style` - Output styles: startup, enterprise, oss, devops
   - `--interactive` - Start Q&A mode after generation

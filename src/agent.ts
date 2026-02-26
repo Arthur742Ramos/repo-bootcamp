@@ -8,13 +8,51 @@ import chalk from "chalk";
 import * as fs from "fs";
 import * as path from "path";
 import type { RepoFacts, ScanResult, RepoInfo, BootcampOptions } from "./types.js";
+import { getStyleConfig, type StyleConfig } from "./plugins.js";
 import { getRepoTools } from "./tools.js";
 import { validateRepoFacts, getMissingFieldsSummary, type ValidatedRepoFacts } from "./schema.js";
 
 /**
  * System prompt for the repo analysis agent
  */
-const SYSTEM_PROMPT = `You are an expert software architect and technical writer. Your job is to analyze codebases and produce comprehensive onboarding documentation.
+const CUSTOM_PROMPT_FILE = ".bootcamp-prompts.md";
+const CUSTOM_PROMPT_MAX_CHARS = 8000;
+const MAX_FILE_LIST_ITEMS = 50;
+const MAX_FAST_FILE_LIST_ITEMS = 30;
+const MAX_KEY_FILE_CHARS = 5000;
+const MAX_ENTRY_POINT_CHARS = 3000;
+const FAST_MODE_TIMEOUT_MS = 300_000; // 5 minutes
+const STANDARD_MODE_TIMEOUT_MS = 600_000; // 10 minutes
+
+function getSectionDepthGuidance(depth: StyleConfig["sectionDepth"]): string {
+  const guidance: Record<StyleConfig["sectionDepth"], string> = {
+    minimal: "Keep sections concise, with only high-signal details.",
+    standard: "Use balanced detail with practical examples and quick context.",
+    deep: "Provide deeper context, rationale, and implementation details where useful.",
+  };
+  return guidance[depth];
+}
+
+function styleSectionLists(styleConfig: StyleConfig): { enabled: string[]; disabled: string[] } {
+  const sectionNames = [
+    { enabled: styleConfig.sections.showRunbook, name: "runbook" },
+    { enabled: styleConfig.sections.showSecurityDetails, name: "security analysis" },
+    { enabled: styleConfig.sections.showDependencyGraph, name: "dependency graph" },
+    { enabled: styleConfig.sections.showRadar, name: "technology radar" },
+    { enabled: styleConfig.sections.showImpact, name: "change impact" },
+  ];
+
+  return {
+    enabled: sectionNames.filter((s) => s.enabled).map((s) => s.name),
+    disabled: sectionNames.filter((s) => !s.enabled).map((s) => s.name),
+  };
+}
+
+function buildSystemPrompt(styleConfig: StyleConfig, fastMode = false): string {
+  const { enabled, disabled } = styleSectionLists(styleConfig);
+  const toolSection = fastMode
+    ? ""
+    : `
 
 You have access to tools to explore the repository:
 - read_file: Read contents of any file
@@ -26,22 +64,35 @@ EFFICIENCY GUIDELINES:
 1. Make ONE batch of tool calls to gather key info (README, package.json, entry point, one source file)
 2. Make at most 2-3 additional targeted tool calls if needed
 3. Then IMMEDIATELY produce your JSON output
-4. DO NOT exhaustively read every file - sample intelligently
+4. DO NOT exhaustively read every file - sample intelligently`;
+
+  return `You are an expert software architect and technical writer. Your job is to analyze codebases and produce comprehensive onboarding documentation.
+
+STYLE PACK (${styleConfig.name}):
+- Write in a ${styleConfig.tone} tone.
+- ${getSectionDepthGuidance(styleConfig.sectionDepth)}
+- Target exactly ${styleConfig.firstTasksCount} firstTasks.
+- Prefer sections: ${enabled.length > 0 ? enabled.join(", ") : "core onboarding essentials only"}.
+${disabled.length > 0 ? `- Avoid over-emphasizing: ${disabled.join(", ")}.` : ""}
+${toolSection}
 
 IMPORTANT:
-- Limit yourself to 10-15 total tool calls maximum
+- ${fastMode ? "No tools are available in this mode; rely on provided context only." : "Limit yourself to 10-15 total tool calls maximum."}
 - Prioritize: README > package.json/config > main entry point > 1-2 source files
 - After gathering basics, produce output - don't over-research
 - Always return valid JSON as the final output`;
+}
 
-const CUSTOM_PROMPT_FILE = ".bootcamp-prompts.md";
-const CUSTOM_PROMPT_MAX_CHARS = 8000;
-const MAX_FILE_LIST_ITEMS = 50;
-const MAX_FAST_FILE_LIST_ITEMS = 30;
-const MAX_KEY_FILE_CHARS = 5000;
-const MAX_ENTRY_POINT_CHARS = 3000;
-const FAST_MODE_TIMEOUT_MS = 300_000; // 5 minutes
-const STANDARD_MODE_TIMEOUT_MS = 600_000; // 10 minutes
+function formatStylePromptSection(styleConfig: StyleConfig): string {
+  const { enabled, disabled } = styleSectionLists(styleConfig);
+  return `## Style Pack Requirements (${styleConfig.name})
+- Tone: ${styleConfig.tone}
+- Section depth: ${styleConfig.sectionDepth}
+- Intro direction: ${styleConfig.introText}
+- First tasks target: exactly ${styleConfig.firstTasksCount}
+- Prioritize sections: ${enabled.length > 0 ? enabled.join(", ") : "core onboarding essentials only"}
+${disabled.length > 0 ? `- Keep these lightweight or omitted when not useful: ${disabled.join(", ")}` : ""}`;
+}
 
 export function readCustomPrompt(repoPath: string, overridePath?: string): string | null {
   const promptPath = overridePath
@@ -69,6 +120,24 @@ export function formatCustomPromptSection(customPrompt?: string | null): string 
   return `\n## Repository Guidance (.bootcamp-prompts.md)\n${customPrompt}\n`;
 }
 
+function getAudiencePromptGuidance(audience: BootcampOptions["audience"]): string {
+  const guidance: Record<BootcampOptions["audience"], string> = {
+    backend: `## Audience Guidance (backend)
+- Prioritize API, service, worker, database, and backend config files.
+- In firstTasks, emphasize endpoint behavior, data validation/persistence, and integration tests.
+- In architecture, focus on request/data flows, service boundaries, and backend reliability concerns.`,
+    frontend: `## Audience Guidance (frontend)
+- Prioritize UI/component, routing, state management, styling, and frontend build files.
+- In firstTasks, emphasize component improvements, UI bugs, accessibility, and frontend tests.
+- In architecture, focus on UI composition, client-side data flow, and rendering boundaries.`,
+    sre: `## Audience Guidance (sre)
+- Prioritize deployment, infra, CI/CD, observability, and runtime config files.
+- In firstTasks, emphasize runbook quality, alerts/metrics coverage, incident drills, and release safety.
+- In architecture, focus on production topology, operational dependencies, and failure recovery paths.`,
+  };
+  return guidance[audience];
+}
+
 /**
  * Create the analysis prompt with scan results
  */
@@ -76,8 +145,10 @@ function createAnalysisPrompt(
   repoInfo: RepoInfo,
   scanResult: ScanResult,
   options: BootcampOptions,
-  customPrompt?: string | null
+  customPrompt?: string | null,
+  styleConfig?: StyleConfig
 ): string {
+  const resolvedStyle = styleConfig || getStyleConfig(options.style);
   const fileList = scanResult.files
     .filter((f) => !f.isDirectory)
     .slice(0, MAX_FILE_LIST_ITEMS)
@@ -87,6 +158,8 @@ function createAnalysisPrompt(
   const cmdList = scanResult.commands.map((c) => `- ${c.name}: ${c.command}`).join("\n");
 
   const customSection = formatCustomPromptSection(customPrompt);
+  const audienceSection = getAudiencePromptGuidance(options.audience);
+  const styleSection = formatStylePromptSection(resolvedStyle);
 
   return `Analyze this GitHub repository and produce a comprehensive onboarding kit.
 
@@ -193,9 +266,11 @@ Return a JSON object with this exact structure. Include "sources" arrays citing 
 
 Focus: ${options.focus}
 Target audience: ${options.audience}
+${audienceSection}
+${styleSection}
 ${customSection}
 
-Provide at least 8-10 first tasks of varying difficulty. Be specific about file paths.
+Provide exactly ${resolvedStyle.firstTasksCount} firstTasks spread across difficulty levels when possible. Be specific about file paths.
 Set runbook.applicable = false for libraries/tools that aren't deployed as services.
 Include 2-4 codeExamples showing key patterns/usage (short snippets of 5-15 lines with explanations).
 
@@ -210,8 +285,10 @@ function createFastAnalysisPrompt(
   repoInfo: RepoInfo,
   scanResult: ScanResult,
   options: BootcampOptions,
-  customPrompt?: string | null
+  customPrompt?: string | null,
+  styleConfig?: StyleConfig
 ): string {
+  const resolvedStyle = styleConfig || getStyleConfig(options.style);
   // Read key files inline
   const keyFiles = ["README.md", "readme.md", "package.json", "pyproject.toml", "Cargo.toml", "go.mod"];
   const inlineContents: string[] = [];
@@ -252,6 +329,8 @@ function createFastAnalysisPrompt(
   const cmdList = scanResult.commands.map((c) => `- ${c.name}: ${c.command}`).join("\n");
 
   const customSection = formatCustomPromptSection(customPrompt);
+  const audienceSection = getAudiencePromptGuidance(options.audience);
+  const styleSection = formatStylePromptSection(resolvedStyle);
 
   return `Analyze this repository and produce a comprehensive onboarding kit.
 
@@ -374,11 +453,13 @@ Based on the above information, produce a JSON object. Follow this EXACT structu
 
 Focus: ${options.focus}
 Target audience: ${options.audience}
+${audienceSection}
+${styleSection}
 ${customSection}
 
 INSTRUCTIONS:
 1. Replace the example values above with actual data from this repository
-2. Provide at least 3-5 firstTasks with varying difficulty levels
+2. Provide exactly ${resolvedStyle.firstTasksCount} firstTasks with varying difficulty levels when possible
 3. Set runbook.applicable = false for libraries that aren't deployed as services
 4. Use ONLY the exact enum values listed in the CRITICAL SCHEMA REQUIREMENTS section
 
@@ -460,7 +541,7 @@ function parseAndValidateRepoFacts(
 /**
  * Models to try in order of preference
  */
-const PREFERRED_MODELS = [
+export const PREFERRED_MODELS = [
   "claude-opus-4-5",
   "claude-sonnet-4-5",
   "claude-sonnet-4-20250514",
@@ -469,7 +550,7 @@ const PREFERRED_MODELS = [
 /**
  * Try to create a session with the preferred model, falling back to alternatives
  */
-async function createSessionWithFallback(
+export async function createSessionWithFallback(
   client: CopilotClient,
   config: Parameters<CopilotClient["createSession"]>[0],
   verbose: boolean = false,
@@ -522,7 +603,8 @@ export async function analyzeRepo(
   repoInfo: RepoInfo,
   scanResult: ScanResult,
   options: BootcampOptions,
-  onProgress?: (message: string) => void
+  onProgress?: (message: string) => void,
+  styleConfigOverride?: StyleConfig
 ): Promise<{ facts: RepoFacts; stats: AnalysisStats }> {
   const stats: AnalysisStats = {
     model: "",
@@ -534,6 +616,10 @@ export async function analyzeRepo(
 
   const client = new CopilotClient();
   const customPrompt = readCustomPrompt(repoPath, options.repoPrompts);
+  const resolvedStyleConfig = styleConfigOverride || getStyleConfig(options.style);
+  const configuredSystemPrompt = options.systemPrompt?.trim();
+  const standardSystemPrompt = configuredSystemPrompt || buildSystemPrompt(resolvedStyleConfig);
+  const fastSystemPrompt = configuredSystemPrompt || buildSystemPrompt(resolvedStyleConfig, true);
 
   if (customPrompt) {
     const source = options.repoPrompts || path.join(repoPath, CUSTOM_PROMPT_FILE);
@@ -547,7 +633,7 @@ export async function analyzeRepo(
         client,
         {
           streaming: true,
-          systemMessage: { content: "You are an expert software architect. Analyze repositories and produce JSON output." },
+          systemMessage: { content: fastSystemPrompt },
           // No tools in fast mode
         },
         options.verbose,
@@ -558,7 +644,14 @@ export async function analyzeRepo(
       console.log(chalk.blue(`\nUsing model: ${model}`));
       console.log(chalk.yellow(`⚡ Fast mode: no tools, inline file contents\n`));
 
-      const prompt = createFastAnalysisPrompt(repoPath, repoInfo, scanResult, options, customPrompt);
+      const prompt = createFastAnalysisPrompt(
+        repoPath,
+        repoInfo,
+        scanResult,
+        options,
+        customPrompt,
+        resolvedStyleConfig
+      );
       let fullResponse = "";
 
       session.on((event: SessionEvent) => {
@@ -621,7 +714,7 @@ export async function analyzeRepo(
       client,
       {
         streaming: true,
-        systemMessage: { content: SYSTEM_PROMPT },
+        systemMessage: { content: standardSystemPrompt },
         tools,
       },
       options.verbose,
@@ -632,7 +725,13 @@ export async function analyzeRepo(
     console.log(chalk.blue(`\nUsing model: ${model}`));
     console.log(chalk.gray(`Tools available: ${tools.map((t) => t.name).join(", ")}\n`));
 
-    const prompt = createAnalysisPrompt(repoInfo, scanResult, options, customPrompt);
+    const prompt = createAnalysisPrompt(
+      repoInfo,
+      scanResult,
+      options,
+      customPrompt,
+      resolvedStyleConfig
+    );
     let fullResponse = "";
 
     // Set up event handlers

@@ -9,15 +9,16 @@ import type { StylePack } from "../src/types.js";
 
 describe("Template Packs + Plugin System", () => {
   describe("STYLE_PACKS", () => {
-    it("should define all four style packs", () => {
+    it("should define all five style packs", () => {
+      expect(STYLE_PACKS.corporate).toBeDefined();
       expect(STYLE_PACKS.startup).toBeDefined();
-      expect(STYLE_PACKS.enterprise).toBeDefined();
       expect(STYLE_PACKS.oss).toBeDefined();
-      expect(STYLE_PACKS.devops).toBeDefined();
+      expect(STYLE_PACKS.academic).toBeDefined();
+      expect(STYLE_PACKS.minimal).toBeDefined();
     });
 
     it("should have correct structure for each pack", () => {
-      const styles: StylePack[] = ["startup", "enterprise", "oss", "devops"];
+      const styles: StylePack[] = ["corporate", "startup", "oss", "academic", "minimal"];
 
       for (const style of styles) {
         const pack = STYLE_PACKS[style];
@@ -37,21 +38,21 @@ describe("Template Packs + Plugin System", () => {
       expect(STYLE_PACKS.startup.emoji).toBe(true);
     });
 
-    it("should have enterprise pack with formal tone and no emoji", () => {
-      expect(STYLE_PACKS.enterprise.tone).toBe("formal");
-      expect(STYLE_PACKS.enterprise.emoji).toBe(false);
+    it("should have corporate pack with formal tone and no emoji", () => {
+      expect(STYLE_PACKS.corporate.tone).toBe("formal");
+      expect(STYLE_PACKS.corporate.emoji).toBe(false);
     });
 
     it("should have oss pack with casual tone", () => {
       expect(STYLE_PACKS.oss.tone).toBe("casual");
     });
 
-    it("should have devops pack with technical tone", () => {
-      expect(STYLE_PACKS.devops.tone).toBe("technical");
+    it("should have academic pack with technical tone", () => {
+      expect(STYLE_PACKS.academic.tone).toBe("technical");
     });
 
-    it("should have enterprise pack with most sections enabled", () => {
-      const sections = STYLE_PACKS.enterprise.sections;
+    it("should have corporate pack with most sections enabled", () => {
+      const sections = STYLE_PACKS.corporate.sections;
       expect(sections.showRunbook).toBe(true);
       expect(sections.showSecurityDetails).toBe(true);
       expect(sections.showDependencyGraph).toBe(true);
@@ -59,10 +60,13 @@ describe("Template Packs + Plugin System", () => {
       expect(sections.showImpact).toBe(true);
     });
 
-    it("should have startup pack with limited sections", () => {
-      const sections = STYLE_PACKS.startup.sections;
+    it("should have minimal pack with most sections disabled", () => {
+      const sections = STYLE_PACKS.minimal.sections;
+      expect(sections.showRunbook).toBe(false);
       expect(sections.showSecurityDetails).toBe(false);
       expect(sections.showDependencyGraph).toBe(false);
+      expect(sections.showRadar).toBe(false);
+      expect(sections.showImpact).toBe(false);
     });
   });
 
@@ -73,8 +77,8 @@ describe("Template Packs + Plugin System", () => {
     });
 
     it("should return specified style", () => {
-      const config = getStyleConfig("enterprise");
-      expect(config.name).toBe("enterprise");
+      const config = getStyleConfig("corporate");
+      expect(config.name).toBe("corporate");
     });
 
     it("should merge custom overrides", () => {

@@ -94,7 +94,7 @@ function makeMockOptions(overrides: Partial<BootcampOptions> = {}): BootcampOpti
   return {
     branch: "main",
     focus: "all",
-    audience: "oss-contributor",
+    audience: "backend",
     output: "./output",
     maxFiles: 200,
     noClone: false,
@@ -446,6 +446,20 @@ describe("standard mode (with tools)", () => {
     expect(sessionConfig.systemMessage.content).toContain("expert software architect");
   });
 
+  it("uses options.systemPrompt when provided", async () => {
+    configureSessionResponse(VALID_REPO_FACTS_JSON);
+
+    await analyzeRepo(
+      "/tmp/repo",
+      makeMockRepoInfo(),
+      makeMockScanResult(),
+      makeMockOptions({ systemPrompt: "Custom system prompt" })
+    );
+
+    const sessionConfig = sharedMockClient.createSession.mock.calls[0][0];
+    expect(sessionConfig.systemMessage.content).toBe("Custom system prompt");
+  });
+
   it("calls sharedMockClient.stop() on success", async () => {
     
     configureSessionResponse(VALID_REPO_FACTS_JSON);
@@ -778,6 +792,20 @@ describe("fast mode", () => {
     const sessionConfig = sharedMockClient.createSession.mock.calls[0][0];
     expect(sessionConfig.systemMessage.content).toContain("expert software architect");
     expect(sessionConfig.systemMessage.content).not.toContain("read_file");
+  });
+
+  it("uses options.systemPrompt in fast mode", async () => {
+    configureSessionResponse(VALID_REPO_FACTS_JSON);
+
+    await analyzeRepo(
+      "/tmp/repo",
+      makeMockRepoInfo(),
+      makeMockScanResult(),
+      makeMockOptions({ fast: true, systemPrompt: "Fast custom prompt" })
+    );
+
+    const sessionConfig = sharedMockClient.createSession.mock.calls[0][0];
+    expect(sessionConfig.systemMessage.content).toBe("Fast custom prompt");
   });
 
   it("throws on invalid JSON in fast mode (no retries)", async () => {
@@ -1156,12 +1184,13 @@ describe("prompt construction", () => {
       "/tmp/repo",
       makeMockRepoInfo(),
       makeMockScanResult(),
-      makeMockOptions({ focus: "architecture", audience: "new-hire" })
+      makeMockOptions({ focus: "architecture", audience: "frontend" })
     );
 
     const prompt = mockSession.sendAndWait.mock.calls[0][0].prompt;
     expect(prompt).toContain("architecture");
-    expect(prompt).toContain("new-hire");
+    expect(prompt).toContain("frontend");
+    expect(prompt).toContain("Audience Guidance (frontend)");
   });
 
   it("excludes directories from file list", async () => {

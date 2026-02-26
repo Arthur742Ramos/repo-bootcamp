@@ -71,7 +71,7 @@ https://github.com/Arthur742Ramos/repo-bootcamp/raw/main/media/demo-sonnet.mp4
   Repository:  https://github.com/sindresorhus/ky
   Branch:      default
   Focus:       all
-  Audience:    oss-contributor
+  Audience:    backend
   Style:       OSS (Community-friendly)
 ──────────────────────────────────────────────────
 
@@ -131,18 +131,20 @@ Onboarding Risk: 18/100 (A) 🟢
 1. **Powered by GitHub Copilot SDK** - Leverages the official SDK for agentic AI with tool-calling
 2. **Truly Agentic** - Claude autonomously explores codebases, not just template filling
 3. **Schema Validated** - All output is validated with Zod schemas and auto-retried on failures
-4. **Production Ready** - 205 tests, TypeScript, proper error handling
-5. **Full Feature Set** - Interactive mode, web UI, GitHub integration, version diffing
+4. **Production Ready** - 569 tests, TypeScript, proper error handling
+5. **Full Feature Set** - Interactive mode, web UI, docs drift analyzer, cache management, version diffing
 6. **Beautiful Output** - Mermaid diagrams, structured markdown, professional formatting
 
 ### By the Numbers
 
 | Metric | Value |
 |--------|-------|
+| GitHub stars | 29 |
 | Generated files | 12+ |
-| Test coverage | 205 tests |
-| Source files | 18 modules |
-| Lines of code | 7,500+ |
+| Test suite | 569 tests |
+| Source files | 36 TypeScript modules |
+| Test files | 25 Vitest files |
+| Lines of code | 10,992 TypeScript LOC (src/) |
 | Languages supported | 10+ |
 | Generation time | < 60 seconds |
 
@@ -238,13 +240,16 @@ The Copilot SDK transforms what would be a simple template-filler into an intell
 - **Schema Validation** - Validates LLM output with auto-retry on failures
 - **Multi-language Support** - Works with TypeScript, Python, Go, Rust, Java, and more
 - **Interactive Q&A Mode** - Chat with the codebase using natural language
+- **Docs Drift Analyzer** - Detect stale/mismatched docs with `bootcamp docs --check`, and auto-fix with `--fix`
+- **Cache Management** - Prune or clear analysis cache with `bootcamp cache prune|clear`
 - **Tech Radar** - Identify modern, stable, legacy, and risky technologies
 - **Change Impact Analysis** - Understand how file changes affect the codebase
-- **Version Comparison** - Compare refs to see onboarding-relevant changes
+- **Version & PR Comparison** - Compare refs with `--compare` or analyze pull requests with `bootcamp diff`
 - **Auto-Issue Creator** - Generate GitHub issues from starter tasks
 - **Web Demo Server** - Beautiful browser UI for analyzing repositories
 - **Template Packs** - Customize output style for different contexts
 - **Diagram Rendering** - Convert Mermaid to SVG/PNG with mermaid-cli
+- **Watch Mode** - Re-run analysis automatically when new commits are detected
 
 ## Example Output
 
@@ -373,10 +378,13 @@ bootcamp <github-url>
 bootcamp https://github.com/owner/repo \
   --branch main \
   --focus all \
-  --audience oss-contributor \
+  --audience backend \
   --output ./my-bootcamp \
   --verbose \
   --stats
+
+# Analyze an existing local checkout (no clone)
+bootcamp ./path/to/local/repo --no-clone
 ```
 
 ### Fast Mode
@@ -425,6 +433,9 @@ bootcamp https://github.com/owner/repo --watch
 
 # Custom polling interval (seconds)
 bootcamp https://github.com/owner/repo --watch --watch-interval 60
+
+# Allow destructive hard-reset fallback if fast-forward merge is not possible
+bootcamp https://github.com/owner/repo --watch --watch-force
 ```
 
 ### Auto-Create GitHub Issues
@@ -482,7 +493,7 @@ npm install -g @mermaid-js/mermaid-cli
 |--------|-------------|---------|
 | `-b, --branch <branch>` | Branch to analyze | default branch |
 | `-f, --focus <focus>` | Focus: onboarding, architecture, contributing, all | `all` |
-| `-a, --audience <type>` | Target: new-hire, oss-contributor, internal-dev | `oss-contributor` |
+| `-a, --audience <type>` | Target: backend, frontend, sre | `backend` |
 | `-o, --output <dir>` | Output directory | `./bootcamp-{repo}` |
 | `--format <format>` | Output format: markdown, html, pdf | `markdown` |
 | `-m, --max-files <n>` | Maximum files to scan | `200` |
@@ -495,11 +506,12 @@ npm install -g @mermaid-js/mermaid-cli
 | `--dry-run` | Preview issues without creating | false |
 | `--render-diagrams [format]` | Render Mermaid to SVG/PNG (requires mermaid-cli) | `svg` |
 | `--json-only` | Only generate repo_facts.json | false |
-| `--no-clone` | Use GitHub API instead of cloning (faster but limited) | false |
+| `--no-clone` | Use a local directory path instead of cloning | false |
 | `--fast` | Fast mode: inline key files, skip tools, much faster (~15-30s) | false |
 | `--keep-temp` | Keep temporary clone | false |
 | `-w, --watch` | Watch mode: re-run analysis on new commits | false |
 | `--watch-interval <seconds>` | Polling interval for watch mode in seconds | `30` |
+| `--watch-force` | Allow destructive `git reset --hard` fallback in watch mode | false |
 | `--stats` | Show detailed statistics | false |
 | `-v, --verbose` | Show tool calls and reasoning | false |
 
@@ -636,7 +648,7 @@ npm install
 # Build
 npm run build
 
-# Run tests (205 tests)
+# Run tests (569 tests)
 npm test
 
 # Watch mode
@@ -667,7 +679,7 @@ Set `--model` to override.
 - **Runtime:** Node.js 18+
 - **Language:** TypeScript 5.6
 - **AI:** GitHub Copilot SDK with Claude
-- **Testing:** Vitest (205 tests)
+- **Testing:** Vitest (569 tests)
 - **CLI:** Commander.js
 - **Validation:** Zod schemas
 - **Web:** Express 5 with SSE

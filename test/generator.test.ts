@@ -111,7 +111,7 @@ const mockFacts: RepoFacts = {
 const mockOptions: BootcampOptions = {
   branch: "main",
   focus: "all",
-  audience: "oss-contributor",
+  audience: "backend",
   output: "./output",
   maxFiles: 200,
   noClone: false,
@@ -174,6 +174,12 @@ describe("generateOnboarding", () => {
     const result = generateOnboarding(mockFacts);
     expect(result).toContain("npm test");
   });
+
+  it("includes audience-specific onboarding journey", () => {
+    const result = generateOnboarding(mockFacts, { audience: "frontend" });
+    expect(result).toContain("Frontend Start Here");
+    expect(result).toContain("Suggested first tasks");
+  });
 });
 
 describe("generateArchitecture", () => {
@@ -197,6 +203,12 @@ describe("generateArchitecture", () => {
   it("includes data flow", () => {
     const result = generateArchitecture(mockFacts);
     expect(result).toContain("Request -> Router");
+  });
+
+  it("includes audience-specific architecture focus", () => {
+    const result = generateArchitecture(mockFacts, { audience: "sre" });
+    expect(result).toContain("Operations & Reliability Focus");
+    expect(result).toContain(".github/workflows/ci.yml");
   });
 });
 
@@ -234,6 +246,12 @@ describe("generateFirstTasks", () => {
   it("includes files to look at", () => {
     const result = generateFirstTasks(mockFacts);
     expect(result).toContain("README.md");
+  });
+
+  it("includes audience-specific first-task picks", () => {
+    const result = generateFirstTasks(mockFacts, { audience: "backend" });
+    expect(result).toContain("Backend-first task picks");
+    expect(result).toContain("Add unit test");
   });
 });
 
@@ -344,10 +362,10 @@ describe("edge cases", () => {
   });
 
   it("handles different audience options", () => {
-    const audiences: Array<"new-hire" | "oss-contributor" | "internal-dev"> = [
-      "new-hire",
-      "oss-contributor",
-      "internal-dev",
+    const audiences: Array<"backend" | "frontend" | "sre"> = [
+      "backend",
+      "frontend",
+      "sre",
     ];
     for (const audience of audiences) {
       const opts = { ...mockOptions, audience };

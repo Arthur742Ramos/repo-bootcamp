@@ -184,7 +184,7 @@ function buildMockFacts(): RepoFacts {
 const DEFAULT_OPTIONS: BootcampOptions = {
   branch: "main",
   focus: "all",
-  audience: "oss-contributor",
+  audience: "backend",
   output: "",
   maxFiles: 200,
   noClone: false,
@@ -244,10 +244,10 @@ describe("E2E smoke test", () => {
     // Build document list (mirrors index.ts logic)
     const documents = [
       { name: "BOOTCAMP.md", content: generateBootcamp(facts, DEFAULT_OPTIONS) },
-      { name: "ONBOARDING.md", content: generateOnboarding(facts) },
-      { name: "ARCHITECTURE.md", content: generateArchitecture(facts) },
+      { name: "ONBOARDING.md", content: generateOnboarding(facts, DEFAULT_OPTIONS) },
+      { name: "ARCHITECTURE.md", content: generateArchitecture(facts, DEFAULT_OPTIONS) },
       { name: "CODEMAP.md", content: generateCodemap(facts) },
-      { name: "FIRST_TASKS.md", content: generateFirstTasks(facts) },
+      { name: "FIRST_TASKS.md", content: generateFirstTasks(facts, DEFAULT_OPTIONS) },
       { name: "RUNBOOK.md", content: generateRunbook(facts) },
       { name: "diagrams.mmd", content: generateDiagrams(facts) },
       { name: "repo_facts.json", content: JSON.stringify(facts, null, 2) },

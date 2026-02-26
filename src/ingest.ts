@@ -512,7 +512,7 @@ export async function readRepoFile(repoPath: string, filePath: string): Promise<
  */
 export function listFilesByPattern(files: FileInfo[], pattern: string): string[] {
   // Escape regex special chars, then convert glob syntax
-  const escaped = pattern.replace(/[-+?^${}()|[\]\\\.]/g, "\\$&");
+  const escaped = pattern.replace(/[-+?^${}()|[\].\\]/g, "\\$&");
   const regexPattern = escaped
     .replace(/\\\*\\\*/g, ".*")
     .replace(/\\\*/g, "[^/]*");

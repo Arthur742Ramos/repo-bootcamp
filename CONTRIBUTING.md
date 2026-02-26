@@ -103,7 +103,7 @@ repo-bootcamp/
 │   ├── ingest.ts  # Repository scanning
 │   ├── generator.ts # Documentation generation
 │   └── ...        # Other modules
-├── tests/         # Test files
+├── test/          # Test files
 ├── examples/      # Example outputs
 └── dist/          # Compiled output
 ```
