@@ -126,7 +126,7 @@ async function runAnalysis(job: AnalysisJob, options: Partial<BootcampOptions>):
     const useCache = !fullOptions.noCache && !!repoInfo.commitSha;
     const cacheOptions = {
       focus: fullOptions.focus,
-      style: fullOptions.style,
+      style: styleConfig.name,
       model: fullOptions.model,
       audience: fullOptions.audience,
     };
