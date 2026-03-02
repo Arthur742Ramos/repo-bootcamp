@@ -111,7 +111,7 @@ const mockFacts: RepoFacts = {
 const mockOptions: BootcampOptions = {
   branch: "main",
   focus: "all",
-  audience: "oss-contributor",
+  audience: "backend",
   output: "./output",
   maxFiles: 200,
   noClone: false,
@@ -150,6 +150,16 @@ describe("generateBootcamp", () => {
     expect(result).toContain("ONBOARDING.md");
     expect(result).toContain("ARCHITECTURE.md");
   });
+
+  it("applies style-specific links and tone", () => {
+    const startup = generateBootcamp(mockFacts, { ...mockOptions, style: "startup" });
+    const minimal = generateBootcamp(mockFacts, { ...mockOptions, style: "minimal" });
+
+    expect(startup).toContain("Let's get you up and running fast");
+    expect(minimal).toContain("Concise onboarding essentials");
+    expect(minimal).not.toContain("SECURITY.md");
+    expect(minimal).not.toContain("RUNBOOK.md");
+  });
 });
 
 describe("generateOnboarding", () => {
@@ -174,6 +184,12 @@ describe("generateOnboarding", () => {
     const result = generateOnboarding(mockFacts);
     expect(result).toContain("npm test");
   });
+
+  it("includes audience-specific onboarding journey", () => {
+    const result = generateOnboarding(mockFacts, { audience: "frontend" });
+    expect(result).toContain("Frontend Start Here");
+    expect(result).toContain("Suggested first tasks");
+  });
 });
 
 describe("generateArchitecture", () => {
@@ -197,6 +213,12 @@ describe("generateArchitecture", () => {
   it("includes data flow", () => {
     const result = generateArchitecture(mockFacts);
     expect(result).toContain("Request -> Router");
+  });
+
+  it("includes audience-specific architecture focus", () => {
+    const result = generateArchitecture(mockFacts, { audience: "sre" });
+    expect(result).toContain("Operations & Reliability Focus");
+    expect(result).toContain(".github/workflows/ci.yml");
   });
 });
 
@@ -234,6 +256,36 @@ describe("generateFirstTasks", () => {
   it("includes files to look at", () => {
     const result = generateFirstTasks(mockFacts);
     expect(result).toContain("README.md");
+  });
+
+  it("includes audience-specific first-task picks", () => {
+    const result = generateFirstTasks(mockFacts, { audience: "backend" });
+    expect(result).toContain("Backend-first task picks");
+    expect(result).toContain("Add unit test");
+  });
+
+  it("limits and simplifies tasks for minimal style", () => {
+    const expandedFacts = {
+      ...mockFacts,
+      firstTasks: Array.from({ length: 6 }, (_, i) => ({
+        title: `Task ${i + 1}`,
+        description: `Description ${i + 1}`,
+        difficulty: (i % 3 === 0 ? "beginner" : i % 3 === 1 ? "intermediate" : "advanced") as
+          | "beginner"
+          | "intermediate"
+          | "advanced",
+        category: "docs" as const,
+        files: [`file-${i + 1}.ts`],
+        why: `Why ${i + 1}`,
+      })),
+    };
+
+    const minimal = generateFirstTasks(expandedFacts, { audience: "backend", style: "minimal" });
+    const corporate = generateFirstTasks(expandedFacts, { audience: "backend", style: "corporate" });
+
+    expect((minimal.match(/^### /gm) || []).length).toBe(3);
+    expect(minimal).not.toContain("Why this matters");
+    expect(corporate).toContain("Why this matters");
   });
 });
 
@@ -344,10 +396,10 @@ describe("edge cases", () => {
   });
 
   it("handles different audience options", () => {
-    const audiences: Array<"new-hire" | "oss-contributor" | "internal-dev"> = [
-      "new-hire",
-      "oss-contributor",
-      "internal-dev",
+    const audiences: Array<"backend" | "frontend" | "sre"> = [
+      "backend",
+      "frontend",
+      "sre",
     ];
     for (const audience of audiences) {
       const opts = { ...mockOptions, audience };

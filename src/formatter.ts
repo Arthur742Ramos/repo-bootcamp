@@ -25,9 +25,21 @@ function escapeHtml(text: string): string {
  */
 function convertCodeBlocks(match: string): string {
   return match.replace(/```(\w*)\n([\s\S]*?)```/g, (_m, lang, code) => {
+    if (lang === "mermaid") {
+      return `<div class="mermaid">\n${escapeHtml(code.trimEnd())}\n</div>`;
+    }
     const cls = lang ? ` class="language-${lang}"` : "";
     return `<pre><code${cls}>${escapeHtml(code.trimEnd())}</code></pre>`;
   });
+}
+
+function getMermaidRuntime(body: string): string {
+  if (!body.includes('class="mermaid"')) return "";
+  return `
+<script type="module">
+  import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs";
+  mermaid.initialize({ startOnLoad: true });
+</script>`;
 }
 
 /**
@@ -187,6 +199,7 @@ export function markdownToHtml(md: string): string {
  * Wrap HTML body content in a full HTML page with basic styling.
  */
 export function wrapHtmlPage(body: string, title: string): string {
+  const mermaidRuntime = getMermaidRuntime(body);
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -207,12 +220,14 @@ export function wrapHtmlPage(body: string, title: string): string {
   a { color: #0969da; text-decoration: none; }
   a:hover { text-decoration: underline; }
   img { max-width: 100%; }
+  .mermaid { overflow-x: auto; }
   details { margin: 0.5em 0; }
   summary { cursor: pointer; }
 </style>
 </head>
 <body>
 ${body}
+${mermaidRuntime}
 </body>
 </html>`;
 }
@@ -228,11 +243,12 @@ export function convertToHtml(markdown: string, title: string): string {
  * Convert a markdown document to a PDF-ready HTML page.
  *
  * Returns HTML with print-optimised styles. The caller can write this
- * to a `.pdf.html` file and use a headless browser to produce the
+ * to a `.html` file and use a headless browser to produce the
  * actual PDF, or pipe it directly.
  */
 export function convertToPdf(markdown: string, title: string): string {
   const body = markdownToHtml(markdown);
+  const mermaidRuntime = getMermaidRuntime(body);
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -252,10 +268,12 @@ export function convertToPdf(markdown: string, title: string): string {
   hr { border: none; border-top: 1px solid #d0d7de; margin: 2em 0; }
   a { color: #0969da; text-decoration: none; }
   img { max-width: 100%; }
+  .mermaid { overflow-x: auto; }
 </style>
 </head>
 <body>
 ${body}
+${mermaidRuntime}
 </body>
 </html>`;
 }
@@ -266,7 +284,7 @@ ${body}
 export function getFileExtension(format: OutputFormat): string {
   switch (format) {
     case "html": return ".html";
-    case "pdf": return ".pdf.html";
+    case "pdf": return ".html";
     default: return "";
   }
 }
@@ -279,11 +297,11 @@ export function formatFileName(originalName: string, format: OutputFormat): stri
   if (format === "markdown") return originalName;
 
   // Don't convert non-markdown files (JSON, mermaid)
-  if (!originalName.endsWith(".md") && !originalName.endsWith(".mmd")) {
+  if (!originalName.endsWith(".md")) {
     return originalName;
   }
 
-  const baseName = originalName.replace(/\.(md|mmd)$/, "");
+  const baseName = originalName.replace(/\.md$/, "");
   return baseName + getFileExtension(format);
 }
 
@@ -299,11 +317,11 @@ export function formatContent(
   if (format === "markdown") return content;
 
   // Don't convert non-markdown files
-  if (!originalName.endsWith(".md") && !originalName.endsWith(".mmd")) {
+  if (!originalName.endsWith(".md")) {
     return content;
   }
 
-  const title = originalName.replace(/\.(md|mmd)$/, "");
+  const title = originalName.replace(/\.md$/, "");
   if (format === "html") return convertToHtml(content, title);
   if (format === "pdf") return convertToPdf(content, title);
   return content;

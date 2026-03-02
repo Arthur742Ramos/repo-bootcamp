@@ -91,7 +91,7 @@ describe("InteractiveSession", () => {
     expect(mockCreateSession).toHaveBeenCalledWith(
       expect.objectContaining({
         streaming: true,
-        model: "claude-sonnet-4-20250514",
+        model: "claude-opus-4-5",
         systemMessage: {
           content: expect.stringContaining("expert assistant"),
         },
@@ -134,6 +134,34 @@ describe("InteractiveSession", () => {
     const transcript = session.getTranscript();
     expect(transcript.messages).toHaveLength(2);
     expect(transcript.messages[1].citations).toContain("src/index.ts");
+  });
+
+  it("registers a single listener across multiple questions", async () => {
+    let handler: ((event: Record<string, any>) => void) | undefined;
+    mockSession.on.mockImplementation((cb) => {
+      handler = cb;
+    });
+
+    mockSession.sendAndWait
+      .mockResolvedValueOnce(undefined)
+      .mockImplementationOnce(async () => {
+        handler?.({ type: "assistant.message_delta", data: { deltaContent: "First answer" } });
+      })
+      .mockImplementationOnce(async () => {
+        handler?.({ type: "assistant.message_delta", data: { deltaContent: "Second answer" } });
+      });
+
+    const session = new InteractiveSession("/repo", repoInfo, scanResult);
+    await session.initialize();
+
+    const writeSpy = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+    const first = await session.ask("first");
+    const second = await session.ask("second");
+    writeSpy.mockRestore();
+
+    expect(first).toBe("First answer");
+    expect(second).toBe("Second answer");
+    expect(mockSession.on).toHaveBeenCalledTimes(1);
   });
 
   it("saves transcript markdown", async () => {

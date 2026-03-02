@@ -190,7 +190,6 @@ export function getIndexHtml(): string {
 
     function getFileKey(filename) {
       if (filename === 'repo_facts.json') return filename;
-      if (filename.endsWith('.pdf.html')) return filename.slice(0, -'.pdf.html'.length);
       if (filename.endsWith('.html')) return filename.slice(0, -'.html'.length);
       if (filename.endsWith('.md')) return filename.slice(0, -'.md'.length);
       if (filename.endsWith('.mmd')) return filename.slice(0, -'.mmd'.length);

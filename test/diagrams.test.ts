@@ -4,6 +4,7 @@
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { parseMermaidFile } from "../src/diagrams.js";
+import { generateDiagrams } from "../src/generator.js";
 
 describe("diagrams", () => {
   describe("parseMermaidFile", () => {
@@ -34,6 +35,31 @@ sequenceDiagram
       expect(diagrams[0].code).toContain("flowchart TD");
       expect(diagrams[1].title).toBe("data-flow");
       expect(diagrams[1].code).toContain("sequenceDiagram");
+    });
+
+    it("parses generated markdown mermaid sections as multiple diagrams", () => {
+      const content = generateDiagrams({
+        repoName: "test/repo",
+        architecture: {
+          components: [
+            { name: "API" },
+            { name: "Worker" },
+          ],
+        },
+        structure: {
+          keyDirs: [
+            { path: "src" },
+            { path: "test" },
+          ],
+        },
+      } as never);
+
+      const diagrams = parseMermaidFile(content);
+      expect(diagrams).toHaveLength(3);
+      expect(diagrams[0].title).toBe("component-architecture");
+      expect(diagrams[1].title).toBe("directory-structure");
+      expect(diagrams[2].title).toBe("ci-cd-pipeline");
+      expect(diagrams[2].code).toContain("graph LR");
     });
 
     it("handles diagrams without titles", () => {

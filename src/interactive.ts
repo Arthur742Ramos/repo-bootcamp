@@ -13,7 +13,7 @@ import type {
   Transcript,
 } from "./types.js";
 import { getRepoTools } from "./tools.js";
-import { readCustomPrompt, formatCustomPromptSection } from "./agent.js";
+import { createSessionWithFallback, readCustomPrompt, formatCustomPromptSection } from "./agent.js";
 import { writeFile } from "fs/promises";
 import { join } from "path";
 
@@ -85,13 +85,18 @@ export class InteractiveSession {
   private scanResult: ScanResult;
   private facts?: RepoFacts;
   private verbose: boolean;
+  private modelOverride?: string;
+  private awaitingResponse = false;
+  private activeResponse = "";
+  private activeCitations: string[] = [];
 
   constructor(
     repoPath: string,
     repoInfo: RepoInfo,
     scanResult: ScanResult,
     facts?: RepoFacts,
-    verbose: boolean = false
+    verbose: boolean = false,
+    modelOverride?: string
   ) {
     this.client = new CopilotClient();
     this.repoPath = repoPath;
@@ -99,6 +104,7 @@ export class InteractiveSession {
     this.scanResult = scanResult;
     this.facts = facts;
     this.verbose = verbose;
+    this.modelOverride = modelOverride;
     this.transcript = {
       repoName: repoInfo.fullName,
       startedAt: new Date(),
@@ -129,12 +135,18 @@ export class InteractiveSession {
     const customPrompt = readCustomPrompt(this.repoPath);
     const systemPrompt = `${INTERACTIVE_SYSTEM_PROMPT}${formatCustomPromptSection(customPrompt)}`;
 
-    this.session = await this.client.createSession({
-      streaming: true,
-      systemMessage: { content: systemPrompt },
-      tools,
-      model: "claude-sonnet-4-20250514",
-    });
+    const { session } = await createSessionWithFallback(
+      this.client,
+      {
+        streaming: true,
+        systemMessage: { content: systemPrompt },
+        tools,
+      },
+      this.verbose,
+      this.modelOverride
+    );
+    this.session = session;
+    this.session.on((event: SessionEvent) => this.handleSessionEvent(event));
 
     // Send initial context
     const contextMessage = createContextMessage(this.repoInfo, this.scanResult, this.facts);
@@ -158,33 +170,19 @@ export class InteractiveSession {
       timestamp: new Date(),
     });
 
-    let fullResponse = "";
-    const citations: string[] = [];
-
-    // Set up event handlers
-    this.session.on((event: SessionEvent) => {
-      if (event.type === "assistant.message_delta") {
-        const delta = event.data.deltaContent;
-        if (delta) {
-          fullResponse += delta;
-          process.stdout.write(delta);
-        }
-      }
-
-      // Extract citations from tool calls
-      const eventAny = event as Record<string, unknown>;
-      if (eventAny.type === "tool.call") {
-        const data = eventAny.data as Record<string, unknown> | undefined;
-        const toolName = data?.name as string | undefined;
-        const args = data?.arguments as Record<string, unknown> | undefined;
-        if (toolName === "read_file" && args?.path) {
-          citations.push(args.path as string);
-        }
-      }
-    });
+    this.awaitingResponse = true;
+    this.activeResponse = "";
+    this.activeCitations = [];
 
     // Send question
-    await this.session.sendAndWait({ prompt: question }, 120000);
+    try {
+      await this.session.sendAndWait({ prompt: question }, 120000);
+    } finally {
+      this.awaitingResponse = false;
+    }
+
+    const fullResponse = this.activeResponse;
+    const citations = [...new Set(this.activeCitations)];
 
     console.log(); // Newline after response
 
@@ -197,6 +195,31 @@ export class InteractiveSession {
     });
 
     return fullResponse;
+  }
+
+  private handleSessionEvent(event: SessionEvent): void {
+    if (!this.awaitingResponse) {
+      return;
+    }
+
+    if (event.type === "assistant.message_delta") {
+      const delta = event.data.deltaContent;
+      if (delta) {
+        this.activeResponse += delta;
+        process.stdout.write(delta);
+      }
+    }
+
+    // Extract citations from tool calls
+    const eventAny = event as Record<string, unknown>;
+    if (eventAny.type === "tool.call") {
+      const data = eventAny.data as Record<string, unknown> | undefined;
+      const toolName = data?.name as string | undefined;
+      const args = data?.arguments as Record<string, unknown> | undefined;
+      if (toolName === "read_file" && args?.path) {
+        this.activeCitations.push(args.path as string);
+      }
+    }
   }
 
   /**
@@ -276,7 +299,7 @@ export async function runInteractiveMode(
   scanResult: ScanResult,
   outputDir: string,
   facts?: RepoFacts,
-  options?: { verbose?: boolean; saveTranscript?: boolean }
+  options?: { verbose?: boolean; saveTranscript?: boolean; model?: string }
 ): Promise<void> {
   console.log(chalk.bold.cyan("\n=== Interactive Mode ==="));
   console.log(chalk.gray(`Repository: ${repoInfo.fullName}`));
@@ -287,7 +310,8 @@ export async function runInteractiveMode(
     repoInfo,
     scanResult,
     facts,
-    options?.verbose
+    options?.verbose,
+    options?.model
   );
 
   try {
@@ -350,14 +374,16 @@ export async function quickAsk(
   repoInfo: RepoInfo,
   scanResult: ScanResult,
   question: string,
-  verbose: boolean = false
+  verbose: boolean = false,
+  model?: string
 ): Promise<string> {
   const session = new InteractiveSession(
     repoPath,
     repoInfo,
     scanResult,
     undefined,
-    verbose
+    verbose,
+    model
   );
 
   try {

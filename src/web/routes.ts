@@ -21,6 +21,7 @@ import {
   generateRunbook,
   generateDiagrams,
 } from "../generator.js";
+import { getStyleConfig } from "../plugins.js";
 import type { BootcampOptions, RepoFacts } from "../types.js";
 
 /**
@@ -111,7 +112,7 @@ async function runAnalysis(job: AnalysisJob, options: Partial<BootcampOptions>):
     const fullOptions: BootcampOptions = {
       branch: options.branch || "",
       focus: options.focus || "all",
-      audience: options.audience || "oss-contributor",
+      audience: options.audience || "all",
       output: "",
       maxFiles: options.maxFiles || 200,
       noClone: false,
@@ -119,15 +120,22 @@ async function runAnalysis(job: AnalysisJob, options: Partial<BootcampOptions>):
       ...options,
       format: outputFormat,
     };
+    const styleConfig = getStyleConfig(fullOptions.style);
 
     const analysisStart = Date.now();
     const useCache = !fullOptions.noCache && !!repoInfo.commitSha;
+    const cacheOptions = {
+      focus: fullOptions.focus,
+      style: styleConfig.name,
+      model: fullOptions.model,
+      audience: fullOptions.audience,
+    };
     let cacheHit = false;
     let facts!: RepoFacts;
     let analysisStats!: AnalysisStats;
 
     if (useCache) {
-      const cached = await readCache(repoInfo.fullName, repoInfo.commitSha!);
+      const cached = await readCache(repoInfo.fullName, repoInfo.commitSha!, cacheOptions);
       if (cached) {
         facts = cached;
         cacheHit = true;
@@ -153,7 +161,7 @@ async function runAnalysis(job: AnalysisJob, options: Partial<BootcampOptions>):
           toolCallCount++;
           emit({ type: "progress", message: `Tool call ${toolCallCount}: ${msg}` });
         }
-      });
+      }, styleConfig);
       facts = result.facts;
       analysisStats = result.stats;
       emit({
@@ -163,17 +171,21 @@ async function runAnalysis(job: AnalysisJob, options: Partial<BootcampOptions>):
 
       if (useCache) {
         try {
-          await writeCache(repoInfo.fullName, repoInfo.commitSha!, facts);
+          await writeCache(repoInfo.fullName, repoInfo.commitSha!, facts, cacheOptions);
         } catch {
           // Cache write failure is non-fatal
         }
       }
     }
+    const styledFacts: RepoFacts = {
+      ...facts,
+      firstTasks: facts.firstTasks.slice(0, styleConfig.firstTasksCount),
+    };
 
     // Generate docs
     emit({ type: "phase", phase: "generate", message: "Generating documentation..." });
     
-    const outputDir = join(process.cwd(), `.bootcamp-output`, repoInfo.repo);
+    const outputDir = join(process.cwd(), `.bootcamp-output`, job.id, repoInfo.repo);
     await mkdir(outputDir, { recursive: true });
 
     const { deps, security, radar, impacts } = await runParallelAnalysis(
@@ -183,26 +195,35 @@ async function runAnalysis(job: AnalysisJob, options: Partial<BootcampOptions>):
 
     // Generate all docs
     const documents = [
-      { name: "BOOTCAMP.md", content: generateBootcamp(facts, fullOptions) },
-      { name: "ONBOARDING.md", content: generateOnboarding(facts) },
-      { name: "ARCHITECTURE.md", content: generateArchitecture(facts) },
-      { name: "CODEMAP.md", content: generateCodemap(facts) },
-      { name: "FIRST_TASKS.md", content: generateFirstTasks(facts) },
-      { name: "RUNBOOK.md", content: generateRunbook(facts) },
-      { name: "diagrams.mmd", content: generateDiagrams(facts) },
-      { name: "repo_facts.json", content: JSON.stringify(facts, null, 2) },
-      { name: "SECURITY.md", content: generateSecurityDocs(security, repoInfo.repo) },
-      { name: "RADAR.md", content: generateRadarDocs(radar, repoInfo.repo) },
+      { name: "BOOTCAMP.md", content: generateBootcamp(styledFacts, fullOptions, styleConfig) },
+      { name: "ONBOARDING.md", content: generateOnboarding(styledFacts, fullOptions) },
+      { name: "ARCHITECTURE.md", content: generateArchitecture(styledFacts, fullOptions) },
+      { name: "CODEMAP.md", content: generateCodemap(styledFacts) },
+      { name: "FIRST_TASKS.md", content: generateFirstTasks(styledFacts, fullOptions, styleConfig) },
+      { name: "diagrams.mmd", content: generateDiagrams(styledFacts) },
+      { name: "repo_facts.json", content: JSON.stringify(styledFacts, null, 2) },
     ];
 
-    if (deps) {
+    if (styleConfig.sections.showRunbook) {
+      documents.push({ name: "RUNBOOK.md", content: generateRunbook(styledFacts) });
+    }
+
+    if (styleConfig.sections.showSecurityDetails) {
+      documents.push({ name: "SECURITY.md", content: generateSecurityDocs(security, repoInfo.repo) });
+    }
+
+    if (styleConfig.sections.showRadar) {
+      documents.push({ name: "RADAR.md", content: generateRadarDocs(radar, repoInfo.repo) });
+    }
+
+    if (deps && styleConfig.sections.showDependencyGraph) {
       documents.push({
         name: "DEPENDENCIES.md",
         content: generateDependencyDocs(deps, repoInfo.repo),
       });
     }
 
-    if (impacts.length > 0) {
+    if (impacts.length > 0 && styleConfig.sections.showImpact) {
       documents.push({
         name: "IMPACT.md",
         content: generateImpactDocs(impacts, repoInfo.repo),

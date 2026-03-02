@@ -19,8 +19,10 @@ const execFileAsync = promisify(execFile);
 export function parseGitHubUrl(url: string): RepoInfo {
   // Handle various GitHub URL formats
   const patterns = [
-    /github\.com\/([^/]+)\/([^/.]+)/,
-    /github\.com:([^/]+)\/([^/.]+)/,
+    /github\.com\/([^/]+)\/([^/]+?)(?:\.git)?$/,
+    /github\.com\/([^/]+)\/([^/]+)/,
+    /github\.com:([^/]+)\/([^/]+?)(?:\.git)?$/,
+    /github\.com:([^/]+)\/([^/]+)/,
   ];
 
   for (const pattern of patterns) {
@@ -202,6 +204,17 @@ function detectStack(files: FileInfo[]): StackInfo {
   // Set build system based on package.json if not set
   if (!stack.buildSystem && fileNameSet.has("package.json")) {
     stack.buildSystem = "npm";
+  }
+
+  // Infer package manager from package.json if not detected from lock files
+  if (!stack.packageManager && fileNameSet.has("package.json")) {
+    stack.packageManager = "npm";
+  }
+  if (!stack.packageManager && fileNameSet.has("pyproject.toml")) {
+    stack.packageManager = "pip";
+  }
+  if (!stack.packageManager && fileNameSet.has("Cargo.toml")) {
+    stack.packageManager = "cargo";
   }
 
   return stack;
@@ -512,7 +525,7 @@ export async function readRepoFile(repoPath: string, filePath: string): Promise<
  */
 export function listFilesByPattern(files: FileInfo[], pattern: string): string[] {
   // Escape regex special chars, then convert glob syntax
-  const escaped = pattern.replace(/[-+?^${}()|[\]\\\.]/g, "\\$&");
+  const escaped = pattern.replace(/[-+?^${}()|[\].\\]/g, "\\$&");
   const regexPattern = escaped
     .replace(/\\\*\\\*/g, ".*")
     .replace(/\\\*/g, "[^/]*");

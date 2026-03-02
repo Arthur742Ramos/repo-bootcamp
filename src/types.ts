@@ -8,9 +8,10 @@ import type { OutputFormat } from "./formatter.js";
 export interface BootcampOptions {
   branch: string;
   focus: "onboarding" | "architecture" | "contributing" | "all";
-  audience: "new-hire" | "oss-contributor" | "internal-dev";
+  audience: "all" | "backend" | "frontend" | "sre";
   output: string;
   maxFiles: number;
+  /** When true, the main command expects a local repository path input instead of cloning. */
   noClone: boolean;
   verbose: boolean;
   model?: string;
@@ -27,17 +28,19 @@ export interface BootcampOptions {
   format?: OutputFormat;
   renderDiagrams?: boolean;
   diagramFormat?: "svg" | "png" | "pdf";
-  style?: "startup" | "enterprise" | "oss" | "devops";
+  style?: "corporate" | "startup" | "oss" | "academic" | "minimal";
   web?: boolean;
   fullClone?: boolean;
   watch?: boolean;
   watchInterval?: number;
+  watchForce?: boolean;
   noCache?: boolean;
   repoPrompts?: string;
+  systemPrompt?: string;
 }
 
 // Template style pack
-export type StylePack = "startup" | "enterprise" | "oss" | "devops";
+export type StylePack = "corporate" | "startup" | "oss" | "academic" | "minimal";
 
 // Tech Radar signal
 export interface RadarSignal {

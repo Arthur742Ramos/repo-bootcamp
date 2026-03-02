@@ -9,7 +9,6 @@
  * - Stale badge URLs
  */
 
-import { readFile } from "fs/promises";
 import { join } from "path";
 import { execFileSync } from "child_process";
 import { readFileSafe, README_NAMES } from "./utils.js";

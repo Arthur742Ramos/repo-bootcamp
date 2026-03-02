@@ -108,11 +108,13 @@ function createLocalRepoInfo(localPath: string, repoName: string): RepoInfo {
  * 
  * @param input - Either a local filesystem path or a GitHub URL
  * @param outputDir - Output directory (used for cloning GitHub repos)
+ * @param branch - Optional branch to clone for GitHub URLs
  * @returns A RepoSource with path, metadata, and cleanup function
  */
 export async function resolveRepo(
   input: string,
-  outputDir: string = process.cwd()
+  outputDir: string = process.cwd(),
+  branch?: string
 ): Promise<RepoSource> {
   if (isLocalPath(input)) {
     // Handle local path
@@ -152,7 +154,7 @@ export async function resolveRepo(
   } else {
     // Handle GitHub URL
     const repoInfo = parseGitHubUrl(input);
-    const clonePath = await cloneRepo(repoInfo, outputDir);
+    const clonePath = await cloneRepo(repoInfo, outputDir, branch);
     
     return {
       path: clonePath,

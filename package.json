@@ -36,7 +36,7 @@
     "url": "https://github.com/Arthur742Ramos/repo-bootcamp/issues"
   },
   "scripts": {
-    "build": "tsc && npm run copy:data",
+    "build": "tsc -p tsconfig.build.json && npm run copy:data",
     "copy:data": "node --input-type=module -e \"import { cpSync } from 'node:fs'; cpSync('src/data','dist/data',{ recursive: true, force: true });\"",
     "start": "tsx src/index.ts",
     "dev": "tsx watch src/index.ts",

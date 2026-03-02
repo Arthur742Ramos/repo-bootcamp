@@ -44,11 +44,11 @@ describe("parseGitHubUrl", () => {
     expect(result.repo).toBe("my-awesome-repo");
   });
 
-  it("strips extension from repo name in URL", () => {
-    // The regex excludes dots from repo name capture
-    // This is intentional to handle .git suffix cleanly
+  it("preserves dots in repo names like next.js", () => {
+    // Repo names can contain dots (e.g., next.js, socket.io)
+    // Only .git suffix should be stripped
     const result = parseGitHubUrl("https://github.com/owner/repo.js");
-    expect(result.repo).toBe("repo");
+    expect(result.repo).toBe("repo.js");
   });
 
   it("handles repos with underscores", () => {

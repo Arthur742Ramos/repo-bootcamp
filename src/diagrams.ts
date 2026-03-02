@@ -55,7 +55,65 @@ async function getMmdcCommand(): Promise<{ cmd: string; args: string[] }> {
  * Parse a .mmd file that may contain multiple diagrams
  * Each diagram should start with a title comment: %%% Title Name
  */
+function normalizeDiagramTitle(title: string, fallback = "diagram"): string {
+  const normalized = title
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  return normalized || fallback;
+}
+
 export function parseMermaidFile(content: string): Array<{ title: string; code: string }> {
+  const fencedDiagrams: Array<{ title: string; code: string }> = [];
+  const fencedLines = content.split("\n");
+  let fencedTitle = "diagram";
+  let inFence = false;
+  let fencedCode: string[] = [];
+
+  for (const line of fencedLines) {
+    if (!inFence) {
+      const titleMatch = line.match(/^%%%\s*(.+)$/);
+      if (titleMatch) {
+        fencedTitle = normalizeDiagramTitle(titleMatch[1], "diagram");
+        continue;
+      }
+
+      const headingMatch = line.match(/^#{1,6}\s+(.+)$/);
+      if (headingMatch) {
+        fencedTitle = normalizeDiagramTitle(headingMatch[1], "diagram");
+        continue;
+      }
+    }
+
+    if (!inFence && line.trim().startsWith("```mermaid")) {
+      inFence = true;
+      fencedCode = [];
+      continue;
+    }
+
+    if (inFence && line.trim() === "```") {
+      const code = fencedCode.join("\n").trim();
+      if (code) {
+        fencedDiagrams.push({
+          title: fencedTitle,
+          code,
+        });
+      }
+      inFence = false;
+      fencedCode = [];
+      continue;
+    }
+
+    if (inFence) {
+      fencedCode.push(line);
+    }
+  }
+
+  if (fencedDiagrams.length > 0) {
+    return fencedDiagrams;
+  }
+
   const diagrams: Array<{ title: string; code: string }> = [];
   const lines = content.split("\n");
 
@@ -74,7 +132,7 @@ export function parseMermaidFile(content: string): Array<{ title: string; code: 
           code: currentCode.join("\n").trim(),
         });
       }
-      currentTitle = titleMatch[1].trim().replace(/\s+/g, "-").toLowerCase();
+      currentTitle = normalizeDiagramTitle(titleMatch[1], "diagram");
       currentCode = [];
       inDiagram = false;
       continue;
@@ -101,15 +159,17 @@ export function parseMermaidFile(content: string): Array<{ title: string; code: 
 
     if (!inDiagram && diagramStarters.some((s) => line.trim().startsWith(s))) {
       inDiagram = true;
+      currentCode = [line];
+      continue;
     }
 
-    if (inDiagram || line.trim()) {
+    if (inDiagram) {
       currentCode.push(line);
     }
   }
 
   // Don't forget the last diagram
-  if (currentCode.length > 0) {
+  if (currentCode.length > 0 && inDiagram) {
     diagrams.push({
       title: currentTitle,
       code: currentCode.join("\n").trim(),
