@@ -3,7 +3,10 @@
  */
 
 import { describe, it, expect } from "vitest";
-import { parseGitHubUrl, detectFrameworksFromDeps, mergeFrameworksFromDeps } from "../src/ingest.js";
+import { mkdtemp, mkdir, rm, writeFile } from "fs/promises";
+import { join } from "path";
+import { tmpdir } from "os";
+import { parseGitHubUrl, detectFrameworksFromDeps, mergeFrameworksFromDeps, scanRepo } from "../src/ingest.js";
 import type { StackInfo } from "../src/types.js";
 
 describe("parseGitHubUrl", () => {
@@ -13,6 +16,7 @@ describe("parseGitHubUrl", () => {
     expect(result.repo).toBe("repo");
     expect(result.fullName).toBe("owner/repo");
     expect(result.url).toBe("https://github.com/owner/repo");
+    expect(result.provider).toBe("github");
   });
 
   it("parses URL with .git suffix", () => {
@@ -32,11 +36,49 @@ describe("parseGitHubUrl", () => {
     const result = parseGitHubUrl("git@github.com:owner/repo.git");
     expect(result.owner).toBe("owner");
     expect(result.repo).toBe("repo");
+    expect(result.url).toBe("https://github.com/owner/repo");
   });
 
-  it("throws on invalid URL", () => {
+  it("parses GitLab URL", () => {
+    const result = parseGitHubUrl("https://gitlab.com/owner/repo");
+    expect(result.owner).toBe("owner");
+    expect(result.repo).toBe("repo");
+    expect(result.url).toBe("https://gitlab.com/owner/repo");
+    expect(result.provider).toBe("gitlab");
+  });
+
+  it("parses GitLab URL with nested groups", () => {
+    const result = parseGitHubUrl("https://gitlab.com/group/subgroup/repo");
+    expect(result.owner).toBe("group/subgroup");
+    expect(result.repo).toBe("repo");
+    expect(result.fullName).toBe("group/subgroup/repo");
+  });
+
+  it("parses Bitbucket URL", () => {
+    const result = parseGitHubUrl("https://bitbucket.org/owner/repo");
+    expect(result.owner).toBe("owner");
+    expect(result.repo).toBe("repo");
+    expect(result.url).toBe("https://bitbucket.org/owner/repo");
+    expect(result.provider).toBe("bitbucket");
+  });
+
+  it("parses SSH-style GitLab URL", () => {
+    const result = parseGitHubUrl("git@gitlab.com:group/project.git");
+    expect(result.owner).toBe("group");
+    expect(result.repo).toBe("project");
+    expect(result.url).toBe("https://gitlab.com/group/project");
+  });
+
+  it("parses SSH GitLab URL", () => {
+    const result = parseGitHubUrl("git@gitlab.com:group/subgroup/repo.git");
+    expect(result.owner).toBe("group/subgroup");
+    expect(result.repo).toBe("repo");
+    expect(result.provider).toBe("gitlab");
+  });
+
+  it("throws on invalid or unsupported URL", () => {
     expect(() => parseGitHubUrl("not-a-url")).toThrow("Invalid GitHub URL");
-    expect(() => parseGitHubUrl("https://gitlab.com/owner/repo")).toThrow("Invalid GitHub URL");
+    expect(() => parseGitHubUrl("https://example.com/owner/repo")).toThrow("Invalid GitHub URL");
   });
 
   it("handles complex repo names", () => {
@@ -66,6 +108,14 @@ describe("parseGitHubUrl", () => {
     expect(() => parseGitHubUrl("")).toThrow("Invalid GitHub URL");
   });
 
+  it("rejects URL values containing control characters", () => {
+    expect(() => parseGitHubUrl("https://github.com/owner/repo\nbad")).toThrow("Invalid GitHub URL");
+  });
+
+  it("rejects traversal-style URL segments", () => {
+    expect(() => parseGitHubUrl("https://github.com/%2E%2E/repo")).toThrow("Invalid GitHub URL");
+  });
+
   it("throws on URL with only owner", () => {
     expect(() => parseGitHubUrl("https://github.com/owner")).toThrow("Invalid GitHub URL");
   });
@@ -83,16 +133,15 @@ describe("parseGitHubUrl", () => {
   });
 
   it("handles URL with query string", () => {
-    // Query string is captured in the regex; parseGitHubUrl extracts what it can
     const result = parseGitHubUrl("https://github.com/owner/repo?tab=readme");
     expect(result.owner).toBe("owner");
-    expect(result.repo).toBe("repo?tab=readme");
+    expect(result.repo).toBe("repo");
   });
 
   it("handles URL with fragment", () => {
     const result = parseGitHubUrl("https://github.com/owner/repo#readme");
     expect(result.owner).toBe("owner");
-    expect(result.repo).toBe("repo#readme");
+    expect(result.repo).toBe("repo");
   });
 
   it("handles http (non-https) URL", () => {
@@ -101,8 +150,8 @@ describe("parseGitHubUrl", () => {
     expect(result.repo).toBe("repo");
   });
 
-  it("throws on non-GitHub URL with similar structure", () => {
-    expect(() => parseGitHubUrl("https://bitbucket.org/owner/repo")).toThrow("Invalid GitHub URL");
+  it("throws on non-supported host URL with similar structure", () => {
+    expect(() => parseGitHubUrl("https://sourcehut.org/owner/repo")).toThrow("Invalid GitHub URL");
   });
 
   it("sets default branch to main", () => {
@@ -206,5 +255,84 @@ describe("mergeFrameworksFromDeps", () => {
     const result = mergeFrameworksFromDeps(stack, ["react"]);
     // Should not add React again since REACT already exists
     expect(result.frameworks).toHaveLength(1);
+  });
+});
+
+describe("scanRepo", () => {
+  it("skips ignored directories while scanning", async () => {
+    const repoPath = await mkdtemp(join(tmpdir(), "bootcamp-ingest-"));
+    try {
+      await mkdir(join(repoPath, "src"), { recursive: true });
+      await mkdir(join(repoPath, "node_modules", "pkg"), { recursive: true });
+      await writeFile(join(repoPath, "src", "index.ts"), "export const x = 1;\n", "utf-8");
+      await writeFile(join(repoPath, "node_modules", "pkg", "index.js"), "module.exports = 1;\n", "utf-8");
+
+      const scan = await scanRepo(repoPath, 200);
+      expect(scan.files.some((f) => f.path.startsWith("node_modules/"))).toBe(false);
+      expect(scan.files.some((f) => f.path === "src/index.ts")).toBe(true);
+    } finally {
+      await rm(repoPath, { recursive: true, force: true });
+    }
+  });
+
+  it("respects maxFiles when scanning", async () => {
+    const repoPath = await mkdtemp(join(tmpdir(), "bootcamp-ingest-limit-"));
+    try {
+      await mkdir(join(repoPath, "src"), { recursive: true });
+      for (let i = 0; i < 6; i++) {
+        await writeFile(join(repoPath, "src", `file-${i}.ts`), `export const value${i} = ${i};\n`, "utf-8");
+      }
+
+      const scan = await scanRepo(repoPath, 2);
+      expect(scan.files.length).toBeLessThanOrEqual(2);
+    } finally {
+      await rm(repoPath, { recursive: true, force: true });
+    }
+  });
+
+  it("detects npm workspace monorepos", async () => {
+    const repoPath = await mkdtemp(join(tmpdir(), "bootcamp-ingest-monorepo-"));
+    try {
+      await mkdir(join(repoPath, "packages", "core"), { recursive: true });
+      await mkdir(join(repoPath, "apps", "web"), { recursive: true });
+      await writeFile(
+        join(repoPath, "package.json"),
+        JSON.stringify({
+          name: "root",
+          private: true,
+          workspaces: ["packages/*", "apps/*"],
+        }),
+        "utf-8"
+      );
+      await writeFile(join(repoPath, "packages", "core", "package.json"), JSON.stringify({ name: "@acme/core" }), "utf-8");
+      await writeFile(join(repoPath, "apps", "web", "package.json"), JSON.stringify({ name: "@acme/web" }), "utf-8");
+
+      const scan = await scanRepo(repoPath, 500);
+      expect(scan.monorepo?.isMonorepo).toBe(true);
+      expect(scan.monorepo?.managers).toContain("npm-workspaces");
+      expect(scan.monorepo?.workspacePackages.map((pkg) => pkg.name)).toEqual(
+        expect.arrayContaining(["@acme/core", "@acme/web"])
+      );
+    } finally {
+      await rm(repoPath, { recursive: true, force: true });
+    }
+  });
+
+  it("detects monorepo manager signals", async () => {
+    const repoPath = await mkdtemp(join(tmpdir(), "bootcamp-ingest-monorepo-signals-"));
+    try {
+      await mkdir(join(repoPath, "packages", "shared"), { recursive: true });
+      await writeFile(join(repoPath, "pnpm-workspace.yaml"), "packages:\n  - 'packages/*'\n", "utf-8");
+      await writeFile(join(repoPath, "lerna.json"), "{ \"version\": \"0.0.0\" }\n", "utf-8");
+      await writeFile(join(repoPath, "nx.json"), "{ \"extends\": \"nx/presets/npm.json\" }\n", "utf-8");
+      await writeFile(join(repoPath, "turbo.json"), "{ \"pipeline\": {} }\n", "utf-8");
+      await writeFile(join(repoPath, "packages", "shared", "package.json"), JSON.stringify({ name: "@acme/shared" }), "utf-8");
+
+      const scan = await scanRepo(repoPath, 500);
+      expect(scan.monorepo?.managers).toEqual(expect.arrayContaining(["pnpm", "lerna", "nx", "turborepo"]));
+      expect(scan.monorepo?.workspacePackages.some((pkg) => pkg.path === "packages/shared")).toBe(true);
+    } finally {
+      await rm(repoPath, { recursive: true, force: true });
+    }
   });
 });

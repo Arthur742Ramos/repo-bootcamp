@@ -5,3 +5,53 @@
 - [2026-03-02T20:27:31+00:00] [preference] [cli] Always include a 'lead' role with phase 1
 - [2026-03-02T20:27:31+00:00] [decision] [cli] You understand the full architecture: CLI commands (commander), Copilot SDK agent with tool-calling, repository ingestion/analysis pipeline, web dashboard (Express), security analysis, dependency graphing, and the plugin/schema system.
 - [2026-03-02T20:27:31+00:00] [decision] [cli] Keep code modular and consistent with the existing architecture.",
+- [2026-03-02T20:46:04+00:00] [preference] [sdk] LINT: src/agent.ts — buildRepoHeader, buildCommandList, buildPromptFooter, buildJsonSchema are defined but never used.
+- [2026-03-02T20:46:04+00:00] [pattern] [sdk] Follow existing project pattern for causal error wrapping (`new Error(msg, { cause: error })`) seen in `src/diff.ts`, `src/ingest.ts`, `src/repo-resolver.ts`
+- [2026-03-02T20:46:04+00:00] [decision] [sdk] **Decision:** whether fast-mode should now include `Has Docker` if `buildRepoHeader` is reused directly (recommended: accept for dedup consistency unless strict prompt parity is required)
+- [2026-03-02T20:46:04+00:00] [pattern] [sdk] Error-handling convention prefers preserving original exceptions via `cause`
+- [2026-03-02T20:48:33+00:00] [preference] [sdk] Keep message text unchanged to avoid test expectation drift
+- [2026-03-02T20:48:33+00:00] [preference] [sdk] **Decision:** whether fast-mode should now include `Has Docker` if `buildRepoHeader` is reused directly (recommended: accept for dedup consistency unless strict prompt parity is required)
+- [2026-03-02T20:48:33+00:00] [preference] [sdk] Prefer minimal source edits + dependency additions over broader refactors to keep CI fix low-risk and surgical
+- [2026-03-02T20:48:56+00:00] [pattern] [sdk] Error-handling convention prefers preserving original exceptions via `new Error(message, { cause })`.
+- [2026-03-02T20:49:24+00:00] [pattern] [sdk] The project prefers causal error wrapping (`new Error(message, { cause })`) for rethrows in async flows.
+- [2026-03-02T21:45:20+00:00] [preference] [sdk] DEPENDENCY INJECTION FOR AGENT (5b) — Refactor src/agent.ts to inject the LLM client instead of directly importing CopilotClient.
+- [2026-03-02T21:45:39+00:00] [preference] [sdk] STREAMING LLM OUTPUT (2a) — Update src/agent.ts to stream agent responses to terminal instead of waiting for full completion.
+- [2026-03-02T21:45:39+00:00] [preference] [sdk] CACHE WARMING / PARTIAL CACHE (2c) — Refactor src/cache.ts to cache individual analysis phases (deps, security, impact) separately instead of the whole RepoFacts blob.
+- [2026-03-02T21:45:39+00:00] [pattern] [sdk] Add format and format:check scripts to package.json using prettier.
+- [2026-03-02T21:45:39+00:00] [decision] [sdk] Replace fixed `MAX_KEY_FILE_CHARS` usage with model-adjusted value; keep fast-mode schema block text intact (per squad decision).
+- [2026-03-02T21:45:39+00:00] [pattern] [sdk] `format`: `prettier --write .`
+- [2026-03-02T21:45:39+00:00] [pattern] [sdk] `format:check`: `prettier --check .`
+- [2026-03-02T21:45:40+00:00] [preference] [sdk] Analysis endpoints should be 5/15min, other API endpoints 100/15min.
+- [2026-03-02T21:45:40+00:00] [decision] [sdk] ARCHITECTURE DECISION RECORDS — Create docs/adr/ directory with ADRs for key decisions (why Copilot SDK, why Express, cache design, etc).
+- [2026-03-02T21:45:40+00:00] [decision] [sdk] PLUGIN SYSTEM (5a) — Generalize src/plugins.ts into a plugin architecture with a defined API (src/plugin-api.ts) that allows custom analyzers, formatters, and output targets.
+- [2026-03-02T21:45:40+00:00] [decision] [sdk] **Build:** Create `docs/adr/` with ADR template + initial records (Copilot SDK, Express web stack, cache strategy, plugin architecture); keep screenshot reference (already present in `README.md`), add npm provenance badge near npm badges.
+- [2026-03-02T21:45:40+00:00] [pattern] [sdk] **Build:** Add structured GitHub issue forms (`bug.yml`, `feature.yml`) and PR template with reproduction/use-case/testing/checklist sections aligned with `CONTRIBUTING.md`.
+- [2026-03-02T21:45:40+00:00] [decision] [sdk] Plugin architecture generalization (5a)
+- [2026-03-02T21:47:38+00:00] [pattern] [sdk] Implement ALL of these testing and CI/CD improvements:
+- [2026-03-02T21:47:38+00:00] [pattern] [sdk] SNAPSHOT TESTING FOR FORMATTER (4b) — Add snapshot tests in test/formatter.test.ts for markdown/HTML output from src/formatter.ts (347 lines).
+- [2026-03-02T21:47:38+00:00] [pattern] [sdk] WEB SERVER SUPERTEST (4c) — Ensure test/web.test.ts uses supertest for full HTTP-level testing of all routes including error paths, rate limiting, CSP headers.
+- [2026-03-02T21:47:38+00:00] [pattern] [sdk] ERROR HANDLING STRATEGY (5d) — Audit all async paths across source files.
+- [2026-03-02T21:47:38+00:00] [pattern] [sdk] ensure async request paths return controlled JSON errors instead of uncaught exceptions.
+- [2026-03-02T21:47:38+00:00] [pattern] [sdk] **Error convention:** existing code frequently wraps failures with `new Error(message, { cause })`; continue this pattern (do not swallow errors).
+- [2026-03-02T21:51:12+00:00] [preference] [sdk] This repo has many behavior/assertion tests (especially `test/agent.test.ts` + `test/index.test.ts`), so we should preserve externally visible behavior while refactoring structure.
+- [2026-03-02T21:51:12+00:00] [preference] [sdk] Keep API intentional/curated (avoid exporting internal command orchestration unless needed).
+- [2026-03-02T21:51:12+00:00] [preference] [sdk] `createSessionWithFallback` should depend on interface, not `CopilotClient` concrete type.
+- [2026-03-02T21:51:12+00:00] [preference] [sdk] `analyzeRepo` should accept optional injected client/deps, defaulting to `new CopilotClient()` when not provided.
+- [2026-03-02T21:51:12+00:00] [preference] [sdk] **Config precedence edge case:** if user explicitly passes CLI value equal to built-in default, we still must treat it as explicit CLI input; avoid hidden overrides.
+- [2026-03-02T21:58:13+00:00] [preference] [sdk] ensure async request paths return controlled JSON errors instead of uncaught exceptions.
+- [2026-03-02T21:58:13+00:00] [preference] [sdk] split lint and typecheck into clearly distinct checks/jobs (typecheck should be explicit, not hidden in build semantics).
+- [2026-03-02T22:00:26+00:00] [preference] [sdk] Error conventions: wrap with `cause` when rethrowing; avoid broad silent fallbacks.
+- [2026-03-02T22:01:42+00:00] [preference] [sdk] **Adopt real dual ESM/CJS packaging** (extra build complexity) to satisfy `exports` requirements correctly instead of fragile `require` fallbacks.
+- [2026-03-02T22:02:01+00:00] [preference] [sdk] **Prompt/test sensitivity:** `src/agent.ts` is heavily test-coupled; many tests assert prompt substrings and schema wording, so error-boundary edits must stay out of prompt composition blocks.
+- [2026-03-02T22:03:31+00:00] [pattern] [sdk] **Error handling pattern:** preserve wrapped errors with `cause` where context is added (`new Error(msg, { cause })`).
+- [2026-03-02T22:03:57+00:00] [preference] [sdk] Prompt-generation text is test-sensitive, so docs should describe behavior-level changes without renaming prompt section concepts.
+- [2026-03-02T22:09:56+00:00] [preference] [sdk] Prefer **surgical edits** to preserve current behavior and avoid prompt-test regressions.
+- [2026-03-02T22:09:56+00:00] [decision] [sdk] Treat coverage threshold rollout as the primary trade-off: strict immediate enforcement vs staged ratcheting.
+- [2026-03-02T22:09:56+00:00] [preference] [sdk] Prefer helper-based extensions in `agent.ts` over prompt refactors to minimize regression risk.
+- [2026-03-02T22:09:56+00:00] [preference] [sdk] Fast mode is intentionally stricter and schema-explicit, and should stay separate from shared schema helpers.
+- [2026-03-02T22:11:26+00:00] [preference] [sdk] `agent.ts` is highly test-sensitive and prompt/event behavior is heavily asserted, so DI changes must preserve flow and output shape.
+- [2026-03-02T22:11:26+00:00] [preference] [sdk] I hit unexpected concurrent workspace drift (many unrelated tracked files changed, including `src/plugins.ts`, `src/agent.ts`, `package.json`, and tests), so I paused to avoid overwriting someone else’s in-flight work.
+- [2026-03-02T22:13:27+00:00] [preference] [sdk] Prompt-related changes in `src/agent.ts` are highly test-sensitive, so error-boundary logic should stay isolated from prompt text blocks.
+- [2026-03-02T22:13:27+00:00] [preference] [sdk] Prompt and session behavior in `src/agent.ts` is highly test-coupled, so DI changes must preserve flow exactly.
+- [2026-03-02T22:14:31+00:00] [pattern] [sdk] Keep-a-Changelog format is actively used and best for release-facing QA/CI notes.
+- [2026-03-02T22:14:31+00:00] [pattern] [sdk] CI quality gates now include matrix testing, dependency scanning, SBOM artifacts, and explicit lint/typecheck separation.

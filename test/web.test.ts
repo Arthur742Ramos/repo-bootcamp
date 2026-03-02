@@ -2,27 +2,22 @@
  * Tests for web server and templates
  */
 
-import { describe, it, expect, afterEach, vi } from "vitest";
 import type { AddressInfo } from "net";
+
+import request from "supertest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { createApp, startServer } from "../src/web/server.js";
 import { getIndexHtml } from "../src/web/templates.js";
 
 let server: ReturnType<typeof startServer> | undefined;
 
-async function startTestServer(): Promise<string> {
-  const app = createApp();
-  server = app.listen(0);
-  await new Promise<void>((resolve) => server?.once("listening", () => resolve()));
-  const { port } = server.address() as AddressInfo;
-  return `http://127.0.0.1:${port}`;
-}
-
 afterEach(async () => {
-  if (server) {
-    await new Promise<void>((resolve) => server?.close(() => resolve()));
-    server = undefined;
+  if (!server) {
+    return;
   }
+  await new Promise<void>((resolve) => server?.close(() => resolve()));
+  server = undefined;
 });
 
 describe("getIndexHtml", () => {
@@ -66,195 +61,158 @@ describe("getIndexHtml", () => {
 
 describe("createApp", () => {
   it("serves the index page", async () => {
-    const baseUrl = await startTestServer();
-    const response = await fetch(`${baseUrl}/`);
-    const body = await response.text();
-
+    const response = await request(createApp()).get("/");
     expect(response.status).toBe(200);
-    expect(body).toContain("<h1>Repo Bootcamp</h1>");
+    expect(response.text).toContain("<h1>Repo Bootcamp</h1>");
   });
 
   it("handles OPTIONS with CORS headers for localhost origin", async () => {
-    const baseUrl = await startTestServer();
-    const response = await fetch(`${baseUrl}/api/analyze`, {
-      method: "OPTIONS",
-      headers: { Origin: "http://localhost:3000" },
-    });
+    const response = await request(createApp())
+      .options("/api/analyze")
+      .set("Origin", "http://localhost:3000");
 
     expect(response.status).toBe(200);
-    expect(response.headers.get("access-control-allow-origin")).toBe("http://localhost:3000");
+    expect(response.headers["access-control-allow-origin"]).toBe("http://localhost:3000");
   });
 
   it("sets CORS headers on regular requests from localhost", async () => {
-    const baseUrl = await startTestServer();
-    const response = await fetch(`${baseUrl}/`, {
-      headers: { Origin: "http://localhost:3000" },
-    });
-
-    expect(response.headers.get("access-control-allow-origin")).toBe("http://localhost:3000");
-    expect(response.headers.get("access-control-allow-methods")).toBe("GET, POST, OPTIONS");
+    const response = await request(createApp()).get("/").set("Origin", "http://localhost:3000");
+    expect(response.headers["access-control-allow-origin"]).toBe("http://localhost:3000");
+    expect(response.headers["access-control-allow-methods"]).toBe("GET, POST, OPTIONS");
   });
 
   it("sets CORS headers for 127.0.0.1 origin", async () => {
-    const baseUrl = await startTestServer();
-    const response = await fetch(`${baseUrl}/`, {
-      headers: { Origin: "http://127.0.0.1:5000" },
-    });
-
-    expect(response.headers.get("access-control-allow-origin")).toBe("http://127.0.0.1:5000");
+    const response = await request(createApp()).get("/").set("Origin", "http://127.0.0.1:5000");
+    expect(response.headers["access-control-allow-origin"]).toBe("http://127.0.0.1:5000");
   });
 
   it("does not set CORS header for non-localhost origins", async () => {
-    const baseUrl = await startTestServer();
-    const response = await fetch(`${baseUrl}/`, {
-      headers: { Origin: "https://evil.com" },
-    });
-
-    expect(response.headers.get("access-control-allow-origin")).toBeNull();
+    const response = await request(createApp()).get("/").set("Origin", "https://evil.com");
+    expect(response.headers["access-control-allow-origin"]).toBeUndefined();
   });
 
   it("does not set CORS header when no Origin is sent", async () => {
-    const baseUrl = await startTestServer();
-    const response = await fetch(`${baseUrl}/`);
-
-    expect(response.headers.get("access-control-allow-origin")).toBeNull();
+    const response = await request(createApp()).get("/");
+    expect(response.headers["access-control-allow-origin"]).toBeUndefined();
   });
 
-  it("sets security headers", async () => {
-    const baseUrl = await startTestServer();
-    const response = await fetch(`${baseUrl}/`);
-
-    expect(response.headers.get("x-content-type-options")).toBe("nosniff");
-    expect(response.headers.get("x-frame-options")).toBe("DENY");
+  it("sets security headers including CSP", async () => {
+    const response = await request(createApp()).get("/");
+    expect(response.headers["x-content-type-options"]).toBe("nosniff");
+    expect(response.headers["x-frame-options"]).toBe("DENY");
+    expect(response.headers["content-security-policy"]).toContain("default-src 'self'");
   });
 
   it("rejects analyze requests without repoUrl", async () => {
-    const baseUrl = await startTestServer();
-    const response = await fetch(`${baseUrl}/api/analyze`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({}),
-    });
+    const response = await request(createApp())
+      .post("/api/analyze")
+      .set("Content-Type", "application/json")
+      .send({});
 
-    const payload = await response.json();
     expect(response.status).toBe(400);
-    expect(payload.error).toBe("repoUrl is required and must be a string");
+    expect(response.body.error).toBe("repoUrl is required and must be a string");
   });
 
   it("rejects analyze requests with invalid repoUrl", async () => {
-    const baseUrl = await startTestServer();
-    const response = await fetch(`${baseUrl}/api/analyze`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ repoUrl: "not-a-url" }),
-    });
+    const response = await request(createApp())
+      .post("/api/analyze")
+      .set("Content-Type", "application/json")
+      .send({ repoUrl: "not-a-url" });
 
-    const payload = await response.json();
     expect(response.status).toBe(400);
-    expect(payload.error).toBeTruthy();
+    expect(response.body.error).toBeTruthy();
+  });
+
+  it("rejects non-object analyze request bodies", async () => {
+    const response = await request(createApp())
+      .post("/api/analyze")
+      .set("Content-Type", "application/json")
+      .send([]);
+
+    expect(response.status).toBe(400);
+    expect(response.body.error).toBe("Request body must be a JSON object");
+  });
+
+  it("rejects non-object options values", async () => {
+    const response = await request(createApp())
+      .post("/api/analyze")
+      .set("Content-Type", "application/json")
+      .send({ repoUrl: "https://github.com/owner/repo", options: "bad-options" });
+
+    expect(response.status).toBe(400);
+    expect(response.body.error).toBe("options must be an object when provided");
   });
 
   it("returns 404 for unknown job status", async () => {
-    const baseUrl = await startTestServer();
-    const response = await fetch(`${baseUrl}/api/jobs/nonexistent`);
-
-    const payload = await response.json();
+    const response = await request(createApp()).get("/api/jobs/nonexistent");
     expect(response.status).toBe(404);
-    expect(payload.error).toBe("Job not found");
+    expect(response.body.error).toBe("Job not found");
   });
 
   it("returns 404 for unknown job stream", async () => {
-    const baseUrl = await startTestServer();
-    const response = await fetch(`${baseUrl}/api/jobs/nonexistent/stream`);
-
+    const response = await request(createApp()).get("/api/jobs/nonexistent/stream");
     expect(response.status).toBe(404);
   });
 
   it("returns 404 for unknown job file", async () => {
-    const baseUrl = await startTestServer();
-    const response = await fetch(`${baseUrl}/api/jobs/nonexistent/files/test.md`);
-
-    const payload = await response.json();
+    const response = await request(createApp()).get("/api/jobs/nonexistent/files/test.md");
     expect(response.status).toBe(404);
-    expect(payload.error).toContain("not found");
-  });
-
-  it("rejects analyze with non-string repoUrl", async () => {
-    const baseUrl = await startTestServer();
-    const response = await fetch(`${baseUrl}/api/analyze`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ repoUrl: 12345 }),
-    });
-
-    const payload = await response.json();
-    expect(response.status).toBe(400);
-    expect(payload.error).toBe("repoUrl is required and must be a string");
-  });
-
-  it("rejects analyze with null repoUrl", async () => {
-    const baseUrl = await startTestServer();
-    const response = await fetch(`${baseUrl}/api/analyze`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ repoUrl: null }),
-    });
-
-    const payload = await response.json();
-    expect(response.status).toBe(400);
-    expect(payload.error).toBe("repoUrl is required and must be a string");
+    expect(response.body.error).toContain("not found");
   });
 
   it("rejects overly long repoUrl", async () => {
-    const baseUrl = await startTestServer();
-    const response = await fetch(`${baseUrl}/api/analyze`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ repoUrl: "https://github.com/o/" + "a".repeat(500) }),
-    });
+    const response = await request(createApp())
+      .post("/api/analyze")
+      .set("Content-Type", "application/json")
+      .send({ repoUrl: "https://github.com/o/" + "a".repeat(500) });
 
-    const payload = await response.json();
     expect(response.status).toBe(400);
-    expect(payload.error).toBe("repoUrl too long");
+    expect(response.body.error).toBe("repoUrl too long");
   });
 
   it("rejects file requests with path traversal (..)", async () => {
-    const baseUrl = await startTestServer();
-    const response = await fetch(`${baseUrl}/api/jobs/test/files/%2e%2e%2fetc%2fpasswd`);
-
-    // Express may normalize the encoded path - either 400 (invalid filename) or 404 (job not found)
+    const response = await request(createApp()).get("/api/jobs/test/files/%2e%2e%2fetc%2fpasswd");
     expect([400, 404]).toContain(response.status);
   });
 
   it("rejects file requests with forward slash in filename", async () => {
-    const baseUrl = await startTestServer();
-    const response = await fetch(`${baseUrl}/api/jobs/test/files/sub/file.md`);
-
-    // Express sees this as a different route, so 404
+    const response = await request(createApp()).get("/api/jobs/test/files/sub/file.md");
     expect(response.status).toBe(404);
   });
 
   it("rejects file requests with backslash in filename", async () => {
-    const baseUrl = await startTestServer();
-    const response = await fetch(`${baseUrl}/api/jobs/test/files/sub%5Cfile.md`);
-
-    const payload = await response.json();
-    // Either 400 (invalid filename) or 404 (job not found)
+    const response = await request(createApp()).get("/api/jobs/test/files/sub%5Cfile.md");
     expect([400, 404]).toContain(response.status);
   });
 
-  it("registers API routes on the app", async () => {
-    const baseUrl = await startTestServer();
-    // Verify that POST to /api/analyze exists (returns 400 not 404 without body)
-    const response = await fetch(`${baseUrl}/api/analyze`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({}),
-    });
+  it("enforces API rate limiting", async () => {
+    const app = createApp();
+    let response = await request(app).get("/api/jobs/nonexistent");
+    for (let i = 1; i < 101; i++) {
+      response = await request(app).get("/api/jobs/nonexistent");
+    }
+    expect(response.status).toBe(429);
+    expect(response.headers["ratelimit-limit"]).toBeDefined();
+  }, 15000);
 
-    // 400 means the route exists but input is invalid
-    expect(response.status).toBe(400);
+  it("does not cap non-analysis endpoints at 5 requests", async () => {
+    const app = createApp();
+    let response = await request(app).get("/api/jobs/nonexistent");
+    for (let i = 1; i < 6; i++) {
+      response = await request(app).get("/api/jobs/nonexistent");
+    }
+    expect(response.status).toBe(404);
   });
+
+  it("enforces stricter rate limiting for /api/analyze", async () => {
+    const app = createApp();
+    let response = await request(app).post("/api/analyze").send({ repoUrl: "not-a-url" });
+    for (let i = 1; i < 6; i++) {
+      response = await request(app).post("/api/analyze").send({ repoUrl: "not-a-url" });
+    }
+    expect(response.status).toBe(429);
+    expect(response.headers["ratelimit-limit"]).toBeDefined();
+  }, 15000);
 });
 
 describe("startServer", () => {
@@ -274,8 +232,7 @@ describe("startServer", () => {
     server = startServer(0);
     await new Promise<void>((resolve) => server?.once("listening", () => resolve()));
 
-    const address = server.address() as AddressInfo;
-    const response = await fetch(`http://127.0.0.1:${address.port}/`);
+    const response = await request(server).get("/");
     expect(response.status).toBe(200);
 
     logSpy.mockRestore();

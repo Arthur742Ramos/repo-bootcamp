@@ -1,0 +1,49 @@
+name: Feature request
+description: Propose a new capability or enhancement
+title: "[Feature]: "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Share the problem first, then the proposed solution.
+
+  - type: input
+    id: problem
+    attributes:
+      label: Problem statement
+      description: What user problem are you trying to solve?
+      placeholder: As a user, I need ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: Describe behavior, UX, and API shape if applicable
+      placeholder: The tool should ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Any workarounds or other designs evaluated
+
+  - type: textarea
+    id: scope
+    attributes:
+      label: Scope and impact
+      description: In/out of scope, trade-offs, compatibility notes
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Pre-submission checks
+      options:
+        - label: I checked existing issues/discussions for similar requests
+          required: true
+        - label: This request aligns with Repo Bootcamp's onboarding/documentation goals
+          required: true

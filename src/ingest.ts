@@ -5,40 +5,153 @@
 
 import { execFile } from "child_process";
 import { promisify } from "util";
-import { readdir, stat, readFile, rm } from "fs/promises";
-import { join, basename, resolve, relative, isAbsolute } from "path";
-import type { RepoInfo, FileInfo, StackInfo, Command, CIWorkflow, ScanResult } from "./types.js";
+import { readFile, rm } from "fs/promises";
+import { join, basename, resolve, relative, isAbsolute, dirname } from "path";
+import fg from "fast-glob";
+import type {
+  RepoInfo,
+  FileInfo,
+  StackInfo,
+  Command,
+  CIWorkflow,
+  ScanResult,
+  MonorepoInfo,
+  MonorepoManager,
+  RepoProvider,
+} from "./types.js";
 import { SKIP_DIRS } from "./utils.js";
 import frameworkMaps from "./data/framework-maps.json" with { type: "json" };
 
 const execFileAsync = promisify(execFile);
+const REPO_SEGMENT_PATTERN = /^[A-Za-z0-9._-]+$/;
+const SUPPORTED_REPOSITORY_HOSTS: Record<string, RepoProvider> = {
+  "github.com": "github",
+  "gitlab.com": "gitlab",
+  "bitbucket.org": "bitbucket",
+};
 
-/**
- * Parse a GitHub URL into owner/repo components
- */
-export function parseGitHubUrl(url: string): RepoInfo {
-  // Handle various GitHub URL formats
-  const patterns = [
-    /github\.com\/([^/]+)\/([^/]+?)(?:\.git)?$/,
-    /github\.com\/([^/]+)\/([^/]+)/,
-    /github\.com:([^/]+)\/([^/]+?)(?:\.git)?$/,
-    /github\.com:([^/]+)\/([^/]+)/,
-  ];
+function isSafeBranchName(branch: string): boolean {
+  return (
+    /^[A-Za-z0-9._/-]+$/.test(branch) &&
+    !branch.startsWith("-") &&
+    !branch.includes("..") &&
+    !branch.includes("@{") &&
+    !branch.endsWith(".lock") &&
+    !branch.includes("\\")
+  );
+}
 
-  for (const pattern of patterns) {
-    const match = url.match(pattern);
-    if (match) {
-      return {
-        owner: match[1],
-        repo: match[2].replace(/\.git$/, ""),
-        url: `https://github.com/${match[1]}/${match[2].replace(/\.git$/, "")}`,
-        branch: "main", // will be updated later
-        fullName: `${match[1]}/${match[2].replace(/\.git$/, "")}`,
-      };
+function parseSegmentsForOwnerRepo(host: string, allSegments: string[]): { owner: string; repo: string } {
+  let segments = allSegments;
+
+  if (host === "gitlab.com") {
+    const markerIndex = segments.findIndex((segment, index) =>
+      index >= 2 && (segment === "-" || segment === "tree" || segment === "blob")
+    );
+    if (markerIndex > 0) {
+      segments = segments.slice(0, markerIndex);
+    }
+  } else {
+    segments = segments.slice(0, 2);
+  }
+
+  if (segments.length < 2) {
+    throw new Error("Repository URL must include owner and repository name");
+  }
+
+  const ownerSegments = segments.slice(0, -1).map((segment) => decodeURIComponent(segment.trim()));
+  const repoSegment = decodeURIComponent(segments[segments.length - 1].trim()).replace(/\.git$/, "");
+
+  if (!repoSegment) {
+    throw new Error("Repository name is missing");
+  }
+
+  for (const segment of [...ownerSegments, repoSegment]) {
+    if (!segment || segment === "." || segment === ".." || !REPO_SEGMENT_PATTERN.test(segment)) {
+      throw new Error(`Invalid repository segment: ${segment || "(empty)"}`);
     }
   }
 
-  throw new Error(`Invalid GitHub URL: ${url}`);
+  return {
+    owner: ownerSegments.join("/"),
+    repo: repoSegment,
+  };
+}
+
+function parseSshRepositoryUrl(url: string): { host: string; pathSegments: string[] } | null {
+  const sshMatch = url.match(/^(?:ssh:\/\/)?git@([^:/]+)[:/]([^?#]+?)(?:\.git)?\/?$/i);
+  if (!sshMatch) {
+    return null;
+  }
+
+  const host = sshMatch[1].toLowerCase();
+  const pathSegments = sshMatch[2]
+    .split("/")
+    .map((segment) => segment.trim())
+    .filter(Boolean);
+
+  return { host, pathSegments };
+}
+
+/**
+ * Parse a repository URL (GitHub, GitLab, or Bitbucket) into owner/repo components
+ */
+export function parseGitHubUrl(url: string): RepoInfo {
+  const trimmedUrl = url?.trim();
+  if (!trimmedUrl || /[\r\n\t]/.test(trimmedUrl)) {
+    throw new Error(`Invalid GitHub URL: ${url}`);
+  }
+
+  try {
+    const sshParsed = parseSshRepositoryUrl(trimmedUrl);
+    if (sshParsed) {
+      const provider = SUPPORTED_REPOSITORY_HOSTS[sshParsed.host];
+      if (!provider) {
+        throw new Error(`Unsupported repository host: ${sshParsed.host}`);
+      }
+      const { owner, repo } = parseSegmentsForOwnerRepo(sshParsed.host, sshParsed.pathSegments);
+      return {
+        owner,
+        repo,
+        url: `https://${sshParsed.host}/${owner}/${repo}`,
+        branch: "main",
+        fullName: `${owner}/${repo}`,
+        provider,
+        host: sshParsed.host,
+      };
+    }
+
+    const normalizedUrl = /^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//.test(trimmedUrl)
+      ? trimmedUrl
+      : `https://${trimmedUrl}`;
+    const parsed = new URL(normalizedUrl);
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+      throw new Error(`Unsupported URL protocol: ${parsed.protocol}`);
+    }
+    const host = parsed.hostname.toLowerCase();
+    const provider = SUPPORTED_REPOSITORY_HOSTS[host];
+    if (!provider) {
+      throw new Error(`Unsupported repository host: ${host}`);
+    }
+
+    const pathSegments = parsed.pathname
+      .split("/")
+      .map((segment) => segment.trim())
+      .filter(Boolean);
+    const { owner, repo } = parseSegmentsForOwnerRepo(host, pathSegments);
+
+    return {
+      owner,
+      repo,
+      url: `https://${host}/${owner}/${repo}`,
+      branch: "main", // will be updated later
+      fullName: `${owner}/${repo}`,
+      provider,
+      host,
+    };
+  } catch (error: unknown) {
+    throw new Error(`Invalid GitHub URL: ${url}`, { cause: error });
+  }
 }
 
 /**
@@ -50,7 +163,28 @@ export async function cloneRepo(
   branch?: string,
   fullClone?: boolean
 ): Promise<string> {
-  const clonePath = join(targetDir, ".tmp", repoInfo.repo);
+  if (!repoInfo?.url || typeof repoInfo.url !== "string") {
+    throw new Error("Invalid repository URL");
+  }
+  if (repoInfo.url.startsWith("-") || /[\r\n\t]/.test(repoInfo.url)) {
+    throw new Error("Unsafe repository URL");
+  }
+  if (!/^(https?:\/\/|file:\/\/)/i.test(repoInfo.url)) {
+    throw new Error("Unsupported repository URL protocol");
+  }
+  if (branch && !isSafeBranchName(branch)) {
+    throw new Error(`Invalid branch name: ${branch}`);
+  }
+
+  const tempRoot = resolve(targetDir, ".tmp");
+  const safeOwner = repoInfo.owner.replace(/[^A-Za-z0-9._/-]/g, "_").replaceAll("/", "__");
+  const safeRepo = repoInfo.repo.replace(/[^A-Za-z0-9._-]/g, "_");
+  const clonePath = resolve(tempRoot, `${safeOwner}__${safeRepo}`);
+  if (!clonePath.startsWith(`${tempRoot}/`) && clonePath !== tempRoot) {
+    throw new Error("Unsafe clone path");
+  }
+
+  const cloneUrl = repoInfo.url.endsWith(".git") ? repoInfo.url : `${repoInfo.url}.git`;
   const cloneArgs = ["clone"];
   if (!fullClone) {
     cloneArgs.push("--filter=blob:none", "--depth", "1");
@@ -58,15 +192,59 @@ export async function cloneRepo(
   if (branch) {
     cloneArgs.push("--branch", branch);
   }
-  cloneArgs.push(`${repoInfo.url}.git`, clonePath);
+  cloneArgs.push("--", cloneUrl, clonePath);
 
   /** Timeout for git clone operations (2 minutes) */
   const CLONE_TIMEOUT_MS = 120_000;
 
-  try {
-    await rm(clonePath, { recursive: true, force: true });
-    await execFileAsync("git", cloneArgs, { timeout: CLONE_TIMEOUT_MS });
+  const getErrorMessage = (error: unknown): string => {
+    if (error instanceof Error) {
+      return error.message;
+    }
+    return String(error);
+  };
 
+  const getCloneErrorMessage = (error: unknown): string => {
+    if (!(error instanceof Error)) {
+      return "Failed to clone repository: Unknown clone error";
+    }
+    const execError = error as Error & {
+      code?: number | string;
+      signal?: NodeJS.Signals | null;
+      killed?: boolean;
+      stderr?: string;
+      name?: string;
+    };
+    const code = typeof execError.code === "string" ? execError.code.toUpperCase() : execError.code;
+    const isTimeout =
+      (execError.killed && /timed out/i.test(error.message)) ||
+      (typeof code === "string" &&
+        (code === "ETIMEDOUT" || code === "ESOCKETTIMEDOUT" || code === "ERR_TIMEOUT")) ||
+      execError.name === "AbortError" ||
+      /timeout|timed out/i.test(error.message);
+    if (isTimeout) {
+      return `Failed to clone repository: git clone timed out after ${CLONE_TIMEOUT_MS / 1000}s`;
+    }
+    const stderr = typeof execError.stderr === "string"
+      ? execError.stderr.trim().split(/\r?\n/, 1)[0]
+      : "";
+    if (execError.code !== undefined) {
+      const signalSuffix = execError.signal ? ` (signal: ${execError.signal})` : "";
+      const stderrSuffix = stderr ? `: ${stderr}` : "";
+      return `Failed to clone repository: git clone exited with code ${String(execError.code)}${signalSuffix}${stderrSuffix}`;
+    }
+    return `Failed to clone repository: ${error.message}`;
+  };
+
+  await rm(clonePath, { recursive: true, force: true });
+
+  try {
+    await execFileAsync("git", cloneArgs, { timeout: CLONE_TIMEOUT_MS });
+  } catch (error: unknown) {
+    throw new Error(getCloneErrorMessage(error), { cause: error });
+  }
+
+  try {
     // Get the actual branch name
     const { stdout } = await execFileAsync("git", ["rev-parse", "--abbrev-ref", "HEAD"], {
       cwd: clonePath,
@@ -81,48 +259,36 @@ export async function cloneRepo(
 
     return clonePath;
   } catch (error: unknown) {
-    throw new Error(`Failed to clone repository: ${(error as Error).message}`, { cause: error });
+    throw new Error(`Failed to read cloned repository metadata: ${getErrorMessage(error)}`, { cause: error });
   }
 }
 
 /**
- * Recursively scan directory for files
+ * Scan directory tree using fast-glob
  */
-async function scanDirectory(
-  dir: string,
-  basePath: string,
-  maxFiles: number,
-  files: FileInfo[] = []
-): Promise<FileInfo[]> {
-  if (files.length >= maxFiles) return files;
+async function scanDirectory(basePath: string, maxFiles: number): Promise<FileInfo[]> {
+  const ignorePatterns = Array.from(SKIP_DIRS).flatMap((dir) => [`**/${dir}`, `**/${dir}/**`]);
+  const entries = await fg("**/*", {
+    cwd: basePath,
+    onlyFiles: false,
+    stats: true,
+    dot: true,
+    unique: true,
+    objectMode: true,
+    followSymbolicLinks: false,
+    suppressErrors: true,
+    ignore: ignorePatterns,
+  });
 
-  const entries = await readdir(dir, { withFileTypes: true });
-
+  const files: FileInfo[] = [];
   for (const entry of entries) {
     if (files.length >= maxFiles) break;
-
-    const fullPath = join(dir, entry.name);
-    const relativePath = fullPath.replace(basePath + "/", "");
-
-    // Skip common unimportant directories
-    if (
-      entry.isDirectory() &&
-      SKIP_DIRS.has(entry.name)
-    ) {
-      continue;
-    }
-
-    if (entry.isDirectory()) {
-      files.push({ path: relativePath, size: 0, isDirectory: true });
-      await scanDirectory(fullPath, basePath, maxFiles, files);
-    } else {
-      const stats = await stat(fullPath);
-      files.push({
-        path: relativePath,
-        size: stats.size,
-        isDirectory: false,
-      });
-    }
+    const isDirectory = entry.dirent?.isDirectory() ?? false;
+    files.push({
+      path: entry.path,
+      size: isDirectory ? 0 : entry.stats?.size ?? 0,
+      isDirectory,
+    });
   }
 
   return files;
@@ -330,6 +496,141 @@ async function readDocFile(repoPath: string, filename: string): Promise<string |
   return null;
 }
 
+function extractWorkspaceGlobsFromPackageJson(pkg: unknown): string[] {
+  if (!pkg || typeof pkg !== "object") {
+    return [];
+  }
+  const candidate = (pkg as Record<string, unknown>).workspaces;
+  if (!candidate) {
+    return [];
+  }
+  if (Array.isArray(candidate)) {
+    return candidate.filter((entry): entry is string => typeof entry === "string" && entry.trim().length > 0);
+  }
+  if (typeof candidate === "object" && candidate !== null) {
+    const packages = (candidate as { packages?: unknown }).packages;
+    if (Array.isArray(packages)) {
+      return packages.filter((entry): entry is string => typeof entry === "string" && entry.trim().length > 0);
+    }
+  }
+  return [];
+}
+
+function extractWorkspaceGlobsFromPnpmWorkspaceYaml(content: string): string[] {
+  const patterns: string[] = [];
+  const lines = content.split("\n");
+  let inPackagesSection = false;
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith("#")) {
+      continue;
+    }
+    if (trimmed === "packages:") {
+      inPackagesSection = true;
+      continue;
+    }
+    if (!inPackagesSection) {
+      continue;
+    }
+    const match = trimmed.match(/^-\s*['"]?([^'"]+)['"]?$/);
+    if (!match) {
+      if (/^[a-zA-Z]/.test(trimmed)) {
+        break;
+      }
+      continue;
+    }
+    if (match[1].trim().length > 0) {
+      patterns.push(match[1].trim());
+    }
+  }
+
+  return patterns;
+}
+
+function normalizeWorkspacePattern(pattern: string): string {
+  return pattern.trim().replace(/^\.\//, "").replace(/\/+$/, "");
+}
+
+async function detectMonorepo(repoPath: string, files: FileInfo[]): Promise<MonorepoInfo | null> {
+  const filePaths = new Set(files.filter((file) => !file.isDirectory).map((file) => file.path));
+  const managers = new Set<MonorepoManager>();
+  const workspaceGlobSet = new Set<string>();
+
+  if (filePaths.has("lerna.json")) managers.add("lerna");
+  if (filePaths.has("nx.json")) managers.add("nx");
+  if (filePaths.has("turbo.json")) managers.add("turborepo");
+  if (filePaths.has("pnpm-workspace.yaml") || filePaths.has("pnpm-workspace.yml")) managers.add("pnpm");
+
+  if (filePaths.has("package.json")) {
+    try {
+      const rootPackageJson = JSON.parse(await readFile(join(repoPath, "package.json"), "utf-8"));
+      for (const workspacePattern of extractWorkspaceGlobsFromPackageJson(rootPackageJson)) {
+        workspaceGlobSet.add(normalizeWorkspacePattern(workspacePattern));
+      }
+      if (workspaceGlobSet.size > 0) {
+        managers.add("npm-workspaces");
+      }
+    } catch (err: unknown) {
+      if (process.env.DEBUG) console.error("[debug]", (err as Error).message);
+    }
+  }
+
+  for (const pnpmFile of ["pnpm-workspace.yaml", "pnpm-workspace.yml"]) {
+    if (!filePaths.has(pnpmFile)) {
+      continue;
+    }
+    try {
+      const pnpmWorkspace = await readFile(join(repoPath, pnpmFile), "utf-8");
+      for (const workspacePattern of extractWorkspaceGlobsFromPnpmWorkspaceYaml(pnpmWorkspace)) {
+        workspaceGlobSet.add(normalizeWorkspacePattern(workspacePattern));
+      }
+    } catch (err: unknown) {
+      if (process.env.DEBUG) console.error("[debug]", (err as Error).message);
+    }
+  }
+
+  if (managers.size === 0 && workspaceGlobSet.size === 0) {
+    return null;
+  }
+
+  const workspaceGlobs = Array.from(workspaceGlobSet);
+  const effectiveWorkspaceGlobs = workspaceGlobs.length > 0
+    ? workspaceGlobs
+    : ["packages/*", "apps/*"];
+
+  const workspacePackagePaths = new Set<string>();
+  for (const workspaceGlob of effectiveWorkspaceGlobs) {
+    const packagePattern = `${workspaceGlob}/package.json`;
+    for (const matchedPath of listFilesByPattern(files, packagePattern)) {
+      workspacePackagePaths.add(matchedPath);
+    }
+  }
+
+  const workspacePackages: MonorepoInfo["workspacePackages"] = [];
+  for (const packagePath of Array.from(workspacePackagePaths).sort()) {
+    try {
+      const pkg = JSON.parse(await readFile(join(repoPath, packagePath), "utf-8")) as { name?: string };
+      workspacePackages.push({
+        name: typeof pkg.name === "string" && pkg.name.trim() ? pkg.name : basename(dirname(packagePath)),
+        path: dirname(packagePath),
+      });
+    } catch {
+      workspacePackages.push({
+        name: basename(dirname(packagePath)),
+        path: dirname(packagePath),
+      });
+    }
+  }
+
+  return {
+    isMonorepo: true,
+    managers: Array.from(managers),
+    workspaceGlobs: effectiveWorkspaceGlobs,
+    workspacePackages,
+  };
+}
+
 /**
  * File priority scoring for intelligent sampling
  */
@@ -490,10 +791,11 @@ async function readKeySourceFiles(
  */
 export async function scanRepo(repoPath: string, maxFiles: number): Promise<ScanResult> {
   // Scan files
-  const files = await scanDirectory(repoPath, repoPath, maxFiles);
+  const files = await scanDirectory(repoPath, maxFiles);
 
   // Detect stack
   const stack = detectStack(files);
+  const monorepo = await detectMonorepo(repoPath, files);
 
   // Extract commands
   const pkgCommands = await extractPackageJsonCommands(repoPath);
@@ -515,6 +817,7 @@ export async function scanRepo(repoPath: string, maxFiles: number): Promise<Scan
   return {
     files,
     stack,
+    monorepo,
     commands,
     ciWorkflows,
     readme,
@@ -542,10 +845,13 @@ export async function readRepoFile(repoPath: string, filePath: string): Promise<
  */
 export function listFilesByPattern(files: FileInfo[], pattern: string): string[] {
   // Escape regex special chars, then convert glob syntax
-  const escaped = pattern.replace(/[-+?^${}()|[\].\\]/g, "\\$&");
-  const regexPattern = escaped
-    .replace(/\\\*\\\*/g, ".*")
-    .replace(/\\\*/g, "[^/]*");
+  const DOUBLE_STAR_TOKEN = "__DOUBLE_STAR__";
+  const regexPattern = pattern
+    .replace(/[.+^${}()|[\]\\]/g, "\\$&")
+    .replace(/\*\*/g, DOUBLE_STAR_TOKEN)
+    .replace(/\*/g, "[^/]*")
+    .replace(/\?/g, "[^/]")
+    .replace(new RegExp(DOUBLE_STAR_TOKEN, "g"), ".*");
 
   const regex = new RegExp(`^${regexPattern}$`);
   return files.filter((f) => !f.isDirectory && regex.test(f.path)).map((f) => f.path);

@@ -10,6 +10,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - `bootcamp diff <owner/repo#pr>` command for onboarding-focused PR diffing
+- Developer workflow scripts: `format`, `format:check`, `typecheck`, and `dev:web`
+- `lint-staged` configuration for husky pre-commit usage
+- Formatter snapshot tests for markdown/HTML/PDF output stability in `test/formatter.test.ts`
+- Supertest HTTP-level web server tests for routes, error paths, rate limiting, and security headers
+- Vitest global coverage thresholds (`lines: 80`, `branches: 70`)
+- CI test matrix support for Node.js 24
+- PR dependency scanning with `actions/dependency-review-action`
+- SBOM generation/upload in CI via `npm sbom --sbom-format spdx`
+- Separate CI jobs for linting and type-checking
+- Programmatic API entry modules (`src/api.ts`, `src/lib.ts`) with package root re-export from `src/index.ts`
+- CLI/core split with `src/cli.ts` as bin entrypoint (`dist/cli.js`) and library-safe `src/index.ts`
+- Project config file discovery via cosmiconfig (`.bootcamprc`, `bootcamp.config.ts`, and related variants)
+- Config `defaults` support for audience/focus/style/model/maxFiles with CLI-over-config precedence
+- Agent dependency injection interfaces (`LlmClient`, `LlmSession`, `AnalyzeRepoDependencies`) for testable client wiring
+- npm `exports` map with subpath exports (`./api`, `./lib`, and focused modules) for ESM/CJS consumers
+- CJS build output generation (`dist/cjs`) for `require(...)` compatibility alongside ESM output
+- Multi-host repository URL support (GitHub, GitLab, Bitbucket) with normalized parsing metadata
+- Monorepo detection for npm workspaces, pnpm workspaces, Lerna, Nx, and Turborepo
+- Typed plugin API (`src/plugin-api.ts`) supporting analyzer, formatter, and output-target plugin stages
+- Architecture Decision Records in `docs/adr/` for Copilot SDK, Express, cache strategy, and plugin architecture
+- Structured GitHub issue forms (`bug.yml`, `feature.yml`) and pull request template
+- npm provenance badge and related documentation updates in `README.md`
+
+### Fixed
+
+- Reused shared prompt helper builders in `src/agent.ts` for standard/fast prompt construction.
+- Preserved caught error causes in `src/watch.ts` non-fast-forward rethrows.
+- Added missing web middleware dependencies/types (`helmet`, `express-rate-limit`, `@types/helmet`) for type-checking.
+- Streamed Copilot assistant output incrementally in analysis flows (verbose stdout and non-verbose progress updates).
+- Added model-aware fast-mode inline file budgets based on selected model context window.
+- Switched repository walking to concurrent `fast-glob` traversal while preserving skip/max-file behavior.
+- Added phase-level analyzer cache entries for dependency, security, and impact analysis.
+- Hardened async error boundaries for Copilot timeouts (`src/agent.ts`), clone failures (`src/ingest.ts`), and web request handling (`src/web/routes.ts`).
+- Hardened repository URL/branch sanitization before clone execution and added safer clone path construction.
+- Replaced coarse API throttling with endpoint-level limits (`/api/analyze`: 5/15m, other API routes: 100/15m).
 
 ## [1.0.0] - 2026-01-25
 

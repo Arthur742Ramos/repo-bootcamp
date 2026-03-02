@@ -6,7 +6,6 @@
 import express, { Request, Response } from "express";
 import chalk from "chalk";
 import helmet from "helmet";
-import rateLimit from "express-rate-limit";
 
 import { getIndexHtml } from "./templates.js";
 import { registerRoutes, startJobPruner, stopJobPruner } from "./routes.js";
@@ -32,16 +31,7 @@ export function createApp(): express.Application {
       crossOriginEmbedderPolicy: false,
     })
   );
-  app.use(express.json({ limit: "1mb" }));
-  app.use(
-    "/api",
-    rateLimit({
-      windowMs: 15 * 60 * 1000,
-      limit: 100,
-      standardHeaders: true,
-      legacyHeaders: false,
-    })
-  );
+  app.use(express.json({ limit: "1mb", strict: false }));
 
   // CORS for local development — restrict to localhost origins only
   app.use((req, res, next) => {

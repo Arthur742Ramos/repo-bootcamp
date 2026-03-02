@@ -4,8 +4,97 @@
   "description": "Turn any public GitHub repository into a Day 1 onboarding kit using GitHub Copilot SDK",
   "type": "module",
   "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/cjs/index.js"
+    },
+    "./api": {
+      "types": "./dist/api.d.ts",
+      "import": "./dist/api.js",
+      "require": "./dist/cjs/api.js"
+    },
+    "./lib": {
+      "types": "./dist/lib.d.ts",
+      "import": "./dist/lib.js",
+      "require": "./dist/cjs/lib.js"
+    },
+    "./agent": {
+      "types": "./dist/agent.d.ts",
+      "import": "./dist/agent.js",
+      "require": "./dist/cjs/agent.js"
+    },
+    "./analysis": {
+      "types": "./dist/analysis.d.ts",
+      "import": "./dist/analysis.js",
+      "require": "./dist/cjs/analysis.js"
+    },
+    "./generator": {
+      "types": "./dist/generator.d.ts",
+      "import": "./dist/generator.js",
+      "require": "./dist/cjs/generator.js"
+    },
+    "./repo-resolver": {
+      "types": "./dist/repo-resolver.d.ts",
+      "import": "./dist/repo-resolver.js",
+      "require": "./dist/cjs/repo-resolver.js"
+    },
+    "./plugins": {
+      "types": "./dist/plugins.d.ts",
+      "import": "./dist/plugins.js",
+      "require": "./dist/cjs/plugins.js"
+    },
+    "./security": {
+      "types": "./dist/security.d.ts",
+      "import": "./dist/security.js",
+      "require": "./dist/cjs/security.js"
+    },
+    "./deps": {
+      "types": "./dist/deps.d.ts",
+      "import": "./dist/deps.js",
+      "require": "./dist/cjs/deps.js"
+    },
+    "./diagrams": {
+      "types": "./dist/diagrams.d.ts",
+      "import": "./dist/diagrams.js",
+      "require": "./dist/cjs/diagrams.js"
+    },
+    "./diff": {
+      "types": "./dist/diff.d.ts",
+      "import": "./dist/diff.js",
+      "require": "./dist/cjs/diff.js"
+    },
+    "./docs-analyzer": {
+      "types": "./dist/docs-analyzer.d.ts",
+      "import": "./dist/docs-analyzer.js",
+      "require": "./dist/cjs/docs-analyzer.js"
+    },
+    "./docs-fixer": {
+      "types": "./dist/docs-fixer.d.ts",
+      "import": "./dist/docs-fixer.js",
+      "require": "./dist/cjs/docs-fixer.js"
+    },
+    "./cache": {
+      "types": "./dist/cache.d.ts",
+      "import": "./dist/cache.js",
+      "require": "./dist/cjs/cache.js"
+    },
+    "./watch": {
+      "types": "./dist/watch.d.ts",
+      "import": "./dist/watch.js",
+      "require": "./dist/cjs/watch.js"
+    },
+    "./types": {
+      "types": "./dist/types.d.ts",
+      "import": "./dist/types.js",
+      "require": "./dist/cjs/types.js"
+    },
+    "./package.json": "./package.json"
+  },
   "bin": {
-    "bootcamp": "dist/index.js"
+    "bootcamp": "dist/cli.js"
   },
   "files": [
     "dist/**/*.js",
@@ -36,22 +125,34 @@
     "url": "https://github.com/Arthur742Ramos/repo-bootcamp/issues"
   },
   "scripts": {
-    "build": "tsc -p tsconfig.build.json && npm run copy:data",
-    "copy:data": "node --input-type=module -e \"import { cpSync } from 'node:fs'; cpSync('src/data','dist/data',{ recursive: true, force: true });\"",
-    "start": "tsx src/index.ts",
-    "dev": "tsx watch src/index.ts",
+    "build": "tsc -p tsconfig.build.json && npm run build:cjs && npm run copy:data",
+    "build:cjs": "node ./scripts/build-cjs.mjs",
+    "copy:data": "node --input-type=module -e \"import { cpSync, mkdirSync, writeFileSync } from 'node:fs'; cpSync('src/data','dist/data',{ recursive: true, force: true }); mkdirSync('dist/cjs',{ recursive: true }); cpSync('src/data','dist/cjs/data',{ recursive: true, force: true }); writeFileSync('dist/cjs/package.json', JSON.stringify({ type: 'commonjs' }, null, 2));\"",
+    "start": "tsx src/cli.ts",
+    "dev": "tsx watch src/cli.ts",
+    "dev:web": "tsx watch src/cli.ts web",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
     "lint": "eslint \"src/**/*.{ts,tsx}\"",
+    "typecheck": "tsc -p tsconfig.build.json --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "prepublishOnly": "npm run build && npm test"
   },
+  "lint-staged": {
+    "*.{js,jsx,ts,tsx,json,md,yml,yaml}": "prettier --write",
+    "src/**/*.{ts,tsx}": "eslint --fix"
+  },
   "dependencies": {
     "@github/copilot-sdk": "^0.1.23",
     "chalk": "^5.3.0",
     "commander": "^14.0.3",
+    "cosmiconfig": "^9.0.1",
+    "cosmiconfig-typescript-loader": "^6.2.0",
     "express": "^5.2.1",
     "express-rate-limit": "^8.2.1",
+    "fast-glob": "^3.3.3",
     "helmet": "^8.1.0",
     "ora": "^9.3.0",
     "zod": "^4.3.6"
@@ -61,12 +162,15 @@
     "@types/express": "^5.0.6",
     "@types/helmet": "^0.0.48",
     "@types/node": "^25.2.2",
+    "@types/supertest": "^7.2.0",
     "@typescript-eslint/eslint-plugin": "^8.56.1",
     "@typescript-eslint/parser": "^8.56.1",
     "@vitest/coverage-v8": "^4.0.18",
+    "esbuild": "^0.27.2",
     "eslint": "^10.0.0",
     "eslint-config-prettier": "^10.1.8",
     "prettier": "^3.8.1",
+    "supertest": "^7.2.2",
     "tsx": "^4.19.0",
     "typescript": "^5.6.0",
     "vitest": "^4.0.18"

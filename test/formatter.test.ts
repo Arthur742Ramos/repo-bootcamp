@@ -242,6 +242,40 @@ describe("convertToPdf", () => {
   });
 });
 
+describe("formatter snapshots", () => {
+  const snapshotMarkdown = `# Snapshot Title
+
+> Snapshot quote
+
+- [ ] todo item
+- [x] done item
+
+| Name | Value |
+|------|-------|
+| alpha | beta |
+
+\`\`\`typescript
+const answer = 42;
+\`\`\`
+
+\`\`\`mermaid
+graph LR
+A-->B
+\`\`\``;
+
+  it("matches markdownToHtml output", () => {
+    expect(markdownToHtml(snapshotMarkdown)).toMatchSnapshot();
+  });
+
+  it("matches convertToHtml output", () => {
+    expect(convertToHtml(snapshotMarkdown, "Snapshot Doc")).toMatchSnapshot();
+  });
+
+  it("matches convertToPdf output", () => {
+    expect(convertToPdf(snapshotMarkdown, "Snapshot Doc")).toMatchSnapshot();
+  });
+});
+
 describe("getFileExtension", () => {
   it("returns empty for markdown", () => {
     expect(getFileExtension("markdown")).toBe("");

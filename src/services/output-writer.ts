@@ -5,6 +5,7 @@ import { basename, join } from "path";
 import { renderOutputDiagrams } from "../diagrams.js";
 import { applyOutputFormat, type OutputFormat } from "../formatter.js";
 import { createIssuesFromTasks, generateIssuePreview } from "../issues.js";
+import type { OutputTargetPlugin } from "../plugin-api.js";
 import { ProgressTracker } from "../progress.js";
 import type { BootcampOptions, RepoFacts, RepoInfo } from "../types.js";
 import type { GeneratedDoc } from "./analysis-orchestration.js";
@@ -18,6 +19,7 @@ interface WriteGeneratedOutputsParams {
   outputFormat: OutputFormat;
   progress: ProgressTracker;
   allowIssueCreation?: boolean;
+  outputTargets?: OutputTargetPlugin[];
 }
 
 export interface WriteGeneratedOutputsResult {
@@ -33,6 +35,7 @@ export async function writeGeneratedOutputs({
   outputFormat,
   progress,
   allowIssueCreation = true,
+  outputTargets = [],
 }: WriteGeneratedOutputsParams): Promise<WriteGeneratedOutputsResult> {
   const factsDoc = documents.find((doc) => doc.name === "repo_facts.json");
   const formattedDocuments = applyOutputFormat(documents, outputFormat);
@@ -75,6 +78,25 @@ export async function writeGeneratedOutputs({
       console.log(chalk.cyan("\nDiagrams rendered: ") + chalk.white(renderResult.files.map((f) => basename(f)).join(", ")));
     } else if (renderResult.error) {
       console.log(chalk.yellow(`\nDiagram rendering skipped: ${renderResult.error}`));
+    }
+  }
+
+  if (outputTargets.length > 0) {
+    const targetDocuments = options.jsonOnly
+      ? [{ name: "repo_facts.json", content: factsDoc?.content || JSON.stringify(facts, null, 2) }]
+      : formattedDocuments;
+    for (const outputTarget of outputTargets) {
+      try {
+        await outputTarget.writeOutput({
+          documents: targetDocuments,
+          outputDir,
+          repoInfo,
+          facts,
+          options,
+        });
+      } catch (error: unknown) {
+        console.warn(`Output target ${outputTarget.name} failed: ${(error as Error).message}`);
+      }
     }
   }
 

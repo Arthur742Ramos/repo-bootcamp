@@ -375,6 +375,48 @@ describe("model fallback", () => {
   });
 });
 
+describe("client dependency injection", () => {
+  it("uses an injected client when provided", async () => {
+    const mockSession = {
+      on: vi.fn().mockImplementation(() => vi.fn()),
+      sendAndWait: vi.fn(),
+      destroy: vi.fn().mockResolvedValue(undefined),
+    };
+    const injectedClient = {
+      createSession: vi.fn().mockResolvedValue(mockSession),
+      stop: vi.fn().mockResolvedValue(undefined),
+    };
+
+    mockSession.sendAndWait.mockImplementation(async () => {
+      const handler = mockSession.on.mock.calls[0]?.[0];
+      if (handler) {
+        handler({
+          id: "evt-1",
+          timestamp: new Date().toISOString(),
+          parentId: null,
+          type: "assistant.message_delta",
+          data: { messageId: "msg-1", deltaContent: VALID_REPO_FACTS_JSON },
+        });
+      }
+      return undefined;
+    });
+
+    await analyzeRepo(
+      "/tmp/repo",
+      makeMockRepoInfo(),
+      makeMockScanResult(),
+      makeMockOptions(),
+      undefined,
+      undefined,
+      { client: injectedClient }
+    );
+
+    expect(injectedClient.createSession).toHaveBeenCalled();
+    expect(injectedClient.stop).toHaveBeenCalled();
+    expect(sharedMockClient.createSession).not.toHaveBeenCalled();
+  });
+});
+
 // ─── Standard mode (with tools) ─────────────────────────────────────────────
 
 describe("standard mode (with tools)", () => {
@@ -632,6 +674,40 @@ describe("event handling", () => {
     await analyzeRepo("/tmp/repo", makeMockRepoInfo(), makeMockScanResult(), makeMockOptions(), onProgress);
 
     expect(onProgress).toHaveBeenCalledWith("thinking...");
+  });
+
+  it("streams message deltas through onProgress in non-verbose mode", async () => {
+    const mockSession = {
+      on: vi.fn().mockImplementation(() => vi.fn()),
+      sendAndWait: vi.fn(),
+      destroy: vi.fn().mockResolvedValue(undefined),
+    };
+    sharedMockClient.createSession.mockResolvedValue(mockSession);
+
+    mockSession.sendAndWait.mockImplementation(async () => {
+      const handler = mockSession.on.mock.calls[0]?.[0];
+      if (handler) {
+        handler({
+          id: "evt-1",
+          timestamp: new Date().toISOString(),
+          parentId: null,
+          type: "assistant.message_delta",
+          data: { messageId: "msg-1", deltaContent: VALID_REPO_FACTS_JSON },
+        });
+      }
+      return undefined;
+    });
+
+    const onProgress = vi.fn();
+    await analyzeRepo(
+      "/tmp/repo",
+      makeMockRepoInfo(),
+      makeMockScanResult(),
+      makeMockOptions({ verbose: false }),
+      onProgress
+    );
+
+    expect(onProgress).toHaveBeenCalledWith(expect.stringContaining("LLM:"));
   });
 
   it("writes deltas to stdout in verbose mode", async () => {
@@ -1087,7 +1163,21 @@ describe("error handling", () => {
         makeMockScanResult(),
         makeMockOptions({ fast: true })
       )
-    ).rejects.toThrow("Fast analysis failed");
+    ).rejects.toThrow("Fast analysis failed: Fast analysis request timed out after 300s");
+  });
+
+  it("adds timeout context for standard mode timeouts", async () => {
+    const timeoutError = Object.assign(new Error("Request timed out"), { code: "ETIMEDOUT" });
+    const mockSession = {
+      on: vi.fn().mockImplementation(() => vi.fn()),
+      sendAndWait: vi.fn().mockRejectedValue(timeoutError),
+      destroy: vi.fn().mockResolvedValue(undefined),
+    };
+    sharedMockClient.createSession.mockResolvedValue(mockSession);
+
+    await expect(
+      analyzeRepo("/tmp/repo", makeMockRepoInfo(), makeMockScanResult(), makeMockOptions())
+    ).rejects.toThrow("Analysis request timed out after 600s");
   });
 
   it("propagates sendAndWait errors in standard mode", async () => {
@@ -1520,6 +1610,50 @@ describe("fast mode prompt construction", () => {
     expect(prompt).toContain("# My Project");
     expect(prompt).toContain("### package.json");
     expect(prompt).toContain('"my-project"');
+  });
+
+  it("uses larger key-file budget for large-context models in fast mode", async () => {
+    const existsSyncMock = fs.existsSync as Mock;
+    const readFileSyncMock = fs.readFileSync as Mock;
+    const longReadme = "A".repeat(10000);
+
+    existsSyncMock.mockImplementation((p: string) => p.endsWith("README.md"));
+    readFileSyncMock.mockReturnValue(longReadme);
+
+    const mockSession = configureSessionResponse(VALID_REPO_FACTS_JSON);
+
+    await analyzeRepo(
+      "/tmp/repo",
+      makeMockRepoInfo(),
+      makeMockScanResult(),
+      makeMockOptions({ fast: true, model: "claude-opus-4-5" })
+    );
+
+    const prompt = mockSession.sendAndWait.mock.calls[0][0].prompt as string;
+    const readmeContent = prompt.split("### README.md\n```\n")[1]?.split("\n```")[0] ?? "";
+    expect(readmeContent).toHaveLength(8000);
+  });
+
+  it("uses smaller key-file budget for small-context models in fast mode", async () => {
+    const existsSyncMock = fs.existsSync as Mock;
+    const readFileSyncMock = fs.readFileSync as Mock;
+    const longReadme = "B".repeat(10000);
+
+    existsSyncMock.mockImplementation((p: string) => p.endsWith("README.md"));
+    readFileSyncMock.mockReturnValue(longReadme);
+
+    const mockSession = configureSessionResponse(VALID_REPO_FACTS_JSON);
+
+    await analyzeRepo(
+      "/tmp/repo",
+      makeMockRepoInfo(),
+      makeMockScanResult(),
+      makeMockOptions({ fast: true, model: "tiny-context-model" })
+    );
+
+    const prompt = mockSession.sendAndWait.mock.calls[0][0].prompt as string;
+    const readmeContent = prompt.split("### README.md\n```\n")[1]?.split("\n```")[0] ?? "";
+    expect(readmeContent).toHaveLength(3500);
   });
 
   it("limits fast mode file list to 30 files", async () => {

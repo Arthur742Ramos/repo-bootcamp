@@ -1,9 +1,14 @@
+import { mkdtemp, rm, writeFile } from "fs/promises";
+import { tmpdir } from "os";
+import { join } from "path";
 import { describe, it, expect } from "vitest";
 import { 
   STYLE_PACKS, 
   getStyleConfig, 
   generateExampleConfig,
-  examplePlugin 
+  examplePlugin,
+  loadConfig,
+  runPlugins,
 } from "../src/plugins.js";
 import type { StylePack } from "../src/types.js";
 
@@ -150,6 +155,56 @@ describe("Template Packs + Plugin System", () => {
     });
   });
 
+  describe("loadConfig", () => {
+    it("loads extensionless .bootcamprc files", async () => {
+      const dir = await mkdtemp(join(tmpdir(), "bootcamp-config-"));
+      const configPath = join(dir, ".bootcamprc");
+      try {
+        await writeFile(
+          configPath,
+          JSON.stringify({
+            defaults: {
+              audience: "sre",
+              focus: "architecture",
+              maxFiles: 180,
+            },
+          }),
+          "utf-8"
+        );
+        const config = await loadConfig(configPath);
+        expect(config?.defaults?.audience).toBe("sre");
+        expect(config?.defaults?.focus).toBe("architecture");
+        expect(config?.defaults?.maxFiles).toBe(180);
+      } finally {
+        await rm(dir, { recursive: true, force: true });
+      }
+    });
+
+    it("loads bootcamp.config.ts files", async () => {
+      const dir = await mkdtemp(join(tmpdir(), "bootcamp-config-ts-"));
+      const configPath = join(dir, "bootcamp.config.ts");
+      try {
+        await writeFile(
+          configPath,
+          `export default {
+  defaults: {
+    model: "test-model",
+    style: "minimal",
+    maxFiles: 42
+  }
+};`,
+          "utf-8"
+        );
+        const config = await loadConfig(configPath);
+        expect(config?.defaults?.model).toBe("test-model");
+        expect(config?.defaults?.style).toBe("minimal");
+        expect(config?.defaults?.maxFiles).toBe(42);
+      } finally {
+        await rm(dir, { recursive: true, force: true });
+      }
+    });
+  });
+
   describe("examplePlugin", () => {
     it("should have correct structure", () => {
       expect(examplePlugin.name).toBe("example-plugin");
@@ -212,6 +267,33 @@ describe("Template Packs + Plugin System", () => {
 
       expect(output.extraData).toBeDefined();
       expect(output.extraData?.customMetric).toBe(42);
+    });
+  });
+
+  describe("runPlugins", () => {
+    it("supports analyzer, formatter, and output-target plugin shapes", async () => {
+      const formatterPlugin = {
+        name: "formatter-plugin",
+        type: "formatter",
+        formatDocuments: async (documents: { name: string; content: string }[]) => documents,
+      };
+      const outputTargetPlugin = {
+        name: "target-plugin",
+        type: "output-target",
+        writeOutput: async () => {},
+      };
+
+      const result = await runPlugins(
+        [examplePlugin as any, formatterPlugin as any, outputTargetPlugin as any],
+        "/tmp/repo",
+        { stack: { languages: [] } } as any,
+        { repoName: "test-repo" } as any,
+        {} as any
+      );
+
+      expect(result.docs.length).toBeGreaterThan(0);
+      expect(result.formatters).toHaveLength(1);
+      expect(result.outputTargets).toHaveLength(1);
     });
   });
 });

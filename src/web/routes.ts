@@ -1,5 +1,6 @@
 import type { Application, Request, Response } from "express";
 import { EventEmitter } from "events";
+import rateLimit from "express-rate-limit";
 import { mkdir, readFile } from "fs/promises";
 import { join, resolve } from "path";
 
@@ -94,6 +95,14 @@ function buildWebOptions(options: Partial<BootcampOptions>): BootcampOptions {
   };
 }
 
+function isObjectRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function getErrorMessage(error: unknown, fallback: string): string {
+  return error instanceof Error && error.message ? error.message : fallback;
+}
+
 /**
  * Run analysis in background
  */
@@ -159,7 +168,7 @@ async function runAnalysis(job: AnalysisJob, options: Partial<BootcampOptions>):
     const outputDir = join(process.cwd(), `.bootcamp-output`, job.id, repoInfo.repo);
     await mkdir(outputDir, { recursive: true });
 
-    const { documents, facts: preparedFacts, security, radar, deps } = await prepareOutputDocuments({
+    const { documents, facts: preparedFacts, security, radar, deps, outputTargets } = await prepareOutputDocuments({
       repoPath,
       repoInfo,
       scanResult,
@@ -184,6 +193,7 @@ async function runAnalysis(job: AnalysisJob, options: Partial<BootcampOptions>):
       outputFormat,
       progress,
       allowIssueCreation: false,
+      outputTargets,
     });
     progress.stop();
 
@@ -223,80 +233,113 @@ async function runAnalysis(job: AnalysisJob, options: Partial<BootcampOptions>):
   } catch (error: unknown) {
     job.status = "error";
     job.completedAt = Date.now();
-    job.error = (error as Error).message;
-    emit({ type: "error", message: (error as Error).message });
+    const message = getErrorMessage(error, "Analysis failed");
+    job.error = message;
+    emit({ type: "error", message });
   } finally {
     progress.stop();
     if (repoPath) {
       try {
         await cleanupRepository(repoPath);
       } catch (cleanupError: unknown) {
-        console.error(`[web] Failed to clean up temporary repository: ${(cleanupError as Error).message}`);
+        const message = getErrorMessage(cleanupError, "Unknown cleanup error");
+        console.error(`[web] Failed to clean up temporary repository: ${message}`);
       }
     }
   }
 }
 
 export function registerRoutes(app: Application): void {
+  const limiterKeyPrefix = `web-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+  const analysisEndpointRateLimit = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    limit: 5,
+    standardHeaders: true,
+    legacyHeaders: false,
+    keyGenerator: (req) => `${limiterKeyPrefix}:analyze:${req.ip || "unknown"}`,
+  });
+  const defaultApiRateLimit = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    limit: 100,
+    standardHeaders: true,
+    legacyHeaders: false,
+    keyGenerator: (req) => `${limiterKeyPrefix}:api:${req.ip || "unknown"}`,
+  });
+
   // Start analysis
-  app.post("/api/analyze", async (req: Request, res: Response): Promise<void> => {
-    const { repoUrl, options = {} } = req.body;
-
-    if (!repoUrl || typeof repoUrl !== "string") {
-      res.status(400).json({ error: "repoUrl is required and must be a string" });
-      return;
-    }
-
-    // Limit URL length to prevent abuse
-    if (repoUrl.length > 500) {
-      res.status(400).json({ error: "repoUrl too long" });
-      return;
-    }
-
+  app.post("/api/analyze", analysisEndpointRateLimit, async (req: Request, res: Response): Promise<void> => {
     try {
-      parseGitHubUrl(repoUrl); // Validate URL
-    } catch (error: unknown) {
-      res.status(400).json({ error: (error as Error).message });
-      return;
-    }
-
-    const job: AnalysisJob = {
-      id: generateJobId(),
-      repoUrl,
-      status: "pending",
-      progress: [],
-      emitter: new EventEmitter(),
-    };
-
-    // Enforce max jobs cap — evict oldest completed jobs first
-    if (jobs.size >= MAX_JOBS) {
-      let oldestCompletedId: string | null = null;
-      let oldestTime = Infinity;
-      for (const [id, j] of jobs) {
-        if (j.completedAt && j.completedAt < oldestTime) {
-          oldestTime = j.completedAt;
-          oldestCompletedId = id;
-        }
-      }
-      if (oldestCompletedId) {
-        jobs.delete(oldestCompletedId);
-      } else {
-        // All jobs are still running — reject to prevent OOM
-        res.status(503).json({ error: "Server at capacity, try again later" });
+      if (!isObjectRecord(req.body)) {
+        res.status(400).json({ error: "Request body must be a JSON object" });
         return;
       }
+
+      const repoUrl = req.body.repoUrl;
+      const requestOptions = req.body.options;
+
+      if (!repoUrl || typeof repoUrl !== "string") {
+        res.status(400).json({ error: "repoUrl is required and must be a string" });
+        return;
+      }
+      if (requestOptions !== undefined && !isObjectRecord(requestOptions)) {
+        res.status(400).json({ error: "options must be an object when provided" });
+        return;
+      }
+
+      // Limit URL length to prevent abuse
+      if (repoUrl.length > 500) {
+        res.status(400).json({ error: "repoUrl too long" });
+        return;
+      }
+
+      try {
+        parseGitHubUrl(repoUrl); // Validate URL
+      } catch (error: unknown) {
+        res.status(400).json({ error: getErrorMessage(error, "Invalid repository URL") });
+        return;
+      }
+
+      const job: AnalysisJob = {
+        id: generateJobId(),
+        repoUrl,
+        status: "pending",
+        progress: [],
+        emitter: new EventEmitter(),
+      };
+
+      // Enforce max jobs cap — evict oldest completed jobs first
+      if (jobs.size >= MAX_JOBS) {
+        let oldestCompletedId: string | null = null;
+        let oldestTime = Infinity;
+        for (const [id, j] of jobs) {
+          if (j.completedAt && j.completedAt < oldestTime) {
+            oldestTime = j.completedAt;
+            oldestCompletedId = id;
+          }
+        }
+        if (oldestCompletedId) {
+          jobs.delete(oldestCompletedId);
+        } else {
+          // All jobs are still running — reject to prevent OOM
+          res.status(503).json({ error: "Server at capacity, try again later" });
+          return;
+        }
+      }
+
+      jobs.set(job.id, job);
+
+      // Start analysis in background
+      const options = (requestOptions ?? {}) as Partial<BootcampOptions>;
+      void runAnalysis(job, options);
+
+      res.json({ jobId: job.id });
+    } catch (error: unknown) {
+      res.status(500).json({ error: getErrorMessage(error, "Failed to start analysis") });
     }
-
-    jobs.set(job.id, job);
-
-    // Start analysis in background
-    runAnalysis(job, options);
-
-    res.json({ jobId: job.id });
   });
 
   // SSE endpoint for progress
-  app.get("/api/jobs/:jobId/stream", (req: Request, res: Response): void => {
+  app.get("/api/jobs/:jobId/stream", defaultApiRateLimit, (req: Request, res: Response): void => {
     const jobId = req.params.jobId as string;
     const job = jobs.get(jobId);
     if (!job) {
@@ -334,7 +377,7 @@ export function registerRoutes(app: Application): void {
   });
 
   // Get job status
-  app.get("/api/jobs/:jobId", (req: Request, res: Response): void => {
+  app.get("/api/jobs/:jobId", defaultApiRateLimit, (req: Request, res: Response): void => {
     const jobId = req.params.jobId as string;
     const job = jobs.get(jobId);
     if (!job) {
@@ -351,7 +394,7 @@ export function registerRoutes(app: Application): void {
   });
 
   // Get generated file content
-  app.get("/api/jobs/:jobId/files/:filename", async (req: Request, res: Response): Promise<void> => {
+  app.get("/api/jobs/:jobId/files/:filename", defaultApiRateLimit, async (req: Request, res: Response): Promise<void> => {
     const jobId = req.params.jobId as string;
     const filename = req.params.filename as string;
 
@@ -388,7 +431,7 @@ export function registerRoutes(app: Application): void {
       res.setHeader("Content-Type", contentType);
       res.send(content);
     } catch (error: unknown) {
-      res.status(500).json({ error: (error as Error).message });
+      res.status(500).json({ error: getErrorMessage(error, "Failed to read generated file") });
     }
   });
 }

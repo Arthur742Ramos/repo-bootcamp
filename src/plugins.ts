@@ -3,9 +3,31 @@
  * Allows customization of output style and extending with custom analyzers
  */
 
-import { readFile } from "fs/promises";
+import { cosmiconfig } from "cosmiconfig";
+import { TypeScriptLoader } from "cosmiconfig-typescript-loader";
 import { join } from "path";
 import type { StylePack, RepoFacts, ScanResult, BootcampOptions } from "./types.js";
+import type {
+  AnalyzerPlugin,
+  BootcampPlugin,
+  FormatterPlugin,
+  OutputTargetPlugin,
+} from "./plugin-api.js";
+import {
+  isAnalyzerPlugin,
+  isFormatterPlugin,
+  isOutputTargetPlugin,
+} from "./plugin-api.js";
+export type {
+  BootcampPlugin,
+  PluginOutput,
+  PluginDocument,
+  AnalyzerPlugin,
+  FormatterPlugin,
+  OutputTargetPlugin,
+  FormatterContext,
+  OutputTargetContext,
+} from "./plugin-api.js";
 
 /**
  * Style pack configuration
@@ -124,39 +146,17 @@ export const STYLE_PACKS: Record<StylePack, StyleConfig> = {
 export const STYLE_PACK_NAMES = Object.keys(STYLE_PACKS) as StylePack[];
 
 /**
- * Plugin interface for custom analyzers
- */
-export interface BootcampPlugin {
-  name: string;
-  version: string;
-  /**
-   * Analyze the repository and return additional documentation
-   */
-  analyze: (
-    repoPath: string,
-    scanResult: ScanResult,
-    facts: RepoFacts,
-    options: BootcampOptions
-  ) => Promise<PluginOutput>;
-}
-
-/**
- * Plugin output
- */
-export interface PluginOutput {
-  /** Additional documentation files to generate */
-  docs: { name: string; content: string }[];
-  /** Patches to apply to RepoFacts */
-  factsPatch?: Partial<RepoFacts>;
-  /** Additional data to include in repo_facts.json */
-  extraData?: Record<string, unknown>;
-}
-
-/**
  * Bootcamp configuration file structure
  */
 export interface BootcampConfig {
   style?: StylePack;
+  defaults?: {
+    audience?: BootcampOptions["audience"];
+    focus?: BootcampOptions["focus"];
+    maxFiles?: number;
+    model?: string;
+    style?: StylePack;
+  };
   customStyle?: Partial<StyleConfig>;
   plugins?: string[];
   prompts?: {
@@ -170,27 +170,36 @@ export interface BootcampConfig {
 }
 
 /**
- * Load configuration from bootcamp.config.json
+ * Load configuration from .bootcamprc / bootcamp.config.* files
  */
 export async function loadConfig(configPath?: string): Promise<BootcampConfig | null> {
-  const paths = configPath 
-    ? [configPath]
-    : [
-        join(process.cwd(), "bootcamp.config.json"),
-        join(process.cwd(), ".bootcamprc.json"),
-        join(process.cwd(), ".bootcamp.json"),
-      ];
+  const explorer = cosmiconfig("bootcamp", {
+    searchPlaces: [
+      "package.json",
+      ".bootcamprc",
+      ".bootcamprc.json",
+      ".bootcamprc.yaml",
+      ".bootcamprc.yml",
+      ".bootcamprc.js",
+      ".bootcamprc.ts",
+      "bootcamp.config.json",
+      "bootcamp.config.js",
+      "bootcamp.config.ts",
+      ".bootcamp.json",
+    ],
+    loaders: {
+      ".ts": TypeScriptLoader(),
+    },
+  });
 
-  for (const path of paths) {
-    try {
-      const content = await readFile(path, "utf-8");
-      return JSON.parse(content) as BootcampConfig;
-    } catch {
-      // Try next path
-    }
+  try {
+    const result = configPath
+      ? await explorer.load(configPath)
+      : await explorer.search(process.cwd());
+    return result?.config ? (result.config as BootcampConfig) : null;
+  } catch {
+    return null;
   }
-
-  return null;
 }
 
 /**
@@ -234,7 +243,7 @@ export async function loadPlugins(pluginPaths: string[]): Promise<BootcampPlugin
       const module = await import(modulePath);
       const plugin = module.default || module;
 
-      if (plugin.name && plugin.analyze) {
+      if (plugin.name && (isAnalyzerPlugin(plugin) || isFormatterPlugin(plugin) || isOutputTargetPlugin(plugin))) {
         plugins.push(plugin);
         console.log(`Loaded plugin: ${plugin.name} v${plugin.version || "1.0.0"}`);
       }
@@ -259,23 +268,37 @@ export async function runPlugins(
   docs: { name: string; content: string }[];
   factsPatch: Partial<RepoFacts>;
   extraData: Record<string, unknown>;
+  formatters: FormatterPlugin[];
+  outputTargets: OutputTargetPlugin[];
 }> {
   const allDocs: { name: string; content: string }[] = [];
   let factsPatch: Partial<RepoFacts> = {};
   const extraData: Record<string, unknown> = {};
+  const formatters: FormatterPlugin[] = [];
+  const outputTargets: OutputTargetPlugin[] = [];
 
   for (const plugin of plugins) {
+    if (isFormatterPlugin(plugin)) {
+      formatters.push(plugin);
+    }
+    if (isOutputTargetPlugin(plugin)) {
+      outputTargets.push(plugin);
+    }
+    if (!isAnalyzerPlugin(plugin)) {
+      continue;
+    }
+
     try {
       const output = await plugin.analyze(repoPath, scanResult, facts, options);
-      
+
       if (output.docs) {
         allDocs.push(...output.docs);
       }
-      
+
       if (output.factsPatch) {
         factsPatch = { ...factsPatch, ...output.factsPatch };
       }
-      
+
       if (output.extraData) {
         extraData[plugin.name] = output.extraData;
       }
@@ -284,7 +307,7 @@ export async function runPlugins(
     }
   }
 
-  return { docs: allDocs, factsPatch, extraData };
+  return { docs: allDocs, factsPatch, extraData, formatters, outputTargets };
 }
 
 /**
@@ -310,7 +333,7 @@ export function generateExampleConfig(): string {
 /**
  * Example plugin for reference
  */
-export const examplePlugin: BootcampPlugin = {
+export const examplePlugin: AnalyzerPlugin = {
   name: "example-plugin",
   version: "1.0.0",
   analyze: async (repoPath, scanResult, facts, _options) => {

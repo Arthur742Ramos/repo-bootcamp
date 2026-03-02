@@ -1,6 +1,5 @@
 import { analyzeRepo, type AnalysisStats } from "../agent.js";
 import { runParallelAnalysis } from "../analysis.js";
-import { pruneCache, readCache, writeCache } from "../cache.js";
 import { analyzeDiff, generateDiffDocs } from "../diff.js";
 import { generateDependencyDocs, type DependencyAnalysis } from "../deps.js";
 import {
@@ -14,6 +13,7 @@ import {
 } from "../generator.js";
 import { generateImpactDocs } from "../impact.js";
 import { loadPlugins, runPlugins, type BootcampConfig, type StyleConfig } from "../plugins.js";
+import type { FormatterPlugin, OutputTargetPlugin } from "../plugin-api.js";
 import { ProgressTracker } from "../progress.js";
 import { generateRadarDocs } from "../radar.js";
 import { generateSecurityDocs, type SecurityAnalysis } from "../security.js";
@@ -77,39 +77,6 @@ export async function orchestrateAnalysis({
   progress,
   analysisStart,
 }: OrchestrateAnalysisParams): Promise<OrchestratedAnalysisResult> {
-  const useCache = !options.noCache && !!repoInfo.commitSha;
-  const cacheOptions = {
-    focus: options.focus,
-    style: options.style,
-    model: options.model,
-    audience: options.audience,
-  };
-
-  if (useCache) {
-    pruneCache(7 * 24 * 60 * 60 * 1000).catch(() => {});
-
-    const cached = await readCache(repoInfo.fullName, repoInfo.commitSha!, cacheOptions);
-    if (cached) {
-      const durationMs = Date.now() - analysisStart;
-      const analysisStats: AnalysisStats = {
-        model: "cached",
-        toolCalls: [],
-        totalEvents: 0,
-        responseLength: 0,
-        startTime: analysisStart,
-        endTime: Date.now(),
-      };
-      progress.succeed(`Analysis loaded from cache (${repoInfo.commitSha!.substring(0, 7)})`);
-      return {
-        facts: cached,
-        analysisStats,
-        durationMs,
-        toolCalls: 0,
-        model: "cached",
-      };
-    }
-  }
-
   const result = await analyzeRepo(repoPath, repoInfo, scanResult, options, (msg) => {
     if (msg.startsWith("Tool:")) {
       const toolName = msg.replace("Tool:", "").trim();
@@ -120,14 +87,6 @@ export async function orchestrateAnalysis({
 
   const durationMs = Date.now() - analysisStart;
   progress.succeed("Analysis complete");
-
-  if (useCache) {
-    try {
-      await writeCache(repoInfo.fullName, repoInfo.commitSha!, result.facts, cacheOptions);
-    } catch {
-      // Cache write failure is non-fatal
-    }
-  }
 
   return {
     facts: result.facts,
@@ -155,6 +114,7 @@ export interface PrepareOutputDocumentsResult {
   security: SecurityAnalysis;
   radar: TechRadar;
   deps: DependencyAnalysis | null;
+  outputTargets: OutputTargetPlugin[];
 }
 
 export async function prepareOutputDocuments({
@@ -175,6 +135,17 @@ export async function prepareOutputDocuments({
     repoPath,
     scanResult,
     progress,
+    {
+      repoFullName: repoInfo.fullName,
+      commitSha: repoInfo.commitSha,
+      noCache: options.noCache,
+      generationOptions: {
+        focus: options.focus,
+        style: options.style,
+        model: options.model,
+        audience: options.audience,
+      },
+    }
   );
 
   let diffSummary: DiffSummary | null = null;
@@ -190,6 +161,8 @@ export async function prepareOutputDocuments({
   let finalFacts = baseFacts;
   let pluginDocs: GeneratedDoc[] = [];
   let pluginExtraData: Record<string, unknown> = {};
+  let pluginFormatters: FormatterPlugin[] = [];
+  let pluginOutputTargets: OutputTargetPlugin[] = [];
   if (config?.plugins && config.plugins.length > 0) {
     progress.update("Running plugins...");
     const plugins = await loadPlugins(config.plugins);
@@ -201,6 +174,8 @@ export async function prepareOutputDocuments({
 
     pluginDocs = pluginOutput.docs;
     pluginExtraData = pluginOutput.extraData;
+    pluginFormatters = pluginOutput.formatters ?? [];
+    pluginOutputTargets = pluginOutput.outputTargets ?? [];
   }
 
   const documents: GeneratedDoc[] = [
@@ -266,9 +241,23 @@ export async function prepareOutputDocuments({
       .map((doc) => doc.trim())
       .filter((doc) => doc.length > 0)
   );
-  const includedDocuments = excludedDocs.size > 0
+  let includedDocuments = excludedDocs.size > 0
     ? documents.filter((doc) => !excludedDocs.has(doc.name))
     : documents;
+
+  for (const formatter of pluginFormatters) {
+    try {
+      includedDocuments = await formatter.formatDocuments(includedDocuments, {
+        repoPath,
+        repoInfo,
+        scanResult,
+        facts: finalFacts,
+        options,
+      });
+    } catch (error: unknown) {
+      console.warn(`Formatter plugin ${formatter.name} failed: ${(error as Error).message}`);
+    }
+  }
 
   return {
     documents: includedDocuments,
@@ -276,5 +265,6 @@ export async function prepareOutputDocuments({
     security,
     radar,
     deps,
+    outputTargets: pluginOutputTargets,
   };
 }

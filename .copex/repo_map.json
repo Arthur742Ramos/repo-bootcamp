@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generated_at": "2026-03-02T20:27:31.807939+00:00",
+  "generated_at": "2026-03-02T21:42:02.403806+00:00",
   "root": "/tmp/repo-bootcamp",
   "files": {
     "eslint.config.js": {
@@ -37,6 +37,10 @@
       "classes": [],
       "functions": [
         "analyzeRepo",
+        "buildCommandList",
+        "buildJsonSchema",
+        "buildPromptFooter",
+        "buildRepoHeader",
         "buildSystemPrompt",
         "createAnalysisPrompt",
         "createFastAnalysisPrompt",
@@ -51,8 +55,8 @@
       ],
       "methods": [],
       "calls": {},
-      "mtime_ns": 1772481596968027074,
-      "size": 30114
+      "mtime_ns": 1772484415139121944,
+      "size": 30536
     },
     "src/analysis.ts": {
       "path": "src/analysis.ts",
@@ -103,8 +107,8 @@
       ],
       "methods": [],
       "calls": {},
-      "mtime_ns": 1772481596969027101,
-      "size": 5104
+      "mtime_ns": 1772483815772669328,
+      "size": 5516
     },
     "src/commands/ask-command.ts": {
       "path": "src/commands/ask-command.ts",
@@ -486,8 +490,8 @@
       ],
       "methods": [],
       "calls": {},
-      "mtime_ns": 1772481596970027128,
-      "size": 17085
+      "mtime_ns": 1772483877437671177,
+      "size": 18020
     },
     "src/interactive.ts": {
       "path": "src/interactive.ts",
@@ -792,8 +796,8 @@
       ],
       "methods": [],
       "calls": {},
-      "mtime_ns": 1772481596971027156,
-      "size": 11696
+      "mtime_ns": 1772483573838510474,
+      "size": 12038
     },
     "src/types.ts": {
       "path": "src/types.ts",
@@ -806,8 +810,8 @@
       "functions": [],
       "methods": [],
       "calls": {},
-      "mtime_ns": 1772481596971027156,
-      "size": 5323
+      "mtime_ns": 1772483925320473206,
+      "size": 6607
     },
     "src/utils.ts": {
       "path": "src/utils.ts",
@@ -850,24 +854,22 @@
       ],
       "methods": [],
       "calls": {},
-      "mtime_ns": 1772481596971027156,
-      "size": 6108
+      "mtime_ns": 1772484418780182828,
+      "size": 6532
     },
     "src/web/routes.ts": {
       "path": "src/web/routes.ts",
       "language": "typescript",
       "parser": "regex",
       "imports": [
-        "../agent.js",
-        "../analysis.js",
-        "../cache.js",
-        "../deps.js",
         "../formatter.js",
-        "../impact.js",
         "../ingest.js",
-        "../plugins.js",
-        "../radar.js",
+        "../progress.js",
         "../security.js",
+        "../services/analysis-orchestration.js",
+        "../services/clone-service.js",
+        "../services/config-resolution.js",
+        "../services/output-writer.js",
         "../types.js",
         "events",
         "express",
@@ -876,17 +878,20 @@
       ],
       "classes": [],
       "functions": [
+        "buildWebOptions",
         "emit",
         "generateJobId",
         "onProgress",
-        "outputFormat",
+        "pruneExpiredJobs",
         "registerRoutes",
-        "runAnalysis"
+        "runAnalysis",
+        "startJobPruner",
+        "stopJobPruner"
       ],
       "methods": [],
       "calls": {},
-      "mtime_ns": 1772481596972027183,
-      "size": 13391
+      "mtime_ns": 1772483853132261529,
+      "size": 11472
     },
     "src/web/server.ts": {
       "path": "src/web/server.ts",
@@ -896,7 +901,9 @@
         "./routes.js",
         "./templates.js",
         "chalk",
-        "express"
+        "express",
+        "express-rate-limit",
+        "helmet"
       ],
       "classes": [],
       "functions": [
@@ -905,8 +912,8 @@
       ],
       "methods": [],
       "calls": {},
-      "mtime_ns": 1772481596972027183,
-      "size": 1830
+      "mtime_ns": 1772483695730633771,
+      "size": 2529
     },
     "src/web/templates.ts": {
       "path": "src/web/templates.ts",
@@ -915,10 +922,11 @@
       "imports": [],
       "classes": [],
       "functions": [
+        "addGeneratedFile",
         "addProgressItem",
+        "addStatCard",
         "analyze",
         "closeModal",
-        "escapeHtml",
         "getFileKey",
         "getIndexHtml",
         "resetButton",
@@ -928,8 +936,8 @@
       ],
       "methods": [],
       "calls": {},
-      "mtime_ns": 1772481596972027183,
-      "size": 10225
+      "mtime_ns": 1772483562746320471,
+      "size": 10690
     },
     "test/agent.test.ts": {
       "path": "test/agent.test.ts",
@@ -1408,8 +1416,8 @@
       ],
       "methods": [],
       "calls": {},
-      "mtime_ns": 1772481596974027238,
-      "size": 26397
+      "mtime_ns": 1772483596250909913,
+      "size": 26452
     },
     "test/types.test.ts": {
       "path": "test/types.test.ts",

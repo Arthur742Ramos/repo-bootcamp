@@ -1,9 +1,9 @@
 /**
- * Tests for CLI wiring in index.ts
+ * Tests for CLI wiring in cli.ts
  */
 
 import { describe, it, expect } from "vitest";
-import { program } from "../src/index.js";
+import { program } from "../src/cli.js";
 
 describe("CLI program", () => {
   it("registers core subcommands", () => {

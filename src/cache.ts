@@ -1,6 +1,6 @@
 /**
  * Cache layer for analysis results
- * Stores/retrieves RepoFacts by repo fullName + commit SHA
+ * Stores/retrieves per-phase analysis data by repo fullName + commit SHA
  * Cache location: ~/.cache/repo-bootcamp/
  */
 
@@ -11,16 +11,24 @@ import { createHash } from "crypto";
 import type { RepoFacts } from "./types.js";
 
 const CACHE_DIR = join(homedir(), ".cache", "repo-bootcamp");
-const CACHE_VERSION = 1;
+const CACHE_VERSION = 2;
 
-interface CacheEntry {
+export type CachePhase = "facts" | "deps" | "security" | "impact";
+export type AnalysisPhase = Exclude<CachePhase, "facts">;
+
+interface CacheEntry<T = unknown> {
   version: number;
+  phase: CachePhase;
   repoFullName: string;
   commitSha: string;
   generationOptions?: NormalizedCacheGenerationOptions;
   createdAt: string;
-  facts: RepoFacts;
+  value: T;
 }
+
+export type CacheReadResult<T> =
+  | { hit: true; value: T }
+  | { hit: false };
 
 export interface CacheGenerationOptions {
   focus?: string;
@@ -57,25 +65,28 @@ function serializeGenerationOptions(options: NormalizedCacheGenerationOptions): 
 }
 
 /**
- * Build a cache key from repo name and commit SHA
+ * Build a cache key from repo name, commit SHA, and cache phase
  */
 function cacheKey(
   repoFullName: string,
   commitSha: string,
-  generationOptions?: CacheGenerationOptions
+  generationOptions?: CacheGenerationOptions,
+  phase: CachePhase = "facts"
 ): string {
   const normalizedOptions = normalizeGenerationOptions(generationOptions);
   const optionsFingerprint = serializeGenerationOptions(normalizedOptions);
-  const hashSeed = optionsFingerprint === "focus=|style=|model=|audience="
+  const baseSeed = optionsFingerprint === "focus=|style=|model=|audience="
     ? `${repoFullName}@${commitSha}`
     : `${repoFullName}@${commitSha}|${optionsFingerprint}`;
+  const hashSeed = phase === "facts" ? baseSeed : `${baseSeed}|phase=${phase}`;
 
   const hash = createHash("sha256")
     .update(hashSeed)
     .digest("hex")
     .substring(0, 16);
   const safeName = repoFullName.replace(/\//g, "-");
-  return `${safeName}-${hash}.json`;
+  const phaseSuffix = phase === "facts" ? "" : `-${phase}`;
+  return `${safeName}${phaseSuffix}-${hash}.json`;
 }
 
 /**
@@ -86,40 +97,82 @@ async function ensureCacheDir(): Promise<void> {
 }
 
 /**
- * Read cached analysis results
- * Returns null if no cache hit or cache is invalid
+ * Read a specific cached analysis phase.
+ */
+export async function readPhaseCache<T>(
+  phase: CachePhase,
+  repoFullName: string,
+  commitSha: string,
+  generationOptions?: CacheGenerationOptions
+): Promise<CacheReadResult<T>> {
+  try {
+    const expectedOptions = normalizeGenerationOptions(generationOptions);
+    const filePath = join(CACHE_DIR, cacheKey(repoFullName, commitSha, generationOptions, phase));
+    const raw = await readFile(filePath, "utf-8");
+    const entry: CacheEntry<T> = JSON.parse(raw);
+    const entryOptions = normalizeGenerationOptions(entry.generationOptions);
+
+    if (
+      entry.version !== CACHE_VERSION ||
+      entry.phase !== phase ||
+      entry.repoFullName !== repoFullName ||
+      entry.commitSha !== commitSha ||
+      serializeGenerationOptions(entryOptions) !== serializeGenerationOptions(expectedOptions)
+    ) {
+      return { hit: false };
+    }
+
+    return { hit: true, value: entry.value };
+  } catch (err: unknown) {
+    if (process.env.DEBUG) console.error("[debug]", (err as Error).message);
+    return { hit: false };
+  }
+}
+
+/**
+ * Write a specific analysis phase to cache.
+ */
+export async function writePhaseCache<T>(
+  phase: CachePhase,
+  repoFullName: string,
+  commitSha: string,
+  value: T,
+  generationOptions?: CacheGenerationOptions
+): Promise<void> {
+  await ensureCacheDir();
+  const normalizedOptions = normalizeGenerationOptions(generationOptions);
+
+  const entry: CacheEntry<T> = {
+    version: CACHE_VERSION,
+    phase,
+    repoFullName,
+    commitSha,
+    generationOptions: normalizedOptions,
+    createdAt: new Date().toISOString(),
+    value,
+  };
+
+  const filePath = join(CACHE_DIR, cacheKey(repoFullName, commitSha, generationOptions, phase));
+  await writeFile(filePath, JSON.stringify(entry, null, 2), "utf-8");
+}
+
+/**
+ * Legacy wrappers for full facts cache reads.
  */
 export async function readCache(
   repoFullName: string,
   commitSha: string,
   generationOptions?: CacheGenerationOptions
 ): Promise<RepoFacts | null> {
-  try {
-    const expectedOptions = normalizeGenerationOptions(generationOptions);
-    const filePath = join(CACHE_DIR, cacheKey(repoFullName, commitSha, generationOptions));
-    const raw = await readFile(filePath, "utf-8");
-    const entry: CacheEntry = JSON.parse(raw);
-    const entryOptions = normalizeGenerationOptions(entry.generationOptions);
-
-    if (
-      entry.version !== CACHE_VERSION ||
-      entry.repoFullName !== repoFullName ||
-      entry.commitSha !== commitSha ||
-      serializeGenerationOptions(entryOptions) !== serializeGenerationOptions(expectedOptions)
-    ) {
-      return null;
-    }
-
-    return entry.facts;
-  } catch (err: unknown) {
-    // Log and return null on failure
-    if (process.env.DEBUG) console.error("[debug]", (err as Error).message);
+  const result = await readPhaseCache<RepoFacts>("facts", repoFullName, commitSha, generationOptions);
+  if (!result.hit) {
     return null;
   }
+  return result.value;
 }
 
 /**
- * Write analysis results to cache
+ * Legacy wrappers for full facts cache writes.
  */
 export async function writeCache(
   repoFullName: string,
@@ -127,20 +180,7 @@ export async function writeCache(
   facts: RepoFacts,
   generationOptions?: CacheGenerationOptions
 ): Promise<void> {
-  await ensureCacheDir();
-  const normalizedOptions = normalizeGenerationOptions(generationOptions);
-
-  const entry: CacheEntry = {
-    version: CACHE_VERSION,
-    repoFullName,
-    commitSha,
-    generationOptions: normalizedOptions,
-    createdAt: new Date().toISOString(),
-    facts,
-  };
-
-  const filePath = join(CACHE_DIR, cacheKey(repoFullName, commitSha, generationOptions));
-  await writeFile(filePath, JSON.stringify(entry, null, 2), "utf-8");
+  await writePhaseCache("facts", repoFullName, commitSha, facts, generationOptions);
 }
 
 /**

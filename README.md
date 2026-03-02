@@ -8,7 +8,7 @@
 ╩╚═╚═╝╩  ╚═╝  ╚═╝╚═╝╚═╝ ╩ ╚═╝╩ ╩╩ ╩╩  
 ```
 
-**Turn any GitHub repository into a Day 1 onboarding kit**
+**Turn any GitHub, GitLab, or Bitbucket repository into a Day 1 onboarding kit**
 
 [![GitHub Copilot SDK Contest Award](https://img.shields.io/badge/GitHub%20Copilot%20SDK-Contest%20Award%20Winner%20🏆-gold?style=for-the-badge&logo=github&logoColor=white)](https://github.com/features/copilot)
 
@@ -18,8 +18,9 @@
 [![CI](https://github.com/Arthur742Ramos/repo-bootcamp/actions/workflows/ci.yml/badge.svg)](https://github.com/Arthur742Ramos/repo-bootcamp/actions/workflows/ci.yml)
 [![npm version](https://img.shields.io/npm/v/repo-bootcamp)](https://www.npmjs.com/package/repo-bootcamp)
 [![npm downloads](https://img.shields.io/npm/dm/repo-bootcamp)](https://www.npmjs.com/package/repo-bootcamp)
+[![npm provenance](https://img.shields.io/badge/npm-provenance-enabled-2ea44f?logo=npm)](https://docs.npmjs.com/generating-provenance-statements)
 [![codecov](https://codecov.io/gh/Arthur742Ramos/repo-bootcamp/branch/main/graph/badge.svg)](https://codecov.io/gh/Arthur742Ramos/repo-bootcamp)
-[![Node.js](https://img.shields.io/badge/node-%3E%3D18-brightgreen)](https://nodejs.org/)
+[![Node.js](https://img.shields.io/badge/node-%3E%3D20-brightgreen)](https://nodejs.org/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.6-blue)](https://www.typescriptlang.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
@@ -41,7 +42,7 @@ Most READMEs are outdated. Most wikis are incomplete. Most senior devs are too b
 
 ## The Solution
 
-**Repo Bootcamp** uses agentic AI to analyze any GitHub repository and generate comprehensive, actionable onboarding documentation in **under 60 seconds**.
+**Repo Bootcamp** uses agentic AI to analyze repositories from GitHub, GitLab, or Bitbucket and generate comprehensive, actionable onboarding documentation in **under 60 seconds**.
 
 ```bash
 npx repo-bootcamp https://github.com/facebook/react
@@ -131,7 +132,7 @@ Onboarding Risk: 18/100 (A) 🟢
 1. **Powered by GitHub Copilot SDK** - Leverages the official SDK for agentic AI with tool-calling
 2. **Truly Agentic** - Claude autonomously explores codebases, not just template filling
 3. **Schema Validated** - All output is validated with Zod schemas and auto-retried on failures
-4. **Production Ready** - 569 tests, TypeScript, proper error handling
+4. **Production Ready** - 613 tests, TypeScript, proper error handling
 5. **Full Feature Set** - Interactive mode, web UI, docs drift analyzer, cache management, version diffing
 6. **Beautiful Output** - Mermaid diagrams, structured markdown, professional formatting
 
@@ -141,9 +142,9 @@ Onboarding Risk: 18/100 (A) 🟢
 |--------|-------|
 | GitHub stars | 29 |
 | Generated files | 12+ |
-| Test suite | 569 tests |
+| Test suite | 613 tests |
 | Source files | 36 TypeScript modules |
-| Test files | 25 Vitest files |
+| Test files | 30 Vitest files |
 | Lines of code | 10,992 TypeScript LOC (src/) |
 | Languages supported | 10+ |
 | Generation time | < 60 seconds |
@@ -235,13 +236,17 @@ The Copilot SDK transforms what would be a simple template-filler into an intell
 
 - **GitHub Copilot SDK Integration** - Built on the official SDK for agentic AI capabilities
 - **Agentic Analysis** - Claude autonomously reads files, searches code, and understands architecture
+- **Streaming LLM Output** - Streams assistant deltas live to terminal output (verbose) or progress callbacks
+- **Multi-host Repository Support** - Works with GitHub, GitLab, and Bitbucket repository URLs
 - **Complete Documentation Suite** - Generates 12+ interconnected markdown files
 - **Smart Prioritization** - Intelligently samples files based on importance and byte budget
+- **Fast File Walking** - Uses concurrent `fast-glob` traversal while honoring skip directories and file limits
 - **Schema Validation** - Validates LLM output with auto-retry on failures
+- **Model-aware Fast Mode Budgets** - Adjusts inline key-file/entrypoint budgets by selected model context window
 - **Multi-language Support** - Works with TypeScript, Python, Go, Rust, Java, and more
 - **Interactive Q&A Mode** - Chat with the codebase using natural language
 - **Docs Drift Analyzer** - Detect stale/mismatched docs with `bootcamp docs --check`, and auto-fix with `--fix`
-- **Cache Management** - Prune or clear analysis cache with `bootcamp cache prune|clear`
+- **Phase-level Cache Management** - Reuses deps/security/impact analysis phases and supports `bootcamp cache prune|clear`
 - **Tech Radar** - Identify modern, stable, legacy, and risky technologies
 - **Change Impact Analysis** - Understand how file changes affect the codebase
 - **Version & PR Comparison** - Compare refs with `--compare` or analyze pull requests with `bootcamp diff`
@@ -359,7 +364,7 @@ npm install
 npm run build
 
 # Generate bootcamp for any repo
-node dist/index.js https://github.com/sindresorhus/ky
+node dist/cli.js https://github.com/sindresorhus/ky
 
 # Or use with npx (after npm link)
 npm link
@@ -372,7 +377,7 @@ bootcamp https://github.com/sindresorhus/ky
 
 ```bash
 # Basic usage
-bootcamp <github-url>
+bootcamp <repo-url>
 
 # With options
 bootcamp https://github.com/owner/repo \
@@ -387,6 +392,8 @@ bootcamp https://github.com/owner/repo \
 bootcamp ./path/to/local/repo --no-clone
 ```
 
+`<repo-url>` can be a GitHub, GitLab, or Bitbucket repository URL.
+
 ### Fast Mode
 
 ```bash
@@ -394,6 +401,7 @@ bootcamp ./path/to/local/repo --no-clone
 bootcamp https://github.com/owner/repo --fast
 
 # Fast mode skips tool-calling and inlines key files directly
+# Inline file budget adapts to model context window (or use --model to override)
 ```
 
 ### Interactive Q&A Mode
@@ -494,7 +502,7 @@ npm install -g @mermaid-js/mermaid-cli
 |--------|-------------|---------|
 | `-b, --branch <branch>` | Branch to analyze | default branch |
 | `-f, --focus <focus>` | Focus: onboarding, architecture, contributing, all | `all` |
-| `-a, --audience <type>` | Target: backend, frontend, sre | `backend` |
+| `-a, --audience <type>` | Target: all, backend, frontend, sre | `all` |
 | `-o, --output <dir>` | Output directory | `./bootcamp-{repo}` |
 | `--format <format>` | Output format: markdown, html, pdf | `markdown` |
 | `-m, --max-files <n>` | Maximum files to scan | `200` |
@@ -525,11 +533,26 @@ npm install -g @mermaid-js/mermaid-cli
 | `bootcamp diff <owner/repo#pr>` | Generate onboarding diff for a PR |
 | `bootcamp web` | Start local web demo server |
 
+## Programmatic API
+
+```ts
+import { analyzeRepo, generateBootcamp } from "repo-bootcamp";
+import { runParallelAnalysis } from "repo-bootcamp/api";
+import { extractDependencies, analyzeSecurityPatterns } from "repo-bootcamp/lib";
+```
+
+```js
+const { generateBootcamp } = require("repo-bootcamp");
+const { extractDependencies } = require("repo-bootcamp/lib");
+```
+
+Use `repo-bootcamp/api` for curated core exports and `repo-bootcamp/lib` for the broader module surface.
+
 ## Architecture
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                     CLI (index.ts)                          │
+│                      CLI (cli.ts)                           │
 │  Parses args, orchestrates flow, displays progress          │
 └─────────────────────────────────────────────────────────────┘
                               │
@@ -556,36 +579,49 @@ npm install -g @mermaid-js/mermaid-cli
 └──────────────┘    └──────────────┘    └──────────────────┘
 ```
 
+### Architecture Decision Records
+
+Key architecture decisions are documented in [docs/adr/](./docs/adr/), including decisions around Copilot SDK usage, Express, cache design, and plugin architecture.
+
 ## How It Works
 
 1. **Clone & Scan** - Shallow clones the repo, scans file tree, detects stack
 2. **Priority Sampling** - Scores files by importance, reads within byte budget
-3. **Agentic Analysis** - Claude explores the repo with tools, produces JSON
+3. **Agentic Analysis** - Claude explores the repo with tools, streams response deltas, produces JSON
 4. **Schema Validation** - Validates output, retries with targeted prompts if needed
-5. **Extended Analysis** - Tech radar, security scan, dependency graph, impact map
+5. **Extended Analysis** - Tech radar, security scan, dependency graph, impact map (with phase-level cache reuse)
 6. **Generate Docs** - Transforms JSON into polished markdown documentation
 
 ## Configuration
 
-### bootcamp.config.json
+### .bootcamprc / bootcamp.config.ts
 
-Create a `bootcamp.config.json` in your project root for custom settings:
+Create a `.bootcamprc` or `bootcamp.config.ts` in your project root for custom settings and defaults:
 
-```json
-{
-  "style": "corporate",
-  "customStyle": {
-    "emoji": false,
-    "firstTasksCount": 15
+Supported config files include `.bootcamprc`, `.bootcamprc.{json,yaml,yml,js,ts}`, `bootcamp.config.{json,js,ts}`, and `.bootcamp.json`.
+Option precedence is: explicit CLI flag > config `defaults` > built-in defaults.
+
+```ts
+export default {
+  defaults: {
+    audience: "all",
+    focus: "all",
+    style: "oss",
+    model: "claude-sonnet-4-5",
+    maxFiles: 200
   },
-  "plugins": [],
-  "prompts": {
-    "system": "You are a helpful assistant for onboarding developers."
+  customStyle: {
+    emoji: true,
+    firstTasksCount: 10
   },
-  "output": {
-    "excludeDocs": ["RUNBOOK.md"]
+  plugins: [],
+  prompts: {
+    system: "You are a helpful assistant for onboarding developers."
+  },
+  output: {
+    excludeDocs: ["RUNBOOK.md"]
   }
-}
+};
 ```
 
 ### .bootcamp-prompts.md
@@ -619,6 +655,11 @@ Example `.bootcamp-prompts.md`:
 
 Extend Repo Bootcamp with custom analyzers:
 
+Plugins can hook into three stages:
+- **Analyzer plugins** via `analyze(...)` (enrich facts and add docs)
+- **Formatter plugins** via `formatDocuments(...)` (transform generated docs)
+- **Output target plugins** via `writeOutput(...)` (publish/store outputs elsewhere)
+
 ```typescript
 // my-plugin.ts
 export default {
@@ -649,19 +690,38 @@ npm install
 # Build
 npm run build
 
-# Run tests (569 tests)
+# Lint + type-check
+npm run lint
+npm run typecheck
+
+# Run tests (613 tests)
 npm test
+
+# Check formatting (or apply it)
+npm run format:check
+npm run format
 
 # Watch mode
 npm run test:watch
 
-# Coverage
+# Web server hot-reload
+npm run dev:web
+
+# Coverage (enforces lines >= 80%, branches >= 70%)
 npm run test:coverage
 ```
 
+### CI Quality Gates
+
+- Test matrix runs on Node.js 20, 22, and 24.
+- CI separates `lint`, `typecheck`, and `test` checks.
+- Pull requests run dependency review scanning.
+- CI generates and uploads an SPDX SBOM artifact (`sbom.spdx.json`).
+- Coverage is uploaded from the Node 20 lane and validated with Vitest thresholds.
+
 ## Requirements
 
-- Node.js 18+
+- Node.js 20+
 - GitHub Copilot SDK access (requires GitHub Copilot subscription)
 - `GITHUB_TOKEN` environment variable for API authentication (provided by Copilot SDK)
 - `gh` CLI (optional, for `--create-issues`)
@@ -677,10 +737,10 @@ Set `--model` to override.
 
 ## Tech Stack
 
-- **Runtime:** Node.js 18+
+- **Runtime:** Node.js 20+
 - **Language:** TypeScript 5.6
 - **AI:** GitHub Copilot SDK with Claude
-- **Testing:** Vitest (569 tests)
+- **Testing:** Vitest (613 tests)
 - **CLI:** Commander.js
 - **Validation:** Zod schemas
 - **Web:** Express 5 with SSE
@@ -691,8 +751,9 @@ Contributions are welcome! Please:
 
 1. Fork the repository
 2. Create a feature branch
-3. Run `npm test` to ensure all tests pass
-4. Submit a pull request
+3. Open a bug/feature issue using the GitHub issue forms if needed
+4. Run `npm run lint && npm run build && npm test`
+5. Submit a pull request (the PR template will guide the checklist)
 
 ## License
 

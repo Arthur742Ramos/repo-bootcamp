@@ -38,7 +38,51 @@ export interface BootcampOptions {
   noCache?: boolean;
   repoPrompts?: string;
   systemPrompt?: string;
+  optionSource?: Partial<Record<"audience" | "focus" | "maxFiles" | "model" | "style", "cli" | "default">>;
 }
+
+/** Generic prompt payload used by LLM sessions. */
+export interface LlmPrompt {
+  prompt: string;
+}
+
+/** Generic session creation config used by injectable LLM clients. */
+export interface LlmSessionConfig {
+  streaming?: boolean;
+  model?: string;
+  systemMessage?: { content: string };
+  tools?: unknown[];
+}
+
+/** Generic event shape emitted by LLM sessions. */
+export interface LlmSessionEvent {
+  type: string;
+  data: {
+    deltaContent?: string;
+    [key: string]: unknown;
+  };
+  [key: string]: unknown;
+}
+
+/** Injectable LLM session interface used by analysis code. */
+export interface LlmSession {
+  on(handler: (event: LlmSessionEvent) => void): unknown;
+  sendAndWait(input: LlmPrompt, timeoutMs?: number): Promise<unknown>;
+}
+
+/** Injectable LLM client interface used by analysis code. */
+export interface LlmClient {
+  createSession(config: LlmSessionConfig): Promise<LlmSession>;
+  stop(): Promise<unknown>;
+}
+
+/** Optional dependency injection hooks for analyzeRepo. */
+export interface AnalyzeRepoDependencies {
+  client?: LlmClient;
+  createClient?: () => LlmClient | Promise<LlmClient>;
+}
+
+export type RepoProvider = "github" | "gitlab" | "bitbucket";
 
 // Template style pack
 /** Available template style packs for output formatting. */
@@ -123,7 +167,23 @@ export interface RepoInfo {
   url: string;
   branch: string;
   fullName: string;
+  provider?: RepoProvider;
+  host?: string;
   commitSha?: string;
+}
+
+export type MonorepoManager = "lerna" | "nx" | "turborepo" | "pnpm" | "npm-workspaces";
+
+export interface MonorepoWorkspace {
+  name: string;
+  path: string;
+}
+
+export interface MonorepoInfo {
+  isMonorepo: boolean;
+  managers: MonorepoManager[];
+  workspaceGlobs: string[];
+  workspacePackages: MonorepoWorkspace[];
 }
 
 // Stack detection results
@@ -247,6 +307,7 @@ export interface FileInfo {
 export interface ScanResult {
   files: FileInfo[];
   stack: StackInfo;
+  monorepo?: MonorepoInfo | null;
   commands: Command[];
   ciWorkflows: CIWorkflow[];
   readme: string | null;

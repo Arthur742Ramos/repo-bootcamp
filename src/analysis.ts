@@ -1,6 +1,13 @@
 import { readFile } from "fs/promises";
 import { join } from "path";
 
+import {
+  pruneCache,
+  readPhaseCache,
+  writePhaseCache,
+  type AnalysisPhase,
+  type CacheGenerationOptions,
+} from "./cache.js";
 import { mergeFrameworksFromDeps } from "./ingest.js";
 import { extractDependencies, type DependencyAnalysis } from "./deps.js";
 import { analyzeSecurityPatterns, type SecurityAnalysis } from "./security.js";
@@ -16,6 +23,13 @@ export interface ParallelAnalysisResult {
   impacts: ChangeImpact[];
 }
 
+export interface ParallelAnalysisCacheOptions {
+  repoFullName: string;
+  commitSha?: string;
+  generationOptions?: CacheGenerationOptions;
+  noCache?: boolean;
+}
+
 /**
  * Run security, radar, impact, and deps analyzers concurrently.
  * Each analyzer starts as early as its dependencies allow; independent
@@ -25,11 +39,53 @@ export async function runParallelAnalysis(
   repoPath: string,
   scanResult: ScanResult,
   progress?: ProgressTracker,
+  cacheOptions?: ParallelAnalysisCacheOptions,
 ): Promise<ParallelAnalysisResult> {
   progress?.update("Running analyzers in parallel…");
+  const useCache = Boolean(
+    cacheOptions?.repoFullName &&
+    cacheOptions?.commitSha &&
+    cacheOptions?.noCache !== true
+  );
+  const cacheRepo = cacheOptions?.repoFullName || "";
+  const cacheSha = cacheOptions?.commitSha || "";
+  const generationOptions = cacheOptions?.generationOptions;
+
+  if (useCache) {
+    pruneCache(7 * 24 * 60 * 60 * 1000).catch(() => {});
+  }
+
+  const runCachedPhase = async <T>(
+    phase: AnalysisPhase,
+    label: string,
+    compute: () => Promise<T>
+  ): Promise<T> => {
+    if (useCache) {
+      const cached = await readPhaseCache<T>(phase, cacheRepo, cacheSha, generationOptions);
+      if (cached.hit) {
+        progress?.update(`${label} ✓ (cache)`);
+        return cached.value;
+      }
+    }
+
+    const value = await compute();
+
+    if (useCache) {
+      try {
+        await writePhaseCache(phase, cacheRepo, cacheSha, value, generationOptions);
+      } catch {
+        // Cache write failures are non-fatal.
+      }
+    }
+
+    progress?.update(`${label} ✓`);
+    return value;
+  };
 
   // --- independent branches, kicked off immediately ---
-  const depsPromise = extractDependencies(repoPath).then((deps) => {
+  const depsPromise = runCachedPhase<DependencyAnalysis | null>("deps", "deps", async () => {
+    return await extractDependencies(repoPath);
+  }).then((deps) => {
     if (deps) {
       const allDepNames = [
         ...deps.runtime.map(d => d.name),
@@ -37,7 +93,6 @@ export async function runParallelAnalysis(
       ];
       mergeFrameworksFromDeps(scanResult.stack, allDepNames);
     }
-    progress?.update("deps ✓");
     return deps;
   });
 
@@ -48,26 +103,30 @@ export async function runParallelAnalysis(
     .then((pkgContent) => JSON.parse(pkgContent) as Record<string, unknown>)
     .catch(() => undefined);
 
-  const securityPromise = packageJsonPromise.then((packageJson) =>
-    analyzeSecurityPatterns(repoPath, scanResult.files, packageJson)
-  ).then((security) => {
-    progress?.update("security ✓");
-    return security;
-  });
+  const securityPromise = runCachedPhase<SecurityAnalysis>(
+    "security",
+    "security",
+    async () => {
+      const packageJson = await packageJsonPromise;
+      return await analyzeSecurityPatterns(repoPath, scanResult.files, packageJson);
+    }
+  );
 
   const MAX_KEY_FILES_FOR_IMPACT = 10;
 
-  const impactsPromise = buildImportGraph(repoPath, scanResult.files).then((importGraph) => {
-    const keyFiles = getKeyFilesForImpact(scanResult.files);
-    return Promise.all(
-      keyFiles.slice(0, MAX_KEY_FILES_FOR_IMPACT).map(file =>
-        analyzeChangeImpact(repoPath, scanResult.files, file, importGraph)
-      )
-    );
-  }).then((impacts) => {
-    progress?.update("impact ✓");
-    return impacts;
-  });
+  const impactsPromise = runCachedPhase<ChangeImpact[]>(
+    "impact",
+    "impact",
+    async () => {
+      const importGraph = await buildImportGraph(repoPath, scanResult.files);
+      const keyFiles = getKeyFilesForImpact(scanResult.files);
+      return await Promise.all(
+        keyFiles.slice(0, MAX_KEY_FILES_FOR_IMPACT).map(file =>
+          analyzeChangeImpact(repoPath, scanResult.files, file, importGraph)
+        )
+      );
+    }
+  );
 
   // radar depends on deps + security, but runs as soon as both resolve
   const radarPromise = Promise.all([depsPromise, securityPromise]).then(([deps, security]) => {

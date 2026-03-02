@@ -3,11 +3,19 @@
  * Uses GitHub Copilot SDK with agentic tool-calling to analyze repositories
  */
 
-import { CopilotClient, SessionEvent } from "@github/copilot-sdk";
 import chalk from "chalk";
 import * as fs from "fs";
 import * as path from "path";
-import type { RepoFacts, ScanResult, RepoInfo, BootcampOptions } from "./types.js";
+import type {
+  AnalyzeRepoDependencies,
+  BootcampOptions,
+  LlmClient,
+  LlmSession,
+  LlmSessionEvent,
+  RepoFacts,
+  RepoInfo,
+  ScanResult,
+} from "./types.js";
 import { getStyleConfig, type StyleConfig } from "./plugins.js";
 import { getRepoTools } from "./tools.js";
 import { validateRepoFacts, getMissingFieldsSummary, type ValidatedRepoFacts } from "./schema.js";
@@ -19,10 +27,168 @@ const CUSTOM_PROMPT_FILE = ".bootcamp-prompts.md";
 const CUSTOM_PROMPT_MAX_CHARS = 8000;
 const MAX_FILE_LIST_ITEMS = 50;
 const MAX_FAST_FILE_LIST_ITEMS = 30;
-const MAX_KEY_FILE_CHARS = 5000;
-const MAX_ENTRY_POINT_CHARS = 3000;
+const DEFAULT_MAX_KEY_FILE_CHARS = 5000;
+const DEFAULT_MAX_ENTRY_POINT_CHARS = 3000;
+const STREAM_PROGRESS_INTERVAL_MS = 250;
+const STREAM_PROGRESS_BATCH_CHARS = 180;
+const STREAM_PROGRESS_PREVIEW_CHARS = 140;
 const FAST_MODE_TIMEOUT_MS = 300_000; // 5 minutes
 const STANDARD_MODE_TIMEOUT_MS = 600_000; // 10 minutes
+const TIMEOUT_ERROR_CODES = new Set(["ETIMEDOUT", "ESOCKETTIMEDOUT", "ERR_TIMEOUT", "ABORT_ERR"]);
+const TIMEOUT_ERROR_PATTERNS = ["timeout", "timed out", "deadline exceeded", "request timed out"];
+
+interface PromptCharBudget {
+  maxKeyFileChars: number;
+  maxEntryPointChars: number;
+}
+
+interface ResponseStreamHandler {
+  onDelta: (delta: string) => void;
+  onFallbackMessage: (content: string) => void;
+  flushProgress: () => void;
+}
+
+function getModelContextWindow(model?: string): number {
+  if (!model) return 128_000;
+  const normalized = model.toLowerCase();
+  if (normalized.includes("1m")) return 1_000_000;
+  if (
+    normalized.includes("claude-opus") ||
+    normalized.includes("claude-sonnet") ||
+    normalized.includes("claude-haiku")
+  ) {
+    return 200_000;
+  }
+  if (
+    normalized.includes("gpt-5") ||
+    normalized.includes("gpt-4") ||
+    normalized.includes("gpt-4o") ||
+    normalized.includes("o1") ||
+    normalized.includes("o3")
+  ) {
+    return 128_000;
+  }
+  return 64_000;
+}
+
+function getPromptCharBudget(model?: string): PromptCharBudget {
+  const contextWindow = getModelContextWindow(model);
+  if (contextWindow >= 1_000_000) {
+    return { maxKeyFileChars: 12_000, maxEntryPointChars: 7_000 };
+  }
+  if (contextWindow >= 200_000) {
+    return { maxKeyFileChars: 8_000, maxEntryPointChars: 4_500 };
+  }
+  if (contextWindow >= 128_000) {
+    return {
+      maxKeyFileChars: DEFAULT_MAX_KEY_FILE_CHARS,
+      maxEntryPointChars: DEFAULT_MAX_ENTRY_POINT_CHARS,
+    };
+  }
+  return { maxKeyFileChars: 3_500, maxEntryPointChars: 2_500 };
+}
+
+function createResponseStreamHandler(
+  verbose: boolean,
+  onProgress?: (message: string) => void
+): ResponseStreamHandler {
+  let progressBuffer = "";
+  let lastProgressAt = 0;
+
+  const emitProgress = (force = false): void => {
+    if (!onProgress || progressBuffer.length === 0) return;
+
+    const now = Date.now();
+    if (
+      !force &&
+      now - lastProgressAt < STREAM_PROGRESS_INTERVAL_MS &&
+      progressBuffer.length < STREAM_PROGRESS_BATCH_CHARS
+    ) {
+      return;
+    }
+
+    const compact = progressBuffer.replace(/\s+/g, " ").trim();
+    progressBuffer = "";
+    if (!compact) return;
+
+    const preview = compact.length > STREAM_PROGRESS_PREVIEW_CHARS
+      ? compact.slice(-STREAM_PROGRESS_PREVIEW_CHARS)
+      : compact;
+    onProgress(`LLM: ${preview}`);
+    lastProgressAt = now;
+  };
+
+  return {
+    onDelta: (delta: string) => {
+      if (!delta) return;
+      if (verbose) {
+        process.stdout.write(delta);
+        return;
+      }
+      if (onProgress) {
+        progressBuffer += delta;
+        emitProgress();
+      }
+    },
+    onFallbackMessage: (content: string) => {
+      if (!content) return;
+      if (verbose) {
+        process.stdout.write(content);
+        return;
+      }
+      if (onProgress) {
+        progressBuffer += content;
+        emitProgress(true);
+      }
+    },
+    flushProgress: () => {
+      emitProgress(true);
+    },
+  };
+}
+
+function getErrorMessage(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  return String(error);
+}
+
+function isTimeoutError(error: unknown): boolean {
+  const message = getErrorMessage(error).toLowerCase();
+  if (TIMEOUT_ERROR_PATTERNS.some((pattern) => message.includes(pattern))) {
+    return true;
+  }
+
+  if (error instanceof Error) {
+    const code = (error as NodeJS.ErrnoException).code;
+    return typeof code === "string" && TIMEOUT_ERROR_CODES.has(code.toUpperCase());
+  }
+
+  if (error && typeof error === "object") {
+    const maybeError = error as { code?: unknown; name?: unknown };
+    if (typeof maybeError.code === "string" && TIMEOUT_ERROR_CODES.has(maybeError.code.toUpperCase())) {
+      return true;
+    }
+    return typeof maybeError.name === "string" && maybeError.name.toLowerCase() === "aborterror";
+  }
+
+  return false;
+}
+
+async function sendAndWaitWithTimeoutBoundary(
+  session: LlmSession,
+  prompt: string,
+  timeoutMs: number,
+  operation: string
+): Promise<void> {
+  try {
+    await session.sendAndWait({ prompt }, timeoutMs);
+  } catch (error: unknown) {
+    if (isTimeoutError(error)) {
+      throw new Error(`${operation} timed out after ${Math.round(timeoutMs / 1000)}s`, { cause: error });
+    }
+    throw error;
+  }
+}
 
 function getSectionDepthGuidance(depth: StyleConfig["sectionDepth"]): string {
   const guidance: Record<StyleConfig["sectionDepth"], string> = {
@@ -145,6 +311,9 @@ function getAudiencePromptGuidance(audience: BootcampOptions["audience"]): strin
 }
 
 function buildRepoHeader(repoInfo: RepoInfo, scanResult: ScanResult): string {
+  const monorepoSummary = scanResult.monorepo?.isMonorepo
+    ? `\nMonorepo: true\nMonorepo Managers: ${scanResult.monorepo.managers.join(", ") || "Unknown"}\nWorkspace Packages: ${scanResult.monorepo.workspacePackages.length}`
+    : "";
   return `## Repository
 - Name: ${repoInfo.fullName}
 - URL: ${repoInfo.url}
@@ -155,7 +324,7 @@ Languages: ${scanResult.stack.languages.join(", ") || "Unknown"}
 Frameworks: ${scanResult.stack.frameworks.join(", ") || "None detected"}
 Build System: ${scanResult.stack.buildSystem || "Unknown"}
 Has CI: ${scanResult.stack.hasCi}
-Has Docker: ${scanResult.stack.hasDocker}`;
+Has Docker: ${scanResult.stack.hasDocker}${monorepoSummary}`;
 }
 
 function buildCommandList(scanResult: ScanResult): string {
@@ -314,9 +483,11 @@ function createFastAnalysisPrompt(
   scanResult: ScanResult,
   options: BootcampOptions,
   customPrompt?: string | null,
-  styleConfig?: StyleConfig
+  styleConfig?: StyleConfig,
+  model?: string
 ): string {
   const resolvedStyle = styleConfig || getStyleConfig(options.style);
+  const promptBudget = getPromptCharBudget(model);
   // Read key files inline
   const keyFiles = ["README.md", "readme.md", "package.json", "pyproject.toml", "Cargo.toml", "go.mod"];
   const inlineContents: string[] = [];
@@ -325,7 +496,9 @@ function createFastAnalysisPrompt(
     const filePath = path.join(repoPath, filename);
     if (fs.existsSync(filePath)) {
       try {
-        const content = fs.readFileSync(filePath, "utf-8").substring(0, MAX_KEY_FILE_CHARS);
+        const content = fs
+          .readFileSync(filePath, "utf-8")
+          .substring(0, promptBudget.maxKeyFileChars);
         inlineContents.push(`### ${filename}\n\`\`\`\n${content}\n\`\`\``);
       } catch (err: unknown) {
         // Skip unreadable files
@@ -340,7 +513,9 @@ function createFastAnalysisPrompt(
     const filePath = path.join(repoPath, entry);
     if (fs.existsSync(filePath)) {
       try {
-        const content = fs.readFileSync(filePath, "utf-8").substring(0, MAX_ENTRY_POINT_CHARS);
+        const content = fs
+          .readFileSync(filePath, "utf-8")
+          .substring(0, promptBudget.maxEntryPointChars);
         inlineContents.push(`### ${entry}\n\`\`\`\n${content}\n\`\`\``);
         break; // Only include first found entry point
       } catch (err: unknown) {
@@ -562,15 +737,33 @@ export const PREFERRED_MODELS = [
   "claude-sonnet-4-20250514",
 ];
 
+async function createDefaultLlmClient(): Promise<LlmClient> {
+  const { CopilotClient } = await import("@github/copilot-sdk");
+  return new CopilotClient() as unknown as LlmClient;
+}
+
+async function resolveLlmClient(dependencies?: AnalyzeRepoDependencies): Promise<LlmClient> {
+  if (dependencies?.client) {
+    return dependencies.client;
+  }
+  if (dependencies?.createClient) {
+    return await dependencies.createClient();
+  }
+  return await createDefaultLlmClient();
+}
+
 /**
  * Try to create a session with the preferred model, falling back to alternatives
  */
-export async function createSessionWithFallback(
-  client: CopilotClient,
-  config: Parameters<CopilotClient["createSession"]>[0],
+export async function createSessionWithFallback<
+  TConfig extends Record<string, unknown>,
+  TSession
+>(
+  client: { createSession(config: TConfig): Promise<TSession> },
+  config: TConfig,
   verbose: boolean = false,
   overrideModel?: string
-): Promise<{ session: Awaited<ReturnType<CopilotClient["createSession"]>>; model: string }> {
+): Promise<{ session: TSession; model: string }> {
   // If a specific model is requested, try it first
   const modelsToTry = overrideModel ? [overrideModel, ...PREFERRED_MODELS] : PREFERRED_MODELS;
   
@@ -582,11 +775,12 @@ export async function createSessionWithFallback(
       const session = await client.createSession({
         ...config,
         model,
-      });
+      } as TConfig);
       return { session, model };
     } catch (error: unknown) {
       // If model not available, try next one
-      if ((error as Error).message?.includes("model") || (error as Error).message?.includes("not available")) {
+      const errorMessage = getErrorMessage(error).toLowerCase();
+      if (errorMessage.includes("model") || errorMessage.includes("not available")) {
         continue;
       }
       // For other errors, throw immediately
@@ -619,7 +813,8 @@ export async function analyzeRepo(
   scanResult: ScanResult,
   options: BootcampOptions,
   onProgress?: (message: string) => void,
-  styleConfigOverride?: StyleConfig
+  styleConfigOverride?: StyleConfig,
+  dependencies?: AnalyzeRepoDependencies
 ): Promise<{ facts: RepoFacts; stats: AnalysisStats }> {
   const stats: AnalysisStats = {
     model: "",
@@ -629,7 +824,7 @@ export async function analyzeRepo(
     startTime: Date.now(),
   };
 
-  const client = new CopilotClient();
+  const client = await resolveLlmClient(dependencies);
   const customPrompt = readCustomPrompt(repoPath, options.repoPrompts);
   const resolvedStyleConfig = styleConfigOverride || getStyleConfig(options.style);
   const configuredSystemPrompt = options.systemPrompt?.trim();
@@ -665,24 +860,40 @@ export async function analyzeRepo(
         scanResult,
         options,
         customPrompt,
-        resolvedStyleConfig
+        resolvedStyleConfig,
+        model
       );
       let fullResponse = "";
+      const responseStream = createResponseStreamHandler(options.verbose, onProgress);
 
-      session.on((event: SessionEvent) => {
+      session.on((event: LlmSessionEvent) => {
         stats.totalEvents++;
+        const eventAny = event as Record<string, unknown>;
         if (event.type === "assistant.message_delta") {
           const delta = event.data.deltaContent;
           if (delta) {
             fullResponse += delta;
-            if (options.verbose) {
-              process.stdout.write(delta);
-            }
+            responseStream.onDelta(delta);
+          }
+        }
+
+        if (event.type === "assistant.message") {
+          const data = eventAny.data as Record<string, unknown> | undefined;
+          const content = data?.content as string | undefined;
+          if (content && !fullResponse) {
+            fullResponse = content;
+            responseStream.onFallbackMessage(content);
           }
         }
       });
 
-      await session.sendAndWait({ prompt }, FAST_MODE_TIMEOUT_MS);
+      await sendAndWaitWithTimeoutBoundary(
+        session,
+        prompt,
+        FAST_MODE_TIMEOUT_MS,
+        "Fast analysis request"
+      );
+      responseStream.flushProgress();
       stats.responseLength = fullResponse.length;
       stats.endTime = Date.now();
 
@@ -699,7 +910,7 @@ export async function analyzeRepo(
 
       return { facts: facts as RepoFacts, stats };
     } catch (error: unknown) {
-      throw new Error(`Fast analysis failed: ${(error as Error).message}`, { cause: error });
+      throw new Error(`Fast analysis failed: ${getErrorMessage(error)}`, { cause: error });
     }
   }
 
@@ -748,9 +959,10 @@ export async function analyzeRepo(
       resolvedStyleConfig
     );
     let fullResponse = "";
+    const responseStream = createResponseStreamHandler(options.verbose, onProgress);
 
     // Set up event handlers
-    session.on((event: SessionEvent) => {
+    session.on((event: LlmSessionEvent) => {
       stats.totalEvents++;
       const eventAny = event as Record<string, unknown>;
 
@@ -759,9 +971,7 @@ export async function analyzeRepo(
         const delta = event.data.deltaContent;
         if (delta) {
           fullResponse += delta;
-          if (options.verbose) {
-            process.stdout.write(delta);
-          }
+          responseStream.onDelta(delta);
         }
       }
 
@@ -788,12 +998,19 @@ export async function analyzeRepo(
         const content = data?.content as string | undefined;
         if (content && !fullResponse) {
           fullResponse = content;
+          responseStream.onFallbackMessage(content);
         }
       }
     });
 
     // Send the analysis prompt
-    await session.sendAndWait({ prompt }, STANDARD_MODE_TIMEOUT_MS); // 10 minute timeout for tool-calling
+    await sendAndWaitWithTimeoutBoundary(
+      session,
+      prompt,
+      STANDARD_MODE_TIMEOUT_MS,
+      "Analysis request"
+    ); // 10 minute timeout for tool-calling
+    responseStream.flushProgress();
 
     stats.endTime = Date.now();
     stats.responseLength = fullResponse.length;
@@ -835,7 +1052,13 @@ No markdown, no explanations, just the JSON object starting with { and ending wi
 - firstTasks: [{ title, description, difficulty, category, files, why }]`;
 
       fullResponse = "";
-      await session.sendAndWait({ prompt: retryPrompt }, 300000);
+      await sendAndWaitWithTimeoutBoundary(
+        session,
+        retryPrompt,
+        FAST_MODE_TIMEOUT_MS,
+        `Analysis retry ${retryCount}`
+      );
+      responseStream.flushProgress();
       result = parseAndValidateRepoFacts(fullResponse, options.verbose);
     }
 
