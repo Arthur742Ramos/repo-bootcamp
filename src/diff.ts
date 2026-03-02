@@ -88,7 +88,7 @@ async function getChangedFiles(
 
     return { added, removed, modified };
   } catch (error: unknown) {
-    throw new Error(`Failed to get diff: ${(error as Error).message}`);
+    throw new Error(`Failed to get diff: ${(error as Error).message}`, { cause: error });
   }
 }
 
@@ -432,7 +432,7 @@ export async function fetchPullRequestRefs(
       env: fetchEnv,
     });
   } catch (error: unknown) {
-    throw new Error(`Failed to fetch PR base ref: ${(error as Error).message}`);
+    throw new Error(`Failed to fetch PR base ref: ${(error as Error).message}`, { cause: error });
   }
 
   try {
@@ -442,7 +442,7 @@ export async function fetchPullRequestRefs(
       env: fetchEnv,
     });
   } catch (error: unknown) {
-    throw new Error(`Failed to fetch PR head ref: ${(error as Error).message}`);
+    throw new Error(`Failed to fetch PR head ref: ${(error as Error).message}`, { cause: error });
   }
 
   return {

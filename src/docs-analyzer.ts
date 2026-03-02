@@ -264,7 +264,7 @@ export async function analyzeCLIDrift(repoPath: string): Promise<CLIDrift[]> {
   if (!binName) return drift;
 
   // Try to get --help output
-  let helpOutput: string | null = null;
+  let helpOutput: string | null;
   try {
     // Try running the CLI with --help
     const mainFile = typeof bin === "string" ? bin : bin[binName];

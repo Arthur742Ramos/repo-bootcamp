@@ -688,7 +688,7 @@ export async function analyzeRepo(
 
       return { facts: facts as RepoFacts, stats };
     } catch (error: unknown) {
-      throw new Error(`Fast analysis failed: ${(error as Error).message}`);
+      throw new Error(`Fast analysis failed: ${(error as Error).message}`, { cause: error });
     }
   }
 
