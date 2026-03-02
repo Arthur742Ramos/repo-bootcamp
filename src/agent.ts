@@ -266,25 +266,14 @@ function createAnalysisPrompt(
     .map((f) => f.path)
     .join("\n");
 
-  const cmdList = scanResult.commands.map((c) => `- ${c.name}: ${c.command}`).join("\n");
-
-  const customSection = formatCustomPromptSection(customPrompt);
-  const audienceSection = getAudiencePromptGuidance(options.audience);
-  const styleSection = formatStylePromptSection(resolvedStyle);
+  const repoHeader = buildRepoHeader(repoInfo, scanResult);
+  const cmdList = buildCommandList(scanResult);
+  const jsonSchema = buildJsonSchema(repoInfo);
+  const promptFooter = buildPromptFooter(options, resolvedStyle, customPrompt);
 
   return `Analyze this GitHub repository and produce a comprehensive onboarding kit.
 
-## Repository
-- Name: ${repoInfo.fullName}
-- URL: ${repoInfo.url}
-- Branch: ${repoInfo.branch}
-
-## Pre-detected Information
-Languages: ${scanResult.stack.languages.join(", ") || "Unknown"}
-Frameworks: ${scanResult.stack.frameworks.join(", ") || "None detected"}
-Build System: ${scanResult.stack.buildSystem || "Unknown"}
-Has CI: ${scanResult.stack.hasCi}
-Has Docker: ${scanResult.stack.hasDocker}
+${repoHeader}
 
 ## File Tree Preview (first 50 files)
 ${fileList}
@@ -305,81 +294,9 @@ Quickly explore this repository using tools, then produce JSON output.
 
 **Step 2: Produce Output Immediately**
 
-Return a JSON object with this exact structure. Include "sources" arrays citing which files informed each section:
+${jsonSchema}
 
-\`\`\`json
-{
-  "repoName": "${repoInfo.fullName}",
-  "purpose": "one-line description",
-  "description": "2-3 sentence technical description (NO welcome/intro text — just describe the project)",
-  "sources": ["README.md", "package.json"],
-  "confidence": "high|medium|low",
-  "stack": {
-    "languages": [],
-    "frameworks": [],
-    "buildSystem": "",
-    "packageManager": "",
-    "hasDocker": false,
-    "hasCi": true
-  },
-  "quickstart": {
-    "prerequisites": [],
-    "steps": [],
-    "commands": [{"name": "", "command": "", "source": ""}],
-    "commonErrors": [{"error": "", "fix": ""}],
-    "sources": []
-  },
-  "structure": {
-    "keyDirs": [{"path": "", "purpose": "", "keyFiles": []}],
-    "entrypoints": [{"path": "", "type": "main|cli|server|library", "description": ""}],
-    "testDirs": [],
-    "docsDirs": [],
-    "sources": []
-  },
-  "ci": {
-    "workflows": [{"name": "", "file": "", "triggers": [], "mainSteps": []}],
-    "mainChecks": [],
-    "sources": []
-  },
-  "contrib": {
-    "howToAddFeature": [],
-    "howToAddTest": [],
-    "codeStyle": "",
-    "sources": []
-  },
-  "architecture": {
-    "overview": "",
-    "components": [{"name": "", "description": "", "directory": ""}],
-    "dataFlow": "",
-    "keyAbstractions": [{"name": "", "description": ""}],
-    "codeExamples": [{"title": "", "file": "", "code": "", "explanation": ""}],
-    "sources": []
-  },
-  "firstTasks": [
-    {
-      "title": "",
-      "description": "",
-      "difficulty": "beginner|intermediate|advanced",
-      "category": "test|docs|refactor|feature|bug-fix",
-      "files": [],
-      "why": ""
-    }
-  ],
-  "runbook": {
-    "applicable": true,
-    "deploySteps": [],
-    "observability": [],
-    "incidents": [{"name": "", "check": ""}],
-    "sources": []
-  }
-}
-\`\`\`
-
-Focus: ${options.focus}
-Target audience: ${options.audience}
-${audienceSection}
-${styleSection}
-${customSection}
+${promptFooter}
 
 Provide exactly ${resolvedStyle.firstTasksCount} firstTasks spread across difficulty levels when possible. Be specific about file paths.
 Set runbook.applicable = false for libraries/tools that aren't deployed as services.
@@ -439,24 +356,13 @@ function createFastAnalysisPrompt(
     .map((f) => f.path)
     .join("\n");
 
-  const cmdList = scanResult.commands.map((c) => `- ${c.name}: ${c.command}`).join("\n");
-
-  const customSection = formatCustomPromptSection(customPrompt);
-  const audienceSection = getAudiencePromptGuidance(options.audience);
-  const styleSection = formatStylePromptSection(resolvedStyle);
+  const repoHeader = buildRepoHeader(repoInfo, scanResult);
+  const cmdList = buildCommandList(scanResult);
+  const promptFooter = buildPromptFooter(options, resolvedStyle, customPrompt);
 
   return `Analyze this repository and produce a comprehensive onboarding kit.
 
-## Repository
-- Name: ${repoInfo.fullName}
-- URL: ${repoInfo.url}
-- Branch: ${repoInfo.branch}
-
-## Pre-detected Information
-Languages: ${scanResult.stack.languages.join(", ") || "Unknown"}
-Frameworks: ${scanResult.stack.frameworks.join(", ") || "None detected"}
-Build System: ${scanResult.stack.buildSystem || "Unknown"}
-Has CI: ${scanResult.stack.hasCi}
+${repoHeader}
 
 ## File Tree (first 30 files)
 ${fileList}
@@ -564,11 +470,7 @@ Based on the above information, produce a JSON object. Follow this EXACT structu
 }
 \`\`\`
 
-Focus: ${options.focus}
-Target audience: ${options.audience}
-${audienceSection}
-${styleSection}
-${customSection}
+${promptFooter}
 
 INSTRUCTIONS:
 1. Replace the example values above with actual data from this repository

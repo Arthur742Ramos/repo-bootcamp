@@ -78,7 +78,8 @@ export async function fetchAndCheckUpdates(
       if (process.env.DEBUG) console.error("[debug]", (err as Error).message);
       if (!options.allowHardReset) {
         throw new Error(
-          "Remote update is not a fast-forward; refusing automatic 'git reset --hard'. Re-run with --watch-force to allow destructive reset fallback."
+          "Remote update is not a fast-forward; refusing automatic 'git reset --hard'. Re-run with --watch-force to allow destructive reset fallback.",
+          { cause: err }
         );
       }
       await execFileAsync("git", ["reset", "--hard", remoteSha], { cwd: repoPath });
