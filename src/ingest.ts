@@ -81,7 +81,7 @@ export async function cloneRepo(
 
     return clonePath;
   } catch (error: unknown) {
-    throw new Error(`Failed to clone repository: ${(error as Error).message}`);
+    throw new Error(`Failed to clone repository: ${(error as Error).message}`, { cause: error });
   }
 }
 

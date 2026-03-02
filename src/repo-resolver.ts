@@ -128,7 +128,7 @@ export async function resolveRepo(
       }
     } catch (error: unknown) {
       if ((error as NodeJS.ErrnoException).code === "ENOENT") {
-        throw new Error(`Path does not exist: ${absolutePath}`);
+        throw new Error(`Path does not exist: ${absolutePath}`, { cause: error });
       }
       throw error;
     }
