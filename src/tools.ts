@@ -25,6 +25,33 @@ export interface ToolContext {
   onToolResult?: (name: string, result: string) => void;
 }
 
+interface ReadFileToolArgs {
+  path: string;
+  maxLines?: number;
+}
+
+interface ListFilesToolArgs {
+  path?: string;
+  pattern?: string;
+  recursive?: boolean;
+  maxResults?: number;
+}
+
+interface SearchToolArgs {
+  pattern: string;
+  path?: string;
+  filePattern?: string;
+  maxResults?: number;
+}
+
+type RepoMetadataToolArgs = Record<string, never>;
+
+export type RepoTool =
+  | Tool<ReadFileToolArgs>
+  | Tool<ListFilesToolArgs>
+  | Tool<SearchToolArgs>
+  | Tool<RepoMetadataToolArgs>;
+
 /**
  * Validates that a target path stays within the repository root to prevent path traversal.
  */
@@ -43,7 +70,7 @@ export function safePath(repoPath: string, targetPath: string): string {
 /**
  * Read a file from the repository
  */
-function createReadFileTool(context: ToolContext): Tool<any> {
+function createReadFileTool(context: ToolContext): Tool<ReadFileToolArgs> {
   return defineTool("read_file", {
     description: "Read the contents of a file from the repository. Use this to examine source code, configuration files, and documentation.",
     parameters: {
@@ -60,7 +87,7 @@ function createReadFileTool(context: ToolContext): Tool<any> {
     },
     required: ["path"],
   },
-  handler: async (args: { path: string; maxLines?: number }) => {
+  handler: async (args: ReadFileToolArgs) => {
     const { path, maxLines = 500 } = args;
     const fullPath = safePath(context.repoPath, path);
 
@@ -88,7 +115,7 @@ function createReadFileTool(context: ToolContext): Tool<any> {
 /**
  * List files in a directory
  */
-function createListFilesTool(context: ToolContext): Tool<any> {
+function createListFilesTool(context: ToolContext): Tool<ListFilesToolArgs> {
   return defineTool("list_files", {
   description: "List files and directories in a path. Use this to explore the repository structure.",
   parameters: {
@@ -112,7 +139,7 @@ function createListFilesTool(context: ToolContext): Tool<any> {
       },
     },
   },
-  handler: async (args: { path?: string; pattern?: string; recursive?: boolean; maxResults?: number }) => {
+  handler: async (args: ListFilesToolArgs) => {
     const { path = "", pattern, recursive = false, maxResults = 100 } = args;
     const fullPath = safePath(context.repoPath, path);
 
@@ -177,7 +204,7 @@ function createListFilesTool(context: ToolContext): Tool<any> {
 /**
  * Search for text in files
  */
-function createSearchTool(context: ToolContext): Tool<any> {
+function createSearchTool(context: ToolContext): Tool<SearchToolArgs> {
   return defineTool("search", {
   description: "Search for a pattern in repository files using ripgrep. Use this to find specific code patterns, function definitions, imports, etc.",
   parameters: {
@@ -202,7 +229,7 @@ function createSearchTool(context: ToolContext): Tool<any> {
     },
     required: ["pattern"],
   },
-  handler: async (args: { pattern: string; path?: string; filePattern?: string; maxResults?: number }) => {
+  handler: async (args: SearchToolArgs) => {
     const { pattern, path = "", filePattern, maxResults = 50 } = args;
     const searchPath = safePath(context.repoPath, path);
 
@@ -246,7 +273,7 @@ function createSearchTool(context: ToolContext): Tool<any> {
 /**
  * Get repository metadata
  */
-function createRepoMetadataTool(context: ToolContext): Tool<any> {
+function createRepoMetadataTool(context: ToolContext): Tool<RepoMetadataToolArgs> {
   return defineTool("get_repo_metadata", {
   description: "Get metadata about the repository including detected stack, available commands, and file statistics.",
   parameters: {
@@ -326,7 +353,7 @@ ${gitInfo}`;
 /**
  * Get all tools for session creation
  */
-export function getRepoTools(context: ToolContext): Tool<any>[] {
+export function getRepoTools(context: ToolContext): RepoTool[] {
   return [
     createReadFileTool(context),
     createListFilesTool(context),

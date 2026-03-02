@@ -152,6 +152,37 @@ describe("cache", () => {
       expect(cached).not.toBeNull();
       expect(cached!.purpose).toBe("version 2");
     });
+
+    it("keeps separate cache entries for different generation options", async () => {
+      const onboardingFacts = makeFacts({ purpose: "onboarding profile" });
+      const architectureFacts = makeFacts({ purpose: "architecture profile" });
+      const onboardingOptions = {
+        focus: "onboarding",
+        style: "startup",
+        model: "claude-sonnet-4-5",
+        audience: "frontend",
+      };
+      const architectureOptions = {
+        focus: "architecture",
+        style: "corporate",
+        model: "claude-opus-4-5",
+        audience: "sre",
+      };
+
+      await writeCache(testRepo, testSha, onboardingFacts, onboardingOptions);
+      await writeCache(testRepo, testSha, architectureFacts, architectureOptions);
+
+      const onboardingCached = await readCache(testRepo, testSha, onboardingOptions);
+      const architectureCached = await readCache(testRepo, testSha, architectureOptions);
+      const mismatched = await readCache(testRepo, testSha, {
+        ...onboardingOptions,
+        focus: "contributing",
+      });
+
+      expect(onboardingCached?.purpose).toBe("onboarding profile");
+      expect(architectureCached?.purpose).toBe("architecture profile");
+      expect(mismatched).toBeNull();
+    });
   });
 
   describe("clearCache", () => {

@@ -88,13 +88,25 @@ describe("fetchAndCheckUpdates", () => {
     expect(result.newSha).toBe("fallback1");
   });
 
-  it("falls back to hard reset when ff-merge fails", async () => {
+  it("refuses hard reset when ff-merge fails without force", async () => {
+    mockExecResult("");            // git fetch origin
+    mockExecResult("newsha99\n");  // git rev-parse @{u}
+    mockExecError("not ff");       // git merge --ff-only fails
+
+    await expect(
+      fetchAndCheckUpdates("/tmp/repo", "oldsha11")
+    ).rejects.toThrow("--watch-force");
+  });
+
+  it("falls back to hard reset only when force is enabled", async () => {
     mockExecResult("");            // git fetch origin
     mockExecResult("newsha99\n");  // git rev-parse @{u}
     mockExecError("not ff");       // git merge --ff-only fails
     mockExecResult("");            // git reset --hard
 
-    const result = await fetchAndCheckUpdates("/tmp/repo", "oldsha11");
+    const result = await fetchAndCheckUpdates("/tmp/repo", "oldsha11", {
+      allowHardReset: true,
+    });
     expect(result.updated).toBe(true);
     expect(result.newSha).toBe("newsha99");
   });

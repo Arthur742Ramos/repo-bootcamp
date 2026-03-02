@@ -59,6 +59,13 @@ describe("markdownToHtml", () => {
     expect(html).not.toContain('<div class="test">');
   });
 
+  it("converts mermaid code blocks to mermaid containers", () => {
+    const md = "```mermaid\ngraph LR\nA-->B\n```";
+    const html = markdownToHtml(md);
+    expect(html).toContain('<div class="mermaid">');
+    expect(html).not.toContain('class="language-mermaid"');
+  });
+
   it("converts inline bold", () => {
     expect(markdownToHtml("**bold**")).toContain("<strong>bold</strong>");
   });
@@ -208,6 +215,11 @@ describe("convertToHtml", () => {
     const html = convertToHtml("# Test", 'Title & "Quotes"');
     expect(html).toContain("Title &amp; &quot;Quotes&quot;");
   });
+
+  it("injects mermaid runtime when mermaid blocks exist", () => {
+    const html = convertToHtml("```mermaid\ngraph LR\nA-->B\n```", "Mermaid Doc");
+    expect(html).toContain("mermaid.esm.min.mjs");
+  });
 });
 
 describe("convertToPdf", () => {
@@ -223,6 +235,11 @@ describe("convertToPdf", () => {
     const html = convertToPdf("# Test", "Title");
     expect(html).toContain("size: A4");
   });
+
+  it("injects mermaid runtime when mermaid blocks exist", () => {
+    const html = convertToPdf("```mermaid\ngraph LR\nA-->B\n```", "Mermaid PDF");
+    expect(html).toContain("mermaid.esm.min.mjs");
+  });
 });
 
 describe("getFileExtension", () => {
@@ -234,8 +251,8 @@ describe("getFileExtension", () => {
     expect(getFileExtension("html")).toBe(".html");
   });
 
-  it("returns .pdf.html for pdf", () => {
-    expect(getFileExtension("pdf")).toBe(".pdf.html");
+  it("returns .html for pdf", () => {
+    expect(getFileExtension("pdf")).toBe(".html");
   });
 });
 
@@ -248,12 +265,12 @@ describe("formatFileName", () => {
     expect(formatFileName("BOOTCAMP.md", "html")).toBe("BOOTCAMP.html");
   });
 
-  it("replaces .md with .pdf.html for pdf format", () => {
-    expect(formatFileName("BOOTCAMP.md", "pdf")).toBe("BOOTCAMP.pdf.html");
+  it("replaces .md with .html for pdf format", () => {
+    expect(formatFileName("BOOTCAMP.md", "pdf")).toBe("BOOTCAMP.html");
   });
 
-  it("replaces .mmd extension for html format", () => {
-    expect(formatFileName("diagrams.mmd", "html")).toBe("diagrams.html");
+  it("does not change .mmd files", () => {
+    expect(formatFileName("diagrams.mmd", "html")).toBe("diagrams.mmd");
   });
 
   it("does not change .json files", () => {
@@ -289,10 +306,10 @@ describe("formatContent", () => {
     expect(formatContent(json, "repo_facts.json", "html")).toBe(json);
   });
 
-  it("converts .mmd files", () => {
+  it("does not convert .mmd files", () => {
     const mmd = "graph LR\n  A --> B";
     const result = formatContent(mmd, "diagrams.mmd", "html");
-    expect(result).toContain("<!DOCTYPE html>");
+    expect(result).toBe(mmd);
   });
 });
 

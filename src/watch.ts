@@ -21,11 +21,18 @@ export interface WatchOptions {
   onChangeDetected: () => Promise<void>;
   /** Optional verbose logging */
   verbose?: boolean;
+  /** Allow destructive fallback to git reset --hard when ff merge fails */
+  allowHardReset?: boolean;
 }
 
 export interface WatchHandle {
   /** Stop watching */
   stop: () => void;
+}
+
+export interface FetchUpdateOptions {
+  /** Allow destructive fallback to git reset --hard when ff merge fails */
+  allowHardReset?: boolean;
 }
 
 /**
@@ -45,7 +52,11 @@ export async function getHeadCommit(repoPath: string): Promise<string> {
  * Fetch the latest changes from the remote and check for updates.
  * Returns whether new commits were found and the new SHA.
  */
-export async function fetchAndCheckUpdates(repoPath: string, lastSha: string): Promise<{ updated: boolean; newSha: string }> {
+export async function fetchAndCheckUpdates(
+  repoPath: string,
+  lastSha: string,
+  options: FetchUpdateOptions = {}
+): Promise<{ updated: boolean; newSha: string }> {
   await execFileAsync("git", ["fetch", "origin"], { cwd: repoPath });
 
   let remoteSha: string;
@@ -59,9 +70,16 @@ export async function fetchAndCheckUpdates(repoPath: string, lastSha: string): P
 
   if (remoteSha !== lastSha) {
     // Fast-forward to get the new commits locally
-    await execFileAsync("git", ["merge", "--ff-only", "FETCH_HEAD"], { cwd: repoPath }).catch(
-      () => execFileAsync("git", ["reset", "--hard", remoteSha], { cwd: repoPath })
-    );
+    try {
+      await execFileAsync("git", ["merge", "--ff-only", "FETCH_HEAD"], { cwd: repoPath });
+    } catch {
+      if (!options.allowHardReset) {
+        throw new Error(
+          "Remote update is not a fast-forward; refusing automatic 'git reset --hard'. Re-run with --watch-force to allow destructive reset fallback."
+        );
+      }
+      await execFileAsync("git", ["reset", "--hard", remoteSha], { cwd: repoPath });
+    }
     return { updated: true, newSha: remoteSha };
   }
 
@@ -102,7 +120,9 @@ export function startWatch(
       }
 
       log("Checking for new commits...");
-      const result = await fetchAndCheckUpdates(repoPath, lastSha);
+      const result = await fetchAndCheckUpdates(repoPath, lastSha, {
+        allowHardReset: opts.allowHardReset,
+      });
 
       if (result.updated) {
         console.log(
@@ -167,6 +187,13 @@ export function startWatch(
     chalk.cyan(`\n  👀 Watch mode active `) +
       chalk.dim(`(polling every ${opts.intervalSeconds}s)`)
   );
+  if (opts.allowHardReset) {
+    console.log(
+      chalk.yellow(
+        "  ⚠ --watch-force enabled: watch mode may run destructive 'git reset --hard' fallback."
+      )
+    );
+  }
   console.log(chalk.dim("  Press Ctrl+C to stop.\n"));
 
   // Kick off first poll

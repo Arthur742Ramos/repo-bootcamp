@@ -84,6 +84,7 @@ describe("CLI program", () => {
       const optionFlags = askCmd!.options.map((o) => o.long);
       expect(optionFlags).toContain("--verbose");
       expect(optionFlags).toContain("--branch");
+      expect(optionFlags).toContain("--model");
     });
   });
 
@@ -120,6 +121,7 @@ describe("CLI program", () => {
   it("includes watch interval option", () => {
     const optionFlags = program.options.map((option) => option.long);
     expect(optionFlags).toContain("--watch-interval");
+    expect(optionFlags).toContain("--watch-force");
   });
 
   it("includes branch and max-files options", () => {

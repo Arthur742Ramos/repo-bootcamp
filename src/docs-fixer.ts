@@ -7,7 +7,7 @@
  * - Update CLI usage sections
  */
 
-import { readFile, writeFile } from "fs/promises";
+import { writeFile } from "fs/promises";
 import { join } from "path";
 import type {
   DocsAnalysisResult,

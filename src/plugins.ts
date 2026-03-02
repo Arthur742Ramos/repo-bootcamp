@@ -14,6 +14,7 @@ export interface StyleConfig {
   name: StylePack;
   description: string;
   tone: "formal" | "casual" | "technical";
+  sectionDepth: "minimal" | "standard" | "deep";
   emoji: boolean;
   sections: {
     showRunbook: boolean;
@@ -33,26 +34,11 @@ export interface StyleConfig {
  * Built-in style packs
  */
 export const STYLE_PACKS: Record<StylePack, StyleConfig> = {
-  startup: {
-    name: "startup",
-    description: "Fast-paced, action-oriented documentation",
-    tone: "casual",
-    emoji: true,
-    sections: {
-      showRunbook: true,
-      showSecurityDetails: false,
-      showDependencyGraph: false,
-      showRadar: true,
-      showImpact: false,
-    },
-    badges: { style: "shields" },
-    firstTasksCount: 5,
-    introText: "Let's get you up and running fast! Here's everything you need to start shipping.",
-  },
-  enterprise: {
-    name: "enterprise",
-    description: "Comprehensive, compliance-focused documentation",
+  corporate: {
+    name: "corporate",
+    description: "Structured, policy-aligned onboarding documentation",
     tone: "formal",
+    sectionDepth: "deep",
     emoji: false,
     sections: {
       showRunbook: true,
@@ -63,12 +49,30 @@ export const STYLE_PACKS: Record<StylePack, StyleConfig> = {
     },
     badges: { style: "simple" },
     firstTasksCount: 10,
-    introText: "This document provides comprehensive onboarding materials in accordance with organizational standards.",
+    introText: "This onboarding guide is organized for clarity, governance, and reliable execution.",
+  },
+  startup: {
+    name: "startup",
+    description: "Fast-paced, action-oriented documentation",
+    tone: "casual",
+    sectionDepth: "standard",
+    emoji: true,
+    sections: {
+      showRunbook: true,
+      showSecurityDetails: false,
+      showDependencyGraph: false,
+      showRadar: true,
+      showImpact: false,
+    },
+    badges: { style: "shields" },
+    firstTasksCount: 6,
+    introText: "Let's get you up and running fast! Here's everything you need to start shipping.",
   },
   oss: {
     name: "oss",
     description: "Community-friendly open source documentation",
     tone: "casual",
+    sectionDepth: "standard",
     emoji: true,
     sections: {
       showRunbook: false,
@@ -81,23 +85,43 @@ export const STYLE_PACKS: Record<StylePack, StyleConfig> = {
     firstTasksCount: 8,
     introText: "Welcome to the project! We're excited to have you contribute. Here's how to get started.",
   },
-  devops: {
-    name: "devops",
-    description: "Infrastructure and operations focused",
+  academic: {
+    name: "academic",
+    description: "Evidence-driven documentation for research and teaching contexts",
     tone: "technical",
+    sectionDepth: "deep",
     emoji: false,
     sections: {
-      showRunbook: true,
+      showRunbook: false,
       showSecurityDetails: true,
-      showDependencyGraph: false,
+      showDependencyGraph: true,
       showRadar: false,
       showImpact: true,
     },
     badges: { style: "simple" },
-    firstTasksCount: 6,
-    introText: "Infrastructure and deployment documentation for platform engineers.",
+    firstTasksCount: 7,
+    introText: "This guide emphasizes system understanding, traceability, and precise technical explanations.",
+  },
+  minimal: {
+    name: "minimal",
+    description: "Lean output focused on the essentials only",
+    tone: "formal",
+    sectionDepth: "minimal",
+    emoji: false,
+    sections: {
+      showRunbook: false,
+      showSecurityDetails: false,
+      showDependencyGraph: false,
+      showRadar: false,
+      showImpact: false,
+    },
+    badges: { style: "none" },
+    firstTasksCount: 3,
+    introText: "Concise onboarding essentials for fast orientation with minimal overhead.",
   },
 };
+
+export const STYLE_PACK_NAMES = Object.keys(STYLE_PACKS) as StylePack[];
 
 /**
  * Plugin interface for custom analyzers
