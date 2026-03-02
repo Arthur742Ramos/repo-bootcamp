@@ -111,7 +111,9 @@ export async function readCache(
     }
 
     return entry.facts;
-  } catch {
+  } catch (err: unknown) {
+    // Log and return null on failure
+    if (process.env.DEBUG) console.error("[debug]", (err as Error).message);
     return null;
   }
 }
@@ -152,7 +154,8 @@ export async function clearCache(): Promise<number> {
       jsonFiles.map((f) => rm(join(CACHE_DIR, f), { force: true }))
     );
     return jsonFiles.length;
-  } catch {
+  } catch (err: unknown) {
+    if (process.env.DEBUG) console.error("[debug]", (err as Error).message);
     return 0;
   }
 }
@@ -177,14 +180,16 @@ export async function pruneCache(maxAgeMs: number): Promise<number> {
             await rm(filePath, { force: true });
             pruned++;
           }
-        } catch {
+        } catch (err: unknown) {
           // File may have been removed concurrently — skip
+          if (process.env.DEBUG) console.error("[debug]", (err as Error).message);
         }
       })
     );
 
     return pruned;
-  } catch {
+  } catch (err: unknown) {
+    if (process.env.DEBUG) console.error("[debug]", (err as Error).message);
     return 0;
   }
 }

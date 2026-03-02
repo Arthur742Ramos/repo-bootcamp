@@ -43,7 +43,8 @@ export async function getHeadCommit(repoPath: string): Promise<string> {
   try {
     const { stdout } = await execFileAsync("git", ["rev-parse", "HEAD"], { cwd: repoPath });
     return stdout.trim();
-  } catch {
+  } catch (err: unknown) {
+    if (process.env.DEBUG) console.error("[debug]", (err as Error).message);
     return "";
   }
 }
@@ -63,7 +64,8 @@ export async function fetchAndCheckUpdates(
   try {
     const { stdout } = await execFileAsync("git", ["rev-parse", "@{u}"], { cwd: repoPath });
     remoteSha = stdout.trim();
-  } catch {
+  } catch (err: unknown) {
+    if (process.env.DEBUG) console.error("[debug] primary rev-parse failed:", (err as Error).message);
     const { stdout } = await execFileAsync("git", ["rev-parse", "FETCH_HEAD"], { cwd: repoPath });
     remoteSha = stdout.trim();
   }
@@ -72,7 +74,8 @@ export async function fetchAndCheckUpdates(
     // Fast-forward to get the new commits locally
     try {
       await execFileAsync("git", ["merge", "--ff-only", "FETCH_HEAD"], { cwd: repoPath });
-    } catch {
+    } catch (err: unknown) {
+      if (process.env.DEBUG) console.error("[debug]", (err as Error).message);
       if (!options.allowHardReset) {
         throw new Error(
           "Remote update is not a fast-forward; refusing automatic 'git reset --hard'. Re-run with --watch-force to allow destructive reset fallback."
@@ -171,8 +174,9 @@ export function startWatch(
         // Ignore fs.watch errors (not critical)
       });
       fsWatchers.push(watcher);
-    } catch {
+    } catch (err: unknown) {
       // fs.watch not available or path doesn't exist
+      if (process.env.DEBUG) console.error("[debug]", (err as Error).message);
     }
   };
 

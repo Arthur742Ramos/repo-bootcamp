@@ -240,8 +240,9 @@ async function extractPackageJsonCommands(repoPath: string): Promise<Command[]> 
         });
       }
     }
-  } catch {
+  } catch (err: unknown) {
     // No package.json or parse error
+    if (process.env.DEBUG) console.error("[debug]", (err as Error).message);
   }
 
   return commands;
@@ -265,8 +266,9 @@ async function extractMakefileCommands(repoPath: string): Promise<Command[]> {
         source: "Makefile",
       });
     }
-  } catch {
+  } catch (err: unknown) {
     // No Makefile
+    if (process.env.DEBUG) console.error("[debug]", (err as Error).message);
   }
 
   return commands;
@@ -295,8 +297,9 @@ async function parseWorkflows(repoPath: string, files: FileInfo[]): Promise<CIWo
         triggers: onMatch ? onMatch[1].split(",").map((t) => t.trim()) : [],
         mainSteps: [],
       });
-    } catch {
+    } catch (err: unknown) {
       // Skip unparseable workflow
+      if (process.env.DEBUG) console.error("[debug]", (err as Error).message);
     }
   }
 
@@ -318,8 +321,9 @@ async function readDocFile(repoPath: string, filename: string): Promise<string |
   for (const name of possibleNames) {
     try {
       return await readFile(join(repoPath, name), "utf-8");
-    } catch {
+    } catch (err: unknown) {
       // Try next
+      if (process.env.DEBUG) console.error("[debug]", (err as Error).message);
     }
   }
 
@@ -442,27 +446,40 @@ async function readKeySourceFiles(
     .filter((f) => f.score > 0)
     .sort((a, b) => b.score - a.score);
 
-  // Read files in priority order until budget exhausted
-  for (const file of scoredFiles) {
+  // Read files in parallel with concurrency limiter, then assemble in priority order
+  const CONCURRENCY = 8;
+  const readResults: { path: string; content: string | null; size: number }[] = [];
+
+  for (let i = 0; i < scoredFiles.length; i += CONCURRENCY) {
+    const batch = scoredFiles.slice(i, i + CONCURRENCY);
+    const batchResults = await Promise.all(
+      batch.map(async (file) => {
+        try {
+          const raw = await readFile(join(repoPath, file.path), "utf-8");
+          const maxFileBytes = Math.min(file.size, MAX_BYTES_PER_FILE);
+          const truncated = raw.substring(0, maxFileBytes);
+          return { path: file.path, content: truncated, size: truncated.length };
+        } catch (err: unknown) {
+          if (process.env.DEBUG) console.error("[debug]", (err as Error).message);
+          return { path: file.path, content: null, size: 0 };
+        }
+      })
+    );
+    readResults.push(...batchResults);
+  }
+
+  // Assemble in priority order until budget exhausted
+  for (const result of readResults) {
     if (totalBytes >= maxBytes) break;
+    if (!result.content) continue;
 
-    // Skip if adding this file would exceed budget by too much
     const remainingBudget = maxBytes - totalBytes;
-    if (file.size > remainingBudget * 2 && totalBytes > maxBytes * 0.5) {
-      continue; // Skip large files when we're past 50% budget
+    if (result.size > remainingBudget * 2 && totalBytes > maxBytes * 0.5) {
+      continue;
     }
 
-    try {
-      const content = await readFile(join(repoPath, file.path), "utf-8");
-      // Truncate very long files
-      const maxFileBytes = Math.min(file.size, MAX_BYTES_PER_FILE);
-      const truncated = content.substring(0, maxFileBytes);
-      
-      sourceFiles.set(file.path, truncated);
-      totalBytes += truncated.length;
-    } catch {
-      // Skip unreadable files
-    }
+    sourceFiles.set(result.path, result.content);
+    totalBytes += result.size;
   }
 
   return sourceFiles;

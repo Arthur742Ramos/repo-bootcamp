@@ -8,11 +8,10 @@ import { defineTool } from "@github/copilot-sdk";
 import type { Tool } from "@github/copilot-sdk";
 import { readFile, readdir, stat } from "fs/promises";
 import { isAbsolute, join, relative, resolve } from "path";
-import { exec, execFile } from "child_process";
+import { execFile } from "child_process";
 import { promisify } from "util";
 import { SKIP_DIRS } from "./utils.js";
 
-const execAsync = promisify(exec);
 const execFileAsync = promisify(execFile);
 
 /**
@@ -303,8 +302,10 @@ function createRepoMetadataTool(context: ToolContext): Tool<RepoMetadataToolArgs
             try {
               const stats = await stat(join(dir, entry.name));
               totalSize += stats.size;
-            } catch {
-              // Ignore unreadable files
+            } catch (error: unknown) {
+              console.error(
+                `[tools:get_repo_metadata] Failed to stat ${join(dir, entry.name)}: ${(error as Error).message}`
+              );
             }
           }
         }
@@ -315,11 +316,20 @@ function createRepoMetadataTool(context: ToolContext): Tool<RepoMetadataToolArgs
       // Get git info
       let gitInfo = "";
       try {
-        const { stdout: branch } = await execAsync("git rev-parse --abbrev-ref HEAD", { cwd: context.repoPath });
-        const { stdout: commits } = await execAsync("git rev-list --count HEAD", { cwd: context.repoPath });
-        const { stdout: remotes } = await execAsync("git remote -v", { cwd: context.repoPath });
+        const { stdout: branch } = await execFileAsync("git", ["rev-parse", "--abbrev-ref", "HEAD"], {
+          cwd: context.repoPath,
+        });
+        const { stdout: commits } = await execFileAsync("git", ["rev-list", "--count", "HEAD"], {
+          cwd: context.repoPath,
+        });
+        const { stdout: remotes } = await execFileAsync("git", ["remote", "-v"], {
+          cwd: context.repoPath,
+        });
         gitInfo = `Branch: ${branch.trim()}\nCommits: ${commits.trim()}\nRemotes:\n${remotes.trim()}`;
-      } catch {
+      } catch (error: unknown) {
+        console.error(
+          `[tools:get_repo_metadata] Failed to collect git metadata: ${(error as Error).message}`
+        );
         gitInfo = "Git info not available";
       }
 

@@ -1,0 +1,21 @@
+[squad]
+lead = "Lead Architect"
+
+[[squad.agents]]
+name = "Core Developer"
+role = "Writes implementation code"
+phase = 2
+id = "developer"
+subtasks = ["Analysis pipeline and Copilot SDK agent modules (agent.ts, analysis.ts, ingest.ts, tools.ts, schema.ts)", "CLI commands, services, and web dashboard (src/commands/, src/services/, src/web/)", "Supporting modules: security, deps, diagrams, diff, docs, plugins, cache, watch"]
+
+[[squad.agents]]
+name = "Test Engineer"
+role = "Writes and runs tests"
+phase = 3
+id = "tester"
+
+[[squad.agents]]
+name = "Documentation Specialist"
+role = "Updates documentation"
+phase = 4
+id = "docs"

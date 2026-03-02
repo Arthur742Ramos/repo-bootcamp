@@ -206,7 +206,7 @@ export function getIndexHtml(): string {
 
       const progress = document.getElementById('progress');
       progress.style.display = 'block';
-      progress.innerHTML = '';
+      progress.textContent = '';
 
       document.getElementById('results').classList.remove('show');
 
@@ -257,12 +257,6 @@ export function getIndexHtml(): string {
       };
     }
 
-    function escapeHtml(s) {
-      const div = document.createElement('div');
-      div.textContent = s;
-      return div.innerHTML;
-    }
-
     function addProgressItem(message, type = '') {
       const progress = document.getElementById('progress');
       const item = document.createElement('div');
@@ -272,22 +266,57 @@ export function getIndexHtml(): string {
       progress.scrollTop = progress.scrollHeight;
     }
 
+    function addStatCard(statsContainer, value, label) {
+      const stat = document.createElement('div');
+      stat.className = 'stat';
+
+      const statValue = document.createElement('div');
+      statValue.className = 'stat-value';
+      statValue.textContent = String(value);
+
+      const statLabel = document.createElement('div');
+      statLabel.className = 'stat-label';
+      statLabel.textContent = label;
+
+      stat.appendChild(statValue);
+      stat.appendChild(statLabel);
+      statsContainer.appendChild(stat);
+    }
+
+    function addGeneratedFile(filesContainer, filename) {
+      const file = document.createElement('div');
+      file.className = 'file';
+      file.dataset.file = filename;
+      file.addEventListener('click', () => {
+        void viewFile(filename);
+      });
+
+      const name = document.createElement('div');
+      name.className = 'file-name';
+      name.textContent = filename;
+
+      const desc = document.createElement('div');
+      desc.className = 'file-desc';
+      desc.textContent = fileDescriptions[getFileKey(filename)] || '';
+
+      file.appendChild(name);
+      file.appendChild(desc);
+      filesContainer.appendChild(file);
+    }
+
     function showResults(data) {
       const stats = document.getElementById('stats');
-      stats.innerHTML = \`
-        <div class="stat"><div class="stat-value">\${escapeHtml(String(data.stats.securityScore))}</div><div class="stat-label">Security Score (\${escapeHtml(String(data.stats.securityGrade))})</div></div>
-        <div class="stat"><div class="stat-value">\${escapeHtml(String(data.stats.riskScore))}</div><div class="stat-label">Onboarding Risk (\${escapeHtml(String(data.stats.riskGrade))})</div></div>
-        <div class="stat"><div class="stat-value">\${escapeHtml(String(data.stats.dependencies))}</div><div class="stat-label">Dependencies</div></div>
-        <div class="stat"><div class="stat-value">\${escapeHtml(String(data.stats.toolCalls))}</div><div class="stat-label">Tool Calls</div></div>
-      \`;
+      stats.textContent = '';
+      addStatCard(stats, data.stats.securityScore, 'Security Score (' + data.stats.securityGrade + ')');
+      addStatCard(stats, data.stats.riskScore, 'Onboarding Risk (' + data.stats.riskGrade + ')');
+      addStatCard(stats, data.stats.dependencies, 'Dependencies');
+      addStatCard(stats, data.stats.toolCalls, 'Tool Calls');
 
       const files = document.getElementById('files');
-      files.innerHTML = data.files.map(f => \`
-        <div class="file" onclick="viewFile(this.dataset.file)" data-file="\${escapeHtml(f)}">
-          <div class="file-name">\${escapeHtml(f)}</div>
-          <div class="file-desc">\${escapeHtml(fileDescriptions[getFileKey(f)] || '')}</div>
-        </div>
-      \`).join('');
+      files.textContent = '';
+      for (const filename of data.files) {
+        addGeneratedFile(files, filename);
+      }
 
       document.getElementById('results').classList.add('show');
     }

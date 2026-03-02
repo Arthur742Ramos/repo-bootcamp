@@ -108,7 +108,9 @@ export function readCustomPrompt(repoPath: string, overridePath?: string): strin
       return null;
     }
     return content.substring(0, CUSTOM_PROMPT_MAX_CHARS);
-  } catch {
+  } catch (err: unknown) {
+    // Log and return null on failure
+    if (process.env.DEBUG) console.error("[debug]", (err as Error).message);
     return null;
   }
 }
@@ -140,6 +142,111 @@ function getAudiencePromptGuidance(audience: BootcampOptions["audience"]): strin
 - In architecture, focus on production topology, operational dependencies, and failure recovery paths.`,
   };
   return guidance[audience];
+}
+
+function buildRepoHeader(repoInfo: RepoInfo, scanResult: ScanResult): string {
+  return `## Repository
+- Name: ${repoInfo.fullName}
+- URL: ${repoInfo.url}
+- Branch: ${repoInfo.branch}
+
+## Pre-detected Information
+Languages: ${scanResult.stack.languages.join(", ") || "Unknown"}
+Frameworks: ${scanResult.stack.frameworks.join(", ") || "None detected"}
+Build System: ${scanResult.stack.buildSystem || "Unknown"}
+Has CI: ${scanResult.stack.hasCi}
+Has Docker: ${scanResult.stack.hasDocker}`;
+}
+
+function buildCommandList(scanResult: ScanResult): string {
+  return scanResult.commands.map((c) => `- ${c.name}: ${c.command}`).join("\n");
+}
+
+function buildPromptFooter(
+  options: BootcampOptions,
+  resolvedStyle: StyleConfig,
+  customPrompt?: string | null
+): string {
+  const audienceSection = getAudiencePromptGuidance(options.audience);
+  const styleSection = formatStylePromptSection(resolvedStyle);
+  const customSection = formatCustomPromptSection(customPrompt);
+  return `Focus: ${options.focus}
+Target audience: ${options.audience}
+${audienceSection}
+${styleSection}
+${customSection}`;
+}
+
+function buildJsonSchema(repoInfo: RepoInfo): string {
+  return `Return a JSON object with this exact structure. Include "sources" arrays citing which files informed each section:
+
+\`\`\`json
+{
+  "repoName": "${repoInfo.fullName}",
+  "purpose": "one-line description",
+  "description": "2-3 sentence technical description (NO welcome/intro text — just describe the project)",
+  "sources": ["README.md", "package.json"],
+  "confidence": "high|medium|low",
+  "stack": {
+    "languages": [],
+    "frameworks": [],
+    "buildSystem": "",
+    "packageManager": "",
+    "hasDocker": false,
+    "hasCi": true
+  },
+  "quickstart": {
+    "prerequisites": [],
+    "steps": [],
+    "commands": [{"name": "", "command": "", "source": ""}],
+    "commonErrors": [{"error": "", "fix": ""}],
+    "sources": []
+  },
+  "structure": {
+    "keyDirs": [{"path": "", "purpose": "", "keyFiles": []}],
+    "entrypoints": [{"path": "", "type": "main|cli|server|library", "description": ""}],
+    "testDirs": [],
+    "docsDirs": [],
+    "sources": []
+  },
+  "ci": {
+    "workflows": [{"name": "", "file": "", "triggers": [], "mainSteps": []}],
+    "mainChecks": [],
+    "sources": []
+  },
+  "contrib": {
+    "howToAddFeature": [],
+    "howToAddTest": [],
+    "codeStyle": "",
+    "sources": []
+  },
+  "architecture": {
+    "overview": "",
+    "components": [{"name": "", "description": "", "directory": ""}],
+    "dataFlow": "",
+    "keyAbstractions": [{"name": "", "description": ""}],
+    "codeExamples": [{"title": "", "file": "", "code": "", "explanation": ""}],
+    "sources": []
+  },
+  "firstTasks": [
+    {
+      "title": "",
+      "description": "",
+      "difficulty": "beginner|intermediate|advanced",
+      "category": "test|docs|refactor|feature|bug-fix",
+      "files": [],
+      "why": ""
+    }
+  ],
+  "runbook": {
+    "applicable": true,
+    "deploySteps": [],
+    "observability": [],
+    "incidents": [{"name": "", "check": ""}],
+    "sources": []
+  }
+}
+\`\`\``;
 }
 
 /**
@@ -303,8 +410,9 @@ function createFastAnalysisPrompt(
       try {
         const content = fs.readFileSync(filePath, "utf-8").substring(0, MAX_KEY_FILE_CHARS);
         inlineContents.push(`### ${filename}\n\`\`\`\n${content}\n\`\`\``);
-      } catch {
+      } catch (err: unknown) {
         // Skip unreadable files
+        if (process.env.DEBUG) console.error("[debug]", (err as Error).message);
       }
     }
   }
@@ -318,8 +426,9 @@ function createFastAnalysisPrompt(
         const content = fs.readFileSync(filePath, "utf-8").substring(0, MAX_ENTRY_POINT_CHARS);
         inlineContents.push(`### ${entry}\n\`\`\`\n${content}\n\`\`\``);
         break; // Only include first found entry point
-      } catch {
+      } catch (err: unknown) {
         // Skip
+        if (process.env.DEBUG) console.error("[debug]", (err as Error).message);
       }
     }
   }

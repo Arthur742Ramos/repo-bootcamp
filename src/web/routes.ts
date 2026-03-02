@@ -1,27 +1,16 @@
 import type { Application, Request, Response } from "express";
 import { EventEmitter } from "events";
-import { mkdir, writeFile, rm, readFile } from "fs/promises";
+import { mkdir, readFile } from "fs/promises";
 import { join, resolve } from "path";
 
-import { parseGitHubUrl, cloneRepo, scanRepo } from "../ingest.js";
-import { analyzeRepo, type AnalysisStats } from "../agent.js";
-import { readCache, writeCache } from "../cache.js";
-import { generateDependencyDocs } from "../deps.js";
-import { generateSecurityDocs, getSecurityGrade } from "../security.js";
-import { generateRadarDocs } from "../radar.js";
-import { generateImpactDocs } from "../impact.js";
-import { runParallelAnalysis } from "../analysis.js";
-import { applyOutputFormat, type OutputFormat } from "../formatter.js";
-import {
-  generateBootcamp,
-  generateOnboarding,
-  generateArchitecture,
-  generateCodemap,
-  generateFirstTasks,
-  generateRunbook,
-  generateDiagrams,
-} from "../generator.js";
-import { getStyleConfig } from "../plugins.js";
+import { applyOutputFormat } from "../formatter.js";
+import { parseGitHubUrl } from "../ingest.js";
+import { ProgressTracker } from "../progress.js";
+import { getSecurityGrade } from "../security.js";
+import { orchestrateAnalysis, prepareOutputDocuments } from "../services/analysis-orchestration.js";
+import { cloneRepository, scanRepositoryFiles, cleanupRepository } from "../services/clone-service.js";
+import { resolveRunConfiguration } from "../services/config-resolution.js";
+import { writeGeneratedOutputs } from "../services/output-writer.js";
 import type { BootcampOptions, RepoFacts } from "../types.js";
 
 /**
@@ -58,21 +47,51 @@ const jobs = new Map<string, AnalysisJob>();
 const JOB_TTL_MS = 30 * 60 * 1000; // 30 minutes
 const MAX_JOBS = 100; // Prevent unbounded memory growth
 
-// Prune completed/errored jobs older than TTL
-setInterval(() => {
+let pruneTimer: NodeJS.Timeout | null = null;
+
+function pruneExpiredJobs(): void {
   const now = Date.now();
   for (const [id, job] of jobs) {
     if (job.completedAt && now - job.completedAt > JOB_TTL_MS) {
       jobs.delete(id);
     }
   }
-}, JOB_TTL_MS).unref();
+}
+
+export function startJobPruner(): void {
+  if (pruneTimer) {
+    return;
+  }
+  pruneTimer = setInterval(pruneExpiredJobs, JOB_TTL_MS);
+  pruneTimer.unref();
+}
+
+export function stopJobPruner(): void {
+  if (!pruneTimer) {
+    return;
+  }
+  clearInterval(pruneTimer);
+  pruneTimer = null;
+}
 
 /**
  * Generate unique job ID
  */
 function generateJobId(): string {
   return `job_${Date.now()}_${Math.random().toString(36).substring(7)}`;
+}
+
+function buildWebOptions(options: Partial<BootcampOptions>): BootcampOptions {
+  return {
+    branch: "",
+    focus: "all",
+    audience: "all",
+    output: "",
+    maxFiles: 200,
+    noClone: false,
+    verbose: false,
+    ...options,
+  };
 }
 
 /**
@@ -83,13 +102,13 @@ async function runAnalysis(job: AnalysisJob, options: Partial<BootcampOptions>):
     job.progress.push(event);
     job.emitter.emit("progress", event);
   };
+  const progress = new ProgressTracker(false);
+  let repoPath: string | null = null;
 
   try {
     job.status = "running";
-    const outputFormat = (options.format || "markdown") as OutputFormat;
-    if (!["markdown", "html", "pdf"].includes(outputFormat)) {
-      throw new Error(`Invalid format: ${options.format}. Use: markdown, html, pdf`);
-    }
+    const fullOptions = buildWebOptions(options);
+    const { config, styleConfig, outputFormat } = await resolveRunConfiguration(fullOptions);
 
     // Parse URL
     emit({ type: "phase", phase: "parse", message: "Parsing repository URL..." });
@@ -98,159 +117,95 @@ async function runAnalysis(job: AnalysisJob, options: Partial<BootcampOptions>):
 
     // Clone
     emit({ type: "phase", phase: "clone", message: `Cloning ${repoInfo.fullName}...` });
-    const repoPath = await cloneRepo(repoInfo, process.cwd(), options.branch, false);
+    repoPath = await cloneRepository(repoInfo, fullOptions.branch || undefined, fullOptions.fullClone);
     emit({ type: "progress", message: `Cloned (branch: ${repoInfo.branch})` });
 
     // Scan
     emit({ type: "phase", phase: "scan", message: "Scanning files..." });
-    const scanResult = await scanRepo(repoPath, options.maxFiles || 200);
+    const scanResult = await scanRepositoryFiles(repoPath, fullOptions.maxFiles);
     emit({ type: "progress", message: `Scanned ${scanResult.files.length} files` });
     emit({ type: "progress", message: `Stack: ${scanResult.stack.languages.join(", ")}` });
 
     // Analyze with Copilot
     emit({ type: "phase", phase: "analyze", message: "Analyzing with AI..." });
-    const fullOptions: BootcampOptions = {
-      branch: options.branch || "",
-      focus: options.focus || "all",
-      audience: options.audience || "all",
-      output: "",
-      maxFiles: options.maxFiles || 200,
-      noClone: false,
-      verbose: false,
-      ...options,
-      format: outputFormat,
-    };
-    const styleConfig = getStyleConfig(fullOptions.style);
-
+    progress.startPhase("analyze");
     const analysisStart = Date.now();
-    const useCache = !fullOptions.noCache && !!repoInfo.commitSha;
-    const cacheOptions = {
-      focus: fullOptions.focus,
-      style: styleConfig.name,
-      model: fullOptions.model,
-      audience: fullOptions.audience,
+    const analysis = await orchestrateAnalysis({
+      repoPath,
+      repoInfo,
+      scanResult,
+      options: fullOptions,
+      styleConfig,
+      progress,
+      analysisStart,
+    });
+    progress.stop();
+
+    const facts: RepoFacts = {
+      ...analysis.facts,
+      firstTasks: analysis.facts.firstTasks.slice(0, styleConfig.firstTasksCount),
     };
-    let cacheHit = false;
-    let facts!: RepoFacts;
-    let analysisStats!: AnalysisStats;
-
-    if (useCache) {
-      const cached = await readCache(repoInfo.fullName, repoInfo.commitSha!, cacheOptions);
-      if (cached) {
-        facts = cached;
-        cacheHit = true;
-        analysisStats = {
-          model: "cached",
-          toolCalls: [],
-          totalEvents: 0,
-          responseLength: 0,
-          startTime: analysisStart,
-          endTime: Date.now(),
-        };
-        emit({
-          type: "progress",
-          message: `Analysis loaded from cache (${repoInfo.commitSha!.substring(0, 7)})`,
-        });
-      }
+    if (!facts.stack.packageManager && scanResult.stack.packageManager) {
+      facts.stack.packageManager = scanResult.stack.packageManager;
     }
-
-    if (!cacheHit) {
-      let toolCallCount = 0;
-      const result = await analyzeRepo(repoPath, repoInfo, scanResult, fullOptions, (msg) => {
-        if (msg.startsWith("Tool:")) {
-          toolCallCount++;
-          emit({ type: "progress", message: `Tool call ${toolCallCount}: ${msg}` });
-        }
-      }, styleConfig);
-      facts = result.facts;
-      analysisStats = result.stats;
-      emit({
-        type: "progress",
-        message: `Analysis complete (${analysisStats.toolCalls.length} tool calls)`,
-      });
-
-      if (useCache) {
-        try {
-          await writeCache(repoInfo.fullName, repoInfo.commitSha!, facts, cacheOptions);
-        } catch {
-          // Cache write failure is non-fatal
-        }
-      }
-    }
-    const styledFacts: RepoFacts = {
-      ...facts,
-      firstTasks: facts.firstTasks.slice(0, styleConfig.firstTasksCount),
-    };
+    emit({
+      type: "progress",
+      message: `Analysis complete (${analysis.toolCalls} tool calls)`,
+    });
 
     // Generate docs
     emit({ type: "phase", phase: "generate", message: "Generating documentation..." });
-    
+    progress.startPhase("generate");
     const outputDir = join(process.cwd(), `.bootcamp-output`, job.id, repoInfo.repo);
     await mkdir(outputDir, { recursive: true });
 
-    const { deps, security, radar, impacts } = await runParallelAnalysis(
+    const { documents, facts: preparedFacts, security, radar, deps } = await prepareOutputDocuments({
       repoPath,
+      repoInfo,
       scanResult,
-    );
+      facts,
+      options: fullOptions,
+      config,
+      styleConfig,
+      progress,
+    });
 
-    // Generate all docs
-    const documents = [
-      { name: "BOOTCAMP.md", content: generateBootcamp(styledFacts, fullOptions, styleConfig) },
-      { name: "ONBOARDING.md", content: generateOnboarding(styledFacts, fullOptions) },
-      { name: "ARCHITECTURE.md", content: generateArchitecture(styledFacts, fullOptions) },
-      { name: "CODEMAP.md", content: generateCodemap(styledFacts) },
-      { name: "FIRST_TASKS.md", content: generateFirstTasks(styledFacts, fullOptions, styleConfig) },
-      { name: "diagrams.mmd", content: generateDiagrams(styledFacts) },
-      { name: "repo_facts.json", content: JSON.stringify(styledFacts, null, 2) },
-    ];
+    const outputOptions: BootcampOptions = {
+      ...fullOptions,
+      createIssues: false,
+      renderDiagrams: false,
+    };
+    const { documentCount } = await writeGeneratedOutputs({
+      documents,
+      repoInfo,
+      facts: preparedFacts,
+      options: outputOptions,
+      outputDir,
+      outputFormat,
+      progress,
+      allowIssueCreation: false,
+    });
+    progress.stop();
 
-    if (styleConfig.sections.showRunbook) {
-      documents.push({ name: "RUNBOOK.md", content: generateRunbook(styledFacts) });
-    }
-
-    if (styleConfig.sections.showSecurityDetails) {
-      documents.push({ name: "SECURITY.md", content: generateSecurityDocs(security, repoInfo.repo) });
-    }
-
-    if (styleConfig.sections.showRadar) {
-      documents.push({ name: "RADAR.md", content: generateRadarDocs(radar, repoInfo.repo) });
-    }
-
-    if (deps && styleConfig.sections.showDependencyGraph) {
-      documents.push({
-        name: "DEPENDENCIES.md",
-        content: generateDependencyDocs(deps, repoInfo.repo),
-      });
-    }
-
-    if (impacts.length > 0 && styleConfig.sections.showImpact) {
-      documents.push({
-        name: "IMPACT.md",
-        content: generateImpactDocs(impacts, repoInfo.repo),
-      });
-    }
-
-    const formattedDocuments = applyOutputFormat(documents, outputFormat);
-
-    await Promise.all(formattedDocuments.map(doc =>
-      writeFile(join(outputDir, doc.name), doc.content, "utf-8")
-    ));
-
-    emit({ type: "progress", message: `Generated ${formattedDocuments.length} files` });
+    const files = outputOptions.jsonOnly
+      ? ["repo_facts.json"]
+      : applyOutputFormat(documents, outputFormat).map((doc) => doc.name);
+    emit({ type: "progress", message: `Generated ${documentCount} files` });
 
     // Cleanup
     emit({ type: "phase", phase: "cleanup", message: "Cleaning up..." });
-    await rm(repoPath, { recursive: true, force: true });
+    await cleanupRepository(repoPath);
+    repoPath = null;
 
     // Complete
     job.status = "complete";
     job.completedAt = Date.now();
     job.result = {
       outputDir,
-      files: formattedDocuments.map(d => d.name),
+      files,
       stats: {
-        toolCalls: analysisStats.toolCalls.length,
-        model: analysisStats.model,
+        toolCalls: analysis.toolCalls,
+        model: analysis.model,
         securityScore: security.score,
         securityGrade: getSecurityGrade(security.score),
         riskScore: radar.onboardingRisk.score,
@@ -270,6 +225,15 @@ async function runAnalysis(job: AnalysisJob, options: Partial<BootcampOptions>):
     job.completedAt = Date.now();
     job.error = (error as Error).message;
     emit({ type: "error", message: (error as Error).message });
+  } finally {
+    progress.stop();
+    if (repoPath) {
+      try {
+        await cleanupRepository(repoPath);
+      } catch (cleanupError: unknown) {
+        console.error(`[web] Failed to clean up temporary repository: ${(cleanupError as Error).message}`);
+      }
+    }
   }
 }
 

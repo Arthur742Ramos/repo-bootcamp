@@ -14,18 +14,16 @@ vi.mock("fs/promises", () => ({
 
 // Mock child_process
 vi.mock("child_process", () => ({
-  exec: vi.fn(),
   execFile: vi.fn(),
 }));
 
 import { readFile, readdir, stat } from "fs/promises";
-import { exec, execFile } from "child_process";
+import { execFile } from "child_process";
 import { getRepoTools, safePath, type ToolContext } from "../src/tools.js";
 
 const mockReadFile = vi.mocked(readFile);
 const mockReaddir = vi.mocked(readdir);
 const mockStat = vi.mocked(stat);
-const mockExec = vi.mocked(exec);
 const mockExecFile = vi.mocked(execFile);
 
 describe("safePath", () => {
@@ -638,7 +636,7 @@ describe("get_repo_metadata tool", () => {
 
     // git commands: branch, commits, remotes
     let callIdx = 0;
-    mockExec.mockImplementation((_cmd: any, _opts: any, cb?: any) => {
+    mockExecFile.mockImplementation((_cmd: any, _args: any, _opts: any, cb?: any) => {
       const callback = cb || _opts;
       const responses = ["main\n", "42\n", "origin\thttps://github.com/o/r (fetch)\n"];
       if (typeof callback === "function") {
@@ -675,7 +673,7 @@ describe("get_repo_metadata tool", () => {
     mockStat.mockResolvedValueOnce({ size: 512 } as any);
 
     // git commands all fail
-    mockExec.mockImplementation((_cmd: any, _opts: any, cb?: any) => {
+    mockExecFile.mockImplementation((_cmd: any, _args: any, _opts: any, cb?: any) => {
       const callback = cb || _opts;
       if (typeof callback === "function") {
         callback(new Error("not a git repo"));
@@ -701,7 +699,7 @@ describe("get_repo_metadata tool", () => {
     ] as any);
     mockStat.mockResolvedValueOnce({ size: 100 } as any);
 
-    mockExec.mockImplementation((_cmd: any, _opts: any, cb?: any) => {
+    mockExecFile.mockImplementation((_cmd: any, _args: any, _opts: any, cb?: any) => {
       const callback = cb || _opts;
       if (typeof callback === "function") {
         callback(new Error("no git"));
@@ -732,7 +730,7 @@ describe("get_repo_metadata tool", () => {
 
     mockStat.mockResolvedValueOnce({ size: 256 } as any);
 
-    mockExec.mockImplementation((_cmd: any, _opts: any, cb?: any) => {
+    mockExecFile.mockImplementation((_cmd: any, _args: any, _opts: any, cb?: any) => {
       const callback = cb || _opts;
       if (typeof callback === "function") {
         callback(new Error("no git"));
@@ -756,7 +754,7 @@ describe("get_repo_metadata tool", () => {
     ] as any);
     mockStat.mockResolvedValue({ size: 100 } as any);
 
-    mockExec.mockImplementation((_cmd: any, _opts: any, cb?: any) => {
+    mockExecFile.mockImplementation((_cmd: any, _args: any, _opts: any, cb?: any) => {
       const callback = cb || _opts;
       if (typeof callback === "function") {
         callback(new Error("no git"));
@@ -778,7 +776,7 @@ describe("get_repo_metadata tool", () => {
     ] as any);
     mockStat.mockRejectedValueOnce(new Error("permission denied"));
 
-    mockExec.mockImplementation((_cmd: any, _opts: any, cb?: any) => {
+    mockExecFile.mockImplementation((_cmd: any, _args: any, _opts: any, cb?: any) => {
       const callback = cb || _opts;
       if (typeof callback === "function") {
         callback(new Error("no git"));
@@ -814,7 +812,7 @@ describe("get_repo_metadata tool", () => {
     ] as any);
     mockStat.mockResolvedValueOnce({ size: 10 } as any);
 
-    mockExec.mockImplementation((_cmd: any, _opts: any, cb?: any) => {
+    mockExecFile.mockImplementation((_cmd: any, _args: any, _opts: any, cb?: any) => {
       const callback = cb || _opts;
       if (typeof callback === "function") {
         callback(new Error("no git"));

@@ -1,0 +1,1480 @@
+{
+  "version": 1,
+  "generated_at": "2026-03-02T20:27:31.807939+00:00",
+  "root": "/tmp/repo-bootcamp",
+  "files": {
+    "eslint.config.js": {
+      "path": "eslint.config.js",
+      "language": "javascript",
+      "parser": "regex",
+      "imports": [
+        "@eslint/js",
+        "@typescript-eslint/eslint-plugin",
+        "@typescript-eslint/parser",
+        "eslint-config-prettier"
+      ],
+      "classes": [],
+      "functions": [],
+      "methods": [],
+      "calls": {},
+      "mtime_ns": 1772481596961026881,
+      "size": 938
+    },
+    "src/agent.ts": {
+      "path": "src/agent.ts",
+      "language": "typescript",
+      "parser": "regex",
+      "imports": [
+        "./plugins.js",
+        "./schema.js",
+        "./tools.js",
+        "./types.js",
+        "@github/copilot-sdk",
+        "chalk",
+        "fs",
+        "path"
+      ],
+      "classes": [],
+      "functions": [
+        "analyzeRepo",
+        "buildSystemPrompt",
+        "createAnalysisPrompt",
+        "createFastAnalysisPrompt",
+        "createSessionWithFallback",
+        "formatCustomPromptSection",
+        "formatStylePromptSection",
+        "getAudiencePromptGuidance",
+        "getSectionDepthGuidance",
+        "parseAndValidateRepoFacts",
+        "readCustomPrompt",
+        "styleSectionLists"
+      ],
+      "methods": [],
+      "calls": {},
+      "mtime_ns": 1772481596968027074,
+      "size": 30114
+    },
+    "src/analysis.ts": {
+      "path": "src/analysis.ts",
+      "language": "typescript",
+      "parser": "regex",
+      "imports": [
+        "./deps.js",
+        "./impact.js",
+        "./ingest.js",
+        "./progress.js",
+        "./radar.js",
+        "./security.js",
+        "./types.js",
+        "fs/promises",
+        "path"
+      ],
+      "classes": [],
+      "functions": [
+        "runParallelAnalysis"
+      ],
+      "methods": [],
+      "calls": {},
+      "mtime_ns": 1772481596968027074,
+      "size": 3091
+    },
+    "src/cache.ts": {
+      "path": "src/cache.ts",
+      "language": "typescript",
+      "parser": "regex",
+      "imports": [
+        "./types.js",
+        "crypto",
+        "fs/promises",
+        "os",
+        "path"
+      ],
+      "classes": [],
+      "functions": [
+        "cacheKey",
+        "clearCache",
+        "ensureCacheDir",
+        "getCacheDir",
+        "normalizeGenerationOptions",
+        "pruneCache",
+        "readCache",
+        "serializeGenerationOptions",
+        "writeCache"
+      ],
+      "methods": [],
+      "calls": {},
+      "mtime_ns": 1772481596969027101,
+      "size": 5104
+    },
+    "src/commands/ask-command.ts": {
+      "path": "src/commands/ask-command.ts",
+      "language": "typescript",
+      "parser": "regex",
+      "imports": [
+        "../ingest.js",
+        "../interactive.js",
+        "../services/clone-service.js",
+        "../types.js",
+        "chalk"
+      ],
+      "classes": [],
+      "functions": [
+        "runAskCommand"
+      ],
+      "methods": [],
+      "calls": {},
+      "mtime_ns": 1772481596969027101,
+      "size": 1651
+    },
+    "src/commands/diff-command.ts": {
+      "path": "src/commands/diff-command.ts",
+      "language": "typescript",
+      "parser": "regex",
+      "imports": [
+        "../diff.js",
+        "../formatter.js",
+        "../ingest.js",
+        "../progress.js",
+        "../services/clone-service.js",
+        "../services/config-resolution.js",
+        "../types.js",
+        "chalk",
+        "fs/promises",
+        "path"
+      ],
+      "classes": [],
+      "functions": [
+        "runPullRequestDiff"
+      ],
+      "methods": [],
+      "calls": {},
+      "mtime_ns": 1772481596969027101,
+      "size": 5264
+    },
+    "src/commands/docs-command.ts": {
+      "path": "src/commands/docs-command.ts",
+      "language": "typescript",
+      "parser": "regex",
+      "imports": [
+        "../docs-analyzer.js",
+        "../docs-fixer.js",
+        "../repo-resolver.js",
+        "chalk"
+      ],
+      "classes": [],
+      "functions": [
+        "runDocsCommand"
+      ],
+      "methods": [],
+      "calls": {},
+      "mtime_ns": 1772481596969027101,
+      "size": 4407
+    },
+    "src/commands/main-command.ts": {
+      "path": "src/commands/main-command.ts",
+      "language": "typescript",
+      "parser": "regex",
+      "imports": [
+        "../agent.js",
+        "../formatter.js",
+        "../ingest.js",
+        "../interactive.js",
+        "../plugins.js",
+        "../progress.js",
+        "../radar.js",
+        "../repo-resolver.js",
+        "../security.js",
+        "../services/analysis-orchestration.js",
+        "../services/clone-service.js",
+        "../services/config-resolution.js",
+        "../services/output-writer.js",
+        "../types.js",
+        "../watch.js",
+        "chalk",
+        "fs/promises"
+      ],
+      "classes": [],
+      "functions": [
+        "formatName",
+        "generateOutputs",
+        "onSignal",
+        "runMainCommand"
+      ],
+      "methods": [],
+      "calls": {},
+      "mtime_ns": 1772481596969027101,
+      "size": 16813
+    },
+    "src/deps.ts": {
+      "path": "src/deps.ts",
+      "language": "typescript",
+      "parser": "regex",
+      "imports": [
+        "./data/category-patterns.json",
+        "fs/promises",
+        "path"
+      ],
+      "classes": [],
+      "functions": [
+        "categorizeDependency",
+        "extractCargoDependencies",
+        "extractDependencies",
+        "extractGoDependencies",
+        "extractNpmDependencies",
+        "extractPythonDependencies",
+        "generateDependencyDiagram",
+        "generateDependencyDocs"
+      ],
+      "methods": [],
+      "calls": {},
+      "mtime_ns": 1772481596969027101,
+      "size": 13396
+    },
+    "src/diagrams.ts": {
+      "path": "src/diagrams.ts",
+      "language": "typescript",
+      "parser": "regex",
+      "imports": [
+        "child_process",
+        "fs/promises",
+        "path",
+        "util"
+      ],
+      "classes": [],
+      "functions": [
+        "getMmdcCommand",
+        "isMermaidCliAvailable",
+        "normalizeDiagramTitle",
+        "parseMermaidFile",
+        "renderDiagram",
+        "renderMermaidFile",
+        "renderOutputDiagrams"
+      ],
+      "methods": [],
+      "calls": {},
+      "mtime_ns": 1772481596969027101,
+      "size": 7777
+    },
+    "src/diff.ts": {
+      "path": "src/diff.ts",
+      "language": "typescript",
+      "parser": "regex",
+      "imports": [
+        "./types.js",
+        "child_process",
+        "util"
+      ],
+      "classes": [],
+      "functions": [
+        "analyzeDiff",
+        "baseScripts",
+        "detectBreakingChanges",
+        "extractCommandChanges",
+        "extractDependencyChanges",
+        "extractEnvVarChanges",
+        "fetchPullRequestInfo",
+        "fetchPullRequestRefs",
+        "generateDiffDocs",
+        "getChangedFiles",
+        "getFileDiff",
+        "getPackageJsonAtRef",
+        "headScripts",
+        "parsePullRequestTarget"
+      ],
+      "methods": [],
+      "calls": {},
+      "mtime_ns": 1772481596969027101,
+      "size": 19261
+    },
+    "src/docs-analyzer.ts": {
+      "path": "src/docs-analyzer.ts",
+      "language": "typescript",
+      "parser": "regex",
+      "imports": [
+        "./utils.js",
+        "child_process",
+        "path"
+      ],
+      "classes": [],
+      "functions": [
+        "analyzeBadges",
+        "analyzeCLIDrift",
+        "analyzeDocumentation",
+        "analyzeFrameworkDocs",
+        "analyzePrerequisites",
+        "analyzeVersionMismatches",
+        "getPackageJson",
+        "getReadme",
+        "pkgManager"
+      ],
+      "methods": [],
+      "calls": {},
+      "mtime_ns": 1772481596969027101,
+      "size": 13909
+    },
+    "src/docs-fixer.ts": {
+      "path": "src/docs-fixer.ts",
+      "language": "typescript",
+      "parser": "regex",
+      "imports": [
+        "./utils.js",
+        "fs/promises",
+        "path"
+      ],
+      "classes": [],
+      "functions": [
+        "addMissingFrameworks",
+        "capitalize",
+        "fixDocumentation",
+        "getReadmePath",
+        "updateCLIUsage",
+        "updateVersionNumbers"
+      ],
+      "methods": [],
+      "calls": {},
+      "mtime_ns": 1772481596970027128,
+      "size": 9035
+    },
+    "src/formatter.ts": {
+      "path": "src/formatter.ts",
+      "language": "typescript",
+      "parser": "regex",
+      "imports": [
+        "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs"
+      ],
+      "classes": [],
+      "functions": [
+        "applyOutputFormat",
+        "convertCodeBlocks",
+        "convertInlineFormatting",
+        "convertToHtml",
+        "convertToPdf",
+        "escapeHtml",
+        "formatContent",
+        "formatDocName",
+        "formatFileName",
+        "getFileExtension",
+        "getMermaidRuntime",
+        "markdownToHtml",
+        "wrapHtmlPage"
+      ],
+      "methods": [],
+      "calls": {},
+      "mtime_ns": 1772481596970027128,
+      "size": 11801
+    },
+    "src/generator.ts": {
+      "path": "src/generator.ts",
+      "language": "typescript",
+      "parser": "regex",
+      "imports": [
+        "./plugins.js",
+        "./types.js"
+      ],
+      "classes": [],
+      "functions": [
+        "confidenceBadge",
+        "formatTask",
+        "generateArchitecture",
+        "generateBootcamp",
+        "generateCodemap",
+        "generateDiagrams",
+        "generateFirstTasks",
+        "generateMermaidDiagram",
+        "generateOnboarding",
+        "generateRunbook",
+        "getAudienceFiles",
+        "getAudienceProfile",
+        "getAudienceTasks",
+        "getSectionDepthLimits",
+        "resolveStyleConfig",
+        "scorePathForAudience",
+        "scoreTaskForAudience",
+        "sourcesSection",
+        "tonePrefix"
+      ],
+      "methods": [],
+      "calls": {},
+      "mtime_ns": 1772481596970027128,
+      "size": 25657
+    },
+    "src/impact.ts": {
+      "path": "src/impact.ts",
+      "language": "typescript",
+      "parser": "regex",
+      "imports": [
+        "./data/import-patterns.json",
+        "./types.js",
+        "./utils.js",
+        "fs/promises",
+        "path"
+      ],
+      "classes": [],
+      "functions": [
+        "analyzeChangeImpact",
+        "buildImportGraph",
+        "extractImports",
+        "findRelatedDocs",
+        "findRelatedTests",
+        "generateImpactDocs",
+        "getKeyFilesForImpact",
+        "resolveImport"
+      ],
+      "methods": [],
+      "calls": {},
+      "mtime_ns": 1772481596970027128,
+      "size": 11247
+    },
+    "src/index.ts": {
+      "path": "src/index.ts",
+      "language": "typescript",
+      "parser": "regex",
+      "imports": [
+        "../package.json",
+        "./cache.js",
+        "./commands/ask-command.js",
+        "./commands/diff-command.js",
+        "./commands/docs-command.js",
+        "./commands/main-command.js",
+        "./formatter.js",
+        "./plugins.js",
+        "./services/config-resolution.js",
+        "./types.js",
+        "./web/server.js",
+        "chalk",
+        "commander",
+        "path",
+        "url"
+      ],
+      "classes": [],
+      "functions": [],
+      "methods": [],
+      "calls": {},
+      "mtime_ns": 1772481596970027128,
+      "size": 8766
+    },
+    "src/ingest.ts": {
+      "path": "src/ingest.ts",
+      "language": "typescript",
+      "parser": "regex",
+      "imports": [
+        "./data/framework-maps.json",
+        "./types.js",
+        "./utils.js",
+        "child_process",
+        "fs/promises",
+        "path",
+        "util"
+      ],
+      "classes": [],
+      "functions": [
+        "cloneRepo",
+        "detectFrameworksFromDeps",
+        "detectStack",
+        "extractMakefileCommands",
+        "extractPackageJsonCommands",
+        "listFilesByPattern",
+        "mergeFrameworksFromDeps",
+        "parseGitHubUrl",
+        "parseWorkflows",
+        "readDocFile",
+        "readKeySourceFiles",
+        "readRepoFile",
+        "scanDirectory",
+        "scanRepo",
+        "scoreFile"
+      ],
+      "methods": [],
+      "calls": {},
+      "mtime_ns": 1772481596970027128,
+      "size": 17085
+    },
+    "src/interactive.ts": {
+      "path": "src/interactive.ts",
+      "language": "typescript",
+      "parser": "regex",
+      "imports": [
+        "./agent.js",
+        "./tools.js",
+        "@github/copilot-sdk",
+        "chalk",
+        "fs/promises",
+        "path",
+        "readline"
+      ],
+      "classes": [
+        "InteractiveSession"
+      ],
+      "functions": [
+        "askQuestion",
+        "createContextMessage",
+        "generateTranscriptMarkdown",
+        "quickAsk",
+        "runInteractiveMode"
+      ],
+      "methods": [],
+      "calls": {},
+      "mtime_ns": 1772481596970027128,
+      "size": 10414
+    },
+    "src/issues.ts": {
+      "path": "src/issues.ts",
+      "language": "typescript",
+      "parser": "regex",
+      "imports": [
+        "./types.js",
+        "chalk",
+        "child_process",
+        "util"
+      ],
+      "classes": [],
+      "functions": [
+        "categoryToLabel",
+        "checkGhAuth",
+        "createIssue",
+        "createIssuesFromTasks",
+        "difficultyToLabel",
+        "generateIssuePreview",
+        "taskToIssuePayload"
+      ],
+      "methods": [],
+      "calls": {},
+      "mtime_ns": 1772481596970027128,
+      "size": 6956
+    },
+    "src/plugins.ts": {
+      "path": "src/plugins.ts",
+      "language": "typescript",
+      "parser": "regex",
+      "imports": [
+        "./types.js",
+        "fs/promises",
+        "path"
+      ],
+      "classes": [],
+      "functions": [
+        "generateExampleConfig",
+        "getStyleConfig",
+        "loadConfig",
+        "loadPlugins",
+        "runPlugins"
+      ],
+      "methods": [],
+      "calls": {},
+      "mtime_ns": 1772481596971027156,
+      "size": 8226
+    },
+    "src/progress.ts": {
+      "path": "src/progress.ts",
+      "language": "typescript",
+      "parser": "regex",
+      "imports": [
+        "chalk",
+        "ora"
+      ],
+      "classes": [
+        "ProgressTracker"
+      ],
+      "functions": [
+        "createProgressBar",
+        "formatElapsed"
+      ],
+      "methods": [
+        "constructor"
+      ],
+      "calls": {},
+      "mtime_ns": 1772481596971027156,
+      "size": 6504
+    },
+    "src/radar.ts": {
+      "path": "src/radar.ts",
+      "language": "typescript",
+      "parser": "regex",
+      "imports": [
+        "./data/radar-signals.json",
+        "./deps.js",
+        "./security.js",
+        "./types.js"
+      ],
+      "classes": [],
+      "functions": [
+        "analyzeDepSignals",
+        "calculateOnboardingRisk",
+        "generateRadarDocs",
+        "generateTechRadar",
+        "getRiskEmoji"
+      ],
+      "methods": [],
+      "calls": {},
+      "mtime_ns": 1772481596971027156,
+      "size": 9185
+    },
+    "src/repo-resolver.ts": {
+      "path": "src/repo-resolver.ts",
+      "language": "typescript",
+      "parser": "regex",
+      "imports": [
+        "./ingest.js",
+        "./types.js",
+        "fs/promises",
+        "os",
+        "path"
+      ],
+      "classes": [],
+      "functions": [
+        "createLocalRepoInfo",
+        "getRepoNameFromPath",
+        "isGitRepo",
+        "isLocalPath",
+        "resolveLocalPath",
+        "resolveRepo"
+      ],
+      "methods": [],
+      "calls": {},
+      "mtime_ns": 1772481596971027156,
+      "size": 4609
+    },
+    "src/schema.ts": {
+      "path": "src/schema.ts",
+      "language": "typescript",
+      "parser": "regex",
+      "imports": [
+        "zod"
+      ],
+      "classes": [],
+      "functions": [
+        "getMissingFieldsSummary",
+        "validateRepoFacts"
+      ],
+      "methods": [],
+      "calls": {},
+      "mtime_ns": 1772481596971027156,
+      "size": 6085
+    },
+    "src/security.ts": {
+      "path": "src/security.ts",
+      "language": "typescript",
+      "parser": "regex",
+      "imports": [
+        "./data/security-packages.json",
+        "./data/security-patterns.json",
+        "./types.js",
+        "fs/promises",
+        "path"
+      ],
+      "classes": [],
+      "functions": [
+        "analyzeSecurityPatterns",
+        "calculateSecurityScore",
+        "generateSecurityDocs",
+        "getSecurityGrade"
+      ],
+      "methods": [],
+      "calls": {},
+      "mtime_ns": 1772481596971027156,
+      "size": 16145
+    },
+    "src/services/analysis-orchestration.ts": {
+      "path": "src/services/analysis-orchestration.ts",
+      "language": "typescript",
+      "parser": "regex",
+      "imports": [
+        "../agent.js",
+        "../analysis.js",
+        "../cache.js",
+        "../deps.js",
+        "../diff.js",
+        "../impact.js",
+        "../plugins.js",
+        "../progress.js",
+        "../radar.js",
+        "../security.js",
+        "../types.js",
+        "chalk"
+      ],
+      "classes": [],
+      "functions": [
+        "isPlainObject",
+        "mergeDeep",
+        "orchestrateAnalysis",
+        "prepareOutputDocuments"
+      ],
+      "methods": [],
+      "calls": {},
+      "mtime_ns": 1772481596971027156,
+      "size": 8075
+    },
+    "src/services/clone-service.ts": {
+      "path": "src/services/clone-service.ts",
+      "language": "typescript",
+      "parser": "regex",
+      "imports": [
+        "../ingest.js",
+        "../types.js",
+        "fs/promises"
+      ],
+      "classes": [],
+      "functions": [
+        "cleanupRepository",
+        "cloneRepository",
+        "scanRepositoryFiles"
+      ],
+      "methods": [],
+      "calls": {},
+      "mtime_ns": 1772481596971027156,
+      "size": 611
+    },
+    "src/services/config-resolution.ts": {
+      "path": "src/services/config-resolution.ts",
+      "language": "typescript",
+      "parser": "regex",
+      "imports": [
+        "../formatter.js",
+        "../plugins.js",
+        "../types.js"
+      ],
+      "classes": [],
+      "functions": [
+        "resolveOutputFormat",
+        "resolveRunConfiguration"
+      ],
+      "methods": [],
+      "calls": {},
+      "mtime_ns": 1772481596971027156,
+      "size": 1179
+    },
+    "src/services/output-writer.ts": {
+      "path": "src/services/output-writer.ts",
+      "language": "typescript",
+      "parser": "regex",
+      "imports": [
+        "../diagrams.js",
+        "../formatter.js",
+        "../issues.js",
+        "../progress.js",
+        "../types.js",
+        "./analysis-orchestration.js",
+        "chalk",
+        "fs/promises",
+        "path"
+      ],
+      "classes": [],
+      "functions": [
+        "writeGeneratedOutputs"
+      ],
+      "methods": [],
+      "calls": {},
+      "mtime_ns": 1772481596971027156,
+      "size": 2797
+    },
+    "src/tools.ts": {
+      "path": "src/tools.ts",
+      "language": "typescript",
+      "parser": "regex",
+      "imports": [
+        "./utils.js",
+        "@github/copilot-sdk",
+        "child_process",
+        "fs/promises",
+        "path",
+        "util"
+      ],
+      "classes": [],
+      "functions": [
+        "countFiles",
+        "createListFilesTool",
+        "createReadFileTool",
+        "createRepoMetadataTool",
+        "createSearchTool",
+        "getRepoTools",
+        "safePath",
+        "scanDir"
+      ],
+      "methods": [],
+      "calls": {},
+      "mtime_ns": 1772481596971027156,
+      "size": 11696
+    },
+    "src/types.ts": {
+      "path": "src/types.ts",
+      "language": "typescript",
+      "parser": "regex",
+      "imports": [
+        "./formatter.js"
+      ],
+      "classes": [],
+      "functions": [],
+      "methods": [],
+      "calls": {},
+      "mtime_ns": 1772481596971027156,
+      "size": 5323
+    },
+    "src/utils.ts": {
+      "path": "src/utils.ts",
+      "language": "typescript",
+      "parser": "regex",
+      "imports": [
+        "fs/promises"
+      ],
+      "classes": [],
+      "functions": [
+        "escapeRegex",
+        "readFileSafe"
+      ],
+      "methods": [],
+      "calls": {},
+      "mtime_ns": 1772481596971027156,
+      "size": 960
+    },
+    "src/watch.ts": {
+      "path": "src/watch.ts",
+      "language": "typescript",
+      "parser": "regex",
+      "imports": [
+        "chalk",
+        "child_process",
+        "fs",
+        "path",
+        "util"
+      ],
+      "classes": [],
+      "functions": [
+        "addFsWatch",
+        "check",
+        "fetchAndCheckUpdates",
+        "getHeadCommit",
+        "log",
+        "schedulePoll",
+        "startWatch",
+        "triggerCheck"
+      ],
+      "methods": [],
+      "calls": {},
+      "mtime_ns": 1772481596971027156,
+      "size": 6108
+    },
+    "src/web/routes.ts": {
+      "path": "src/web/routes.ts",
+      "language": "typescript",
+      "parser": "regex",
+      "imports": [
+        "../agent.js",
+        "../analysis.js",
+        "../cache.js",
+        "../deps.js",
+        "../formatter.js",
+        "../impact.js",
+        "../ingest.js",
+        "../plugins.js",
+        "../radar.js",
+        "../security.js",
+        "../types.js",
+        "events",
+        "express",
+        "fs/promises",
+        "path"
+      ],
+      "classes": [],
+      "functions": [
+        "emit",
+        "generateJobId",
+        "onProgress",
+        "outputFormat",
+        "registerRoutes",
+        "runAnalysis"
+      ],
+      "methods": [],
+      "calls": {},
+      "mtime_ns": 1772481596972027183,
+      "size": 13391
+    },
+    "src/web/server.ts": {
+      "path": "src/web/server.ts",
+      "language": "typescript",
+      "parser": "regex",
+      "imports": [
+        "./routes.js",
+        "./templates.js",
+        "chalk",
+        "express"
+      ],
+      "classes": [],
+      "functions": [
+        "createApp",
+        "startServer"
+      ],
+      "methods": [],
+      "calls": {},
+      "mtime_ns": 1772481596972027183,
+      "size": 1830
+    },
+    "src/web/templates.ts": {
+      "path": "src/web/templates.ts",
+      "language": "typescript",
+      "parser": "regex",
+      "imports": [],
+      "classes": [],
+      "functions": [
+        "addProgressItem",
+        "analyze",
+        "closeModal",
+        "escapeHtml",
+        "getFileKey",
+        "getIndexHtml",
+        "resetButton",
+        "showResults",
+        "streamProgress",
+        "viewFile"
+      ],
+      "methods": [],
+      "calls": {},
+      "mtime_ns": 1772481596972027183,
+      "size": 10225
+    },
+    "test/agent.test.ts": {
+      "path": "test/agent.test.ts",
+      "language": "typescript",
+      "parser": "regex",
+      "imports": [
+        "../src/agent.js",
+        "../src/types.js",
+        "fs",
+        "vitest"
+      ],
+      "classes": [],
+      "functions": [
+        "calls",
+        "configureSessionResponse",
+        "configureSessionResponses",
+        "makeMockOptions",
+        "makeMockRepoInfo",
+        "makeMockScanResult",
+        "passthrough"
+      ],
+      "methods": [],
+      "calls": {},
+      "mtime_ns": 1772481596972027183,
+      "size": 64042
+    },
+    "test/cache.test.ts": {
+      "path": "test/cache.test.ts",
+      "language": "typescript",
+      "parser": "regex",
+      "imports": [
+        "../src/cache.js",
+        "../src/types.js",
+        "fs/promises",
+        "os",
+        "path",
+        "vitest"
+      ],
+      "classes": [],
+      "functions": [
+        "makeFacts"
+      ],
+      "methods": [],
+      "calls": {},
+      "mtime_ns": 1772481596972027183,
+      "size": 9805
+    },
+    "test/deps.test.ts": {
+      "path": "test/deps.test.ts",
+      "language": "typescript",
+      "parser": "regex",
+      "imports": [
+        "../src/deps.js",
+        "vitest"
+      ],
+      "classes": [],
+      "functions": [],
+      "methods": [],
+      "calls": {},
+      "mtime_ns": 1772481596972027183,
+      "size": 3957
+    },
+    "test/diagrams.test.ts": {
+      "path": "test/diagrams.test.ts",
+      "language": "typescript",
+      "parser": "regex",
+      "imports": [
+        "../src/diagrams.js",
+        "../src/generator.js",
+        "vitest"
+      ],
+      "classes": [],
+      "functions": [],
+      "methods": [],
+      "calls": {},
+      "mtime_ns": 1772481596972027183,
+      "size": 5564
+    },
+    "test/diff.test.ts": {
+      "path": "test/diff.test.ts",
+      "language": "typescript",
+      "parser": "regex",
+      "imports": [
+        "../src/diff.js",
+        "../src/types.js",
+        "vitest"
+      ],
+      "classes": [],
+      "functions": [],
+      "methods": [],
+      "calls": {},
+      "mtime_ns": 1772481596972027183,
+      "size": 6507
+    },
+    "test/docs.test.ts": {
+      "path": "test/docs.test.ts",
+      "language": "typescript",
+      "parser": "regex",
+      "imports": [
+        "fs/promises",
+        "os",
+        "path",
+        "vitest"
+      ],
+      "classes": [],
+      "functions": [
+        "createTestRepo"
+      ],
+      "methods": [],
+      "calls": {},
+      "mtime_ns": 1772481596972027183,
+      "size": 14308
+    },
+    "test/e2e.test.ts": {
+      "path": "test/e2e.test.ts",
+      "language": "typescript",
+      "parser": "regex",
+      "imports": [
+        "../src/deps.js",
+        "../src/impact.js",
+        "../src/index.js",
+        "../src/ingest.js",
+        "../src/radar.js",
+        "../src/security.js",
+        "../src/types.js",
+        "child_process",
+        "fs/promises",
+        "os",
+        "path",
+        "vitest"
+      ],
+      "classes": [],
+      "functions": [
+        "buildMockFacts",
+        "cloneFixtureRepo",
+        "createFixtureRepo"
+      ],
+      "methods": [],
+      "calls": {},
+      "mtime_ns": 1772481596972027183,
+      "size": 10277
+    },
+    "test/flags-behavior.test.ts": {
+      "path": "test/flags-behavior.test.ts",
+      "language": "typescript",
+      "parser": "regex",
+      "imports": [
+        "../src/cache.js",
+        "../src/generator.js",
+        "../src/ingest.js",
+        "../src/plugins.js",
+        "../src/progress.js",
+        "../src/services/analysis-orchestration.js",
+        "../src/types.js",
+        "child_process",
+        "fs/promises",
+        "os",
+        "path",
+        "url",
+        "vitest"
+      ],
+      "classes": [],
+      "functions": [
+        "createFixtureRepo",
+        "makeFacts",
+        "runGit"
+      ],
+      "methods": [],
+      "calls": {},
+      "mtime_ns": 1772481596972027183,
+      "size": 10089
+    },
+    "test/formatter.test.ts": {
+      "path": "test/formatter.test.ts",
+      "language": "typescript",
+      "parser": "regex",
+      "imports": [
+        "vitest"
+      ],
+      "classes": [],
+      "functions": [],
+      "methods": [],
+      "calls": {},
+      "mtime_ns": 1772481596973027211,
+      "size": 10019
+    },
+    "test/generator.test.ts": {
+      "path": "test/generator.test.ts",
+      "language": "typescript",
+      "parser": "regex",
+      "imports": [
+        "../src/types.js",
+        "vitest"
+      ],
+      "classes": [],
+      "functions": [],
+      "methods": [],
+      "calls": {},
+      "mtime_ns": 1772481596973027211,
+      "size": 14351
+    },
+    "test/iac.test.ts": {
+      "path": "test/iac.test.ts",
+      "language": "typescript",
+      "parser": "regex",
+      "imports": [
+        "../src/impact.js",
+        "../src/types.js",
+        "vitest"
+      ],
+      "classes": [],
+      "functions": [],
+      "methods": [],
+      "calls": {},
+      "mtime_ns": 1772481596973027211,
+      "size": 4342
+    },
+    "test/impact.test.ts": {
+      "path": "test/impact.test.ts",
+      "language": "typescript",
+      "parser": "regex",
+      "imports": [
+        "../src/impact.js",
+        "../src/types.js",
+        "vitest"
+      ],
+      "classes": [],
+      "functions": [],
+      "methods": [],
+      "calls": {},
+      "mtime_ns": 1772481596973027211,
+      "size": 4608
+    },
+    "test/index.test.ts": {
+      "path": "test/index.test.ts",
+      "language": "typescript",
+      "parser": "regex",
+      "imports": [
+        "../src/index.js",
+        "vitest"
+      ],
+      "classes": [],
+      "functions": [],
+      "methods": [],
+      "calls": {},
+      "mtime_ns": 1772481596973027211,
+      "size": 4989
+    },
+    "test/ingest.test.ts": {
+      "path": "test/ingest.test.ts",
+      "language": "typescript",
+      "parser": "regex",
+      "imports": [
+        "../src/ingest.js",
+        "../src/types.js",
+        "vitest"
+      ],
+      "classes": [],
+      "functions": [],
+      "methods": [],
+      "calls": {},
+      "mtime_ns": 1772481596973027211,
+      "size": 7249
+    },
+    "test/interactive.test.ts": {
+      "path": "test/interactive.test.ts",
+      "language": "typescript",
+      "parser": "regex",
+      "imports": [
+        "../src/interactive.js",
+        "../src/tools.js",
+        "../src/types.js",
+        "fs/promises",
+        "vitest"
+      ],
+      "classes": [],
+      "functions": [],
+      "methods": [],
+      "calls": {},
+      "mtime_ns": 1772481596973027211,
+      "size": 15347
+    },
+    "test/issues.test.ts": {
+      "path": "test/issues.test.ts",
+      "language": "typescript",
+      "parser": "regex",
+      "imports": [
+        "../src/issues.js",
+        "../src/types.js",
+        "vitest"
+      ],
+      "classes": [],
+      "functions": [],
+      "methods": [],
+      "calls": {},
+      "mtime_ns": 1772481596973027211,
+      "size": 5825
+    },
+    "test/main-command.behavior.test.ts": {
+      "path": "test/main-command.behavior.test.ts",
+      "language": "typescript",
+      "parser": "regex",
+      "imports": [
+        "../src/types.js",
+        "child_process",
+        "fs/promises",
+        "os",
+        "path",
+        "vitest"
+      ],
+      "classes": [],
+      "functions": [
+        "createLocalFixtureRepo",
+        "makeFacts",
+        "makeScanResult"
+      ],
+      "methods": [],
+      "calls": {},
+      "mtime_ns": 1772481596973027211,
+      "size": 6893
+    },
+    "test/pipeline-wiring.test.ts": {
+      "path": "test/pipeline-wiring.test.ts",
+      "language": "typescript",
+      "parser": "regex",
+      "imports": [
+        "../src/plugins.js",
+        "../src/services/analysis-orchestration.js",
+        "../src/services/config-resolution.js",
+        "../src/types.js",
+        "vitest"
+      ],
+      "classes": [],
+      "functions": [],
+      "methods": [],
+      "calls": {},
+      "mtime_ns": 1772481596973027211,
+      "size": 5811
+    },
+    "test/plugins.test.ts": {
+      "path": "test/plugins.test.ts",
+      "language": "typescript",
+      "parser": "regex",
+      "imports": [
+        "../src/types.js",
+        "vitest"
+      ],
+      "classes": [],
+      "functions": [],
+      "methods": [],
+      "calls": {},
+      "mtime_ns": 1772481596973027211,
+      "size": 6717
+    },
+    "test/progress.test.ts": {
+      "path": "test/progress.test.ts",
+      "language": "typescript",
+      "parser": "regex",
+      "imports": [
+        "../src/progress.js",
+        "vitest"
+      ],
+      "classes": [],
+      "functions": [],
+      "methods": [],
+      "calls": {},
+      "mtime_ns": 1772481596973027211,
+      "size": 2587
+    },
+    "test/radar.test.ts": {
+      "path": "test/radar.test.ts",
+      "language": "typescript",
+      "parser": "regex",
+      "imports": [
+        "../src/deps.js",
+        "../src/radar.js",
+        "../src/security.js",
+        "../src/types.js",
+        "vitest"
+      ],
+      "classes": [],
+      "functions": [],
+      "methods": [],
+      "calls": {},
+      "mtime_ns": 1772481596973027211,
+      "size": 6485
+    },
+    "test/repo-resolver-branch.test.ts": {
+      "path": "test/repo-resolver-branch.test.ts",
+      "language": "typescript",
+      "parser": "regex",
+      "imports": [
+        "../src/repo-resolver.js",
+        "vitest"
+      ],
+      "classes": [],
+      "functions": [],
+      "methods": [],
+      "calls": {},
+      "mtime_ns": 1772481596973027211,
+      "size": 1054
+    },
+    "test/repo-resolver.test.ts": {
+      "path": "test/repo-resolver.test.ts",
+      "language": "typescript",
+      "parser": "regex",
+      "imports": [
+        "fs/promises",
+        "os",
+        "path",
+        "vitest"
+      ],
+      "classes": [],
+      "functions": [],
+      "methods": [],
+      "calls": {},
+      "mtime_ns": 1772481596973027211,
+      "size": 6233
+    },
+    "test/schema.test.ts": {
+      "path": "test/schema.test.ts",
+      "language": "typescript",
+      "parser": "regex",
+      "imports": [
+        "../src/schema.js",
+        "vitest"
+      ],
+      "classes": [],
+      "functions": [],
+      "methods": [],
+      "calls": {},
+      "mtime_ns": 1772481596973027211,
+      "size": 5019
+    },
+    "test/security.test.ts": {
+      "path": "test/security.test.ts",
+      "language": "typescript",
+      "parser": "regex",
+      "imports": [
+        "../src/security.js",
+        "../src/types.js",
+        "fs/promises",
+        "path",
+        "vitest"
+      ],
+      "classes": [],
+      "functions": [
+        "setupTestRepo"
+      ],
+      "methods": [],
+      "calls": {},
+      "mtime_ns": 1772481596973027211,
+      "size": 17140
+    },
+    "test/tools.test.ts": {
+      "path": "test/tools.test.ts",
+      "language": "typescript",
+      "parser": "regex",
+      "imports": [
+        "../src/tools.js",
+        "child_process",
+        "fs/promises",
+        "path",
+        "vitest"
+      ],
+      "classes": [],
+      "functions": [
+        "getTool",
+        "lines",
+        "makeContext",
+        "makeDirent",
+        "mockExecFileError",
+        "mockExecFileSuccess",
+        "mockExecSuccess",
+        "text"
+      ],
+      "methods": [],
+      "calls": {},
+      "mtime_ns": 1772481596974027238,
+      "size": 26397
+    },
+    "test/types.test.ts": {
+      "path": "test/types.test.ts",
+      "language": "typescript",
+      "parser": "regex",
+      "imports": [
+        "vitest"
+      ],
+      "classes": [],
+      "functions": [],
+      "methods": [],
+      "calls": {},
+      "mtime_ns": 1772481596974027238,
+      "size": 2155
+    },
+    "test/watch.test.ts": {
+      "path": "test/watch.test.ts",
+      "language": "typescript",
+      "parser": "regex",
+      "imports": [
+        "../src/watch.js",
+        "vitest"
+      ],
+      "classes": [],
+      "functions": [
+        "mockExecError",
+        "mockExecResult"
+      ],
+      "methods": [],
+      "calls": {},
+      "mtime_ns": 1772481596974027238,
+      "size": 4744
+    },
+    "test/web.test.ts": {
+      "path": "test/web.test.ts",
+      "language": "typescript",
+      "parser": "regex",
+      "imports": [
+        "../src/web/server.js",
+        "../src/web/templates.js",
+        "net",
+        "vitest"
+      ],
+      "classes": [],
+      "functions": [
+        "startTestServer"
+      ],
+      "methods": [],
+      "calls": {},
+      "mtime_ns": 1772481596974027238,
+      "size": 9779
+    },
+    "vitest.config.ts": {
+      "path": "vitest.config.ts",
+      "language": "typescript",
+      "parser": "regex",
+      "imports": [
+        "vitest/config"
+      ],
+      "classes": [],
+      "functions": [],
+      "methods": [],
+      "calls": {},
+      "mtime_ns": 1772481596974027238,
+      "size": 344
+    }
+  }
+}
