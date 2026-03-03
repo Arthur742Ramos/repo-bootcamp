@@ -95,3 +95,107 @@ describe("createProgressBar", () => {
     expect(result).toContain("100%");
   });
 });
+
+describe("ProgressTracker - additional branch coverage", () => {
+  let tracker: ProgressTracker;
+
+  beforeEach(() => {
+    tracker = new ProgressTracker(false);
+  });
+
+  afterEach(() => {
+    tracker.stop();
+  });
+
+  it("should handle start with analyze phase", () => {
+    tracker.startPhase("analyze");
+    expect(tracker.getToolCallCount()).toBe(0);
+  });
+
+  it("should handle succeed on analyze phase with tool calls", () => {
+    tracker.startPhase("analyze");
+    tracker.recordToolCall("read_file");
+    tracker.recordToolCall("list_dir");
+    tracker.succeed();
+    expect(tracker.getToolCallCount()).toBe(2);
+  });
+
+  it("should handle succeed with custom message", () => {
+    tracker.startPhase("clone");
+    tracker.succeed("Clone completed successfully");
+  });
+
+  it("should handle fail", () => {
+    tracker.startPhase("scan");
+    tracker.fail("Something went wrong");
+  });
+
+  it("should handle warn", () => {
+    tracker.startPhase("generate");
+    tracker.warn("Partial generation");
+  });
+
+  it("should handle update with message", () => {
+    tracker.startPhase("analyze");
+    tracker.update("Processing files...");
+  });
+
+  it("should handle update with very long message", () => {
+    tracker.startPhase("analyze");
+    tracker.update("This is a very long message that should be truncated because it exceeds forty characters");
+  });
+
+  it("should track tool calls", () => {
+    tracker.startPhase("analyze");
+    tracker.recordToolCall("read_file");
+    expect(tracker.getToolCallCount()).toBe(1);
+  });
+
+  it("should get stats", () => {
+    tracker.startPhase("analyze");
+    tracker.recordToolCall("read_file");
+    const stats = tracker.getStats();
+    expect(stats.toolCalls).toBe(1);
+    expect(stats.toolNames).toEqual(["read_file"]);
+    expect(stats.totalTime).toBeGreaterThanOrEqual(0);
+  });
+
+  it("should get elapsed time", () => {
+    expect(tracker.getElapsedTime()).toBeGreaterThanOrEqual(0);
+  });
+
+  it("should handle start with diff phase", () => {
+    tracker.startPhase("diff");
+    tracker.succeed();
+  });
+
+  it("should handle start with cleanup phase", () => {
+    tracker.startPhase("cleanup");
+    tracker.succeed();
+  });
+
+  it("should print phase overview", () => {
+    ProgressTracker.printPhaseOverview();
+  });
+});
+
+describe("createProgressBar - edge cases", () => {
+  it("should handle zero total", () => {
+    const bar = createProgressBar(0);
+    // current/total = Infinity, Math.min(100, ...) = 100
+    const result = bar(0);
+    expect(result).toContain("%");
+  });
+
+  it("should handle current > total", () => {
+    const bar = createProgressBar(10);
+    const result = bar(20);
+    expect(result).toContain("100%");
+  });
+
+  it("should handle custom width", () => {
+    const bar = createProgressBar(100, 50);
+    const result = bar(50);
+    expect(result).toContain("50%");
+  });
+});
