@@ -165,3 +165,74 @@ describe("getMissingFieldsSummary", () => {
     expect(summary.split(";").length).toBeLessThanOrEqual(3);
   });
 });
+
+import { validateRepoFacts as validateExtra } from "../src/schema.js";
+
+describe("validateRepoFacts additional branches", () => {
+  it("warns on few key dirs", () => {
+    // This needs a full valid object with only 1 keyDir
+    const data = {
+      repoName: "test/repo",
+      purpose: "Test",
+      description: "Test repo",
+      confidence: "high",
+      sources: ["README"],
+      stack: { languages: ["TS"], frameworks: [], buildSystem: "npm", packageManager: "npm", hasDocker: false, hasCi: false },
+      quickstart: { prerequisites: ["Node"], steps: ["npm i"], commands: [{ name: "i", command: "npm i", source: "pkg" }], commonErrors: [], sources: ["R"] },
+      structure: { keyDirs: [{ path: "src/", purpose: "Source", keyFiles: ["a.ts"] }], entrypoints: [{ path: "a", type: "main", description: "d" }], testDirs: ["t/"], docsDirs: [], sources: ["s"] },
+      ci: { workflows: [], mainChecks: [], sources: [] },
+      contrib: { howToAddFeature: ["PR"], howToAddTest: ["test"], codeStyle: "TS", sources: ["R"] },
+      architecture: {
+        overview: "Simple",
+        components: [{ name: "A", description: "a", directory: "src/" }],
+        dataFlow: "a->b",
+        keyAbstractions: [{ name: "a", description: "d" }],
+        codeExamples: [{ title: "t", file: "f", code: "c", explanation: "e" }],
+        sources: ["s"],
+      },
+      firstTasks: [
+        { title: "T1", description: "D1", difficulty: "beginner", category: "test", files: ["a"], why: "w" },
+        { title: "T2", description: "D2", difficulty: "beginner", category: "test", files: ["b"], why: "w" },
+        { title: "T3", description: "D3", difficulty: "beginner", category: "test", files: ["c"], why: "w" },
+        { title: "T4", description: "D4", difficulty: "beginner", category: "test", files: ["d"], why: "w" },
+        { title: "T5", description: "D5", difficulty: "beginner", category: "test", files: ["e"], why: "w" },
+        { title: "T6", description: "D6", difficulty: "beginner", category: "test", files: ["f"], why: "w" },
+        { title: "T7", description: "D7", difficulty: "beginner", category: "test", files: ["g"], why: "w" },
+        { title: "T8", description: "D8", difficulty: "beginner", category: "test", files: ["h"], why: "w" },
+      ],
+      runbook: { applicable: false, deploySteps: [], observability: [], incidents: [], sources: [] },
+    };
+    const result = validateExtra(data);
+    expect(result.success).toBe(true);
+    expect(result.warnings).toContain("Few key directories documented");
+    expect(result.warnings).toContain("Few architecture components documented");
+  });
+
+  it("warns on no commands", () => {
+    const data = {
+      repoName: "test/repo",
+      purpose: "Test",
+      description: "Test repo",
+      confidence: "high",
+      sources: ["README"],
+      stack: { languages: ["TS"], frameworks: [], buildSystem: "npm", packageManager: "npm", hasDocker: false, hasCi: false },
+      quickstart: { prerequisites: ["Node"], steps: ["npm i"], commands: [], commonErrors: [], sources: ["R"] },
+      structure: { keyDirs: [{ path: "src/", purpose: "S", keyFiles: ["a"] }, { path: "test/", purpose: "T", keyFiles: ["b"] }], entrypoints: [{ path: "a", type: "main", description: "d" }], testDirs: ["t/"], docsDirs: [], sources: ["s"] },
+      ci: { workflows: [], mainChecks: [], sources: [] },
+      contrib: { howToAddFeature: ["PR"], howToAddTest: ["test"], codeStyle: "TS", sources: ["R"] },
+      architecture: {
+        overview: "Simple",
+        components: [{ name: "A", description: "a", directory: "src/" }, { name: "B", description: "b", directory: "test/" }],
+        dataFlow: "a->b",
+        keyAbstractions: [{ name: "a", description: "d" }],
+        codeExamples: [{ title: "t", file: "f", code: "c", explanation: "e" }],
+        sources: ["s"],
+      },
+      firstTasks: Array.from({ length: 8 }, (_, i) => ({ title: `T${i}`, description: "D", difficulty: "beginner", category: "test", files: ["f"], why: "w" })),
+      runbook: { applicable: false, deploySteps: [], observability: [], incidents: [], sources: [] },
+    };
+    const result = validateExtra(data);
+    expect(result.success).toBe(true);
+    expect(result.warnings).toContain("No commands documented");
+  });
+});

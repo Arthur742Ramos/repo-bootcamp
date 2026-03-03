@@ -297,3 +297,47 @@ describe("Template Packs + Plugin System", () => {
     });
   });
 });
+
+describe("plugins extra branch coverage", () => {
+  it("loadConfig returns null on error", async () => {
+    const { loadConfig } = await import("../src/plugins.js");
+    // Loading from a nonexistent explicit path should return null
+    const result = await loadConfig("/nonexistent/path/config.json");
+    expect(result).toBeNull();
+  });
+
+  it("loadPlugins handles failed plugin load", async () => {
+    const { loadPlugins } = await import("../src/plugins.js");
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const plugins = await loadPlugins(["/nonexistent/plugin.js"]);
+    expect(plugins).toHaveLength(0);
+    expect(warnSpy).toHaveBeenCalled();
+    warnSpy.mockRestore();
+  });
+
+  it("runPlugins handles plugin with extraData", async () => {
+    const { runPlugins } = await import("../src/plugins.js");
+    const mockPlugin = {
+      name: "test-extra",
+      version: "1.0.0",
+      analyze: vi.fn().mockResolvedValue({
+        docs: [],
+        extraData: { key: "value" },
+      }),
+    };
+    const result = await runPlugins([mockPlugin] as any, "/repo", {} as any, {} as any);
+    expect(result.extraData["test-extra"]).toEqual({ key: "value" });
+  });
+
+  it("runPlugins handles plugin failure", async () => {
+    const { runPlugins } = await import("../src/plugins.js");
+    const mockPlugin = {
+      name: "failing-plugin",
+      analyze: vi.fn().mockRejectedValue(new Error("plugin crash")),
+    };
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const result = await runPlugins([mockPlugin] as any, "/repo", {} as any, {} as any);
+    expect(warnSpy).toHaveBeenCalled();
+    warnSpy.mockRestore();
+  });
+});

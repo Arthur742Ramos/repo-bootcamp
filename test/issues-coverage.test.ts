@@ -69,3 +69,41 @@ describe("createIssuesFromTasks - coverage", () => {
     expect(results).toHaveLength(0);
   });
 });
+
+// Additional branch coverage for issues.ts
+import { taskToIssuePayload, generateIssuePreview } from "../src/issues.js";
+
+describe("issues extra branches", () => {
+  const repoInfo = { owner: "t", repo: "r", url: "https://github.com/t/r", branch: "main", fullName: "t/r" } as any;
+
+  it("intermediate difficulty", () => {
+    const task = { title: "T", description: "D", difficulty: "intermediate", category: "feature", files: ["a.ts"], why: "W" } as any;
+    const p = taskToIssuePayload(task, repoInfo);
+    expect(p.labels).toContain("help wanted");
+    expect(p.labels).toContain("enhancement");
+    expect(p.body).toContain("familiarity");
+  });
+
+  it("docs category", () => {
+    const task = { title: "T", description: "D", difficulty: "beginner", category: "docs", files: ["a.md"], why: "W" } as any;
+    const p = taskToIssuePayload(task, repoInfo);
+    expect(p.labels).toContain("documentation");
+  });
+
+  it("advanced difficulty text", () => {
+    const task = { title: "T", description: "D", difficulty: "advanced", category: "refactor", files: ["a.ts"], why: "W" } as any;
+    const p = taskToIssuePayload(task, repoInfo);
+    expect(p.body).toContain("deep understanding");
+    expect(p.labels).toContain("enhancement");
+    expect(p.labels).toContain("refactor");
+  });
+
+  it("preview with tasks shows commands", () => {
+    const tasks = [
+      { title: "T1", description: "D1", difficulty: "beginner", category: "test", files: ["a.ts"], why: "W1" },
+    ] as any[];
+    const preview = generateIssuePreview(tasks, repoInfo);
+    expect(preview).toContain("--create-issues");
+    expect(preview).toContain("--dry-run");
+  });
+});
