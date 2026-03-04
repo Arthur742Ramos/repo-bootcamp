@@ -1079,7 +1079,7 @@ No markdown, no explanations, just the JSON object starting with { and ending wi
     }
 
     // Cast to RepoFacts (ValidatedRepoFacts is compatible)
-    let facts = result.facts as unknown as RepoFacts;
+    const facts = result.facts as unknown as RepoFacts;
 
     // Merge with detected stack info (trust deterministic detection)
     facts.stack = {

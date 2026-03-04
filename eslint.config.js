@@ -15,6 +15,7 @@ export default [
       parserOptions: {
         ecmaVersion: "latest",
         sourceType: "module",
+        project: "./tsconfig.json",
       },
     },
     plugins: {
@@ -29,6 +30,8 @@ export default [
       // Allow flexibility for small CLIs; keep TS strictness handled by tsc.
       "@typescript-eslint/no-explicit-any": "warn",
       "@typescript-eslint/no-unused-vars": "error",
+      "@typescript-eslint/no-floating-promises": "error",
+      "prefer-const": "error",
     },
   },
 

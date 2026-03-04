@@ -391,7 +391,7 @@ export async function quickAsk(
     const answer = await session.ask(question);
     await session.stop();
     return answer;
-  } catch (error) {
+  } catch (error: unknown) {
     await session.stop();
     throw error;
   }

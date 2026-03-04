@@ -69,7 +69,7 @@ function convertInlineFormatting(line: string): string {
 export function markdownToHtml(md: string): string {
   // Pull out code blocks so they aren't processed line-by-line
   const codeBlockPlaceholders: string[] = [];
-  let processed = md.replace(/```(\w*)\n([\s\S]*?)```/g, (match) => {
+  const processed = md.replace(/```(\w*)\n([\s\S]*?)```/g, (match) => {
     const idx = codeBlockPlaceholders.length;
     codeBlockPlaceholders.push(convertCodeBlocks(match));
     return `\x00CODEBLOCK_${idx}\x00`;

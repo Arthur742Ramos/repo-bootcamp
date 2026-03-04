@@ -41,7 +41,7 @@ async function getPackageJsonAtRef(
       { cwd: repoPath }
     );
     return JSON.parse(stdout);
-  } catch (err) {
+  } catch (err: unknown) {
     console.debug?.(`package.json not available at ref ${ref}: ${err instanceof Error ? err.message : err}`);
     return {};
   }
@@ -108,7 +108,7 @@ async function getFileDiff(
       { cwd: repoPath, maxBuffer: FILE_DIFF_MAX_BUFFER }
     );
     return stdout;
-  } catch (err) {
+  } catch (err: unknown) {
     console.debug?.(`git diff failed for ${filePath}: ${err instanceof Error ? err.message : err}`);
     return "";
   }
@@ -145,7 +145,7 @@ function extractDependencyChanges(
     for (const dep of baseDeps) {
       if (!headDeps.has(dep)) removed.push(dep);
     }
-  } catch (err) {
+  } catch (err: unknown) {
     console.debug?.(`Dependency comparison failed: ${err instanceof Error ? err.message : err}`);
   }
 
@@ -173,7 +173,7 @@ async function extractEnvVarChanges(
     envFiles.map(async (file) => {
       try {
         return await getFileDiff(repoPath, baseRef, headRef, file);
-      } catch (err) {
+      } catch (err: unknown) {
         console.debug?.(`Env scan diff failed for ${file}: ${err instanceof Error ? err.message : err}`);
         return null;
       }
@@ -204,7 +204,7 @@ async function extractEnvVarChanges(
     codeFiles.slice(0, MAX_CODE_FILES_FOR_ENV_SCAN).map(async (file) => {
       try {
         return await getFileDiff(repoPath, baseRef, headRef, file);
-      } catch (err) {
+      } catch (err: unknown) {
         console.debug?.(`Code env scan failed for ${file}: ${err instanceof Error ? err.message : err}`);
         return null;
       }
@@ -250,7 +250,7 @@ function extractCommandChanges(
         newCommands.push(`npm run ${name}`);
       }
     }
-  } catch (err) {
+  } catch (err: unknown) {
     console.debug?.(`Command extraction failed: ${err instanceof Error ? err.message : err}`);
   }
 
@@ -290,7 +290,7 @@ async function detectBreakingChanges(
         breakingChanges.push(`Major version bump: ${baseVersion} → ${headVersion}`);
       }
     }
-  } catch (err) {
+  } catch (err: unknown) {
     console.debug?.(`Version comparison failed: ${err instanceof Error ? err.message : err}`);
   }
 
@@ -314,7 +314,7 @@ async function detectBreakingChanges(
           breakingChanges.push(`Removed export: ${match[1]} in ${file}`);
         }
       }
-    } catch (err) {
+    } catch (err: unknown) {
       console.debug?.(`Export removal check failed for ${file}: ${err instanceof Error ? err.message : err}`);
     }
   }

@@ -164,7 +164,7 @@ export function startWatch(
   const triggerCheck = () => {
     if (!running && !stopped) {
       log("Local git ref change detected, checking...");
-      check();
+      void check();
     }
   };
 

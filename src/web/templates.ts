@@ -223,7 +223,7 @@ export function getIndexHtml(): string {
         currentJobId = jobId;
         streamProgress(jobId);
       } catch (err) {
-        addProgressItem(err.message, 'error');
+        addProgressItem(err instanceof Error ? err.message : String(err), 'error');
         btn.disabled = false;
         btn.textContent = 'Analyze';
       }
