@@ -3,6 +3,20 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 const mockClone = vi.fn().mockResolvedValue("/tmp/fake-repo");
 const mockCleanup = vi.fn().mockResolvedValue(undefined);
 const mockScan = vi.fn().mockResolvedValue({ files: [], keySourceFiles: new Set(), stack: {} });
+const mockResolveRepo = vi.fn().mockResolvedValue({
+  path: "/tmp/local-repo",
+  isLocal: true,
+  repoName: "local-repo",
+  repoInfo: {
+    owner: "local",
+    repo: "local-repo",
+    fullName: "local/local-repo",
+    url: "file:///tmp/local-repo",
+    branch: "local",
+  },
+  cleanup: vi.fn().mockResolvedValue(undefined),
+});
+const mockIsLocalPath = vi.fn((input: string) => input.startsWith("/"));
 
 vi.mock("../src/services/clone-service.js", () => ({
   cloneRepository: (...args: any[]) => mockClone(...args),
@@ -15,6 +29,11 @@ vi.mock("../src/ingest.js", () => ({
     if (url === "bad-url") throw new Error("Invalid URL");
     return { owner: "test", repo: "repo", fullName: "test/repo", url: "https://github.com/test/repo", branch: "main" };
   }),
+}));
+
+vi.mock("../src/repo-resolver.js", () => ({
+  isLocalPath: (input: string) => mockIsLocalPath(input),
+  resolveRepo: (...args: any[]) => mockResolveRepo(...args),
 }));
 
 const mockInteractive = vi.fn().mockResolvedValue(undefined);
@@ -40,6 +59,22 @@ describe("runAskCommand", () => {
   it("passes branch and model options", async () => {
     await runAskCommand("https://github.com/test/repo", { branch: "dev", model: "gpt-4" });
     expect(mockClone).toHaveBeenCalledWith(expect.anything(), "dev", false);
+  });
+
+  it("uses a local repository when given a filesystem path", async () => {
+    await runAskCommand("/tmp/local-repo", {});
+
+    expect(mockResolveRepo).toHaveBeenCalledWith("/tmp/local-repo", process.cwd(), undefined);
+    expect(mockClone).not.toHaveBeenCalled();
+    expect(mockCleanup).not.toHaveBeenCalled();
+    expect(mockInteractive).toHaveBeenCalledWith(
+      "/tmp/local-repo",
+      expect.objectContaining({ fullName: "local/local-repo" }),
+      expect.anything(),
+      process.cwd(),
+      undefined,
+      expect.objectContaining({ saveTranscript: true })
+    );
   });
 
   it("exits on invalid URL", async () => {

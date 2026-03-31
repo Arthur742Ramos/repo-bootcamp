@@ -17,8 +17,9 @@ export async function runAskCommand(
 
   let repoInfo: RepoInfo;
   let repoSource: RepoSource | null = null;
+  const useLocalRepo = Boolean(options.noClone || isLocalPath(repoUrl));
   try {
-    if (options.noClone) {
+    if (useLocalRepo) {
       if (!isLocalPath(repoUrl)) {
         throw new Error("--no-clone requires a local directory path (for example: ./my-repo)");
       }
