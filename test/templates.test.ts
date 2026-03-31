@@ -45,8 +45,10 @@ describe("getIndexHtml", () => {
 
     it("has an analyze button", () => {
       const html = getIndexHtml();
+      expect(html).toContain('id="analyzeForm"');
       expect(html).toContain('id="analyzeBtn"');
-      expect(html).toContain("onclick=\"analyze()\"");
+      expect(html).toContain('type="submit"');
+      expect(html).toContain("document.getElementById('analyzeForm').addEventListener('submit'");
     });
 
     it("has a progress container", () => {
