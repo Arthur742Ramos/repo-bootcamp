@@ -110,9 +110,28 @@ function getOptionSource(command: Command, name: string): "cli" | "default" {
 }
 
 function getActionOptions<T extends Record<string, unknown>>(opts: Command | T): T {
-  return typeof (opts as Command).opts === "function"
+  return (typeof (opts as Command).opts === "function"
     ? (opts as Command).opts() as T
-    : opts;
+    : opts) as T;
+}
+
+function getCliFlagValue(flags: string[]): string | undefined {
+  const args = process.argv.slice(2);
+
+  for (let index = 0; index < args.length; index++) {
+    const arg = args[index];
+    if (flags.includes(arg)) {
+      return args[index + 1];
+    }
+
+    for (const flag of flags) {
+      if (arg.startsWith(`${flag}=`)) {
+        return arg.slice(flag.length + 1);
+      }
+    }
+  }
+
+  return undefined;
 }
 
 function isNegativeOptionEnabled(
@@ -256,7 +275,7 @@ program
   .action(async (repoPr: string, rawOpts) => {
     const opts = getActionOptions<DiffActionOptions>(rawOpts as Command | DiffActionOptions);
     await runPullRequestDiff(repoPr, {
-      output: opts.output,
+      output: opts.output || getCliFlagValue(["--output", "-o"]),
       format: opts.format,
       fullClone: opts.fullClone || false,
       keepTemp: opts.keepTemp || false,
