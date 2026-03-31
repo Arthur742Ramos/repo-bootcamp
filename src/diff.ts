@@ -460,7 +460,7 @@ export async function fetchPullRequestRefs(
 
   try {
     await fetchGitRef(repoPath, baseSha, baseRef, fetchEnv);
-  } catch (error: unknown) {
+  } catch {
     try {
       await fetchGitRef(repoPath, baseRefName, baseRef, fetchEnv);
     } catch (fallbackError: unknown) {
@@ -470,7 +470,7 @@ export async function fetchPullRequestRefs(
 
   try {
     await fetchGitRef(repoPath, `pull/${prNumber}/head`, headRef, fetchEnv);
-  } catch (error: unknown) {
+  } catch {
     try {
       await fetchGitRef(repoPath, `refs/pull/${prNumber}/head`, headRef, fetchEnv);
     } catch (fallbackError: unknown) {

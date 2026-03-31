@@ -423,6 +423,7 @@ describe("InteractiveSession", () => {
 
   it("stop calls client stop", async () => {
     const session = new InteractiveSession("/repo", repoInfo, scanResult);
+    await session.initialize();
     await session.stop();
 
     expect(mockStop).toHaveBeenCalled();

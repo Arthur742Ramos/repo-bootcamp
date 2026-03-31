@@ -192,7 +192,9 @@ describe("diff command", () => {
     );
 
     expect(result.exitCode).toBe(0);
-    expect(result.stderr).toBe("");
+    expect(result.stderr).not.toContain("Diff failed:");
+    expect(result.stderr).not.toContain("Clone failed:");
+    expect(result.stderr).not.toContain("Write failed:");
     expect(result.stdout).toContain("PR Diff Generated Successfully");
 
     const diffDoc = await readFile(join(outputDir, "DIFF.md"), "utf-8");

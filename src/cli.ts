@@ -41,6 +41,14 @@ function getOptionSource(command: Command, name: string): "cli" | "default" {
   return command.getOptionValueSource(name) === "cli" ? "cli" : "default";
 }
 
+function isNegativeOptionEnabled(
+  opts: { [key: string]: unknown },
+  negativeKey: string,
+  positiveKey: string
+): boolean {
+  return opts[negativeKey] === true || opts[positiveKey] === false;
+}
+
 program
   .name("bootcamp")
   .description("Turn any public GitHub/GitLab/Bitbucket repository into a Day 1 onboarding kit using GitHub Copilot SDK")
@@ -90,7 +98,7 @@ program
       output: opts.output,
       format: opts.format as OutputFormat,
       maxFiles: parseInt(opts.maxFiles, 10),
-      noClone: opts.clone === false,
+      noClone: isNegativeOptionEnabled(opts, "noClone", "clone"),
       verbose: opts.verbose || false,
       model: opts.model,
       keepTemp: opts.keepTemp || false,
@@ -106,7 +114,7 @@ program
       renderDiagrams: opts.renderDiagrams !== undefined,
       diagramFormat: (opts.renderDiagrams === true ? "svg" : opts.renderDiagrams) as BootcampOptions["diagramFormat"],
       fullClone: opts.fullClone || false,
-      noCache: opts.cache === false,
+      noCache: isNegativeOptionEnabled(opts, "noCache", "cache"),
       watch: opts.watch || false,
       watchInterval: parseInt(opts.watchInterval, 10),
       watchForce: opts.watchForce || false,
@@ -156,7 +164,7 @@ program
     await runAskCommand(repoUrl, {
       branch: opts.branch,
       model: opts.model,
-      noClone: opts.clone === false,
+      noClone: isNegativeOptionEnabled(opts, "noClone", "clone"),
       verbose: opts.verbose,
     });
   });
