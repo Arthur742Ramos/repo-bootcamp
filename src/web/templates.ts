@@ -18,6 +18,17 @@ export function getIndexHtml(): string {
       padding: 2rem;
     }
     .container { max-width: 900px; margin: 0 auto; }
+    .sr-only {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+      white-space: nowrap;
+      border: 0;
+    }
     h1 { 
       font-size: 2.5rem; 
       margin-bottom: 0.5rem;
@@ -147,25 +158,33 @@ export function getIndexHtml(): string {
     <h1>Repo Bootcamp</h1>
     <p class="subtitle">Generate onboarding documentation for any GitHub repository</p>
     
-    <div class="input-group">
+    <form class="input-group" id="analyzeForm">
+      <label class="sr-only" for="repoUrl">Repository URL</label>
       <input type="text" id="repoUrl" placeholder="https://github.com/owner/repo" />
-      <button id="analyzeBtn" onclick="analyze()">Analyze</button>
-    </div>
+      <button type="submit" id="analyzeBtn">Analyze</button>
+    </form>
 
-    <div class="progress" id="progress" style="display: none;"></div>
+    <div class="progress" id="progress" style="display: none;" aria-live="polite"></div>
 
-    <div class="results" id="results">
+    <div class="results" id="results" aria-live="polite">
       <div class="stats" id="stats"></div>
       <h2 style="margin-bottom: 1rem;">Generated Files</h2>
       <div class="files" id="files"></div>
     </div>
   </div>
 
-  <div class="modal" id="modal" onclick="if(event.target===this)closeModal()">
+  <div
+    class="modal"
+    id="modal"
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="modalTitle"
+    onclick="if(event.target===this)closeModal()"
+  >
     <div class="modal-content">
       <div class="modal-header">
         <h2 id="modalTitle"></h2>
-        <button class="close" onclick="closeModal()">&times;</button>
+        <button class="close" type="button" aria-label="Close file preview" onclick="closeModal()">&times;</button>
       </div>
       <pre id="modalContent"></pre>
     </div>
@@ -337,6 +356,11 @@ export function getIndexHtml(): string {
       btn.disabled = false;
       btn.textContent = 'Analyze';
     }
+
+    document.getElementById('analyzeForm').addEventListener('submit', (event) => {
+      event.preventDefault();
+      void analyze();
+    });
 
     document.addEventListener('keydown', (e) => {
       if (e.key === 'Escape') closeModal();

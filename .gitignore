@@ -9,6 +9,11 @@ dist/
 
 # Generated bootcamp output (keep examples)
 bootcamp-*/
+.bootcamp-output/
+
+# Browser E2E artifacts
+playwright-report/
+test-results/
 
 # OS files
 .DS_Store
