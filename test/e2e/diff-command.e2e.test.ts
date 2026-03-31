@@ -14,6 +14,10 @@ const FIXTURE_OWNER = "fixture-owner";
 const FIXTURE_REPO = "fixture-repo";
 const PR_NUMBER = 123;
 
+function stripAnsi(value: string): string {
+  return value.replace(/\u001b\[[0-9;]*m/g, "");
+}
+
 interface DiffFixture {
   bareRepoPath: string;
   baseSha: string;
@@ -196,8 +200,12 @@ describe("diff command", () => {
     expect(result.stderr).not.toContain("Clone failed:");
     expect(result.stderr).not.toContain("Write failed:");
     expect(result.stdout).toContain("PR Diff Generated Successfully");
+    const plainStdout = stripAnsi(result.stdout);
+    expect(plainStdout).toContain(`${outputDir}/`);
 
-    const diffDoc = await readFile(join(outputDir, "DIFF.md"), "utf-8");
+    const outputFile = plainStdout.match(/File:\s+(\S+)/)?.[1] || "DIFF.md";
+
+    const diffDoc = await readFile(join(outputDir, outputFile), "utf-8");
     expect(diffDoc).toContain("Fixture PR");
     expect(diffDoc).toContain("Comparison for **fixture-repo**: `main` → `PR #123 (feature/pr-123)`");
     expect(diffDoc).toContain("- `zod`");

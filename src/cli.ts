@@ -38,6 +38,7 @@ const VERSION = pkg.version;
 const program = new Command();
 
 interface MainActionOptions {
+  [key: string]: unknown;
   branch?: string;
   focus?: string;
   audience?: string;
@@ -69,6 +70,7 @@ interface MainActionOptions {
 }
 
 interface AskActionOptions {
+  [key: string]: unknown;
   branch?: string;
   clone?: boolean;
   noClone?: boolean;
@@ -77,6 +79,7 @@ interface AskActionOptions {
 }
 
 interface DiffActionOptions {
+  [key: string]: unknown;
   output?: string;
   format?: string;
   fullClone?: boolean;
@@ -85,10 +88,12 @@ interface DiffActionOptions {
 }
 
 interface WebActionOptions {
+  [key: string]: unknown;
   port?: string;
 }
 
 interface DocsActionOptions {
+  [key: string]: unknown;
   check?: boolean;
   fix?: boolean;
   branch?: string;
@@ -96,6 +101,7 @@ interface DocsActionOptions {
 }
 
 interface CachePruneActionOptions {
+  [key: string]: unknown;
   maxAge?: string;
 }
 
@@ -103,9 +109,9 @@ function getOptionSource(command: Command, name: string): "cli" | "default" {
   return command.getOptionValueSource(name) === "cli" ? "cli" : "default";
 }
 
-function getActionOptions(opts: Command | Record<string, unknown>): Record<string, unknown> {
+function getActionOptions<T extends Record<string, unknown>>(opts: Command | T): T {
   return typeof (opts as Command).opts === "function"
-    ? (opts as Command).opts() as Record<string, unknown>
+    ? (opts as Command).opts() as T
     : opts;
 }
 
@@ -159,14 +165,14 @@ program
   .option("--watch-interval <seconds>", "Polling interval for watch mode in seconds", "30")
   .option("--watch-force", "Allow destructive git reset --hard fallback in watch mode")
   .action(async (repoUrl: string, rawOpts, command: Command) => {
-    const opts = getActionOptions(rawOpts as Record<string, unknown>) as MainActionOptions;
+    const opts = getActionOptions<MainActionOptions>(rawOpts as Command | MainActionOptions);
     const options: BootcampOptions = {
-      branch: opts.branch,
+      branch: opts.branch || "",
       focus: opts.focus as BootcampOptions["focus"],
       audience: opts.audience as BootcampOptions["audience"],
-      output: opts.output,
-      format: opts.format as OutputFormat,
-      maxFiles: parseInt(opts.maxFiles, 10),
+      output: opts.output || "",
+      format: (opts.format || "markdown") as OutputFormat,
+      maxFiles: parseInt(opts.maxFiles || "200", 10),
       noClone: isNegativeOptionEnabled(opts, "noClone", "clone"),
       verbose: opts.verbose || false,
       model: opts.model,
@@ -185,7 +191,7 @@ program
       fullClone: opts.fullClone || false,
       noCache: isNegativeOptionEnabled(opts, "noCache", "cache"),
       watch: opts.watch || false,
-      watchInterval: parseInt(opts.watchInterval, 10),
+      watchInterval: parseInt(opts.watchInterval || "30", 10),
       watchForce: opts.watchForce || false,
       repoPrompts: opts.repoPrompts,
       optionSource: {
@@ -230,7 +236,7 @@ program
   .option("--model <model>", "Override model selection (e.g., claude-opus-4-5)")
   .option("-v, --verbose", "Show detailed output")
   .action(async (repoUrl: string, rawOpts) => {
-    const opts = getActionOptions(rawOpts as Record<string, unknown>) as AskActionOptions;
+    const opts = getActionOptions<AskActionOptions>(rawOpts as Command | AskActionOptions);
     await runAskCommand(repoUrl, {
       branch: opts.branch,
       model: opts.model,
@@ -248,7 +254,7 @@ program
   .option("--keep-temp", "Keep temporary clone directory")
   .option("-v, --verbose", "Show detailed output")
   .action(async (repoPr: string, rawOpts) => {
-    const opts = getActionOptions(rawOpts as Record<string, unknown>) as DiffActionOptions;
+    const opts = getActionOptions<DiffActionOptions>(rawOpts as Command | DiffActionOptions);
     await runPullRequestDiff(repoPr, {
       output: opts.output,
       format: opts.format,
@@ -264,7 +270,7 @@ program
   .description("Start local web demo server")
   .option("-p, --port <port>", "Port to listen on", "3000")
   .action((rawOpts) => {
-    const opts = getActionOptions(rawOpts as Record<string, unknown>) as WebActionOptions;
+    const opts = getActionOptions<WebActionOptions>(rawOpts as Command | WebActionOptions);
     startServer(parseInt(opts.port || "3000", 10));
   });
 
@@ -276,7 +282,7 @@ program
   .option("-b, --branch <branch>", "Branch to analyze", "")
   .option("-v, --verbose", "Show detailed output")
   .action(async (repoUrl: string, rawOpts) => {
-    const opts = getActionOptions(rawOpts as Record<string, unknown>) as DocsActionOptions;
+    const opts = getActionOptions<DocsActionOptions>(rawOpts as Command | DocsActionOptions);
     await runDocsCommand(repoUrl, opts);
   });
 
@@ -289,7 +295,7 @@ cacheCommand
   .description("Remove cache entries older than a given age")
   .option("--max-age <days>", "Maximum age in days", "7")
   .action(async (rawOpts) => {
-    const opts = getActionOptions(rawOpts as Record<string, unknown>) as CachePruneActionOptions;
+    const opts = getActionOptions<CachePruneActionOptions>(rawOpts as Command | CachePruneActionOptions);
     const days = parseFloat(opts.maxAge || "7");
     const maxAgeMs = days * 24 * 60 * 60 * 1000;
     console.log(chalk.dim(`Pruning cache entries older than ${days} day(s)...`));
