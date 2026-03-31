@@ -42,6 +42,26 @@ jobs:
           fail_ci_if_error: false
         continue-on-error: true
 
+  e2e:
+    name: E2E
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 20
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run end-to-end tests
+        run: npm run test:e2e
+
   lint:
     name: Lint
     runs-on: ubuntu-latest
@@ -95,12 +115,20 @@ jobs:
         uses: actions/checkout@v6
 
       - name: Dependency review
+        id: dependency-review
         uses: actions/dependency-review-action@v4
+        continue-on-error: true
+
+      - name: Explain dependency review fallback
+        if: steps.dependency-review.outcome == 'failure'
+        run: |
+          echo "Dependency review is informational until GitHub Dependency Graph is enabled for this repository."
+          echo "Enable Security -> Dependency graph in repository settings to make this gate authoritative."
 
   build:
     name: Build
     runs-on: ubuntu-latest
-    needs: [test, lint, typecheck]
+    needs: [test, e2e, lint, typecheck]
 
     steps:
       - name: Checkout repository
@@ -131,7 +159,7 @@ jobs:
   sbom:
     name: SBOM
     runs-on: ubuntu-latest
-    needs: [test, lint, typecheck, build]
+    needs: [test, e2e, lint, typecheck, build]
 
     steps:
       - name: Checkout repository

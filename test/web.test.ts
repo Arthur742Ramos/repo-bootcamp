@@ -60,6 +60,13 @@ describe("getIndexHtml", () => {
 });
 
 describe("createApp", () => {
+  it("registers rate limits without validation warnings", () => {
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    createApp();
+    expect(errorSpy).not.toHaveBeenCalled();
+    errorSpy.mockRestore();
+  });
+
   it("serves the index page", async () => {
     const response = await request(createApp()).get("/");
     expect(response.status).toBe(200);

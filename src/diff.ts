@@ -13,6 +13,8 @@ const execFileAsync = promisify(execFile);
 const DIFF_MAX_BUFFER = 10 * 1024 * 1024;
 /** Maximum buffer size for individual file diffs (5 MB) */
 const FILE_DIFF_MAX_BUFFER = 5 * 1024 * 1024;
+const DEFAULT_GITHUB_API_BASE_URL = "https://api.github.com";
+const GITHUB_API_BASE_URL_ENV = "REPO_BOOTCAMP_GITHUB_API_BASE_URL";
 /** Maximum number of code files to scan for environment variable changes */
 const MAX_CODE_FILES_FOR_ENV_SCAN = 20;
 /** Maximum index files to check for removed exports */
@@ -361,6 +363,23 @@ interface PullRequestApiResponse {
   html_url?: string;
 }
 
+function getGitHubApiBaseUrl(): string {
+  const rawValue = process.env[GITHUB_API_BASE_URL_ENV];
+  if (!rawValue) {
+    return DEFAULT_GITHUB_API_BASE_URL;
+  }
+
+  try {
+    // Allow tests and self-hosted GitHub-compatible setups to override the REST API host.
+    const url = new URL(rawValue);
+    return url.toString().replace(/\/$/, "");
+  } catch (error: unknown) {
+    throw new Error(`Invalid ${GITHUB_API_BASE_URL_ENV}: ${(error as Error).message}`, {
+      cause: error,
+    });
+  }
+}
+
 export interface PullRequestRefs {
   baseRef: string;
   headRef: string;
@@ -381,8 +400,9 @@ async function fetchPullRequestInfo(repoInfo: RepoInfo, prNumber: number): Promi
     headers["Authorization"] = `Bearer ${token}`;
   }
 
+  const apiBaseUrl = getGitHubApiBaseUrl();
   const response = await fetch(
-    `https://api.github.com/repos/${repoInfo.fullName}/pulls/${prNumber}`,
+    `${apiBaseUrl}/repos/${repoInfo.fullName}/pulls/${prNumber}`,
     { headers }
   );
 

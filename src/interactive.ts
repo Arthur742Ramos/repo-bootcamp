@@ -5,15 +5,14 @@
 
 import * as readline from "readline";
 import chalk from "chalk";
-import { CopilotClient, SessionEvent } from "@github/copilot-sdk";
-import type { 
-  ScanResult, 
-  RepoInfo, 
-  RepoFacts, 
-  Transcript,
-} from "./types.js";
+import type { LlmClient, LlmSession, LlmSessionEvent, RepoFacts, RepoInfo, ScanResult, Transcript } from "./types.js";
 import { getRepoTools } from "./tools.js";
-import { createSessionWithFallback, readCustomPrompt, formatCustomPromptSection } from "./agent.js";
+import {
+  createSessionWithFallback,
+  formatCustomPromptSection,
+  readCustomPrompt,
+  readTestLlmFixtureResponse,
+} from "./agent.js";
 import { writeFile } from "fs/promises";
 import { join } from "path";
 
@@ -77,8 +76,8 @@ ${facts.description}
  * Interactive session class
  */
 export class InteractiveSession {
-  private client: CopilotClient;
-  private session: Awaited<ReturnType<CopilotClient["createSession"]>> | null = null;
+  private client: LlmClient | null = null;
+  private session: LlmSession | null = null;
   private transcript: Transcript;
   private repoPath: string;
   private repoInfo: RepoInfo;
@@ -98,7 +97,6 @@ export class InteractiveSession {
     verbose: boolean = false,
     modelOverride?: string
   ) {
-    this.client = new CopilotClient();
     this.repoPath = repoPath;
     this.repoInfo = repoInfo;
     this.scanResult = scanResult;
@@ -116,12 +114,17 @@ export class InteractiveSession {
    * Initialize the Copilot session
    */
   async initialize(): Promise<void> {
+    this.client = await resolveInteractiveLlmClient();
+
     const tools = getRepoTools({
       repoPath: this.repoPath,
       verbose: this.verbose,
       onToolCall: (name, args) => {
         if (this.verbose) {
-          console.log(chalk.cyan(`\n[Tool] ${name}`), chalk.gray(JSON.stringify(args).substring(0, 80)));
+          console.log(
+            chalk.cyan(`\n[Tool] ${name}`),
+            chalk.gray(JSON.stringify(args).substring(0, 80))
+          );
         }
       },
       onToolResult: (name, result) => {
@@ -146,13 +149,16 @@ export class InteractiveSession {
       this.modelOverride
     );
     this.session = session;
-    this.session.on((event: SessionEvent) => this.handleSessionEvent(event));
+    this.session.on((event: LlmSessionEvent) => this.handleSessionEvent(event));
 
     // Send initial context
     const contextMessage = createContextMessage(this.repoInfo, this.scanResult, this.facts);
-    await this.session.sendAndWait({ 
-      prompt: `Here is the repository context:\n\n${contextMessage}\n\nAcknowledge briefly that you're ready to help explore this codebase.`
-    }, 30000);
+    await this.session.sendAndWait(
+      {
+        prompt: `Here is the repository context:\n\n${contextMessage}\n\nAcknowledge briefly that you're ready to help explore this codebase.`,
+      },
+      30000
+    );
   }
 
   /**
@@ -197,7 +203,7 @@ export class InteractiveSession {
     return fullResponse;
   }
 
-  private handleSessionEvent(event: SessionEvent): void {
+  private handleSessionEvent(event: LlmSessionEvent): void {
     if (!this.awaitingResponse) {
       return;
     }
@@ -249,6 +255,48 @@ export class InteractiveSession {
   }
 }
 
+async function createDefaultInteractiveClient(): Promise<LlmClient> {
+  const { CopilotClient } = await import("@github/copilot-sdk");
+  return new CopilotClient() as unknown as LlmClient;
+}
+
+function createFixtureInteractiveClient(response: string): LlmClient {
+  return {
+    async createSession() {
+      const listeners: Array<(event: LlmSessionEvent) => void> = [];
+
+      return {
+        on(handler) {
+          listeners.push(handler);
+          return undefined;
+        },
+        async sendAndWait() {
+          for (const listener of listeners) {
+            listener({
+              type: "assistant.message_delta",
+              data: {
+                deltaContent: response,
+              },
+            });
+          }
+        },
+      };
+    },
+    async stop() {
+      return undefined;
+    },
+  };
+}
+
+async function resolveInteractiveLlmClient(): Promise<LlmClient> {
+  const fixtureResponse = readTestLlmFixtureResponse();
+  if (fixtureResponse !== null) {
+    return createFixtureInteractiveClient(fixtureResponse);
+  }
+
+  return await createDefaultInteractiveClient();
+}
+
 /**
  * Generate markdown from transcript
  */
@@ -267,7 +315,7 @@ function generateTranscriptMarkdown(transcript: Transcript): string {
   for (const msg of transcript.messages) {
     const icon = msg.role === "user" ? "👤" : "🤖";
     const label = msg.role === "user" ? "You" : "Assistant";
-    
+
     lines.push(`## ${icon} ${label}`);
     lines.push("");
     lines.push(msg.content);
@@ -319,46 +367,66 @@ export async function runInteractiveMode(
     await session.initialize();
     console.log(chalk.green("Ready!\n"));
 
-    const rl = readline.createInterface({
-      input: process.stdin,
-      output: process.stdout,
-    });
+    await new Promise<void>((resolve, reject) => {
+      const rl = readline.createInterface({
+        input: process.stdin,
+        output: process.stdout,
+      });
 
-    const askQuestion = (): void => {
-      rl.question(chalk.cyan("You: "), async (input) => {
-        const question = input.trim();
+      let isFinishing = false;
 
-        if (!question) {
-          askQuestion();
+      const finishSession = async (): Promise<void> => {
+        if (isFinishing) {
           return;
         }
+        isFinishing = true;
 
-        if (question.toLowerCase() === "exit" || question.toLowerCase() === "quit") {
-          console.log(chalk.gray("\nEnding session..."));
-
+        try {
           if (options?.saveTranscript) {
             const transcriptPath = await session.saveTranscript(outputDir);
             console.log(chalk.green(`Transcript saved to: ${transcriptPath}`));
           }
 
-          rl.close();
           await session.stop();
-          return;
-        }
-
-        try {
-          console.log(chalk.gray("\nAssistant: "));
-          await session.ask(question);
-          console.log();
+          resolve();
         } catch (error: unknown) {
-          console.error(chalk.red(`Error: ${(error as Error).message}`));
+          reject(error);
         }
+      };
 
-        askQuestion();
+      rl.on("close", () => {
+        void finishSession();
       });
-    };
 
-    askQuestion();
+      const askQuestion = (): void => {
+        rl.question(chalk.cyan("You: "), async (input) => {
+          const question = input.trim();
+
+          if (!question) {
+            askQuestion();
+            return;
+          }
+
+          if (question.toLowerCase() === "exit" || question.toLowerCase() === "quit") {
+            console.log(chalk.gray("\nEnding session..."));
+            rl.close();
+            return;
+          }
+
+          try {
+            console.log(chalk.gray("\nAssistant: "));
+            await session.ask(question);
+            console.log();
+          } catch (error: unknown) {
+            console.error(chalk.red(`Error: ${(error as Error).message}`));
+          }
+
+          askQuestion();
+        });
+      };
+
+      askQuestion();
+    });
   } catch (error: unknown) {
     console.error(chalk.red(`Failed to initialize session: ${(error as Error).message}`));
     await session.stop();
@@ -377,14 +445,7 @@ export async function quickAsk(
   verbose: boolean = false,
   model?: string
 ): Promise<string> {
-  const session = new InteractiveSession(
-    repoPath,
-    repoInfo,
-    scanResult,
-    undefined,
-    verbose,
-    model
-  );
+  const session = new InteractiveSession(repoPath, repoInfo, scanResult, undefined, verbose, model);
 
   try {
     await session.initialize();

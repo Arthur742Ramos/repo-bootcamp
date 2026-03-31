@@ -147,12 +147,18 @@ program
 
 program
   .command("ask <repo-url>")
-  .description("Start interactive Q&A mode without full generation")
+  .description("Start interactive Q&A mode without full generation (supports local paths with --no-clone)")
   .option("-b, --branch <branch>", "Branch to analyze")
+  .option("--no-clone", "Use a local directory path instead of cloning")
   .option("--model <model>", "Override model selection (e.g., claude-opus-4-5)")
   .option("-v, --verbose", "Show detailed output")
   .action(async (repoUrl: string, opts) => {
-    await runAskCommand(repoUrl, opts);
+    await runAskCommand(repoUrl, {
+      branch: opts.branch,
+      model: opts.model,
+      noClone: opts.clone === false,
+      verbose: opts.verbose,
+    });
   });
 
 program

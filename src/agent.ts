@@ -36,6 +36,7 @@ const FAST_MODE_TIMEOUT_MS = 300_000; // 5 minutes
 const STANDARD_MODE_TIMEOUT_MS = 600_000; // 10 minutes
 const TIMEOUT_ERROR_CODES = new Set(["ETIMEDOUT", "ESOCKETTIMEDOUT", "ERR_TIMEOUT", "ABORT_ERR"]);
 const TIMEOUT_ERROR_PATTERNS = ["timeout", "timed out", "deadline exceeded", "request timed out"];
+export const TEST_LLM_RESPONSE_FILE_ENV = "REPO_BOOTCAMP_TEST_LLM_RESPONSE_FILE";
 
 interface PromptCharBudget {
   maxKeyFileChars: number;
@@ -111,9 +112,10 @@ function createResponseStreamHandler(
     progressBuffer = "";
     if (!compact) return;
 
-    const preview = compact.length > STREAM_PROGRESS_PREVIEW_CHARS
-      ? compact.slice(-STREAM_PROGRESS_PREVIEW_CHARS)
-      : compact;
+    const preview =
+      compact.length > STREAM_PROGRESS_PREVIEW_CHARS
+        ? compact.slice(-STREAM_PROGRESS_PREVIEW_CHARS)
+        : compact;
     onProgress(`LLM: ${preview}`);
     lastProgressAt = now;
   };
@@ -165,7 +167,10 @@ function isTimeoutError(error: unknown): boolean {
 
   if (error && typeof error === "object") {
     const maybeError = error as { code?: unknown; name?: unknown };
-    if (typeof maybeError.code === "string" && TIMEOUT_ERROR_CODES.has(maybeError.code.toUpperCase())) {
+    if (
+      typeof maybeError.code === "string" &&
+      TIMEOUT_ERROR_CODES.has(maybeError.code.toUpperCase())
+    ) {
       return true;
     }
     return typeof maybeError.name === "string" && maybeError.name.toLowerCase() === "aborterror";
@@ -184,7 +189,9 @@ async function sendAndWaitWithTimeoutBoundary(
     await session.sendAndWait({ prompt }, timeoutMs);
   } catch (error: unknown) {
     if (isTimeoutError(error)) {
-      throw new Error(`${operation} timed out after ${Math.round(timeoutMs / 1000)}s`, { cause: error });
+      throw new Error(`${operation} timed out after ${Math.round(timeoutMs / 1000)}s`, {
+        cause: error,
+      });
     }
     throw error;
   }
@@ -489,9 +496,16 @@ function createFastAnalysisPrompt(
   const resolvedStyle = styleConfig || getStyleConfig(options.style);
   const promptBudget = getPromptCharBudget(model);
   // Read key files inline
-  const keyFiles = ["README.md", "readme.md", "package.json", "pyproject.toml", "Cargo.toml", "go.mod"];
+  const keyFiles = [
+    "README.md",
+    "readme.md",
+    "package.json",
+    "pyproject.toml",
+    "Cargo.toml",
+    "go.mod",
+  ];
   const inlineContents: string[] = [];
-  
+
   for (const filename of keyFiles) {
     const filePath = path.join(repoPath, filename);
     if (fs.existsSync(filePath)) {
@@ -506,9 +520,17 @@ function createFastAnalysisPrompt(
       }
     }
   }
-  
+
   // Also try to read main entry point
-  const entryPoints = ["index.ts", "index.js", "src/index.ts", "src/index.js", "main.py", "lib.rs", "main.go"];
+  const entryPoints = [
+    "index.ts",
+    "index.js",
+    "src/index.ts",
+    "src/index.js",
+    "main.py",
+    "lib.rs",
+    "main.go",
+  ];
   for (const entry of entryPoints) {
     const filePath = path.join(repoPath, entry);
     if (fs.existsSync(filePath)) {
@@ -660,7 +682,7 @@ IMPORTANT: Return ONLY the JSON object, no other text or markdown.`;
  * Parse the JSON response from Copilot and validate against schema
  */
 function parseAndValidateRepoFacts(
-  response: string, 
+  response: string,
   verbose: boolean = false
 ): { facts: ValidatedRepoFacts | null; errors?: string[]; warnings?: string[] } {
   if (verbose) {
@@ -714,17 +736,17 @@ function parseAndValidateRepoFacts(
 
   // Validate against schema
   const validation = validateRepoFacts(parsed);
-  
+
   if (validation.success && validation.data) {
-    return { 
-      facts: validation.data, 
-      warnings: validation.warnings 
+    return {
+      facts: validation.data,
+      warnings: validation.warnings,
     };
   }
 
-  return { 
-    facts: null, 
-    errors: validation.errors || ["Schema validation failed"] 
+  return {
+    facts: null,
+    errors: validation.errors || ["Schema validation failed"],
   };
 }
 
@@ -742,6 +764,62 @@ async function createDefaultLlmClient(): Promise<LlmClient> {
   return new CopilotClient() as unknown as LlmClient;
 }
 
+function createFixtureLlmClient(response: string): LlmClient {
+  return {
+    async createSession() {
+      const listeners: Array<(event: LlmSessionEvent) => void> = [];
+
+      return {
+        on(handler) {
+          listeners.push(handler);
+          return undefined;
+        },
+        async sendAndWait() {
+          for (const listener of listeners) {
+            listener({
+              type: "assistant.message",
+              data: {
+                content: response,
+              },
+            });
+          }
+        },
+      };
+    },
+    async stop() {
+      return undefined;
+    },
+  };
+}
+
+export function readTestLlmFixtureResponse(): string | null {
+  if (process.env.NODE_ENV !== "test") {
+    return null;
+  }
+
+  const responsePath = process.env[TEST_LLM_RESPONSE_FILE_ENV];
+  if (!responsePath) {
+    return null;
+  }
+
+  try {
+    return fs.readFileSync(responsePath, "utf-8");
+  } catch (error: unknown) {
+    throw new Error(`Failed to read ${TEST_LLM_RESPONSE_FILE_ENV}: ${getErrorMessage(error)}`, {
+      cause: error,
+    });
+  }
+}
+
+function resolveFixtureLlmClient(): LlmClient | null {
+  const response = readTestLlmFixtureResponse();
+  if (response === null) {
+    return null;
+  }
+
+  return createFixtureLlmClient(response);
+}
+
 async function resolveLlmClient(dependencies?: AnalyzeRepoDependencies): Promise<LlmClient> {
   if (dependencies?.client) {
     return dependencies.client;
@@ -749,16 +827,17 @@ async function resolveLlmClient(dependencies?: AnalyzeRepoDependencies): Promise
   if (dependencies?.createClient) {
     return await dependencies.createClient();
   }
+  const fixtureClient = resolveFixtureLlmClient();
+  if (fixtureClient) {
+    return fixtureClient;
+  }
   return await createDefaultLlmClient();
 }
 
 /**
  * Try to create a session with the preferred model, falling back to alternatives
  */
-export async function createSessionWithFallback<
-  TConfig extends Record<string, unknown>,
-  TSession
->(
+export async function createSessionWithFallback<TConfig extends Record<string, unknown>, TSession>(
   client: { createSession(config: TConfig): Promise<TSession> },
   config: TConfig,
   verbose: boolean = false,
@@ -766,7 +845,7 @@ export async function createSessionWithFallback<
 ): Promise<{ session: TSession; model: string }> {
   // If a specific model is requested, try it first
   const modelsToTry = overrideModel ? [overrideModel, ...PREFERRED_MODELS] : PREFERRED_MODELS;
-  
+
   for (const model of modelsToTry) {
     try {
       if (verbose) {
@@ -833,7 +912,9 @@ export async function analyzeRepo(
 
   if (customPrompt) {
     const source = options.repoPrompts || path.join(repoPath, CUSTOM_PROMPT_FILE);
-    console.log(chalk.cyan(`📋 Custom prompts loaded from ${source} (${customPrompt.length} chars)`));
+    console.log(
+      chalk.cyan(`📋 Custom prompts loaded from ${source} (${customPrompt.length} chars)`)
+    );
   }
 
   // Fast mode: no tools, inline file contents
@@ -898,14 +979,14 @@ export async function analyzeRepo(
       stats.endTime = Date.now();
 
       const { facts, errors, warnings } = parseAndValidateRepoFacts(fullResponse, options.verbose);
-      
+
       if (!facts) {
         throw new Error(`Analysis failed: ${errors?.join(", ") || "Unknown error"}`);
       }
 
       if (warnings?.length) {
         console.log(chalk.yellow("\n[Warnings]"));
-        warnings.forEach(w => console.log(chalk.yellow(`  - ${w}`)));
+        warnings.forEach((w) => console.log(chalk.yellow(`  - ${w}`)));
       }
 
       return { facts: facts as RepoFacts, stats };
@@ -1016,9 +1097,13 @@ export async function analyzeRepo(
     stats.responseLength = fullResponse.length;
 
     if (options.verbose) {
-      console.log(chalk.gray(`\n[Stats] Events: ${stats.totalEvents}, Tool calls: ${stats.toolCalls.length}`));
+      console.log(
+        chalk.gray(`\n[Stats] Events: ${stats.totalEvents}, Tool calls: ${stats.toolCalls.length}`)
+      );
       console.log(chalk.gray(`[Stats] Response length: ${stats.responseLength}`));
-      console.log(chalk.gray(`[Stats] Duration: ${((stats.endTime - stats.startTime) / 1000).toFixed(1)}s`));
+      console.log(
+        chalk.gray(`[Stats] Duration: ${((stats.endTime - stats.startTime) / 1000).toFixed(1)}s`)
+      );
     }
 
     // Parse and validate the response
@@ -1029,17 +1114,20 @@ export async function analyzeRepo(
     // Retry with targeted prompts if validation fails
     while (!result.facts && retryCount < maxRetries) {
       retryCount++;
-      const errorSummary = result.errors ? getMissingFieldsSummary(result.errors) : "Invalid JSON structure";
-      
+      const errorSummary = result.errors
+        ? getMissingFieldsSummary(result.errors)
+        : "Invalid JSON structure";
+
       console.log(chalk.yellow(`\nRetrying (${retryCount}/${maxRetries}): ${errorSummary}`));
 
-      const retryPrompt = retryCount === 1
-        ? `Your previous response had validation issues: ${errorSummary}
+      const retryPrompt =
+        retryCount === 1
+          ? `Your previous response had validation issues: ${errorSummary}
            
 Please return ONLY a valid JSON object with the complete repo analysis structure.
 Make sure all required fields are present: repoName, purpose, description, stack, quickstart, structure, ci, contrib, architecture, firstTasks.
 No markdown, no explanations, just the JSON object starting with { and ending with }.`
-        : `Return ONLY valid JSON. Start with { and end with }. Include these required fields:
+          : `Return ONLY valid JSON. Start with { and end with }. Include these required fields:
 - repoName (string)
 - purpose (string) 
 - description (string)
@@ -1066,7 +1154,7 @@ No markdown, no explanations, just the JSON object starting with { and ending wi
       console.error(chalk.red("\n[ERROR] Could not parse/validate response after retries."));
       if (result.errors) {
         console.error(chalk.red("Validation errors:"));
-        result.errors.forEach(e => console.error(chalk.red(`  - ${e}`)));
+        result.errors.forEach((e) => console.error(chalk.red(`  - ${e}`)));
       }
       console.error(chalk.gray("\nResponse preview:"), fullResponse.substring(0, 1000));
       throw new Error("Failed to parse repo facts from Copilot response");
@@ -1075,7 +1163,7 @@ No markdown, no explanations, just the JSON object starting with { and ending wi
     // Log any warnings
     if (result.warnings && options.verbose) {
       console.log(chalk.yellow("\n[Warnings]"));
-      result.warnings.forEach(w => console.log(chalk.yellow(`  - ${w}`)));
+      result.warnings.forEach((w) => console.log(chalk.yellow(`  - ${w}`)));
     }
 
     // Cast to RepoFacts (ValidatedRepoFacts is compatible)
