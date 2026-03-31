@@ -413,6 +413,19 @@ async function fetchPullRequestInfo(repoInfo: RepoInfo, prNumber: number): Promi
   return await response.json() as PullRequestApiResponse;
 }
 
+async function fetchGitRef(
+  repoPath: string,
+  sourceRef: string,
+  targetRef: string,
+  env?: NodeJS.ProcessEnv
+): Promise<void> {
+  await execFileAsync("git", ["fetch", "--quiet", "origin", `${sourceRef}:${targetRef}`], {
+    cwd: repoPath,
+    maxBuffer: FILE_DIFF_MAX_BUFFER,
+    env,
+  });
+}
+
 /**
  * Fetch GitHub PR base/head refs into the local repo.
  */
@@ -446,23 +459,23 @@ export async function fetchPullRequestRefs(
     : undefined;
 
   try {
-    await execFileAsync("git", ["fetch", "--quiet", "origin", `${baseSha}:${baseRef}`], {
-      cwd: repoPath,
-      maxBuffer: FILE_DIFF_MAX_BUFFER,
-      env: fetchEnv,
-    });
+    await fetchGitRef(repoPath, baseSha, baseRef, fetchEnv);
   } catch (error: unknown) {
-    throw new Error(`Failed to fetch PR base ref: ${(error as Error).message}`, { cause: error });
+    try {
+      await fetchGitRef(repoPath, baseRefName, baseRef, fetchEnv);
+    } catch (fallbackError: unknown) {
+      throw new Error(`Failed to fetch PR base ref: ${(fallbackError as Error).message}`, { cause: fallbackError });
+    }
   }
 
   try {
-    await execFileAsync("git", ["fetch", "--quiet", "origin", `pull/${prNumber}/head:${headRef}`], {
-      cwd: repoPath,
-      maxBuffer: FILE_DIFF_MAX_BUFFER,
-      env: fetchEnv,
-    });
+    await fetchGitRef(repoPath, `pull/${prNumber}/head`, headRef, fetchEnv);
   } catch (error: unknown) {
-    throw new Error(`Failed to fetch PR head ref: ${(error as Error).message}`, { cause: error });
+    try {
+      await fetchGitRef(repoPath, `refs/pull/${prNumber}/head`, headRef, fetchEnv);
+    } catch (fallbackError: unknown) {
+      throw new Error(`Failed to fetch PR head ref: ${(fallbackError as Error).message}`, { cause: fallbackError });
+    }
   }
 
   return {

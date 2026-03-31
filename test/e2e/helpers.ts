@@ -121,7 +121,10 @@ export async function waitForOutput(
     await new Promise((resolve) => setTimeout(resolve, 100));
   }
 
-  throw new Error(`Timed out waiting for output: ${String(pattern)}`);
+  const { stdout, stderr } = getOutput();
+  const combinedOutput = `${stdout}\n${stderr}`.trim();
+  const outputPreview = combinedOutput || "(no output)";
+  throw new Error(`Timed out waiting for output: ${String(pattern)}\n\nLast output:\n${outputPreview}`);
 }
 
 export async function getAvailablePort(): Promise<number> {

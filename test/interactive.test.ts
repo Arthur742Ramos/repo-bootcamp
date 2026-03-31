@@ -79,11 +79,16 @@ beforeEach(() => {
 });
 
 describe("InteractiveSession", () => {
-  it("initializes with repo context", async () => {
+  it("includes repo context with the first question", async () => {
     mockSession.sendAndWait.mockResolvedValue(undefined);
+    mockSession.on.mockImplementation(() => {});
 
     const session = new InteractiveSession("/repo", repoInfo, scanResult, undefined, true);
     await session.initialize();
+
+    const writeSpy = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+    await session.ask("How do I start?");
+    writeSpy.mockRestore();
 
     expect(mockGetRepoTools).toHaveBeenCalledWith(
       expect.objectContaining({ repoPath: "/repo", verbose: true }),
@@ -102,7 +107,7 @@ describe("InteractiveSession", () => {
       expect.objectContaining({
         prompt: expect.stringContaining("Repository Context"),
       }),
-      30000,
+      120000,
     );
   });
 
@@ -112,16 +117,14 @@ describe("InteractiveSession", () => {
       handler = cb;
     });
 
-    mockSession.sendAndWait
-      .mockResolvedValueOnce(undefined)
-      .mockImplementationOnce(async () => {
-        handler?.({ type: "assistant.message_delta", data: { deltaContent: "Hello " } });
-        handler?.({ type: "assistant.message_delta", data: { deltaContent: "world" } });
-        handler?.({
-          type: "tool.call",
-          data: { name: "read_file", arguments: { path: "src/index.ts" } },
-        });
+    mockSession.sendAndWait.mockImplementationOnce(async () => {
+      handler?.({ type: "assistant.message_delta", data: { deltaContent: "Hello " } });
+      handler?.({ type: "assistant.message_delta", data: { deltaContent: "world" } });
+      handler?.({
+        type: "tool.call",
+        data: { name: "read_file", arguments: { path: "src/index.ts" } },
       });
+    });
 
     const session = new InteractiveSession("/repo", repoInfo, scanResult);
     await session.initialize();
@@ -143,7 +146,6 @@ describe("InteractiveSession", () => {
     });
 
     mockSession.sendAndWait
-      .mockResolvedValueOnce(undefined)
       .mockImplementationOnce(async () => {
         handler?.({ type: "assistant.message_delta", data: { deltaContent: "First answer" } });
       })
@@ -162,6 +164,8 @@ describe("InteractiveSession", () => {
     expect(first).toBe("First answer");
     expect(second).toBe("Second answer");
     expect(mockSession.on).toHaveBeenCalledTimes(1);
+    expect((mockSession.sendAndWait.mock.calls[0][0].prompt as string)).toContain("Repository Context");
+    expect(mockSession.sendAndWait.mock.calls[1][0].prompt).toBe("second");
   });
 
   it("saves transcript markdown", async () => {
@@ -191,6 +195,7 @@ describe("InteractiveSession", () => {
 
   it("initializes with facts context", async () => {
     mockSession.sendAndWait.mockResolvedValue(undefined);
+    mockSession.on.mockImplementation(() => {});
 
     const facts: RepoFacts = {
       repoName: "octo/demo",
@@ -208,30 +213,40 @@ describe("InteractiveSession", () => {
     const session = new InteractiveSession("/repo", repoInfo, scanResult, facts);
     await session.initialize();
 
+    const writeSpy = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+    await session.ask("What does this app do?");
+    writeSpy.mockRestore();
+
     expect(mockSession.sendAndWait).toHaveBeenCalledWith(
       expect.objectContaining({
         prompt: expect.stringContaining("A demo application"),
       }),
-      30000,
+      120000,
     );
   });
 
   it("includes language info in context message", async () => {
     mockSession.sendAndWait.mockResolvedValue(undefined);
+    mockSession.on.mockImplementation(() => {});
 
     const session = new InteractiveSession("/repo", repoInfo, scanResult);
     await session.initialize();
+
+    const writeSpy = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+    await session.ask("What language is this?");
+    writeSpy.mockRestore();
 
     expect(mockSession.sendAndWait).toHaveBeenCalledWith(
       expect.objectContaining({
         prompt: expect.stringContaining("TypeScript"),
       }),
-      30000,
+      120000,
     );
   });
 
   it("includes file list in context (limited to 30)", async () => {
     mockSession.sendAndWait.mockResolvedValue(undefined);
+    mockSession.on.mockImplementation(() => {});
 
     const filesResult: ScanResult = {
       ...scanResult,
@@ -245,6 +260,10 @@ describe("InteractiveSession", () => {
     const session = new InteractiveSession("/repo", repoInfo, filesResult);
     await session.initialize();
 
+    const writeSpy = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+    await session.ask("What files are important?");
+    writeSpy.mockRestore();
+
     // The context should include files but be capped at 30
     const call = mockSession.sendAndWait.mock.calls[0];
     const prompt = call[0].prompt as string;
@@ -255,6 +274,7 @@ describe("InteractiveSession", () => {
 
   it("excludes directories from file list", async () => {
     mockSession.sendAndWait.mockResolvedValue(undefined);
+    mockSession.on.mockImplementation(() => {});
 
     const filesResult: ScanResult = {
       ...scanResult,
@@ -266,6 +286,10 @@ describe("InteractiveSession", () => {
 
     const session = new InteractiveSession("/repo", repoInfo, filesResult);
     await session.initialize();
+
+    const writeSpy = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+    await session.ask("Show me the entrypoint");
+    writeSpy.mockRestore();
 
     const call = mockSession.sendAndWait.mock.calls[0];
     const prompt = call[0].prompt as string;
@@ -317,12 +341,10 @@ describe("InteractiveSession", () => {
       handler = cb;
     });
 
-    mockSession.sendAndWait
-      .mockResolvedValueOnce(undefined) // init
-      .mockImplementationOnce(async () => {
-        handler?.({ type: "assistant.message_delta", data: { deltaContent: null } });
-        handler?.({ type: "assistant.message_delta", data: { deltaContent: "OK" } });
-      });
+    mockSession.sendAndWait.mockImplementationOnce(async () => {
+      handler?.({ type: "assistant.message_delta", data: { deltaContent: null } });
+      handler?.({ type: "assistant.message_delta", data: { deltaContent: "OK" } });
+    });
 
     const session = new InteractiveSession("/repo", repoInfo, scanResult);
     await session.initialize();
@@ -340,15 +362,13 @@ describe("InteractiveSession", () => {
       handler = cb;
     });
 
-    mockSession.sendAndWait
-      .mockResolvedValueOnce(undefined)
-      .mockImplementationOnce(async () => {
-        handler?.({
-          type: "tool.call",
-          data: { name: "search", arguments: { pattern: "test" } },
-        });
-        handler?.({ type: "assistant.message_delta", data: { deltaContent: "Done" } });
+    mockSession.sendAndWait.mockImplementationOnce(async () => {
+      handler?.({
+        type: "tool.call",
+        data: { name: "search", arguments: { pattern: "test" } },
       });
+      handler?.({ type: "assistant.message_delta", data: { deltaContent: "Done" } });
+    });
 
     const session = new InteractiveSession("/repo", repoInfo, scanResult);
     await session.initialize();
@@ -427,11 +447,9 @@ describe("quickAsk", () => {
       handler = cb;
     });
 
-    mockSession.sendAndWait
-      .mockResolvedValueOnce(undefined)
-      .mockImplementationOnce(async () => {
-        handler?.({ type: "assistant.message_delta", data: { deltaContent: "Answer" } });
-      });
+    mockSession.sendAndWait.mockImplementationOnce(async () => {
+      handler?.({ type: "assistant.message_delta", data: { deltaContent: "Answer" } });
+    });
 
     const writeSpy = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
     const response = await quickAsk("/repo", repoInfo, scanResult, "Question");

@@ -59,7 +59,7 @@ async function createDiffFixture(baseDir: string): Promise<DiffFixture> {
   );
   await writeFile(join(workingDir, ".env.example"), "PORT=3000\n", "utf-8");
 
-  git(baseDir, ["init", "--bare", bareRepoPath]);
+  git(baseDir, ["init", "--bare", "--initial-branch=main", bareRepoPath]);
   git(workingDir, ["init", "-b", "main"]);
   git(workingDir, ["config", "user.email", "test@example.com"]);
   git(workingDir, ["config", "user.name", "Test User"]);

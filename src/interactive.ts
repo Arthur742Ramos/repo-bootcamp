@@ -88,6 +88,7 @@ export class InteractiveSession {
   private awaitingResponse = false;
   private activeResponse = "";
   private activeCitations: string[] = [];
+  private pendingContextPrompt: string | null = null;
 
   constructor(
     repoPath: string,
@@ -151,14 +152,8 @@ export class InteractiveSession {
     this.session = session;
     this.session.on((event: LlmSessionEvent) => this.handleSessionEvent(event));
 
-    // Send initial context
     const contextMessage = createContextMessage(this.repoInfo, this.scanResult, this.facts);
-    await this.session.sendAndWait(
-      {
-        prompt: `Here is the repository context:\n\n${contextMessage}\n\nAcknowledge briefly that you're ready to help explore this codebase.`,
-      },
-      30000
-    );
+    this.pendingContextPrompt = `Here is the repository context:\n\n${contextMessage}\n\nUse this context to answer questions about the repository.`;
   }
 
   /**
@@ -179,10 +174,14 @@ export class InteractiveSession {
     this.awaitingResponse = true;
     this.activeResponse = "";
     this.activeCitations = [];
+    const prompt = this.pendingContextPrompt
+      ? `${this.pendingContextPrompt}\n\nUser question:\n${question}`
+      : question;
 
     // Send question
     try {
-      await this.session.sendAndWait({ prompt: question }, 120000);
+      await this.session.sendAndWait({ prompt }, 120000);
+      this.pendingContextPrompt = null;
     } finally {
       this.awaitingResponse = false;
     }
@@ -367,66 +366,69 @@ export async function runInteractiveMode(
     await session.initialize();
     console.log(chalk.green("Ready!\n"));
 
-    await new Promise<void>((resolve, reject) => {
-      const rl = readline.createInterface({
-        input: process.stdin,
-        output: process.stdout,
-      });
+    const rl = readline.createInterface({
+      input: process.stdin,
+      output: process.stdout,
+      terminal: Boolean(process.stdin.isTTY && process.stdout.isTTY),
+    });
+    let rlClosed = false;
+    rl.on("close", () => {
+      rlClosed = true;
+    });
 
-      let isFinishing = false;
+    const promptUser = (): void => {
+      if (rlClosed) {
+        return;
+      }
 
-      const finishSession = async (): Promise<void> => {
-        if (isFinishing) {
-          return;
+      const prompt = chalk.cyan("You: ");
+      if (rl.terminal) {
+        rl.setPrompt(prompt);
+        rl.prompt();
+        return;
+      }
+
+      process.stdout.write(prompt);
+    };
+
+    try {
+      promptUser();
+
+      for await (const input of rl) {
+        const question = input.trim();
+
+        if (!question) {
+          promptUser();
+          continue;
         }
-        isFinishing = true;
+
+        if (question.toLowerCase() === "exit" || question.toLowerCase() === "quit") {
+          console.log(chalk.gray("\nEnding session..."));
+          break;
+        }
 
         try {
-          if (options?.saveTranscript) {
-            const transcriptPath = await session.saveTranscript(outputDir);
-            console.log(chalk.green(`Transcript saved to: ${transcriptPath}`));
-          }
-
-          await session.stop();
-          resolve();
+          console.log(chalk.gray("\nAssistant: "));
+          await session.ask(question);
+          console.log();
         } catch (error: unknown) {
-          reject(error);
+          console.error(chalk.red(`Error: ${(error as Error).message}`));
         }
-      };
 
-      rl.on("close", () => {
-        void finishSession();
-      });
+        promptUser();
+      }
+    } finally {
+      if (!rlClosed) {
+        rl.close();
+      }
 
-      const askQuestion = (): void => {
-        rl.question(chalk.cyan("You: "), async (input) => {
-          const question = input.trim();
+      if (options?.saveTranscript) {
+        const transcriptPath = await session.saveTranscript(outputDir);
+        console.log(chalk.green(`Transcript saved to: ${transcriptPath}`));
+      }
 
-          if (!question) {
-            askQuestion();
-            return;
-          }
-
-          if (question.toLowerCase() === "exit" || question.toLowerCase() === "quit") {
-            console.log(chalk.gray("\nEnding session..."));
-            rl.close();
-            return;
-          }
-
-          try {
-            console.log(chalk.gray("\nAssistant: "));
-            await session.ask(question);
-            console.log();
-          } catch (error: unknown) {
-            console.error(chalk.red(`Error: ${(error as Error).message}`));
-          }
-
-          askQuestion();
-        });
-      };
-
-      askQuestion();
-    });
+      await session.stop();
+    }
   } catch (error: unknown) {
     console.error(chalk.red(`Failed to initialize session: ${(error as Error).message}`));
     await session.stop();
