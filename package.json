@@ -148,16 +148,16 @@
     "src/**/*.{ts,tsx}": "eslint --fix"
   },
   "dependencies": {
-    "@github/copilot-sdk": "^0.1.23",
+    "@github/copilot-sdk": "^0.3.0",
     "chalk": "^5.3.0",
     "commander": "^14.0.3",
     "cosmiconfig": "^9.0.1",
-    "cosmiconfig-typescript-loader": "^6.2.0",
+    "cosmiconfig-typescript-loader": "^6.3.0",
     "express": "^5.2.1",
-    "express-rate-limit": "^8.2.1",
+    "express-rate-limit": "^8.4.1",
     "fast-glob": "^3.3.3",
     "helmet": "^8.1.0",
-    "ora": "^9.3.0",
+    "ora": "^9.4.0",
     "zod": "^4.3.6"
   },
   "devDependencies": {
