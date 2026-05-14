@@ -3,7 +3,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { join } from "path";
+import { resolve } from "path";
 
 // Mock fs/promises
 vi.mock("fs/promises", () => ({
@@ -28,9 +28,11 @@ const mockExecFile = vi.mocked(execFile);
 
 describe("safePath", () => {
   it("allows valid relative paths", () => {
-    expect(safePath("/repo", "src/index.ts")).toBe("/repo/src/index.ts");
-    expect(safePath("/repo", "package.json")).toBe("/repo/package.json");
-    expect(safePath("/repo", "src/deep/nested/file.ts")).toBe("/repo/src/deep/nested/file.ts");
+    expect(safePath("/repo", "src/index.ts")).toBe(resolve("/repo", "src/index.ts"));
+    expect(safePath("/repo", "package.json")).toBe(resolve("/repo", "package.json"));
+    expect(safePath("/repo", "src/deep/nested/file.ts")).toBe(
+      resolve("/repo", "src/deep/nested/file.ts"),
+    );
   });
 
   it("rejects traversal with ..", () => {
@@ -45,16 +47,16 @@ describe("safePath", () => {
   });
 
   it("allows paths that contain .. but stay within root", () => {
-    expect(safePath("/repo", "src/../package.json")).toBe("/repo/package.json");
+    expect(safePath("/repo", "src/../package.json")).toBe(resolve("/repo", "package.json"));
   });
 
   it("allows empty path (resolves to root)", () => {
-    expect(safePath("/repo", "")).toBe("/repo");
+    expect(safePath("/repo", "")).toBe(resolve("/repo"));
   });
 
   it("handles paths with encoded characters safely", () => {
     // These are just regular directory names, not traversal
-    expect(safePath("/repo", "dir%2F..%2Fetc")).toBe("/repo/dir%2F..%2Fetc");
+    expect(safePath("/repo", "dir%2F..%2Fetc")).toBe(resolve("/repo", "dir%2F..%2Fetc"));
   });
 });
 
@@ -109,7 +111,7 @@ describe("read_file tool", () => {
     const result = await tool.handler({ path: "src/index.ts" }, {} as any);
 
     expect(mockReadFile).toHaveBeenCalledWith(
-      join("/test/repo", "src/index.ts"),
+      resolve("/test/repo", "src/index.ts"),
       "utf-8",
     );
     expect(result).toEqual({
@@ -520,13 +522,16 @@ describe("search tool", () => {
   it("searches in a subdirectory", async () => {
     const ctx = makeContext();
     const tool = getTool(ctx, "search");
-    mockExecFileSuccess("/test/repo/src/a.ts:1:hello\n");
+    mockExecFileSuccess("src/a.ts:1:hello\n");
 
     await tool.handler({ pattern: "hello", path: "src" }, {} as any);
 
     const call = mockExecFile.mock.calls[0];
     const args = call[1] as string[];
-    expect(args).toContain(join("/test/repo", "src"));
+    // Search target is now a forward-slash relative path; cwd handles the absolute root.
+    expect(args).toContain("src");
+    const opts = call[2] as { cwd?: string } | undefined;
+    expect(opts?.cwd).toBe(resolve("/test/repo"));
   });
 
   it("returns no matches message when ripgrep exits with code 1", async () => {
@@ -568,8 +573,10 @@ describe("search tool", () => {
   it("makes paths relative in output", async () => {
     const ctx = makeContext();
     const tool = getTool(ctx, "search");
+    // Real ripgrep, with cwd set and --path-separator /, emits relative
+    // forward-slash paths. The mock reflects that contract.
     mockExecFileSuccess(
-      "/test/repo/deep/nested/file.ts:42:found it\n",
+      "deep/nested/file.ts:42:found it\n",
     );
 
     const result = await tool.handler({ pattern: "found" }, {} as any);

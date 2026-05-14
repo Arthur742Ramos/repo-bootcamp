@@ -3,6 +3,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import { join } from "path";
 import type { RepoInfo, ScanResult, RepoFacts } from "../src/types.js";
 
 const mockCreateSession = vi.fn();
@@ -179,7 +180,9 @@ describe("InteractiveSession", () => {
 
     const outputPath = await session.saveTranscript("/tmp/output");
 
-    expect(outputPath).toBe("/tmp/output/TRANSCRIPT.md");
+    // saveTranscript joins the output dir + filename via path.join, which uses
+    // the platform-native separator. Compare with the same join.
+    expect(outputPath).toBe(join("/tmp/output", "TRANSCRIPT.md"));
     expect(mockWriteFile).toHaveBeenCalledWith(
       outputPath,
       expect.stringContaining("# Interactive Session Transcript"),

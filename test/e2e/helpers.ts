@@ -25,6 +25,13 @@ function buildChildEnv(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
     ...env,
   };
 
+  // On Windows, Node's os.homedir() reads USERPROFILE (not HOME). Tests that
+  // override HOME to redirect home-relative paths (e.g. ~/.cache) need the
+  // same value mirrored to USERPROFILE for the override to take effect.
+  if (process.platform === "win32" && env.HOME && !env.USERPROFILE) {
+    childEnv.USERPROFILE = env.HOME;
+  }
+
   delete childEnv.NODE_OPTIONS;
   delete childEnv.VITEST;
 

@@ -19,7 +19,7 @@ import type {
   MonorepoManager,
   RepoProvider,
 } from "./types.js";
-import { SKIP_DIRS } from "./utils.js";
+import { SKIP_DIRS, isPathInsideDir } from "./utils.js";
 import frameworkMaps from "./data/framework-maps.json" with { type: "json" };
 
 const execFileAsync = promisify(execFile);
@@ -180,7 +180,7 @@ export async function cloneRepo(
   const safeOwner = repoInfo.owner.replace(/[^A-Za-z0-9._/-]/g, "_").replaceAll("/", "__");
   const safeRepo = repoInfo.repo.replace(/[^A-Za-z0-9._-]/g, "_");
   const clonePath = resolve(tempRoot, `${safeOwner}__${safeRepo}`);
-  if (!clonePath.startsWith(`${tempRoot}/`) && clonePath !== tempRoot) {
+  if (!isPathInsideDir(tempRoot, clonePath)) {
     throw new Error("Unsafe clone path");
   }
 
