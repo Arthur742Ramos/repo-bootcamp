@@ -98,7 +98,9 @@ describe("resolveLocalPath", () => {
 
   it("should keep absolute paths as-is", () => {
     const result = resolveLocalPath("/tmp/test-repo");
-    expect(result).toBe("/tmp/test-repo");
+    // path.resolve normalizes to platform-native form: "/tmp/test-repo" on POSIX,
+    // "C:\\tmp\\test-repo" (or current-drive equivalent) on Windows.
+    expect(result).toBe(resolve("/tmp/test-repo"));
   });
 });
 
@@ -156,7 +158,8 @@ describe("resolveRepo", () => {
     const result = await resolveRepo(testLocalRepo);
 
     expect(result.isLocal).toBe(true);
-    expect(result.path).toBe(testLocalRepo);
+    // resolveRepo normalizes to platform-native absolute form via path.resolve.
+    expect(result.path).toBe(resolve(testLocalRepo));
     expect(result.repoName).toBe("test-local-repo-resolve");
     expect(result.repoInfo.owner).toBe("local");
     expect(result.repoInfo.repo).toBe("test-local-repo-resolve");

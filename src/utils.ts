@@ -3,6 +3,7 @@
  */
 
 import { readFile, access } from "fs/promises";
+import { isAbsolute, relative, resolve } from "path";
 
 /**
  * Common directory names to skip during repository traversal
@@ -46,4 +47,36 @@ export async function readFileSafe(filePath: string): Promise<string | null> {
  */
 export function escapeRegex(str: string): string {
   return str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/**
+ * Convert a filesystem path to POSIX form (forward slashes).
+ *
+ * Use for paths that are surfaced to LLMs, written to JSON outputs,
+ * or compared against repo-relative path strings — anywhere the
+ * native Windows backslash separator would cause inconsistency.
+ *
+ * Does not perform path resolution; callers should resolve/normalize first
+ * if needed.
+ */
+export function toPosixPath(p: string): string {
+  return p.replace(/\\/g, "/");
+}
+
+/**
+ * Test whether `child` is the same path as `parent` or strictly inside it.
+ *
+ * Resolves both inputs internally so callers can pass relative or absolute
+ * paths in any normalized form. Cross-platform: works correctly on Windows
+ * where the path separator is `\` and on POSIX where it is `/`.
+ *
+ * NOTE: This is a lexical check only — it does not resolve symlinks. If a
+ * path inside `parent` is a symlink pointing outside, this still returns
+ * true. Use `fs.realpath` first if symlink containment matters.
+ */
+export function isPathInsideDir(parent: string, child: string): boolean {
+  const resolvedParent = resolve(parent);
+  const resolvedChild = resolve(child);
+  const rel = relative(resolvedParent, resolvedChild);
+  return rel === "" || (!rel.startsWith("..") && !isAbsolute(rel));
 }

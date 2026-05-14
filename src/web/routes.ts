@@ -17,6 +17,7 @@ import {
 import { resolveRunConfiguration } from "../services/config-resolution.js";
 import { writeGeneratedOutputs } from "../services/output-writer.js";
 import type { BootcampOptions, RepoFacts } from "../types.js";
+import { isPathInsideDir } from "../utils.js";
 
 /**
  * Progress event for SSE
@@ -444,7 +445,7 @@ export function registerRoutes(app: Application): void {
       try {
         const filePath = resolve(join(job.result.outputDir, filename));
         const outputDirResolved = resolve(job.result.outputDir);
-        if (!filePath.startsWith(outputDirResolved + "/") && filePath !== outputDirResolved) {
+        if (!isPathInsideDir(outputDirResolved, filePath)) {
           res.status(400).json({ error: "Invalid filename" });
           return;
         }

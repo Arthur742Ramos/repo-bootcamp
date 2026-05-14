@@ -1383,7 +1383,7 @@ describe("prompt construction", () => {
   it("uses repoPrompts option as override path", async () => {
     const existsSyncMock = fs.existsSync as Mock;
     existsSyncMock.mockImplementation((p: string) => {
-      return p.endsWith("/custom/my-prompts.md");
+      return p.replace(/\\/g, "/").endsWith("/custom/my-prompts.md");
     });
     (fs.readFileSync as Mock).mockReturnValue("Override prompt content");
 
@@ -1453,7 +1453,7 @@ describe("readCustomPrompt", () => {
 
   it("uses override path when provided", () => {
     (fs.existsSync as Mock).mockImplementation((p: string) =>
-      p.endsWith("/custom/prompts.md")
+      p.replace(/\\/g, "/").endsWith("/custom/prompts.md")
     );
     (fs.readFileSync as Mock).mockReturnValue("Override guidance");
 
@@ -1684,7 +1684,7 @@ describe("fast mode prompt construction", () => {
     const readFileSyncMock = fs.readFileSync as Mock;
 
     existsSyncMock.mockImplementation((p: string) => {
-      return p.endsWith("src/index.ts");
+      return p.replace(/\\/g, "/").endsWith("src/index.ts");
     });
     readFileSyncMock.mockReturnValue("export function main() {}");
 

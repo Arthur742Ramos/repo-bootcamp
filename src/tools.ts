@@ -10,7 +10,7 @@ import { readFile, readdir, stat } from "fs/promises";
 import { isAbsolute, join, relative, resolve } from "path";
 import { execFile } from "child_process";
 import { promisify } from "util";
-import { SKIP_DIRS } from "./utils.js";
+import { SKIP_DIRS, toPosixPath } from "./utils.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -175,7 +175,7 @@ function createListFilesTool(context: ToolContext): Tool<ListFilesToolArgs> {
           }
 
           const prefix = entry.isDirectory() ? "[dir]  " : "[file] ";
-          results.push(`${prefix}${relativePath}`);
+          results.push(`${prefix}${toPosixPath(relativePath)}`);
 
           if (entry.isDirectory() && recursive) {
             await scanDir(entryPath, depth + 1);
@@ -230,24 +230,39 @@ function createSearchTool(context: ToolContext): Tool<SearchToolArgs> {
   },
   handler: async (args: SearchToolArgs) => {
     const { pattern, path = "", filePattern, maxResults = 50 } = args;
+    // Validate the requested search path stays inside the repo (path traversal guard).
     const searchPath = safePath(context.repoPath, path);
+    const repoRoot = resolve(context.repoPath);
+    // Express the search target as a forward-slash relative path so ripgrep
+    // emits matches with paths the LLM can feed back into read_file/list_files.
+    const relSearchPath = relative(repoRoot, searchPath);
+    const rgTarget = toPosixPath(relSearchPath) || ".";
 
     context.onToolCall?.("search", { pattern, path, filePattern });
 
     try {
-      const rgArgs = ["--line-number", "--no-heading", "--max-count", String(maxResults)];
+      // --path-separator / normalizes Windows backslashes to forward slashes
+      // in printed paths; combined with cwd + a relative search target, the
+      // output never contains absolute paths.
+      const rgArgs = [
+        "--line-number",
+        "--no-heading",
+        "--path-separator",
+        "/",
+        "--max-count",
+        String(maxResults),
+      ];
       if (filePattern) {
         rgArgs.push("--glob", filePattern);
       }
-      rgArgs.push(pattern, searchPath);
+      rgArgs.push(pattern, rgTarget);
 
-      const { stdout } = await execFileAsync("rg", rgArgs, { timeout: 30000 });
-
-      // Make paths relative
-      const lines = stdout.split("\n").filter(Boolean).map(line => {
-        const relativeLine = line.replace(context.repoPath + "/", "");
-        return relativeLine;
+      const { stdout } = await execFileAsync("rg", rgArgs, {
+        cwd: repoRoot,
+        timeout: 30000,
       });
+
+      const lines = stdout.split("\n").filter(Boolean);
 
       const result = lines.length > 0
         ? lines.join("\n")
