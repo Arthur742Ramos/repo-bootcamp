@@ -246,7 +246,7 @@ The Copilot SDK transforms what would be a simple template-filler into an intell
 - **Multi-language Support** - Works with TypeScript, Python, Go, Rust, Java, and more
 - **Interactive Q&A Mode** - Chat with the codebase using natural language
 - **Docs Drift Analyzer** - Detect stale/mismatched docs with `bootcamp docs --check`, and auto-fix with `--fix`
-- **Phase-level Cache Management** - Reuses deps/security/impact analysis phases and supports `bootcamp cache prune|clear`
+- **Phase-level Cache Management** - Reuses deps/security/impact analysis phases and supports `bootcamp cache list|prune|clear` (with `--json` listing for scripts)
 - **Tech Radar** - Identify modern, stable, legacy, and risky technologies
 - **Change Impact Analysis** - Understand how file changes affect the codebase
 - **Version & PR Comparison** - Compare refs with `--compare` or analyze pull requests with `bootcamp diff`

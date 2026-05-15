@@ -23,6 +23,7 @@ import { pathToFileURL } from "url";
 
 import { clearCache, getCacheDir, pruneCache } from "./cache.js";
 import { runAskCommand } from "./commands/ask-command.js";
+import { runCacheList } from "./commands/cache-list.js";
 import { runPullRequestDiff } from "./commands/diff-command.js";
 import { runDocsCommand } from "./commands/docs-command.js";
 import { runMainCommand } from "./commands/main-command.js";
@@ -103,6 +104,11 @@ interface DocsActionOptions {
 interface CachePruneActionOptions {
   [key: string]: unknown;
   maxAge?: string;
+}
+
+interface CacheListActionOptions {
+  [key: string]: unknown;
+  json?: boolean;
 }
 
 function getOptionSource(command: Command, name: string): "cli" | "default" {
@@ -328,6 +334,16 @@ cacheCommand
   .action(async () => {
     const cleared = await clearCache();
     console.log(chalk.green(`Cleared ${cleared} cache file(s) from ${getCacheDir()}`));
+  });
+
+cacheCommand
+  .command("list")
+  .alias("ls")
+  .description("List cache entries with repo, phase, age, and size")
+  .option("--json", "Output as JSON for machine consumption")
+  .action(async (rawOpts) => {
+    const opts = getActionOptions<CacheListActionOptions>(rawOpts as Command | CacheListActionOptions);
+    await runCacheList({ json: opts.json });
   });
 
 const isCliEntry = Boolean(process.argv[1]) &&
