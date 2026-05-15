@@ -175,7 +175,7 @@ jobs:
 
       - name: Dependency review
         id: dependency-review
-        uses: actions/dependency-review-action@v4
+        uses: actions/dependency-review-action@v5
         continue-on-error: true
 
       - name: Explain dependency review fallback
