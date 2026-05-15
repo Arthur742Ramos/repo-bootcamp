@@ -132,7 +132,7 @@ Onboarding Risk: 18/100 (A) 🟢
 1. **Powered by GitHub Copilot SDK** - Leverages the official SDK for agentic AI with tool-calling
 2. **Truly Agentic** - Claude autonomously explores codebases, not just template filling
 3. **Schema Validated** - All output is validated with Zod schemas and auto-retried on failures
-4. **Production Ready** - 613 tests, TypeScript, proper error handling
+4. **Production Ready** - 985 tests, TypeScript, proper error handling
 5. **Full Feature Set** - Interactive mode, web UI, docs drift analyzer, cache management, version diffing
 6. **Beautiful Output** - Mermaid diagrams, structured markdown, professional formatting
 
@@ -142,10 +142,10 @@ Onboarding Risk: 18/100 (A) 🟢
 |--------|-------|
 | GitHub stars | 29 |
 | Generated files | 12+ |
-| Test suite | 613 tests |
-| Source files | 36 TypeScript modules |
-| Test files | 30 Vitest files |
-| Lines of code | 10,992 TypeScript LOC (src/) |
+| Test suite | 985 tests |
+| Source files | 41 TypeScript modules |
+| Test files | 60 Vitest files |
+| Lines of code | 11,627 TypeScript LOC (src/) |
 | Languages supported | 10+ |
 | Generation time | < 60 seconds |
 
@@ -694,7 +694,7 @@ npm run build
 npm run lint
 npm run typecheck
 
-# Run tests (613 tests)
+# Run tests (985 tests)
 npm test
 
 # Check formatting (or apply it)
@@ -740,7 +740,7 @@ Set `--model` to override.
 - **Runtime:** Node.js 20+
 - **Language:** TypeScript 5.6
 - **AI:** GitHub Copilot SDK with Claude
-- **Testing:** Vitest (613 tests)
+- **Testing:** Vitest (985 tests)
 - **CLI:** Commander.js
 - **Validation:** Zod schemas
 - **Web:** Express 5 with SSE
