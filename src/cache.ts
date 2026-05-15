@@ -13,6 +13,12 @@ import type { RepoFacts } from "./types.js";
 const CACHE_DIR = join(homedir(), ".cache", "repo-bootcamp");
 const CACHE_VERSION = 2;
 
+/** Current cache entry schema version. Exposed so the CLI and tests can
+ *  display it without duplicating the constant. */
+export function getCacheVersion(): number {
+  return CACHE_VERSION;
+}
+
 export type CachePhase = "facts" | "deps" | "security" | "impact";
 export type AnalysisPhase = Exclude<CachePhase, "facts">;
 
@@ -239,4 +245,171 @@ export async function pruneCache(maxAgeMs: number): Promise<number> {
  */
 export function getCacheDir(): string {
   return CACHE_DIR;
+}
+
+/**
+ * Reason a cache file could not be surfaced as a fully-typed entry.
+ *
+ * - `"legacy"`: file parsed cleanly but is from an older schema version
+ *   (`version !== CACHE_VERSION`). Pruning is the right remediation.
+ * - `"malformed"`: file exists but does not match the expected shape (e.g.
+ *   missing required fields, invalid JSON, or a non-cache `.json` blob that
+ *   happens to live in the cache dir).
+ * - `"unreadable"`: stat or read failed for this file (e.g. permission denied
+ *   or it disappeared between readdir and read).
+ */
+export type CacheEntryProblem = "legacy" | "malformed" | "unreadable";
+
+/**
+ * A single cache file as surfaced by `listCacheEntries`.
+ *
+ * `entry` is populated for valid current-schema files. Otherwise `entry` is
+ * null and `problem` describes why. Even problematic entries are returned so
+ * users can see — and remediate — disk usage from stale or stray files.
+ */
+export interface CacheEntrySummary {
+  file: string;
+  path: string;
+  sizeBytes: number;
+  mtimeMs: number;
+  entry: {
+    version: number;
+    phase: CachePhase;
+    repoFullName: string;
+    commitSha: string;
+    generationOptions: NormalizedCacheGenerationOptions;
+    createdAt: string;
+  } | null;
+  problem?: CacheEntryProblem;
+}
+
+interface RawCacheEntryShape {
+  version?: unknown;
+  phase?: unknown;
+  repoFullName?: unknown;
+  commitSha?: unknown;
+  createdAt?: unknown;
+  generationOptions?: unknown;
+}
+
+const VALID_PHASES: ReadonlySet<CachePhase> = new Set<CachePhase>([
+  "facts",
+  "deps",
+  "security",
+  "impact",
+]);
+
+function hasRequiredShape(raw: unknown): raw is Required<
+  Pick<RawCacheEntryShape, "version" | "phase" | "repoFullName" | "commitSha" | "createdAt">
+> &
+  RawCacheEntryShape {
+  if (!raw || typeof raw !== "object") return false;
+  const r = raw as RawCacheEntryShape;
+  return (
+    typeof r.version === "number" &&
+    typeof r.phase === "string" &&
+    VALID_PHASES.has(r.phase as CachePhase) &&
+    typeof r.repoFullName === "string" &&
+    typeof r.commitSha === "string" &&
+    typeof r.createdAt === "string"
+  );
+}
+
+async function summarizeCacheFile(file: string): Promise<CacheEntrySummary | null> {
+  const path = join(CACHE_DIR, file);
+  let fileStat;
+  try {
+    fileStat = await stat(path);
+  } catch (err: unknown) {
+    if ((err as NodeJS.ErrnoException).code === "ENOENT") return null;
+    if (process.env.DEBUG) console.error("[debug]", (err as Error).message);
+    return {
+      file,
+      path,
+      sizeBytes: 0,
+      mtimeMs: 0,
+      entry: null,
+      problem: "unreadable",
+    };
+  }
+
+  if (!fileStat.isFile()) return null;
+
+  const base: Pick<CacheEntrySummary, "file" | "path" | "sizeBytes" | "mtimeMs"> = {
+    file,
+    path,
+    sizeBytes: fileStat.size,
+    mtimeMs: fileStat.mtimeMs,
+  };
+
+  let raw: unknown;
+  try {
+    const content = await readFile(path, "utf-8");
+    raw = JSON.parse(content);
+  } catch (err: unknown) {
+    if ((err as NodeJS.ErrnoException).code === "ENOENT") return null;
+    if (process.env.DEBUG) console.error("[debug]", (err as Error).message);
+    // Unreadable vs. malformed: distinguish IO failure from successful read
+    // of garbage JSON so the user can tell stale-schema files apart from
+    // permission problems.
+    const isParseError = err instanceof SyntaxError;
+    return { ...base, entry: null, problem: isParseError ? "malformed" : "unreadable" };
+  }
+
+  if (!hasRequiredShape(raw)) {
+    return { ...base, entry: null, problem: "malformed" };
+  }
+
+  const entryVersion = raw.version as number;
+  if (entryVersion !== CACHE_VERSION) {
+    return { ...base, entry: null, problem: "legacy" };
+  }
+
+  return {
+    ...base,
+    entry: {
+      version: entryVersion,
+      phase: raw.phase as CachePhase,
+      repoFullName: raw.repoFullName as string,
+      commitSha: raw.commitSha as string,
+      generationOptions: normalizeGenerationOptions(
+        // generationOptions is optional in the on-disk schema — normalize
+        // missing/partial objects to empty strings to match readPhaseCache's
+        // compatibility rules (otherwise readable v2 entries would be
+        // flagged as malformed by stricter validation).
+        raw.generationOptions as CacheGenerationOptions | undefined
+      ),
+      createdAt: raw.createdAt as string,
+    },
+  };
+}
+
+/**
+ * List every file currently in the cache directory, including legacy and
+ * malformed ones. Sorted by mtime descending so the most recently touched
+ * entries appear first; ties broken alphabetically by filename for
+ * deterministic ordering.
+ *
+ * Returns an empty array if the cache dir does not exist yet.
+ */
+export async function listCacheEntries(): Promise<CacheEntrySummary[]> {
+  let files: string[];
+  try {
+    files = await readdir(CACHE_DIR);
+  } catch (err: unknown) {
+    if ((err as NodeJS.ErrnoException).code === "ENOENT") return [];
+    if (process.env.DEBUG) console.error("[debug]", (err as Error).message);
+    return [];
+  }
+
+  const jsonFiles = files.filter((f) => f.endsWith(".json"));
+  const settled = await Promise.all(jsonFiles.map((f) => summarizeCacheFile(f)));
+  const summaries = settled.filter((s): s is CacheEntrySummary => s !== null);
+
+  summaries.sort((a, b) => {
+    if (b.mtimeMs !== a.mtimeMs) return b.mtimeMs - a.mtimeMs;
+    return a.file.localeCompare(b.file);
+  });
+
+  return summaries;
 }

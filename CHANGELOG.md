@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `bootcamp cache list` (alias `ls`) subcommand to inspect cached analysis entries, with a human-readable table and `--json` output for scripting. Surfaces repository, phase, SHA, age, size, model, and style, and reports `(legacy)`/`(malformed)` files so users can see disk usage from stray cache files instead of silently hiding them.
 - `bootcamp diff <owner/repo#pr>` command for onboarding-focused PR diffing
 - Developer workflow scripts: `format`, `format:check`, `typecheck`, and `dev:web`
 - `lint-staged` configuration for husky pre-commit usage

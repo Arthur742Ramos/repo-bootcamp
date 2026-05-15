@@ -3,7 +3,7 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { readCache, writeCache, clearCache, getCacheDir, pruneCache } from "../src/cache.js";
+import { readCache, writeCache, clearCache, getCacheDir, getCacheVersion, listCacheEntries, pruneCache } from "../src/cache.js";
 import { mkdir, rm, readdir, utimes, readFile, writeFile } from "fs/promises";
 import { join } from "path";
 import { tmpdir } from "os";
@@ -293,6 +293,162 @@ describe("cache", () => {
 
       const pruned = await pruneCache(0);
       expect(pruned).toBeGreaterThanOrEqual(2);
+    });
+  });
+
+  describe("listCacheEntries", () => {
+    afterEach(async () => {
+      await clearCache();
+    });
+
+    it("returns empty array when cache dir is empty", async () => {
+      await clearCache();
+      const entries = await listCacheEntries();
+      expect(entries).toEqual([]);
+    });
+
+    it("returns valid v2 entries with full metadata", async () => {
+      const repo = "list-test/repo";
+      const sha = "deadbeefcafe1234567890";
+      await writeCache(repo, sha, makeFacts({ repoName: repo }), {
+        focus: "all",
+        style: "oss",
+        model: "claude-opus-4-5",
+        audience: "backend",
+      });
+
+      const entries = await listCacheEntries();
+      const ours = entries.filter((e) => e.entry?.repoFullName === repo);
+      expect(ours).toHaveLength(1);
+      const summary = ours[0];
+      expect(summary.problem).toBeUndefined();
+      expect(summary.entry).not.toBeNull();
+      expect(summary.entry!.phase).toBe("facts");
+      expect(summary.entry!.commitSha).toBe(sha);
+      expect(summary.entry!.generationOptions.model).toBe("claude-opus-4-5");
+      expect(summary.entry!.generationOptions.style).toBe("oss");
+      expect(summary.sizeBytes).toBeGreaterThan(0);
+      expect(summary.mtimeMs).toBeGreaterThan(0);
+      expect(summary.file).toMatch(/\.json$/);
+    });
+
+    it("flags JSON parse errors as malformed", async () => {
+      const cacheDir = getCacheDir();
+      await mkdir(cacheDir, { recursive: true });
+      const badFile = join(cacheDir, "list-malformed.json");
+      await writeFile(badFile, "{ not json at all", "utf-8");
+
+      const entries = await listCacheEntries();
+      const ours = entries.filter((e) => e.file === "list-malformed.json");
+      expect(ours).toHaveLength(1);
+      expect(ours[0].problem).toBe("malformed");
+      expect(ours[0].entry).toBeNull();
+    });
+
+    it("flags valid JSON with the wrong shape as malformed", async () => {
+      // The e2e tests drop arbitrary JSON blobs into the cache dir; verify
+      // those surface as malformed (not crashes, not silently hidden).
+      const cacheDir = getCacheDir();
+      await mkdir(cacheDir, { recursive: true });
+      const strayFile = join(cacheDir, "list-stray.json");
+      await writeFile(strayFile, '{"stale":true}\n', "utf-8");
+
+      const entries = await listCacheEntries();
+      const ours = entries.filter((e) => e.file === "list-stray.json");
+      expect(ours).toHaveLength(1);
+      expect(ours[0].problem).toBe("malformed");
+    });
+
+    it("flags entries with a non-current schema version as legacy", async () => {
+      const cacheDir = getCacheDir();
+      await mkdir(cacheDir, { recursive: true });
+      const legacyFile = join(cacheDir, "list-legacy.json");
+      const legacyContent = {
+        version: 1,
+        phase: "facts",
+        repoFullName: "legacy/repo",
+        commitSha: "deadbeef",
+        createdAt: new Date().toISOString(),
+        value: {},
+      };
+      await writeFile(legacyFile, JSON.stringify(legacyContent), "utf-8");
+
+      const entries = await listCacheEntries();
+      const ours = entries.filter((e) => e.file === "list-legacy.json");
+      expect(ours).toHaveLength(1);
+      expect(ours[0].problem).toBe("legacy");
+      expect(ours[0].entry).toBeNull();
+    });
+
+    it("treats missing generationOptions as compatible with v2 (matches readPhaseCache)", async () => {
+      // readPhaseCache normalizes a missing generationOptions to empty
+      // strings rather than rejecting the entry. listCacheEntries should
+      // do the same so it doesn't falsely flag readable v2 files.
+      const cacheDir = getCacheDir();
+      await mkdir(cacheDir, { recursive: true });
+      const file = join(cacheDir, "list-nogenopts.json");
+      const content = {
+        version: getCacheVersion(),
+        phase: "facts" as const,
+        repoFullName: "minimal/repo",
+        commitSha: "abc1234",
+        createdAt: new Date().toISOString(),
+        value: {},
+      };
+      await writeFile(file, JSON.stringify(content), "utf-8");
+
+      const entries = await listCacheEntries();
+      const ours = entries.filter((e) => e.file === "list-nogenopts.json");
+      expect(ours).toHaveLength(1);
+      expect(ours[0].problem).toBeUndefined();
+      expect(ours[0].entry).not.toBeNull();
+      expect(ours[0].entry!.generationOptions).toEqual({
+        focus: "",
+        style: "",
+        model: "",
+        audience: "",
+      });
+    });
+
+    it("sorts mtime descending with filename tiebreaker", async () => {
+      const cacheDir = getCacheDir();
+      await mkdir(cacheDir, { recursive: true });
+
+      const files = ["list-sort-a.json", "list-sort-b.json", "list-sort-c.json"];
+      for (const f of files) {
+        const content = {
+          version: getCacheVersion(),
+          phase: "facts" as const,
+          repoFullName: `sort/${f}`,
+          commitSha: "sha",
+          createdAt: new Date().toISOString(),
+          value: {},
+        };
+        await writeFile(join(cacheDir, f), JSON.stringify(content), "utf-8");
+      }
+
+      // Give all files the same mtime so the tiebreaker is exercised.
+      const sameTime = new Date("2024-06-01T00:00:00.000Z");
+      await Promise.all(
+        files.map((f) => utimes(join(cacheDir, f), sameTime, sameTime))
+      );
+
+      const entries = await listCacheEntries();
+      const ourFiles = entries
+        .filter((e) => e.file.startsWith("list-sort-"))
+        .map((e) => e.file);
+      // Equal mtimes → alphabetical tiebreaker
+      expect(ourFiles).toEqual(["list-sort-a.json", "list-sort-b.json", "list-sort-c.json"]);
+
+      // Now bump file C forward in time; it should move to the front.
+      const future = new Date("2025-01-01T00:00:00.000Z");
+      await utimes(join(cacheDir, "list-sort-c.json"), future, future);
+
+      const reordered = await listCacheEntries();
+      const reorderedFiles = reordered
+        .filter((e) => e.file.startsWith("list-sort-"))
+        .map((e) => e.file);
+      expect(reorderedFiles[0]).toBe("list-sort-c.json");
     });
   });
 });
