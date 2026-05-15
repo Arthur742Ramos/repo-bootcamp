@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { createIssuesFromTasks, taskToIssuePayload } from "../src/issues.js";
+import { createIssuesFromTasks, generateIssuePreview, taskToIssuePayload } from "../src/issues.js";
 import type { FirstTask, RepoInfo } from "../src/types.js";
 
 describe("createIssuesFromTasks - coverage", () => {
@@ -70,8 +70,7 @@ describe("createIssuesFromTasks - coverage", () => {
   });
 });
 
-// Additional branch coverage for issues.ts
-import { taskToIssuePayload, generateIssuePreview } from "../src/issues.js";
+// Additional branch coverage for issues.ts (using imports declared at the top)
 
 describe("issues extra branches", () => {
   const repoInfo = { owner: "t", repo: "r", url: "https://github.com/t/r", branch: "main", fullName: "t/r" } as any;
