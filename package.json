@@ -154,7 +154,7 @@
     "cosmiconfig": "^9.0.1",
     "cosmiconfig-typescript-loader": "^6.3.0",
     "express": "^5.2.1",
-    "express-rate-limit": "^8.5.0",
+    "express-rate-limit": "^8.5.2",
     "fast-glob": "^3.3.3",
     "helmet": "^8.1.0",
     "ora": "^9.4.0",
