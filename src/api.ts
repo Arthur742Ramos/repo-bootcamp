@@ -7,6 +7,31 @@ export {
 } from "./agent.js";
 export { runParallelAnalysis, type ParallelAnalysisResult } from "./analysis.js";
 export {
+  evaluateDoctor,
+  formatDoctorReport,
+  gatherEnvironment,
+  parseNodeMajor,
+  MIN_NODE_MAJOR,
+  TOKEN_ENV_VARS,
+  type DoctorCheck,
+  type DoctorReport,
+  type EnvironmentSnapshot,
+  type CheckStatus,
+  type CheckSeverity,
+} from "./doctor.js";
+export {
+  computeCodebaseMetrics,
+  generateMetricsDocs,
+  getApproachabilityGrade,
+  formatBytes,
+  type CodebaseMetrics,
+  type LanguageMetric,
+  type FileHotspot,
+  type DirectoryMetric,
+  type CodebaseSizeClass,
+  type Approachability,
+} from "./metrics.js";
+export {
   generateBootcamp,
   generateOnboarding,
   generateArchitecture,

@@ -34,6 +34,7 @@ interface GenerationResult {
   security: Awaited<ReturnType<typeof prepareOutputDocuments>>["security"];
   radar: Awaited<ReturnType<typeof prepareOutputDocuments>>["radar"];
   deps: Awaited<ReturnType<typeof prepareOutputDocuments>>["deps"];
+  metrics: Awaited<ReturnType<typeof prepareOutputDocuments>>["metrics"];
 }
 
 interface GenerateOutputsParams {
@@ -63,7 +64,7 @@ async function generateOutputs({
   progress,
   allowIssueCreation = true,
 }: GenerateOutputsParams): Promise<GenerationResult> {
-  const { documents, facts: preparedFacts, security, radar, deps, outputTargets } = await prepareOutputDocuments({
+  const { documents, facts: preparedFacts, security, radar, deps, metrics, outputTargets } = await prepareOutputDocuments({
     repoPath,
     repoInfo,
     scanResult,
@@ -91,6 +92,7 @@ async function generateOutputs({
     security,
     radar,
     deps,
+    metrics,
   };
 }
 
@@ -230,7 +232,7 @@ export async function runMainCommand(repoUrl: string, options: BootcampOptions):
   const generateStart = Date.now();
   progress.startPhase("generate", options.jsonOnly ? "JSON only" : "12+ files");
   try {
-    const { documentCount, security, radar, deps } = await generateOutputs({
+    const { documentCount, security, radar, deps, metrics } = await generateOutputs({
       repoPath,
       repoInfo,
       scanResult,
@@ -258,6 +260,18 @@ export async function runMainCommand(repoUrl: string, options: BootcampOptions):
 
       if (deps) {
         console.log(chalk.cyan("Dependencies: ") + chalk.white(`${deps.totalCount} total (${deps.runtime.length} runtime, ${deps.dev.length} dev)`));
+      }
+
+      if (styleConfig.sections.showMetrics) {
+        const appr = metrics.approachability;
+        const apprColor = appr.score >= 80 ? chalk.green : appr.score >= 60 ? chalk.yellow : chalk.red;
+        console.log(
+          chalk.cyan("Codebase: ") +
+            chalk.white(`${metrics.totalFiles} files, ${metrics.sourceFiles} source`) +
+            chalk.dim(" · ") +
+            chalk.cyan("approachability ") +
+            apprColor(`${appr.score}/100 (${appr.grade})`)
+        );
       }
     }
   } catch (error: unknown) {
@@ -318,6 +332,9 @@ export async function runMainCommand(repoUrl: string, options: BootcampOptions):
     }
     if (styleConfig.sections.showImpact) {
       console.log(chalk.white("  ├── ") + chalk.cyan(formatName("IMPACT.md")) + chalk.dim("        → Change impact analysis"));
+    }
+    if (styleConfig.sections.showMetrics) {
+      console.log(chalk.white("  ├── ") + chalk.cyan(formatName("METRICS.md")) + chalk.dim("       → Codebase metrics & hotspots"));
     }
     if (options.compare) {
       console.log(chalk.white("  ├── ") + chalk.cyan(formatName("DIFF.md")) + chalk.dim("          → Version comparison"));
