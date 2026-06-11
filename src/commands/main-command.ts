@@ -35,6 +35,7 @@ interface GenerationResult {
   radar: Awaited<ReturnType<typeof prepareOutputDocuments>>["radar"];
   deps: Awaited<ReturnType<typeof prepareOutputDocuments>>["deps"];
   metrics: Awaited<ReturnType<typeof prepareOutputDocuments>>["metrics"];
+  health: Awaited<ReturnType<typeof prepareOutputDocuments>>["health"];
 }
 
 interface GenerateOutputsParams {
@@ -64,7 +65,7 @@ async function generateOutputs({
   progress,
   allowIssueCreation = true,
 }: GenerateOutputsParams): Promise<GenerationResult> {
-  const { documents, facts: preparedFacts, security, radar, deps, metrics, outputTargets } = await prepareOutputDocuments({
+  const { documents, facts: preparedFacts, security, radar, deps, metrics, health, outputTargets } = await prepareOutputDocuments({
     repoPath,
     repoInfo,
     scanResult,
@@ -93,6 +94,7 @@ async function generateOutputs({
     radar,
     deps,
     metrics,
+    health,
   };
 }
 
@@ -232,7 +234,7 @@ export async function runMainCommand(repoUrl: string, options: BootcampOptions):
   const generateStart = Date.now();
   progress.startPhase("generate", options.jsonOnly ? "JSON only" : "12+ files");
   try {
-    const { documentCount, security, radar, deps, metrics } = await generateOutputs({
+    const { documentCount, security, radar, deps, metrics, health } = await generateOutputs({
       repoPath,
       repoInfo,
       scanResult,
@@ -271,6 +273,15 @@ export async function runMainCommand(repoUrl: string, options: BootcampOptions):
             chalk.dim(" · ") +
             chalk.cyan("approachability ") +
             apprColor(`${appr.score}/100 (${appr.grade})`)
+        );
+      }
+
+      if (styleConfig.sections.showHealth) {
+        const healthColor = health.score >= 80 ? chalk.green : health.score >= 60 ? chalk.yellow : chalk.red;
+        console.log(
+          chalk.cyan("Repo Health: ") +
+            healthColor(`${health.score}/100 (${health.grade})`) +
+            chalk.dim(` · ${health.passCount} passed, ${health.warnCount} warnings, ${health.failCount} missing`)
         );
       }
     }
@@ -335,6 +346,9 @@ export async function runMainCommand(repoUrl: string, options: BootcampOptions):
     }
     if (styleConfig.sections.showMetrics) {
       console.log(chalk.white("  ├── ") + chalk.cyan(formatName("METRICS.md")) + chalk.dim("       → Codebase metrics & hotspots"));
+    }
+    if (styleConfig.sections.showHealth) {
+      console.log(chalk.white("  ├── ") + chalk.cyan(formatName("HEALTH.md")) + chalk.dim("        → Onboarding-readiness health check"));
     }
     if (options.compare) {
       console.log(chalk.white("  ├── ") + chalk.cyan(formatName("DIFF.md")) + chalk.dim("          → Version comparison"));

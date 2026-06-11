@@ -61,6 +61,11 @@
       "import": "./dist/metrics.js",
       "require": "./dist/cjs/metrics.js"
     },
+    "./health": {
+      "types": "./dist/health.d.ts",
+      "import": "./dist/health.js",
+      "require": "./dist/cjs/health.js"
+    },
     "./doctor": {
       "types": "./dist/doctor.d.ts",
       "import": "./dist/doctor.js",

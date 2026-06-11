@@ -109,6 +109,7 @@ Onboarding Risk: 18/100 (A) 🟢
   ├── RADAR.md         → Tech radar & risk score
   ├── IMPACT.md        → Change impact analysis
   ├── METRICS.md       → Codebase metrics & hotspots
+  ├── HEALTH.md        → Onboarding-readiness health check
   ├── diagrams.mmd     → Mermaid diagrams
   └── repo_facts.json  → Structured data
 
@@ -251,6 +252,7 @@ The Copilot SDK transforms what would be a simple template-filler into an intell
 - **Tech Radar** - Identify modern, stable, legacy, and risky technologies
 - **Change Impact Analysis** - Understand how file changes affect the codebase
 - **Codebase Metrics & Hotspots** - Deterministic `METRICS.md` with language breakdown, largest-file hotspots, test-to-source ratio, and an Approachability score (0-100 + grade)
+- **Repo Health Check** - Deterministic `HEALTH.md` scoring onboarding-readiness across documentation, community, quality, and automation signals (0-100 + grade) with prioritized, actionable recommendations
 - **Environment Doctor** - Diagnose Node, git, GitHub CLI/auth, mermaid-cli, and cache health with `bootcamp doctor` (`--json` for CI)
 - **Version & PR Comparison** - Compare refs with `--compare` or analyze pull requests with `bootcamp diff`
 - **Auto-Issue Creator** - Generate GitHub issues from starter tasks
@@ -352,6 +354,7 @@ Request → Options Merge → Hooks (before) → Fetch → Retry? → Hooks (aft
 | `RADAR.md` | Tech radar and onboarding risk score |
 | `IMPACT.md` | Change impact analysis for key files |
 | `METRICS.md` | Codebase metrics, hotspots & approachability score |
+| `HEALTH.md` | Onboarding-readiness health score & recommendations |
 | `DIFF.md` | Version comparison (with `--compare`) |
 | `diagrams.mmd` | Mermaid diagram sources |
 | `repo_facts.json` | Structured data for automation |

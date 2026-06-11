@@ -203,10 +203,16 @@ describe("bootcamp CLI", () => {
         "SECURITY.md",
         "RADAR.md",
         "DEPENDENCIES.md",
+        "METRICS.md",
+        "HEALTH.md",
         "diagrams.mmd",
         "repo_facts.json",
       ])
     );
+
+    const health = await readFile(join(outputDir, "HEALTH.md"), "utf-8");
+    expect(health).toContain("# Repo Health");
+    expect(health).toContain("## Onboarding Readiness");
 
     const facts = JSON.parse(await readFile(join(outputDir, "repo_facts.json"), "utf-8"));
     expect(facts.repoName).toBe(repoName);

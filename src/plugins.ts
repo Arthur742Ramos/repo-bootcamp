@@ -45,6 +45,7 @@ export interface StyleConfig {
     showRadar: boolean;
     showImpact: boolean;
     showMetrics: boolean;
+    showHealth: boolean;
   };
   badges: {
     style: "shields" | "simple" | "none";
@@ -70,6 +71,7 @@ export const STYLE_PACKS: Record<StylePack, StyleConfig> = {
       showRadar: true,
       showImpact: true,
       showMetrics: true,
+      showHealth: true,
     },
     badges: { style: "simple" },
     firstTasksCount: 10,
@@ -88,6 +90,7 @@ export const STYLE_PACKS: Record<StylePack, StyleConfig> = {
       showRadar: true,
       showImpact: false,
       showMetrics: true,
+      showHealth: true,
     },
     badges: { style: "shields" },
     firstTasksCount: 6,
@@ -106,6 +109,7 @@ export const STYLE_PACKS: Record<StylePack, StyleConfig> = {
       showRadar: true,
       showImpact: false,
       showMetrics: true,
+      showHealth: true,
     },
     badges: { style: "shields" },
     firstTasksCount: 8,
@@ -124,6 +128,7 @@ export const STYLE_PACKS: Record<StylePack, StyleConfig> = {
       showRadar: false,
       showImpact: true,
       showMetrics: true,
+      showHealth: true,
     },
     badges: { style: "simple" },
     firstTasksCount: 7,
@@ -142,6 +147,7 @@ export const STYLE_PACKS: Record<StylePack, StyleConfig> = {
       showRadar: false,
       showImpact: false,
       showMetrics: false,
+      showHealth: false,
     },
     badges: { style: "none" },
     firstTasksCount: 3,
