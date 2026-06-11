@@ -463,6 +463,19 @@ bootcamp doctor
 bootcamp doctor --json
 ```
 
+### Project Configuration
+
+```bash
+# Scaffold a .bootcamprc.json in the current directory
+bootcamp init
+
+# Preview the config without writing a file
+bootcamp init --print
+
+# Preset a style pack (and/or pick a custom path)
+bootcamp init --style corporate --path bootcamp.config.json
+```
+
 ### Repo Health Check
 
 ```bash
@@ -567,6 +580,7 @@ npm install -g @mermaid-js/mermaid-cli
 | `bootcamp web` | Start local web demo server |
 | `bootcamp docs <url>` | Analyze documentation drift (`--check`, `--fix`) |
 | `bootcamp health <url>` | Score onboarding-readiness (`--json`, `--check`, `--min-score`) |
+| `bootcamp init` | Scaffold a `.bootcamprc.json` config (`--force`, `--print`, `--style`) |
 | `bootcamp doctor` | Diagnose your environment (`--json`) |
 | `bootcamp cache list\|prune\|clear` | Manage the analysis cache |
 

@@ -28,6 +28,7 @@ import { runPullRequestDiff } from "./commands/diff-command.js";
 import { runDocsCommand } from "./commands/docs-command.js";
 import { runDoctor } from "./commands/doctor-command.js";
 import { runHealthCommand } from "./commands/health-command.js";
+import { runInitCommand } from "./commands/init-command.js";
 import { runMainCommand } from "./commands/main-command.js";
 import { STYLE_PACK_NAMES } from "./plugins.js";
 import { resolveOutputFormat } from "./services/config-resolution.js";
@@ -117,6 +118,14 @@ interface HealthActionOptions {
   maxFiles?: string;
   keepTemp?: boolean;
   verbose?: boolean;
+}
+
+interface InitActionOptions {
+  [key: string]: unknown;
+  force?: boolean;
+  print?: boolean;
+  path?: string;
+  style?: string;
 }
 
 interface CachePruneActionOptions {
@@ -349,6 +358,23 @@ program
       maxFiles: parseInt(opts.maxFiles || "500", 10),
       keepTemp: opts.keepTemp || false,
       verbose: opts.verbose || false,
+    });
+  });
+
+program
+  .command("init")
+  .description("Scaffold a .bootcamprc.json config file in the current directory")
+  .option("--force", "Overwrite an existing config file")
+  .option("--print", "Print the config to stdout instead of writing a file")
+  .option("--path <file>", "Path to write the config file", ".bootcamprc.json")
+  .option("-s, --style <style>", "Preset a style pack: corporate, startup, oss, academic, minimal")
+  .action(async (rawOpts) => {
+    const opts = getActionOptions<InitActionOptions>(rawOpts as Command | InitActionOptions);
+    await runInitCommand({
+      force: opts.force || false,
+      print: opts.print || false,
+      path: opts.path,
+      style: opts.style || getCliFlagValue(["--style", "-s"]),
     });
   });
 
