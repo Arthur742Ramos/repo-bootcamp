@@ -75,9 +75,13 @@ export async function writeGeneratedOutputs({
     const format = options.diagramFormat || "svg";
     const renderResult = await renderOutputDiagrams(outputDir, format);
     if (renderResult.rendered) {
-      console.log(chalk.cyan("\nDiagrams rendered: ") + chalk.white(renderResult.files.map((f) => basename(f)).join(", ")));
+      if (!options.quiet) {
+        console.log(chalk.cyan("\nDiagrams rendered: ") + chalk.white(renderResult.files.map((f) => basename(f)).join(", ")));
+      }
     } else if (renderResult.error) {
-      console.log(chalk.yellow(`\nDiagram rendering skipped: ${renderResult.error}`));
+      if (!options.quiet) {
+        console.log(chalk.yellow(`\nDiagram rendering skipped: ${renderResult.error}`));
+      }
     }
   }
 

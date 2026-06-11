@@ -146,7 +146,7 @@ Onboarding Risk: 18/100 (A) 🟢
 | Generated files | 14+ |
 | Test suite | 1,000+ tests |
 | Source files | 50 TypeScript modules |
-| Test files | 73 Vitest files |
+| Test files | 74 Vitest files |
 | Lines of code | 13,381 TypeScript LOC (src/) |
 | Languages supported | 10+ |
 | Generation time | < 60 seconds |
@@ -569,6 +569,7 @@ npm install -g @mermaid-js/mermaid-cli
 | `--watch-force` | Allow destructive `git reset --hard` fallback in watch mode | false |
 | `--stats` | Show detailed statistics | false |
 | `-v, --verbose` | Show tool calls and reasoning | false |
+| `-q, --quiet` | Suppress banner/progress; print only the output path (scripting/CI) | false |
 
 ## Commands
 
