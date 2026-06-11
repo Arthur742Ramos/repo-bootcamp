@@ -27,6 +27,7 @@ import { runCacheList } from "./commands/cache-list.js";
 import { runPullRequestDiff } from "./commands/diff-command.js";
 import { runDocsCommand } from "./commands/docs-command.js";
 import { runDoctor } from "./commands/doctor-command.js";
+import { runHealthCommand } from "./commands/health-command.js";
 import { runMainCommand } from "./commands/main-command.js";
 import { STYLE_PACK_NAMES } from "./plugins.js";
 import { resolveOutputFormat } from "./services/config-resolution.js";
@@ -105,6 +106,17 @@ interface DocsActionOptions {
 interface DoctorActionOptions {
   [key: string]: unknown;
   json?: boolean;
+}
+
+interface HealthActionOptions {
+  [key: string]: unknown;
+  branch?: string;
+  check?: boolean;
+  minScore?: string;
+  json?: boolean;
+  maxFiles?: string;
+  keepTemp?: boolean;
+  verbose?: boolean;
 }
 
 interface CachePruneActionOptions {
@@ -315,6 +327,29 @@ program
   .action(async (repoUrl: string, rawOpts) => {
     const opts = getActionOptions<DocsActionOptions>(rawOpts as Command | DocsActionOptions);
     await runDocsCommand(repoUrl, opts);
+  });
+
+program
+  .command("health <repo-url>")
+  .description("Score a repository's onboarding-readiness: docs, community, quality, and automation (supports local paths)")
+  .option("-b, --branch <branch>", "Branch to analyze", "")
+  .option("--check", "Exit with code 1 if the health score is below --min-score (for CI)")
+  .option("--min-score <score>", "Minimum passing score for --check (0-100)", "70")
+  .option("--json", "Output the health report as JSON for machine consumption")
+  .option("-m, --max-files <number>", "Maximum files to scan", "500")
+  .option("--keep-temp", "Keep temporary clone directory")
+  .option("-v, --verbose", "Show detailed output")
+  .action(async (repoUrl: string, rawOpts) => {
+    const opts = getActionOptions<HealthActionOptions>(rawOpts as Command | HealthActionOptions);
+    await runHealthCommand(repoUrl, {
+      branch: opts.branch,
+      check: opts.check || false,
+      minScore: parseInt(opts.minScore || "70", 10),
+      json: opts.json || false,
+      maxFiles: parseInt(opts.maxFiles || "500", 10),
+      keepTemp: opts.keepTemp || false,
+      verbose: opts.verbose || false,
+    });
   });
 
 program

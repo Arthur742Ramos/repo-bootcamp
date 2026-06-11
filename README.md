@@ -463,6 +463,22 @@ bootcamp doctor
 bootcamp doctor --json
 ```
 
+### Repo Health Check
+
+```bash
+# Score a repo's onboarding-readiness (docs, community, quality, automation)
+bootcamp health https://github.com/owner/repo
+
+# Works on local paths too
+bootcamp health ./my-repo
+
+# Machine-readable output
+bootcamp health ./my-repo --json
+
+# CI gate: exit non-zero when the score is below the minimum (default 70)
+bootcamp health ./my-repo --check --min-score 80
+```
+
 ### Auto-Create GitHub Issues
 
 ```bash
@@ -550,6 +566,7 @@ npm install -g @mermaid-js/mermaid-cli
 | `bootcamp diff <owner/repo#pr>` | Generate onboarding diff for a PR |
 | `bootcamp web` | Start local web demo server |
 | `bootcamp docs <url>` | Analyze documentation drift (`--check`, `--fix`) |
+| `bootcamp health <url>` | Score onboarding-readiness (`--json`, `--check`, `--min-score`) |
 | `bootcamp doctor` | Diagnose your environment (`--json`) |
 | `bootcamp cache list\|prune\|clear` | Manage the analysis cache |
 

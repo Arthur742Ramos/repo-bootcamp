@@ -11,6 +11,7 @@ describe("CLI program", () => {
     expect(commandNames).toContain("ask");
     expect(commandNames).toContain("diff");
     expect(commandNames).toContain("web");
+    expect(commandNames).toContain("health");
   });
 
   it("includes main options", () => {
