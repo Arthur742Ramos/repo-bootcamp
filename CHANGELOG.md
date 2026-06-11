@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `bootcamp completion <bash|zsh|fish>` command to print a shell completion script for tab-completing subcommands, their aliases, and option flags. The completion data is derived from the live CLI definition, so it can never drift from the actual command surface; pipe it to your shell's completion directory (or `source <(bootcamp completion bash)`).
 - `bootcamp styles` command (alias `style`) to list the built-in style packs and the documentation sections each one enables, so users can choose a `--style` without reading the source. Prints a per-pack summary (tone, depth, emoji, first-task count, enabled sections) plus a section-coverage matrix, flags the default pack (`oss`), and supports `--json` for scripting.
 - `bootcamp init` command to scaffold a `.bootcamprc.json` configuration file in the current directory. Refuses to overwrite an existing config unless `--force`, supports `--print` to preview the config on stdout without writing, `--path` for a custom output location, and `--style` to preset a built-in style pack.
 - `bootcamp health <repo-url>` command: a standalone, deterministic onboarding-readiness score for any repository (local path or remote URL) without invoking the LLM. Prints a human-readable report by default, supports `--json` for scripting, and offers a CI gate via `--check`/`--min-score` (exits non-zero when the score falls below the threshold). Reuses the same `computeRepoHealth` engine that powers `HEALTH.md`.
