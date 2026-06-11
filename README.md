@@ -145,8 +145,8 @@ Onboarding Risk: 18/100 (A) 🟢
 | GitHub stars | 29 |
 | Generated files | 14+ |
 | Test suite | 1,000+ tests |
-| Source files | 48 TypeScript modules |
-| Test files | 70 Vitest files |
+| Source files | 50 TypeScript modules |
+| Test files | 73 Vitest files |
 | Lines of code | 13,381 TypeScript LOC (src/) |
 | Languages supported | 10+ |
 | Generation time | < 60 seconds |
@@ -583,6 +583,7 @@ npm install -g @mermaid-js/mermaid-cli
 | `bootcamp init` | Scaffold a `.bootcamprc.json` config (`--force`, `--print`, `--style`) |
 | `bootcamp styles` | List the built-in style packs and the sections each enables (`--json`) |
 | `bootcamp doctor` | Diagnose your environment (`--json`) |
+| `bootcamp completion <shell>` | Print a shell completion script (bash, zsh, fish) |
 | `bootcamp cache list\|prune\|clear` | Manage the analysis cache |
 
 ## Programmatic API

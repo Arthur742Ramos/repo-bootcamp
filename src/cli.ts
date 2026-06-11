@@ -24,6 +24,7 @@ import { pathToFileURL } from "url";
 import { clearCache, getCacheDir, pruneCache } from "./cache.js";
 import { runAskCommand } from "./commands/ask-command.js";
 import { runCacheList } from "./commands/cache-list.js";
+import { runCompletionCommand } from "./commands/completion-command.js";
 import { runPullRequestDiff } from "./commands/diff-command.js";
 import { runDocsCommand } from "./commands/docs-command.js";
 import { runDoctor } from "./commands/doctor-command.js";
@@ -401,6 +402,13 @@ program
   .action((rawOpts) => {
     const opts = getActionOptions<StylesActionOptions>(rawOpts as Command | StylesActionOptions);
     runStylesCommand({ json: opts.json });
+  });
+
+program
+  .command("completion <shell>")
+  .description("Print a shell completion script (bash, zsh, or fish)")
+  .action((shell: string) => {
+    runCompletionCommand(program, { shell });
   });
 
 const cacheCommand = program
