@@ -14,6 +14,7 @@ import {
 
 function env(overrides: Partial<EnvironmentSnapshot> = {}): EnvironmentSnapshot {
   return {
+    toolVersion: "1.0.0",
     nodeVersion: "v20.11.0",
     platform: "linux",
     arch: "x64",
@@ -49,6 +50,16 @@ describe("evaluateDoctor", () => {
     expect(report.hasWarnings).toBe(false);
     const node = report.checks.find((c) => c.id === "node");
     expect(node?.status).toBe("ok");
+  });
+
+  it("reports the running tool version as an info check", () => {
+    const report = evaluateDoctor(env({ toolVersion: "2.3.4" }));
+    const version = report.checks.find((c) => c.id === "version");
+    expect(version).toBeDefined();
+    expect(version?.status).toBe("info");
+    expect(version?.detail).toBe("v2.3.4");
+    // info checks never fail the overall report
+    expect(report.ok).toBe(true);
   });
 
   it("fails (required) on an old Node version", () => {
@@ -165,6 +176,7 @@ describe("runDoctor", () => {
     expect(payload.ok).toBe(true);
     expect(Array.isArray(payload.checks)).toBe(true);
     expect(payload.environment.nodeVersion).toBe("v20.11.0");
+    expect(payload.environment.toolVersion).toBe("1.0.0");
   });
 });
 

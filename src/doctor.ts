@@ -15,6 +15,7 @@ import { readdir } from "fs/promises";
 import { isMermaidCliAvailable } from "./diagrams.js";
 import { getCacheDir, listCacheEntries } from "./cache.js";
 import { formatBytes } from "./metrics.js";
+import pkg from "../package.json" with { type: "json" };
 
 const execFileAsync = promisify(execFile);
 
@@ -52,6 +53,8 @@ export interface DoctorReport {
 
 /** A pure snapshot of the host environment, consumed by `evaluateDoctor`. */
 export interface EnvironmentSnapshot {
+  /** The running repo-bootcamp package version (from package.json). */
+  toolVersion: string;
   nodeVersion: string;
   platform: string;
   arch: string;
@@ -78,6 +81,15 @@ export function parseNodeMajor(version: string): number {
  */
 export function evaluateDoctor(env: EnvironmentSnapshot): DoctorReport {
   const checks: DoctorCheck[] = [];
+
+  // repo-bootcamp version (info) — surfaced so users can include it in bug reports.
+  checks.push({
+    id: "version",
+    label: "repo-bootcamp",
+    severity: "optional",
+    status: "info",
+    detail: `v${env.toolVersion}`,
+  });
 
   // Node.js (required)
   const major = parseNodeMajor(env.nodeVersion);
@@ -285,6 +297,7 @@ export async function gatherEnvironment(): Promise<EnvironmentSnapshot> {
   }
 
   return {
+    toolVersion: pkg.version,
     nodeVersion: process.version,
     platform: process.platform,
     arch: process.arch,
