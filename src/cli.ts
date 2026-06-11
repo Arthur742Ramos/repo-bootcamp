@@ -345,17 +345,22 @@ program
   .option("--check", "Exit with code 1 if the health score is below --min-score (for CI)")
   .option("--min-score <score>", "Minimum passing score for --check (0-100)", "70")
   .option("--json", "Output the health report as JSON for machine consumption")
-  .option("-m, --max-files <number>", "Maximum files to scan", "500")
+  .option("-m, --max-files <number>", "Maximum files to scan")
   .option("--keep-temp", "Keep temporary clone directory")
   .option("-v, --verbose", "Show detailed output")
   .action(async (repoUrl: string, rawOpts) => {
     const opts = getActionOptions<HealthActionOptions>(rawOpts as Command | HealthActionOptions);
+    // `-b/--branch` and `-m/--max-files` collide with the root command's
+    // options, which can capture them before the subcommand does. Fall back to
+    // reading the raw argv (same approach as `diff --output`).
+    const branch = opts.branch || getCliFlagValue(["--branch", "-b"]) || "";
+    const maxFiles = opts.maxFiles || getCliFlagValue(["--max-files", "-m"]) || "500";
     await runHealthCommand(repoUrl, {
-      branch: opts.branch,
+      branch,
       check: opts.check || false,
       minScore: parseInt(opts.minScore || "70", 10),
       json: opts.json || false,
-      maxFiles: parseInt(opts.maxFiles || "500", 10),
+      maxFiles: parseInt(maxFiles, 10),
       keepTemp: opts.keepTemp || false,
       verbose: opts.verbose || false,
     });

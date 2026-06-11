@@ -105,4 +105,19 @@ describe("health command", () => {
     const passing = await runCli(["health", repoPath, "--check", "--min-score", "0"]);
     expect(passing.exitCode).toBe(0);
   }, 60_000);
+
+  it("honors --max-files (routed past the root option collision)", async () => {
+    const tempDir = await mkdtemp(join(tmpdir(), "bootcamp-health-e2e-"));
+    tempDirs.push(tempDir);
+    const repoPath = await createRepo(tempDir, HEALTHY_FILES);
+
+    const limited = await runCli(["health", repoPath, "--json", "--max-files", "3"]);
+    expect(limited.exitCode).toBe(0);
+    const limitedParsed = JSON.parse(limited.stdout);
+    expect(limitedParsed.filesScanned).toBeLessThanOrEqual(3);
+
+    const full = await runCli(["health", repoPath, "--json"]);
+    const fullParsed = JSON.parse(full.stdout);
+    expect(fullParsed.filesScanned).toBeGreaterThan(3);
+  }, 60_000);
 });

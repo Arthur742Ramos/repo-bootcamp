@@ -43,6 +43,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `bootcamp health` now honors `--branch` and `--max-files`. These short flags (`-b`/`-m`) collide with the root command's options, which captured them before the subcommand could; the command now falls back to reading raw argv (matching the `diff --output` approach). The `--json` output also gained a `filesScanned` field.
 - Reused shared prompt helper builders in `src/agent.ts` for standard/fast prompt construction.
 - Preserved caught error causes in `src/watch.ts` non-fast-forward rethrows.
 - Added missing web middleware dependencies/types (`helmet`, `express-rate-limit`, `@types/helmet`) for type-checking.
