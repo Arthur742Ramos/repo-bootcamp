@@ -182,7 +182,11 @@ test.describe("web UI", () => {
     tempDirs.length = 0;
   });
 
-  test("submits analysis, streams progress, and opens generated files in the browser", async ({ page }) => {
+  test("submits analysis, streams progress, and opens generated files in the browser", async ({ page, context }) => {
+    // The modal Copy button uses navigator.clipboard.writeText; grant the
+    // permission up front so the primary path is exercised (a fallback exists).
+    await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+
     const tempDir = await mkdtemp(join(tmpdir(), "bootcamp-web-ui-e2e-"));
     tempDirs.push(tempDir);
 
@@ -242,6 +246,21 @@ test.describe("web UI", () => {
     await expect(page.locator("#modal")).toHaveClass(/show/);
     await expect(page.locator("#modalTitle")).toHaveText("BOOTCAMP.md");
     await expect(page.locator("#modalContent")).toContainText("fixture-web-ui-repo");
+
+    // Copy button: clicking runs the copy handler and shows transient
+    // confirmation. The "Copied!" label resets after a short timer, so poll for
+    // it (rather than a single check) to avoid racing the reset.
+    await expect(page.locator("#copyBtn")).toHaveText("Copy");
+    await page.locator("#copyBtn").click();
+    await expect(page.locator("#copyBtn")).toHaveText("Copied!");
+    // ...and it returns to the idle label afterwards.
+    await expect(page.locator("#copyBtn")).toHaveText("Copy");
+
+    // Download button: triggers a browser download named after the file.
+    const downloadPromise = page.waitForEvent("download");
+    await page.locator("#downloadBtn").click();
+    const download = await downloadPromise;
+    expect(download.suggestedFilename()).toBe("BOOTCAMP.md");
 
     await page.keyboard.press("Escape");
     await expect(page.locator("#modal")).toBeHidden();

@@ -514,6 +514,8 @@ bootcamp web --port 8080
 # Then open http://localhost:3000 in your browser
 ```
 
+The browser UI streams live progress, then lets you preview each generated file in a modal with one-click **Copy** (to clipboard) and **Download** buttons.
+
 ![Web Dashboard](media/screenshot-web-dashboard.png)
 
 The web interface allows you to analyze repositories interactively through your browser.
