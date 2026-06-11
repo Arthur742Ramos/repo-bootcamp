@@ -34,12 +34,13 @@ function scoreColor(score: number): typeof chalk.green {
   return chalk.red;
 }
 
-function printReport(health: RepoHealth, repoName: string): void {
+function printReport(health: RepoHealth, repoName: string, filesScanned: number): void {
   const emoji = health.score >= 80 ? "🟢" : health.score >= 60 ? "🟡" : "🔴";
   const color = scoreColor(health.score);
 
   console.log(chalk.bold("\n🩺 Repo Health"));
-  console.log(chalk.dim(`Repository: ${repoName}\n`));
+  console.log(chalk.dim(`Repository: ${repoName}`));
+  console.log(chalk.dim(`Scanned ${filesScanned} files\n`));
 
   console.log(`${emoji} ` + color.bold(`${health.score}/100 (Grade: ${health.grade})`));
   console.log(
@@ -92,12 +93,14 @@ export async function runHealthCommand(repoUrl: string, opts: HealthCommandOptio
   try {
     const scan = await scanRepositoryFiles(repoSource.path, opts.maxFiles ?? 500);
     const health = computeRepoHealth(scan);
+    const filesScanned = scan.files.length;
 
     if (opts.json) {
       console.log(
         JSON.stringify(
           {
             repo: repoSource.repoInfo.fullName,
+            filesScanned,
             score: health.score,
             grade: health.grade,
             passCount: health.passCount,
@@ -113,7 +116,7 @@ export async function runHealthCommand(repoUrl: string, opts: HealthCommandOptio
         )
       );
     } else {
-      printReport(health, repoSource.repoInfo.fullName);
+      printReport(health, repoSource.repoInfo.fullName, filesScanned);
     }
 
     if (opts.check && health.score < minScore) {

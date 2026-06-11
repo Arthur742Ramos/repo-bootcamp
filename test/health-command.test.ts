@@ -96,6 +96,7 @@ describe("runHealthCommand", () => {
     const printed = logSpy.mock.calls.map((c) => String(c[0])).join("\n");
     const parsed = JSON.parse(printed);
     expect(parsed.repo).toBe("test/repo");
+    expect(parsed.filesScanned).toBe(0);
     expect(parsed.score).toBe(85);
     expect(parsed.grade).toBe("C");
     expect(Array.isArray(parsed.checks)).toBe(true);
