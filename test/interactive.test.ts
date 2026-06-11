@@ -25,7 +25,13 @@ vi.mock("fs/promises", () => ({
   writeFile: vi.fn(),
 }));
 
-import { InteractiveSession, quickAsk } from "../src/interactive.js";
+import {
+  InteractiveSession,
+  quickAsk,
+  classifyInteractiveInput,
+  renderInteractiveHelp,
+  renderFileList,
+} from "../src/interactive.js";
 import { getRepoTools } from "../src/tools.js";
 import { writeFile } from "fs/promises";
 
@@ -490,5 +496,108 @@ describe("quickAsk", () => {
     expect(mockGetRepoTools).toHaveBeenCalledWith(
       expect.objectContaining({ verbose: true }),
     );
+  });
+});
+
+// eslint-disable-next-line no-control-regex
+const ANSI = /\[[0-9;]*m/g;
+const stripAnsi = (s: string): string => s.replace(ANSI, "");
+
+function scanWith(paths: Array<{ path: string; isDirectory?: boolean }>): ScanResult {
+  return {
+    files: paths.map((p) => ({ path: p.path, size: 1, isDirectory: Boolean(p.isDirectory) })),
+    stack: { languages: [], frameworks: [], buildSystem: "", packageManager: "", hasDocker: false, hasCi: false },
+    commands: [],
+    ciWorkflows: [],
+    readme: null,
+    contributing: null,
+    keySourceFiles: new Map(),
+  } as unknown as ScanResult;
+}
+
+describe("classifyInteractiveInput", () => {
+  it("treats blank input as empty", () => {
+    expect(classifyInteractiveInput("")).toEqual({ kind: "empty" });
+    expect(classifyInteractiveInput("   ")).toEqual({ kind: "empty" });
+  });
+
+  it("recognizes exit/quit (case-insensitive)", () => {
+    expect(classifyInteractiveInput("exit")).toEqual({ kind: "exit" });
+    expect(classifyInteractiveInput("QUIT")).toEqual({ kind: "exit" });
+    expect(classifyInteractiveInput("  Exit  ")).toEqual({ kind: "exit" });
+  });
+
+  it("maps /exit and /quit to exit", () => {
+    expect(classifyInteractiveInput("/exit")).toEqual({ kind: "exit" });
+    expect(classifyInteractiveInput("/quit")).toEqual({ kind: "exit" });
+  });
+
+  it("recognizes known slash commands and their aliases", () => {
+    expect(classifyInteractiveInput("/help")).toEqual({ kind: "command", name: "help", args: "" });
+    expect(classifyInteractiveInput("/?")).toEqual({ kind: "command", name: "help", args: "" });
+    expect(classifyInteractiveInput("/files")).toEqual({ kind: "command", name: "files", args: "" });
+    expect(classifyInteractiveInput("/clear")).toEqual({ kind: "command", name: "clear", args: "" });
+  });
+
+  it("captures trailing args for slash commands", () => {
+    expect(classifyInteractiveInput("/files src")).toEqual({ kind: "command", name: "files", args: "src" });
+  });
+
+  it("is case-insensitive about the command token", () => {
+    expect(classifyInteractiveInput("/HELP")).toEqual({ kind: "command", name: "help", args: "" });
+  });
+
+  it("flags unknown slash commands", () => {
+    expect(classifyInteractiveInput("/bogus")).toEqual({ kind: "unknown-command", name: "/bogus" });
+  });
+
+  it("treats normal text as a question and trims it", () => {
+    expect(classifyInteractiveInput("  How does auth work?  ")).toEqual({
+      kind: "question",
+      text: "How does auth work?",
+    });
+  });
+
+  it("does not treat a question containing a slash as a command", () => {
+    expect(classifyInteractiveInput("what is src/index.ts")).toEqual({
+      kind: "question",
+      text: "what is src/index.ts",
+    });
+  });
+});
+
+describe("renderInteractiveHelp", () => {
+  it("lists every supported command", () => {
+    const help = stripAnsi(renderInteractiveHelp());
+    expect(help).toContain("/help");
+    expect(help).toContain("/files");
+    expect(help).toContain("/clear");
+    expect(help).toContain("/exit");
+  });
+});
+
+describe("renderFileList", () => {
+  it("lists detected files and excludes directories", () => {
+    const out = stripAnsi(renderFileList(scanWith([
+      { path: "src/index.ts" },
+      { path: "src", isDirectory: true },
+      { path: "README.md" },
+    ])));
+    expect(out).toContain("Detected files (2)");
+    expect(out).toContain("src/index.ts");
+    expect(out).toContain("README.md");
+    expect(out).not.toMatch(/^\s+src$/m);
+  });
+
+  it("truncates to the limit and reports the remainder", () => {
+    const files = Array.from({ length: 50 }, (_, i) => ({ path: `f${i}.ts` }));
+    const out = stripAnsi(renderFileList(scanWith(files), 40));
+    expect(out).toContain("Detected files (50)");
+    expect(out).toContain("…and 10 more");
+  });
+
+  it("handles an empty scan", () => {
+    const out = stripAnsi(renderFileList(scanWith([])));
+    expect(out).toContain("No files detected");
   });
 });

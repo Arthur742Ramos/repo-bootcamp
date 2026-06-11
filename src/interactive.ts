@@ -37,6 +37,92 @@ GUIDELINES:
 When citing files, use the format: \`path/to/file.ts:lineNumber\``;
 
 /**
+ * Result of classifying a line of interactive input.
+ *
+ * - `question`: a normal prompt to send to the assistant
+ * - `exit`: the user wants to end the session
+ * - `empty`: blank input, re-prompt without doing anything
+ * - `command`: a recognized slash command (with any trailing args)
+ * - `unknown-command`: a slash command we don't recognize
+ */
+export type InteractiveInput =
+  | { kind: "question"; text: string }
+  | { kind: "exit" }
+  | { kind: "empty" }
+  | { kind: "command"; name: InteractiveCommand; args: string }
+  | { kind: "unknown-command"; name: string };
+
+/** Slash commands supported in interactive mode. */
+export type InteractiveCommand = "help" | "files" | "clear" | "exit";
+
+const SLASH_COMMANDS: Record<string, InteractiveCommand> = {
+  "/help": "help",
+  "/?": "help",
+  "/files": "files",
+  "/clear": "clear",
+  "/exit": "exit",
+  "/quit": "exit",
+};
+
+/**
+ * Classify a raw line of interactive input. Pure and synchronous so it can be
+ * unit-tested without an LLM session.
+ */
+export function classifyInteractiveInput(raw: string): InteractiveInput {
+  const trimmed = raw.trim();
+  if (!trimmed) {
+    return { kind: "empty" };
+  }
+
+  const lower = trimmed.toLowerCase();
+  if (lower === "exit" || lower === "quit") {
+    return { kind: "exit" };
+  }
+
+  if (trimmed.startsWith("/")) {
+    const [token, ...rest] = trimmed.split(/\s+/);
+    const command = SLASH_COMMANDS[token.toLowerCase()];
+    if (!command) {
+      return { kind: "unknown-command", name: token };
+    }
+    if (command === "exit") {
+      return { kind: "exit" };
+    }
+    return { kind: "command", name: command, args: rest.join(" ") };
+  }
+
+  return { kind: "question", text: trimmed };
+}
+
+/** Render the interactive-mode help text (slash command reference). */
+export function renderInteractiveHelp(): string {
+  return [
+    chalk.bold("Commands:"),
+    `  ${chalk.cyan("/help")}   Show this help (alias: /?)`,
+    `  ${chalk.cyan("/files")}  List the key files detected in the repository`,
+    `  ${chalk.cyan("/clear")}  Clear the screen`,
+    `  ${chalk.cyan("/exit")}   End the session (aliases: exit, quit, /quit)`,
+    "",
+    chalk.dim("Anything else is sent to the assistant as a question."),
+  ].join("\n");
+}
+
+/** Render the detected file list for the `/files` command. */
+export function renderFileList(scanResult: ScanResult, limit = 40): string {
+  const files = scanResult.files.filter((f) => !f.isDirectory).map((f) => f.path);
+  if (files.length === 0) {
+    return chalk.dim("No files detected in the scan.");
+  }
+
+  const shown = files.slice(0, limit);
+  const lines = shown.map((path) => `  ${chalk.cyan(path)}`);
+  if (files.length > shown.length) {
+    lines.push(chalk.dim(`  …and ${files.length - shown.length} more`));
+  }
+  return [chalk.bold(`Detected files (${files.length}):`), ...lines].join("\n");
+}
+
+/**
  * Create context message with repo info
  */
 function createContextMessage(
@@ -350,7 +436,7 @@ export async function runInteractiveMode(
 ): Promise<void> {
   console.log(chalk.bold.cyan("\n=== Interactive Mode ==="));
   console.log(chalk.gray(`Repository: ${repoInfo.fullName}`));
-  console.log(chalk.gray("Type your questions about the codebase. Type 'exit' to quit.\n"));
+  console.log(chalk.gray("Type your questions about the codebase. Type '/help' for commands, 'exit' to quit.\n"));
 
   const session = new InteractiveSession(
     repoPath,
@@ -395,21 +481,46 @@ export async function runInteractiveMode(
       promptUser();
 
       for await (const input of rl) {
-        const question = input.trim();
+        const classified = classifyInteractiveInput(input);
 
-        if (!question) {
+        if (classified.kind === "empty") {
           promptUser();
           continue;
         }
 
-        if (question.toLowerCase() === "exit" || question.toLowerCase() === "quit") {
+        if (classified.kind === "exit") {
           console.log(chalk.gray("\nEnding session..."));
           break;
         }
 
+        if (classified.kind === "unknown-command") {
+          console.log(
+            chalk.yellow(`Unknown command: ${classified.name}.`) +
+              chalk.dim(" Type /help for the list of commands.")
+          );
+          promptUser();
+          continue;
+        }
+
+        if (classified.kind === "command") {
+          switch (classified.name) {
+            case "help":
+              console.log("\n" + renderInteractiveHelp() + "\n");
+              break;
+            case "files":
+              console.log("\n" + renderFileList(scanResult) + "\n");
+              break;
+            case "clear":
+              console.clear();
+              break;
+          }
+          promptUser();
+          continue;
+        }
+
         try {
           console.log(chalk.gray("\nAssistant: "));
-          await session.ask(question);
+          await session.ask(classified.text);
           console.log();
         } catch (error: unknown) {
           console.error(chalk.red(`Error: ${(error as Error).message}`));

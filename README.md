@@ -421,6 +421,8 @@ bootcamp https://github.com/owner/repo --interactive
 bootcamp ask https://github.com/owner/repo
 ```
 
+Inside the session, type a question to ask the assistant, or use a slash command: `/help` (command reference), `/files` (list detected files), `/clear` (clear the screen), `/exit` (end the session).
+
 ### Version Comparison
 
 ```bash
