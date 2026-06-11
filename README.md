@@ -146,7 +146,7 @@ Onboarding Risk: 18/100 (A) 🟢
 | Generated files | 14+ |
 | Test suite | 1,000+ tests |
 | Source files | 52 TypeScript modules |
-| Test files | 78 Vitest files |
+| Test files | 79 Vitest files |
 | Lines of code | 13,381 TypeScript LOC (src/) |
 | Languages supported | 10+ |
 | Generation time | < 60 seconds |
