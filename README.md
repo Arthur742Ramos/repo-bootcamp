@@ -48,7 +48,7 @@ Most READMEs are outdated. Most wikis are incomplete. Most senior devs are too b
 npx repo-bootcamp https://github.com/facebook/react
 ```
 
-That's it. You get 12+ interconnected markdown files covering everything a new contributor needs.
+That's it. You get 14+ interconnected markdown files covering everything a new contributor needs.
 
 <div align="center">
 
@@ -134,7 +134,7 @@ Onboarding Risk: 18/100 (A) 🟢
 1. **Powered by GitHub Copilot SDK** - Leverages the official SDK for agentic AI with tool-calling
 2. **Truly Agentic** - Claude autonomously explores codebases, not just template filling
 3. **Schema Validated** - All output is validated with Zod schemas and auto-retried on failures
-4. **Production Ready** - 985 tests, TypeScript, proper error handling
+4. **Production Ready** - 1,000+ tests, TypeScript, proper error handling
 5. **Full Feature Set** - Interactive mode, web UI, docs drift analyzer, cache management, version diffing
 6. **Beautiful Output** - Mermaid diagrams, structured markdown, professional formatting
 
@@ -143,11 +143,11 @@ Onboarding Risk: 18/100 (A) 🟢
 | Metric | Value |
 |--------|-------|
 | GitHub stars | 29 |
-| Generated files | 12+ |
-| Test suite | 985 tests |
-| Source files | 41 TypeScript modules |
-| Test files | 60 Vitest files |
-| Lines of code | 11,627 TypeScript LOC (src/) |
+| Generated files | 14+ |
+| Test suite | 1,000+ tests |
+| Source files | 47 TypeScript modules |
+| Test files | 67 Vitest files |
+| Lines of code | 13,381 TypeScript LOC (src/) |
 | Languages supported | 10+ |
 | Generation time | < 60 seconds |
 
@@ -240,7 +240,7 @@ The Copilot SDK transforms what would be a simple template-filler into an intell
 - **Agentic Analysis** - Claude autonomously reads files, searches code, and understands architecture
 - **Streaming LLM Output** - Streams assistant deltas live to terminal output (verbose) or progress callbacks
 - **Multi-host Repository Support** - Works with GitHub, GitLab, and Bitbucket repository URLs
-- **Complete Documentation Suite** - Generates 12+ interconnected markdown files
+- **Complete Documentation Suite** - Generates 14+ interconnected markdown files
 - **Smart Prioritization** - Intelligently samples files based on importance and byte budget
 - **Fast File Walking** - Uses concurrent `fast-glob` traversal while honoring skip directories and file limits
 - **Schema Validation** - Validates LLM output with auto-retry on failures
@@ -745,7 +745,7 @@ npm run build
 npm run lint
 npm run typecheck
 
-# Run tests (985 tests)
+# Run tests (1,000+ tests)
 npm test
 
 # Check formatting (or apply it)
@@ -791,7 +791,7 @@ Set `--model` to override.
 - **Runtime:** Node.js 20+
 - **Language:** TypeScript 5.6
 - **AI:** GitHub Copilot SDK with Claude
-- **Testing:** Vitest (985 tests)
+- **Testing:** Vitest (1,000+ tests)
 - **CLI:** Commander.js
 - **Validation:** Zod schemas
 - **Web:** Express 5 with SSE
