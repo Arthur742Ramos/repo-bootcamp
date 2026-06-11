@@ -31,6 +31,7 @@ import { runDoctor } from "./commands/doctor-command.js";
 import { runHealthCommand } from "./commands/health-command.js";
 import { runInitCommand } from "./commands/init-command.js";
 import { runMainCommand } from "./commands/main-command.js";
+import { runMetricsCommand } from "./commands/metrics-command.js";
 import { runStylesCommand } from "./commands/styles-command.js";
 import { STYLE_PACK_NAMES } from "./plugins.js";
 import { resolveOutputFormat } from "./services/config-resolution.js";
@@ -119,6 +120,17 @@ interface StylesActionOptions {
 }
 
 interface HealthActionOptions {
+  [key: string]: unknown;
+  branch?: string;
+  check?: boolean;
+  minScore?: string;
+  json?: boolean;
+  maxFiles?: string;
+  keepTemp?: boolean;
+  verbose?: boolean;
+}
+
+interface MetricsActionOptions {
   [key: string]: unknown;
   branch?: string;
   check?: boolean;
@@ -366,6 +378,34 @@ program
     const branch = opts.branch || getCliFlagValue(["--branch", "-b"]) || "";
     const maxFiles = opts.maxFiles || getCliFlagValue(["--max-files", "-m"]) || "500";
     await runHealthCommand(repoUrl, {
+      branch,
+      check: opts.check || false,
+      minScore: parseInt(opts.minScore || "70", 10),
+      json: opts.json || false,
+      maxFiles: parseInt(maxFiles, 10),
+      keepTemp: opts.keepTemp || false,
+      verbose: opts.verbose || false,
+    });
+  });
+
+program
+  .command("metrics <repo-url>")
+  .description("Report deterministic codebase metrics: languages, size, hotspots, and an approachability score (supports local paths)")
+  .option("-b, --branch <branch>", "Branch to analyze", "")
+  .option("--check", "Exit with code 1 if the approachability score is below --min-score (for CI)")
+  .option("--min-score <score>", "Minimum passing approachability score for --check (0-100)", "70")
+  .option("--json", "Output the metrics report as JSON for machine consumption")
+  .option("-m, --max-files <number>", "Maximum files to scan")
+  .option("--keep-temp", "Keep temporary clone directory")
+  .option("-v, --verbose", "Show detailed output")
+  .action(async (repoUrl: string, rawOpts) => {
+    const opts = getActionOptions<MetricsActionOptions>(rawOpts as Command | MetricsActionOptions);
+    // `-b/--branch` and `-m/--max-files` collide with the root command's
+    // options, which can capture them before the subcommand does. Fall back to
+    // reading the raw argv (same approach as `health` and `diff --output`).
+    const branch = opts.branch || getCliFlagValue(["--branch", "-b"]) || "";
+    const maxFiles = opts.maxFiles || getCliFlagValue(["--max-files", "-m"]) || "500";
+    await runMetricsCommand(repoUrl, {
       branch,
       check: opts.check || false,
       minScore: parseInt(opts.minScore || "70", 10),
