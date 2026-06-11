@@ -54,15 +54,20 @@ export class ProgressTracker {
   private updateInterval: NodeJS.Timeout | null = null;
   private lastMessage: string = "";
   private verbose: boolean;
+  private quiet: boolean;
 
-  constructor(verbose: boolean = false) {
+  constructor(verbose: boolean = false, quiet: boolean = false) {
     this.spinner = ora({
       spinner: "dots",
       color: "cyan",
+      // In quiet mode, never render the spinner; failures/warnings are still
+      // surfaced explicitly (see fail/warn).
+      isSilent: quiet,
     });
     this.startTime = Date.now();
     this.phaseStartTime = Date.now();
     this.verbose = verbose;
+    this.quiet = quiet;
   }
 
   /**
@@ -188,20 +193,32 @@ export class ProgressTracker {
   }
 
   /**
-   * Fail current phase
+   * Fail current phase.
+   *
+   * In quiet mode the spinner is silenced, so the failure is written directly
+   * to stderr — failures must always be visible, even when progress chrome is
+   * suppressed for scripting.
    */
   fail(message: string): void {
     this.stopInterval();
-    this.spinner.fail(message);
+    if (this.quiet) {
+      console.error(chalk.red(`✖ ${message}`));
+    } else {
+      this.spinner.fail(message);
+    }
     this.currentPhase = null;
   }
 
   /**
-   * Warn on current phase
+   * Warn on current phase. Surfaced on stderr in quiet mode (see {@link fail}).
    */
   warn(message: string): void {
     this.stopInterval();
-    this.spinner.warn(message);
+    if (this.quiet) {
+      console.error(chalk.yellow(`⚠ ${message}`));
+    } else {
+      this.spinner.warn(message);
+    }
   }
 
   /**

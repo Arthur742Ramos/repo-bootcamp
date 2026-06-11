@@ -199,3 +199,54 @@ describe("createProgressBar - edge cases", () => {
     expect(result).toContain("50%");
   });
 });
+
+describe("ProgressTracker - quiet mode", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("does not write spinner output to stdout for normal phases", () => {
+    const writeSpy = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+    const tracker = new ProgressTracker(false, true);
+
+    tracker.startPhase("clone", "repo");
+    tracker.update("working");
+    tracker.succeed("done");
+    tracker.stop();
+
+    expect(writeSpy).not.toHaveBeenCalled();
+  });
+
+  it("still surfaces failures on stderr when quiet", () => {
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const tracker = new ProgressTracker(false, true);
+
+    tracker.startPhase("scan");
+    tracker.fail("scan failed");
+    tracker.stop();
+
+    expect(errorSpy).toHaveBeenCalledTimes(1);
+    expect(errorSpy.mock.calls[0][0]).toContain("scan failed");
+  });
+
+  it("still surfaces warnings on stderr when quiet", () => {
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const tracker = new ProgressTracker(false, true);
+
+    tracker.startPhase("cleanup");
+    tracker.warn("could not clean up");
+    tracker.stop();
+
+    expect(errorSpy).toHaveBeenCalledTimes(1);
+    expect(errorSpy.mock.calls[0][0]).toContain("could not clean up");
+  });
+
+  it("preserves tool-call bookkeeping in quiet mode", () => {
+    const tracker = new ProgressTracker(false, true);
+    tracker.startPhase("analyze");
+    tracker.recordToolCall("read_file");
+    tracker.recordToolCall("search");
+    expect(tracker.getToolCallCount()).toBe(2);
+    tracker.stop();
+  });
+});

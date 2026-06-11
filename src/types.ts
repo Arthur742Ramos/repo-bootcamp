@@ -15,6 +15,8 @@ export interface BootcampOptions {
   /** When true, the main command expects a local repository path input instead of cloning. */
   noClone: boolean;
   verbose: boolean;
+  /** When true, suppress decorative output (banner, phase overview, spinners, file tree) for scripting/CI. */
+  quiet?: boolean;
   model?: string;
   keepTemp?: boolean;
   jsonOnly?: boolean;

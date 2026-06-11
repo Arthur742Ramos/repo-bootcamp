@@ -217,4 +217,106 @@ describe("runMainCommand --no-clone behavior", () => {
     expect(scanRepositoryFiles).toHaveBeenCalledWith(repoPath, BASE_OPTIONS.maxFiles);
     expect(cleanupRepository).not.toHaveBeenCalled();
   });
+
+  it("suppresses banner and decorative output in quiet mode, printing the output dir", async () => {
+    const repoPath = await createLocalFixtureRepo();
+    const outputDir = join(repoPath, "bootcamp-output");
+    const facts = makeFacts();
+    const scanResult = makeScanResult();
+
+    vi.resetModules();
+    const scanRepositoryFiles = vi.fn().mockResolvedValue(scanResult);
+    const orchestrateAnalysis = vi.fn().mockResolvedValue({
+      facts,
+      analysisStats: {
+        model: "mock-model",
+        toolCalls: [],
+        totalEvents: 0,
+        responseLength: 0,
+        startTime: Date.now(),
+        endTime: Date.now(),
+      },
+      durationMs: 1,
+      toolCalls: 0,
+      model: "mock-model",
+    });
+    const prepareOutputDocuments = vi.fn().mockResolvedValue({
+      documents: [{ name: "repo_facts.json", content: JSON.stringify(facts, null, 2) }],
+      facts,
+      security: { score: 95 },
+      radar: { onboardingRisk: { score: 10, grade: "A", factors: [] } },
+      deps: null,
+      metrics: { approachability: { score: 90, grade: "A" }, totalFiles: 1, sourceFiles: 1 },
+      health: { score: 90, grade: "A", passCount: 1, warnCount: 0, failCount: 0 },
+    });
+    const writeGeneratedOutputs = vi.fn().mockResolvedValue({ documentCount: 1 });
+    const resolveRunConfiguration = vi.fn().mockResolvedValue({
+      config: null,
+      styleConfig: {
+        name: "oss",
+        description: "mock style",
+        tone: "casual",
+        sectionDepth: "standard",
+        emoji: true,
+        sections: {
+          showRunbook: true,
+          showSecurityDetails: true,
+          showDependencyGraph: true,
+          showRadar: true,
+          showImpact: true,
+          showMetrics: true,
+          showHealth: true,
+        },
+        badges: { style: "shields" },
+        firstTasksCount: 8,
+        introText: "mock",
+      },
+      outputFormat: "markdown",
+    });
+
+    vi.doMock("../src/services/clone-service.js", () => ({
+      cloneRepository: vi.fn(),
+      cleanupRepository: vi.fn(),
+      scanRepositoryFiles,
+    }));
+    vi.doMock("../src/services/analysis-orchestration.js", () => ({
+      orchestrateAnalysis,
+      prepareOutputDocuments,
+    }));
+    vi.doMock("../src/services/output-writer.js", () => ({ writeGeneratedOutputs }));
+    vi.doMock("../src/services/config-resolution.js", () => ({ resolveRunConfiguration }));
+
+    const { runMainCommand } = await import("../src/commands/main-command.js");
+    const exitSpy = vi.spyOn(process, "exit").mockImplementation(((code?: number) => {
+      throw new Error(`EXIT_${code ?? 0}`);
+    }) as (code?: number) => never);
+    const logged: string[] = [];
+    const logSpy = vi.spyOn(console, "log").mockImplementation((msg?: unknown) => {
+      logged.push(String(msg ?? ""));
+    });
+
+    try {
+      await expect(
+        runMainCommand(repoPath, {
+          ...BASE_OPTIONS,
+          jsonOnly: false,
+          quiet: true,
+          output: outputDir,
+        }),
+      ).rejects.toThrow("EXIT_0");
+    } finally {
+      exitSpy.mockRestore();
+      logSpy.mockRestore();
+      await rm(repoPath, { recursive: true, force: true });
+    }
+
+    const output = logged.join("\n");
+    // No banner, headers, stack table, success box, or file tree.
+    expect(output).not.toContain("Turn any repo into a Day 1 onboarding kit");
+    expect(output).not.toContain("Detected Stack");
+    expect(output).not.toContain("Bootcamp Generated Successfully");
+    expect(output).not.toContain("Next step");
+    // The output directory is printed so a caller can capture it.
+    expect(logged).toContain(outputDir);
+  });
 });

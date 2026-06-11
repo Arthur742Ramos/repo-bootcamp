@@ -99,36 +99,39 @@ async function generateOutputs({
 }
 
 export async function runMainCommand(repoUrl: string, options: BootcampOptions): Promise<void> {
-  const progress = new ProgressTracker(options.verbose);
+  const quiet = options.quiet === true;
+  const progress = new ProgressTracker(options.verbose, quiet);
   const runStats: Partial<RunStats> = {};
   const startTime = Date.now();
 
   const { config, styleConfig, outputFormat } = await resolveRunConfiguration(options);
 
-  console.log(chalk.cyan(`
+  if (!quiet) {
+    console.log(chalk.cyan(`
   ╦═╗╔═╗╔═╗╔═╗  ╔╗ ╔═╗╔═╗╔╦╗╔═╗╔═╗╔╦╗╔═╗
   ╠╦╝║╣ ╠═╝║ ║  ╠╩╗║ ║║ ║ ║ ║  ╠═╣║║║╠═╝
-  ╩╚═╚═╝╩  ╚═╝  ╚═╝╚═╝╚═╝ ╩ ╚═╝╩ ╩╩ ╩╩  
+  ╩╚═╚═╝╩  ╚═╝  ╚═╝╚═╝╚═╝ ╩ ╚═╝╩ ╩╩ ╩╩
   `));
-  console.log(chalk.white.bold("  Turn any repo into a Day 1 onboarding kit\n"));
+    console.log(chalk.white.bold("  Turn any repo into a Day 1 onboarding kit\n"));
 
-  console.log(chalk.dim("─".repeat(50)));
-  console.log(chalk.white(`  Repository:  ${chalk.cyan(repoUrl)}`));
-  console.log(chalk.white(`  Branch:      ${chalk.cyan(options.branch || "default")}`));
-  console.log(chalk.white(`  Focus:       ${chalk.cyan(options.focus)}`));
-  console.log(chalk.white(`  Audience:    ${chalk.cyan(options.audience)}`));
-  console.log(chalk.white(`  Style:       ${chalk.cyan(styleConfig.name)}`));
-  console.log(chalk.white(`  Format:      ${chalk.cyan(outputFormat)}`));
-  if (options.model) {
-    console.log(chalk.white(`  Model:       ${chalk.cyan(options.model)}`));
-  }
-  if (options.compare) {
-    console.log(chalk.white(`  Compare:     ${chalk.cyan(options.compare)}`));
-  }
-  console.log(chalk.dim("─".repeat(50)));
-  console.log();
+    console.log(chalk.dim("─".repeat(50)));
+    console.log(chalk.white(`  Repository:  ${chalk.cyan(repoUrl)}`));
+    console.log(chalk.white(`  Branch:      ${chalk.cyan(options.branch || "default")}`));
+    console.log(chalk.white(`  Focus:       ${chalk.cyan(options.focus)}`));
+    console.log(chalk.white(`  Audience:    ${chalk.cyan(options.audience)}`));
+    console.log(chalk.white(`  Style:       ${chalk.cyan(styleConfig.name)}`));
+    console.log(chalk.white(`  Format:      ${chalk.cyan(outputFormat)}`));
+    if (options.model) {
+      console.log(chalk.white(`  Model:       ${chalk.cyan(options.model)}`));
+    }
+    if (options.compare) {
+      console.log(chalk.white(`  Compare:     ${chalk.cyan(options.compare)}`));
+    }
+    console.log(chalk.dim("─".repeat(50)));
+    console.log();
 
-  ProgressTracker.printPhaseOverview();
+    ProgressTracker.printPhaseOverview();
+  }
 
   let repoInfo: RepoInfo;
   let repoSource: RepoSource | null = null;
@@ -143,8 +146,10 @@ export async function runMainCommand(repoUrl: string, options: BootcampOptions):
       repoInfo = parseGitHubUrl(repoUrl);
     }
     const targetLabel = repoSource?.isLocal ? repoSource.path : repoInfo.fullName;
-    console.log(chalk.white(`Target: ${chalk.bold(targetLabel)}`));
-    console.log();
+    if (!quiet) {
+      console.log(chalk.white(`Target: ${chalk.bold(targetLabel)}`));
+      console.log();
+    }
   } catch (error: unknown) {
     console.error(chalk.red(`Failed to resolve repository: ${(error as Error).message}`));
     process.exit(1);
@@ -182,13 +187,15 @@ export async function runMainCommand(repoUrl: string, options: BootcampOptions):
     process.exit(1);
   }
 
-  console.log(chalk.cyan("\nDetected Stack:"));
-  console.log(chalk.white(`  Languages: ${scanResult.stack.languages.join(", ") || "Unknown"}`));
-  console.log(chalk.white(`  Frameworks: ${scanResult.stack.frameworks.join(", ") || "None"}`));
-  console.log(chalk.white(`  Build: ${scanResult.stack.buildSystem || "Unknown"}`));
-  console.log(chalk.white(`  CI: ${scanResult.stack.hasCi ? "Yes" : "No"}`));
-  console.log(chalk.white(`  Docker: ${scanResult.stack.hasDocker ? "Yes" : "No"}`));
-  console.log();
+  if (!quiet) {
+    console.log(chalk.cyan("\nDetected Stack:"));
+    console.log(chalk.white(`  Languages: ${scanResult.stack.languages.join(", ") || "Unknown"}`));
+    console.log(chalk.white(`  Frameworks: ${scanResult.stack.frameworks.join(", ") || "None"}`));
+    console.log(chalk.white(`  Build: ${scanResult.stack.buildSystem || "Unknown"}`));
+    console.log(chalk.white(`  CI: ${scanResult.stack.hasCi ? "Yes" : "No"}`));
+    console.log(chalk.white(`  Docker: ${scanResult.stack.hasDocker ? "Yes" : "No"}`));
+    console.log();
+  }
 
   const analysisStart = Date.now();
   progress.startPhase("analyze");
@@ -250,7 +257,7 @@ export async function runMainCommand(repoUrl: string, options: BootcampOptions):
     runStats.generateTime = Date.now() - generateStart;
     progress.succeed(`Generated ${documentCount} files`);
 
-    if (!options.jsonOnly) {
+    if (!quiet && !options.jsonOnly) {
       const grade = getSecurityGrade(security.score);
       const scoreColor = security.score >= 80 ? chalk.green : security.score >= 60 ? chalk.yellow : chalk.red;
       console.log(chalk.cyan("\nSecurity Score: ") + scoreColor(`${security.score}/100 (${grade})`));
@@ -303,25 +310,35 @@ export async function runMainCommand(repoUrl: string, options: BootcampOptions):
       progress.warn("Could not clean up temporary files");
     }
   } else if (options.interactive && shouldCleanupRepo) {
-    console.log(chalk.gray(`Keeping clone for interactive mode: ${repoPath}`));
+    if (!quiet) console.log(chalk.gray(`Keeping clone for interactive mode: ${repoPath}`));
   } else if (shouldCleanupRepo) {
-    console.log(chalk.gray(`Temporary clone kept at: ${repoPath}`));
+    if (!quiet) console.log(chalk.gray(`Temporary clone kept at: ${repoPath}`));
   } else {
-    console.log(chalk.gray(`Using local repository path: ${repoPath}`));
+    if (!quiet) console.log(chalk.gray(`Using local repository path: ${repoPath}`));
   }
 
   progress.stop();
   runStats.totalTime = Date.now() - startTime;
 
-  console.log();
-  console.log(chalk.green("  ╔══════════════════════════════════════════════════════╗"));
-  console.log(chalk.green("  ║") + chalk.white.bold("        ✓ Bootcamp Generated Successfully!           ") + chalk.green("║"));
-  console.log(chalk.green("  ╚══════════════════════════════════════════════════════╝"));
-  console.log();
-  console.log(chalk.white(`  📁 Output: ${chalk.cyan.bold(outputDir + "/")}`));
-  console.log();
+  if (quiet) {
+    // Minimal, script-friendly completion line. The output directory is the
+    // one piece of information a non-interactive caller needs.
+    if (!options.jsonOnly) {
+      console.log(outputDir);
+    }
+  } else {
+    console.log();
+    console.log(chalk.green("  ╔══════════════════════════════════════════════════════╗"));
+    console.log(chalk.green("  ║") + chalk.white.bold("        ✓ Bootcamp Generated Successfully!           ") + chalk.green("║"));
+    console.log(chalk.green("  ╚══════════════════════════════════════════════════════╝"));
+    console.log();
+  }
+  if (!quiet) {
+    console.log(chalk.white(`  📁 Output: ${chalk.cyan.bold(outputDir + "/")}`));
+    console.log();
+  }
 
-  if (!options.jsonOnly) {
+  if (!quiet && !options.jsonOnly) {
     const formatName = (name: string) => formatDocName(name, outputFormat);
     console.log(chalk.dim("  Generated files:"));
     console.log(chalk.white("  ├── ") + chalk.cyan(formatName("BOOTCAMP.md")) + chalk.dim("      → 1-page overview (start here!)"));
@@ -380,8 +397,10 @@ export async function runMainCommand(repoUrl: string, options: BootcampOptions):
     }
   }
 
-  console.log(chalk.white("  🚀 ") + chalk.white.bold("Next step: ") + chalk.cyan(`open ${outputDir}/${formatDocName("BOOTCAMP.md", outputFormat)}`));
-  console.log();
+  if (!quiet) {
+    console.log(chalk.white("  🚀 ") + chalk.white.bold("Next step: ") + chalk.cyan(`open ${outputDir}/${formatDocName("BOOTCAMP.md", outputFormat)}`));
+    console.log();
+  }
 
   if (options.watch) {
     const watchHandle = startWatch(repoPath, {
@@ -389,7 +408,7 @@ export async function runMainCommand(repoUrl: string, options: BootcampOptions):
       allowHardReset: options.watchForce || false,
       verbose: options.verbose,
       onChangeDetected: async () => {
-        const wp = new ProgressTracker(options.verbose);
+        const wp = new ProgressTracker(options.verbose, quiet);
 
         wp.startPhase("scan", `max ${options.maxFiles} files`);
         const newScan = await scanRepositoryFiles(repoPath, options.maxFiles);

@@ -932,8 +932,10 @@ export async function analyzeRepo(
       );
 
       stats.model = model;
-      console.log(chalk.blue(`\nUsing model: ${model}`));
-      console.log(chalk.yellow(`⚡ Fast mode: no tools, inline file contents\n`));
+      if (!options.quiet) {
+        console.log(chalk.blue(`\nUsing model: ${model}`));
+        console.log(chalk.yellow(`⚡ Fast mode: no tools, inline file contents\n`));
+      }
 
       const prompt = createFastAnalysisPrompt(
         repoPath,
@@ -1029,8 +1031,10 @@ export async function analyzeRepo(
     );
 
     stats.model = model;
-    console.log(chalk.blue(`\nUsing model: ${model}`));
-    console.log(chalk.gray(`Tools available: ${tools.map((t) => t.name).join(", ")}\n`));
+    if (!options.quiet) {
+      console.log(chalk.blue(`\nUsing model: ${model}`));
+      console.log(chalk.gray(`Tools available: ${tools.map((t) => t.name).join(", ")}\n`));
+    }
 
     const prompt = createAnalysisPrompt(
       repoInfo,

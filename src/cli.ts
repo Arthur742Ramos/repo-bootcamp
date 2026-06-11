@@ -55,6 +55,7 @@ interface MainActionOptions {
   clone?: boolean;
   noClone?: boolean;
   verbose?: boolean;
+  quiet?: boolean;
   model?: string;
   keepTemp?: boolean;
   jsonOnly?: boolean;
@@ -199,6 +200,7 @@ program
   .option("--json-only", "Only generate repo_facts.json, skip markdown docs")
   .option("--stats", "Show detailed statistics after generation")
   .option("-v, --verbose", "Show detailed progress including tool calls")
+  .option("-q, --quiet", "Suppress banner, progress, and file tree; print only the output path (for scripting/CI)")
   .option("-i, --interactive", "Start interactive Q&A mode after generation")
   .option("--transcript", "Save interactive session transcript to TRANSCRIPT.md")
   .option("-c, --compare <ref>", "Compare with another git ref (tag, branch, commit)")
@@ -224,6 +226,7 @@ program
       maxFiles: parseInt(opts.maxFiles || "200", 10),
       noClone: isNegativeOptionEnabled(opts, "noClone", "clone"),
       verbose: opts.verbose || false,
+      quiet: opts.quiet || false,
       model: opts.model,
       keepTemp: opts.keepTemp || false,
       jsonOnly: opts.jsonOnly || false,
@@ -251,6 +254,11 @@ program
         maxFiles: getOptionSource(command, "maxFiles"),
       },
     };
+
+    if (options.quiet && options.verbose) {
+      console.error(chalk.red("--quiet and --verbose are mutually exclusive."));
+      process.exit(1);
+    }
 
     if (!["onboarding", "architecture", "contributing", "all"].includes(options.focus)) {
       console.error(chalk.red(`Invalid focus: ${options.focus}`));
