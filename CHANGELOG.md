@@ -43,6 +43,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `bootcamp ask`, `docs`, and `diff` now honor options whose flag names collide with the root command. `ask --branch/--model`, `docs --branch`, and `diff --format/--full-clone/--keep-temp` were captured by the root command and silently ignored; they are now read from raw argv (via shared, tested `getFlagValue`/`hasFlag` helpers in `src/utils.ts`).
 - `bootcamp health` now honors `--branch` and `--max-files`. These short flags (`-b`/`-m`) collide with the root command's options, which captured them before the subcommand could; the command now falls back to reading raw argv (matching the `diff --output` approach). The `--json` output also gained a `filesScanned` field.
 - Reused shared prompt helper builders in `src/agent.ts` for standard/fast prompt construction.
 - Preserved caught error causes in `src/watch.ts` non-fast-forward rethrows.
