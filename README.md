@@ -145,8 +145,8 @@ Onboarding Risk: 18/100 (A) 🟢
 | GitHub stars | 29 |
 | Generated files | 14+ |
 | Test suite | 1,000+ tests |
-| Source files | 51 TypeScript modules |
-| Test files | 76 Vitest files |
+| Source files | 52 TypeScript modules |
+| Test files | 78 Vitest files |
 | Lines of code | 13,381 TypeScript LOC (src/) |
 | Languages supported | 10+ |
 | Generation time | < 60 seconds |
@@ -510,6 +510,22 @@ bootcamp metrics ./my-repo --json
 bootcamp metrics ./my-repo --check --min-score 75
 ```
 
+### Security Analysis
+
+```bash
+# Analyze security patterns, protections, and score a repo
+bootcamp security https://github.com/owner/repo
+
+# Works on local paths too
+bootcamp security ./my-repo
+
+# Machine-readable output (findings, protections, deps, score)
+bootcamp security ./my-repo --json
+
+# CI gate: exit non-zero when the security score is below the minimum (default 70)
+bootcamp security ./my-repo --check --min-score 80
+```
+
 ### Auto-Create GitHub Issues
 
 ```bash
@@ -602,6 +618,7 @@ npm install -g @mermaid-js/mermaid-cli
 | `bootcamp docs <url>` | Analyze documentation drift (`--check`, `--fix`) |
 | `bootcamp health <url>` | Score onboarding-readiness (`--json`, `--check`, `--min-score`) |
 | `bootcamp metrics <url>` | Report codebase metrics & approachability (`--json`, `--check`, `--min-score`) |
+| `bootcamp security <url>` | Analyze security patterns & score (`--json`, `--check`, `--min-score`) |
 | `bootcamp init` | Scaffold a `.bootcamprc.json` config (`--force`, `--print`, `--style`) |
 | `bootcamp styles` | List the built-in style packs and the sections each enables (`--json`) |
 | `bootcamp doctor` | Diagnose your environment (`--json`) |

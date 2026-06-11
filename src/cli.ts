@@ -32,6 +32,7 @@ import { runHealthCommand } from "./commands/health-command.js";
 import { runInitCommand } from "./commands/init-command.js";
 import { runMainCommand } from "./commands/main-command.js";
 import { runMetricsCommand } from "./commands/metrics-command.js";
+import { runSecurityCommand } from "./commands/security-command.js";
 import { runStylesCommand } from "./commands/styles-command.js";
 import { STYLE_PACK_NAMES } from "./plugins.js";
 import { resolveOutputFormat } from "./services/config-resolution.js";
@@ -131,6 +132,17 @@ interface HealthActionOptions {
 }
 
 interface MetricsActionOptions {
+  [key: string]: unknown;
+  branch?: string;
+  check?: boolean;
+  minScore?: string;
+  json?: boolean;
+  maxFiles?: string;
+  keepTemp?: boolean;
+  verbose?: boolean;
+}
+
+interface SecurityActionOptions {
   [key: string]: unknown;
   branch?: string;
   check?: boolean;
@@ -406,6 +418,34 @@ program
     const branch = opts.branch || getCliFlagValue(["--branch", "-b"]) || "";
     const maxFiles = opts.maxFiles || getCliFlagValue(["--max-files", "-m"]) || "500";
     await runMetricsCommand(repoUrl, {
+      branch,
+      check: opts.check || false,
+      minScore: parseInt(opts.minScore || "70", 10),
+      json: opts.json || false,
+      maxFiles: parseInt(maxFiles, 10),
+      keepTemp: opts.keepTemp || false,
+      verbose: opts.verbose || false,
+    });
+  });
+
+program
+  .command("security <repo-url>")
+  .description("Run deterministic security pattern analysis: findings, protections, and a 0-100 score (supports local paths)")
+  .option("-b, --branch <branch>", "Branch to analyze", "")
+  .option("--check", "Exit with code 1 if the security score is below --min-score (for CI)")
+  .option("--min-score <score>", "Minimum passing security score for --check (0-100)", "70")
+  .option("--json", "Output the security report as JSON for machine consumption")
+  .option("-m, --max-files <number>", "Maximum files to scan")
+  .option("--keep-temp", "Keep temporary clone directory")
+  .option("-v, --verbose", "Show detailed output")
+  .action(async (repoUrl: string, rawOpts) => {
+    const opts = getActionOptions<SecurityActionOptions>(rawOpts as Command | SecurityActionOptions);
+    // `-b/--branch` and `-m/--max-files` collide with the root command's
+    // options, which can capture them before the subcommand does. Fall back to
+    // reading the raw argv (same approach as `health`/`metrics`).
+    const branch = opts.branch || getCliFlagValue(["--branch", "-b"]) || "";
+    const maxFiles = opts.maxFiles || getCliFlagValue(["--max-files", "-m"]) || "500";
+    await runSecurityCommand(repoUrl, {
       branch,
       check: opts.check || false,
       minScore: parseInt(opts.minScore || "70", 10),
