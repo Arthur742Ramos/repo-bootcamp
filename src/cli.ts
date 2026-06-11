@@ -35,6 +35,7 @@ import { resolveOutputFormat } from "./services/config-resolution.js";
 import type { OutputFormat } from "./formatter.js";
 import type { BootcampOptions, StylePack } from "./types.js";
 import { startServer } from "./web/server.js";
+import { getFlagValue, hasFlag } from "./utils.js";
 import pkg from "../package.json" with { type: "json" };
 
 const VERSION = pkg.version;
@@ -149,22 +150,11 @@ function getActionOptions<T extends Record<string, unknown>>(opts: Command | T):
 }
 
 function getCliFlagValue(flags: string[]): string | undefined {
-  const args = process.argv.slice(2);
+  return getFlagValue(process.argv.slice(2), flags);
+}
 
-  for (let index = 0; index < args.length; index++) {
-    const arg = args[index];
-    if (flags.includes(arg)) {
-      return args[index + 1];
-    }
-
-    for (const flag of flags) {
-      if (arg.startsWith(`${flag}=`)) {
-        return arg.slice(flag.length + 1);
-      }
-    }
-  }
-
-  return undefined;
+function hasCliFlag(flags: string[]): boolean {
+  return hasFlag(process.argv.slice(2), flags);
 }
 
 function isNegativeOptionEnabled(
@@ -290,8 +280,8 @@ program
   .action(async (repoUrl: string, rawOpts) => {
     const opts = getActionOptions<AskActionOptions>(rawOpts as Command | AskActionOptions);
     await runAskCommand(repoUrl, {
-      branch: opts.branch,
-      model: opts.model,
+      branch: opts.branch || getCliFlagValue(["--branch", "-b"]),
+      model: opts.model || getCliFlagValue(["--model"]),
       noClone: isNegativeOptionEnabled(opts, "noClone", "clone"),
       verbose: opts.verbose,
     });
@@ -301,7 +291,7 @@ program
   .command("diff <repo-pr>")
   .description("Generate onboarding diff for a GitHub PR")
   .option("-o, --output <dir>", "Output directory")
-  .option("--format <format>", "Output format: markdown, html, pdf", "markdown")
+  .option("--format <format>", "Output format: markdown, html, pdf")
   .option("--full-clone", "Perform a full clone instead of shallow clone (slower but includes full history)")
   .option("--keep-temp", "Keep temporary clone directory")
   .option("-v, --verbose", "Show detailed output")
@@ -309,10 +299,10 @@ program
     const opts = getActionOptions<DiffActionOptions>(rawOpts as Command | DiffActionOptions);
     await runPullRequestDiff(repoPr, {
       output: opts.output || getCliFlagValue(["--output", "-o"]),
-      format: opts.format,
-      fullClone: opts.fullClone || false,
-      keepTemp: opts.keepTemp || false,
-      verbose: opts.verbose || false,
+      format: opts.format || getCliFlagValue(["--format"]),
+      fullClone: opts.fullClone || hasCliFlag(["--full-clone"]),
+      keepTemp: opts.keepTemp || hasCliFlag(["--keep-temp"]),
+      verbose: opts.verbose || hasCliFlag(["--verbose", "-v"]),
     });
   });
 
@@ -335,7 +325,12 @@ program
   .option("-v, --verbose", "Show detailed output")
   .action(async (repoUrl: string, rawOpts) => {
     const opts = getActionOptions<DocsActionOptions>(rawOpts as Command | DocsActionOptions);
-    await runDocsCommand(repoUrl, opts);
+    await runDocsCommand(repoUrl, {
+      check: opts.check,
+      fix: opts.fix,
+      branch: opts.branch || getCliFlagValue(["--branch", "-b"]),
+      verbose: opts.verbose || hasCliFlag(["--verbose", "-v"]),
+    });
   });
 
 program

@@ -214,4 +214,46 @@ describe("diff command", () => {
     expect(diffDoc).toContain("Major version bump: 1.0.0 → 2.0.0");
     expect(diffDoc).toContain("Removed export: greet in src/index.ts");
   }, 90_000);
+
+  it("honors --format and --keep-temp routed past root-option collisions", async () => {
+    const tempDir = await mkdtemp(join(tmpdir(), "bootcamp-diff-e2e-"));
+    tempDirs.push(tempDir);
+
+    const { bareRepoPath, baseSha, headSha } = await createDiffFixture(tempDir);
+    const { server, apiBaseUrl } = await startPullRequestApiServer(baseSha, headSha);
+    servers.push(server);
+
+    const outputDir = join(tempDir, "diff-output-html");
+    const bareRepoUrl = pathToFileURL(bareRepoPath).href;
+    const result = await runCli(
+      [
+        "diff",
+        `${FIXTURE_OWNER}/${FIXTURE_REPO}#${PR_NUMBER}`,
+        "--output",
+        outputDir,
+        "--format",
+        "html",
+        "--keep-temp",
+      ],
+      {
+        GIT_CONFIG_COUNT: "1",
+        GIT_CONFIG_KEY_0: `url.${bareRepoUrl}.insteadOf`,
+        GIT_CONFIG_VALUE_0: `https://github.com/${FIXTURE_OWNER}/${FIXTURE_REPO}.git`,
+        REPO_BOOTCAMP_GITHUB_API_BASE_URL: apiBaseUrl,
+      },
+      60_000,
+      tempDir
+    );
+
+    expect(result.exitCode).toBe(0);
+    const plainStdout = stripAnsi(result.stdout);
+    // --format routed correctly -> HTML output file.
+    expect(plainStdout).toMatch(/File:\s+\S+\.html/);
+    // --keep-temp routed correctly -> clone retained.
+    expect(plainStdout).toContain("Temporary clone kept at");
+
+    const htmlDoc = await readFile(join(outputDir, "DIFF.html"), "utf-8");
+    expect(htmlDoc).toContain("<");
+    expect(htmlDoc).toContain("Fixture PR");
+  }, 90_000);
 });

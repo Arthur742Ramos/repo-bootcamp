@@ -50,6 +50,39 @@ export function escapeRegex(str: string): string {
 }
 
 /**
+ * Read the value of a CLI flag directly from a raw argument list.
+ *
+ * Supports both `--flag value` and `--flag=value` forms. This exists to work
+ * around Commander routing options whose flag names collide with the root
+ * command (e.g. `--branch`, `--max-files`, `--style`) to the root rather than
+ * the subcommand. Pure (takes `args`) so it is easy to test.
+ */
+export function getFlagValue(args: string[], flags: string[]): string | undefined {
+  for (let index = 0; index < args.length; index++) {
+    const arg = args[index];
+    if (flags.includes(arg)) {
+      return args[index + 1];
+    }
+    for (const flag of flags) {
+      if (arg.startsWith(`${flag}=`)) {
+        return arg.slice(flag.length + 1);
+      }
+    }
+  }
+  return undefined;
+}
+
+/**
+ * Whether any of the given boolean flags is present in a raw argument list.
+ *
+ * Companion to {@link getFlagValue} for boolean options (e.g. `--full-clone`)
+ * that collide with root-command flags. Pure (takes `args`) for testability.
+ */
+export function hasFlag(args: string[], flags: string[]): boolean {
+  return args.some((arg) => flags.includes(arg) || flags.some((flag) => arg.startsWith(`${flag}=`)));
+}
+
+/**
  * Convert a filesystem path to POSIX form (forward slashes).
  *
  * Use for paths that are surfaced to LLMs, written to JSON outputs,

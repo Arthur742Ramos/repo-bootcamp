@@ -6,7 +6,7 @@ import { describe, it, expect } from "vitest";
 import { mkdtemp, rm, writeFile } from "fs/promises";
 import { join } from "path";
 import { tmpdir } from "os";
-import { SKIP_DIRS, README_NAMES, readFileSafe, escapeRegex } from "../src/utils.js";
+import { SKIP_DIRS, README_NAMES, readFileSafe, escapeRegex, getFlagValue, hasFlag } from "../src/utils.js";
 
 describe("SKIP_DIRS", () => {
   it("is a Set containing common directories to skip", () => {
@@ -101,5 +101,45 @@ describe("escapeRegex", () => {
     const input = ".*+?^${}()|[]\\";
     const expected = "\\.\\*\\+\\?\\^\\$\\{\\}\\(\\)\\|\\[\\]\\\\";
     expect(escapeRegex(input)).toBe(expected);
+  });
+});
+
+describe("getFlagValue", () => {
+  it("reads a value from the `--flag value` form", () => {
+    expect(getFlagValue(["--branch", "dev", "--json"], ["--branch", "-b"])).toBe("dev");
+  });
+
+  it("reads a value from the `--flag=value` form", () => {
+    expect(getFlagValue(["--branch=dev"], ["--branch", "-b"])).toBe("dev");
+  });
+
+  it("matches any of the provided aliases", () => {
+    expect(getFlagValue(["-b", "main"], ["--branch", "-b"])).toBe("main");
+  });
+
+  it("returns undefined when the flag is absent", () => {
+    expect(getFlagValue(["--json"], ["--branch", "-b"])).toBeUndefined();
+  });
+
+  it("returns the first occurrence when repeated", () => {
+    expect(getFlagValue(["--branch", "a", "--branch", "b"], ["--branch"])).toBe("a");
+  });
+});
+
+describe("hasFlag", () => {
+  it("detects a present boolean flag", () => {
+    expect(hasFlag(["--full-clone", "--json"], ["--full-clone"])).toBe(true);
+  });
+
+  it("detects an alias", () => {
+    expect(hasFlag(["-v"], ["--verbose", "-v"])).toBe(true);
+  });
+
+  it("detects the `--flag=value` form", () => {
+    expect(hasFlag(["--keep-temp=true"], ["--keep-temp"])).toBe(true);
+  });
+
+  it("returns false when absent", () => {
+    expect(hasFlag(["--json"], ["--full-clone"])).toBe(false);
   });
 });
