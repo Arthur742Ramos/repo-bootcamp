@@ -108,4 +108,44 @@ describe("ask command", () => {
     expect(transcript).toContain("Where is the main entrypoint?");
     expect(transcript).toContain(expectedAnswer);
   }, 90_000);
+
+  it("handles /help and /files slash commands without invoking the assistant", async () => {
+    const tempDir = await mkdtemp(join(tmpdir(), "bootcamp-ask-e2e-"));
+    tempDirs.push(tempDir);
+
+    const repoPath = await createAskFixtureRepo(tempDir);
+    const responseFile = join(tempDir, "mock-response.txt");
+    await writeFile(responseFile, "Should not be needed for slash commands.", "utf-8");
+
+    const askProcess = spawnCli(
+      ["ask", repoPath, "--no-clone"],
+      {
+        NODE_ENV: "test",
+        REPO_BOOTCAMP_TEST_LLM_RESPONSE_FILE: responseFile,
+      },
+      tempDir
+    );
+    children.push(askProcess);
+
+    await waitForOutput(askProcess.getOutput, "Ready!", 60_000);
+    await new Promise((resolve) => setTimeout(resolve, 200));
+
+    askProcess.child.stdin.write("/help\n");
+    await waitForOutput(askProcess.getOutput, "/files");
+
+    askProcess.child.stdin.write("/files\n");
+    await waitForOutput(askProcess.getOutput, "Detected files");
+
+    askProcess.child.stdin.write("/bogus\n");
+    await waitForOutput(askProcess.getOutput, "Unknown command");
+
+    askProcess.child.stdin.write("/exit\n");
+
+    const [exitCode] = await once(askProcess.child, "close");
+    expect(exitCode).toBe(0);
+
+    const { stdout } = askProcess.getOutput();
+    expect(stdout).toContain("Commands:");
+    expect(stdout).toContain("src/index.ts");
+  }, 90_000);
 });

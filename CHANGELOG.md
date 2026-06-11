@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+### Added
+
+- Interactive Q&A mode (`bootcamp ask` and `--interactive`) now supports **slash commands**: `/help` (alias `/?`) shows the command reference, `/files` lists the detected repository files, `/clear` clears the screen, and `/exit` (aliases `/quit`, `exit`, `quit`) ends the session. Unknown slash commands are reported instead of being sent to the assistant. The input classifier and renderers are pure and unit-tested.
 - `bootcamp metrics <repo-url>` command: a standalone, deterministic codebase-metrics report for any repository (local path or remote URL) without invoking the LLM. Surfaces language breakdown, source/test/doc/config composition, average/median file size, test-to-source ratio, size classification, top-level directory distribution, largest-file hotspots, and an **approachability score (0-100 + A–F grade)** with human-readable drivers. Prints a human-readable report by default, supports `--json` for scripting, and offers a CI gate via `--check`/`--min-score` (exits non-zero when approachability is below the threshold). Reuses the same `computeCodebaseMetrics` engine that powers `METRICS.md` — mirroring the existing `bootcamp health` command.
 - Web demo file viewer now has **Copy** and **Download** buttons: copy a generated doc's contents to the clipboard (async Clipboard API with a `document.execCommand` fallback and a timeout guard) or download it as a file, directly from the preview modal.
 - `bootcamp completion <bash|zsh|fish>` command to print a shell completion script for tab-completing subcommands, their aliases, and option flags. The completion data is derived from the live CLI definition, so it can never drift from the actual command surface; pipe it to your shell's completion directory (or `source <(bootcamp completion bash)`).
