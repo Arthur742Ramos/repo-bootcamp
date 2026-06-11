@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Web demo file viewer now has **Copy** and **Download** buttons: copy a generated doc's contents to the clipboard (async Clipboard API with a `document.execCommand` fallback and a timeout guard) or download it as a file, directly from the preview modal.
 - `bootcamp completion <bash|zsh|fish>` command to print a shell completion script for tab-completing subcommands, their aliases, and option flags. The completion data is derived from the live CLI definition, so it can never drift from the actual command surface; pipe it to your shell's completion directory (or `source <(bootcamp completion bash)`).
 - `--quiet`/`-q` flag for the main `bootcamp <repo-url>` command: suppresses the banner, run header, detected-stack table, progress spinners, score summary, and file-tree listing, printing only the output directory path on stdout so the command composes cleanly in scripts and CI (`OUT=$(bootcamp <url> --quiet)`). Failures and warnings are still written to stderr. Mutually exclusive with `--verbose`.
 - `bootcamp styles` command (alias `style`) to list the built-in style packs and the documentation sections each one enables, so users can choose a `--style` without reading the source. Prints a per-pack summary (tone, depth, emoji, first-task count, enabled sections) plus a section-coverage matrix, flags the default pack (`oss`), and supports `--json` for scripting.
@@ -46,6 +47,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Web demo modal controls (close button, click-outside-to-dismiss) were wired with inline `onclick` handlers that the server's Content-Security-Policy (`script-src-attr 'none'`) silently blocked, so they did nothing. All modal controls now use `addEventListener`, restoring close/dismiss behavior and enabling the new Copy/Download buttons under the same CSP.
 - `bootcamp ask`, `docs`, and `diff` now honor options whose flag names collide with the root command. `ask --branch/--model`, `docs --branch`, and `diff --format/--full-clone/--keep-temp` were captured by the root command and silently ignored; they are now read from raw argv (via shared, tested `getFlagValue`/`hasFlag` helpers in `src/utils.ts`).
 - `bootcamp health` now honors `--branch` and `--max-files`. These short flags (`-b`/`-m`) collide with the root command's options, which captured them before the subcommand could; the command now falls back to reading raw argv (matching the `diff --output` approach). The `--json` output also gained a `filesScanned` field.
 - Reused shared prompt helper builders in `src/agent.ts` for standard/fast prompt construction.

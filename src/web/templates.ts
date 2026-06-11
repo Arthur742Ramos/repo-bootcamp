@@ -127,18 +127,35 @@ export function getIndexHtml(): string {
       border-radius: 8px;
       padding: 2rem;
     }
-    .modal-header { 
-      display: flex; 
-      justify-content: space-between; 
+    .modal-header {
+      display: flex;
+      justify-content: space-between;
       align-items: center;
       margin-bottom: 1rem;
+      gap: 1rem;
     }
-    .close { 
-      background: none; 
-      border: none; 
-      color: #888; 
-      font-size: 2rem; 
+    .modal-actions { display: flex; gap: 0.5rem; align-items: center; }
+    .icon-btn {
+      padding: 0.4rem 0.85rem;
+      border: 1px solid #30363d;
+      border-radius: 6px;
+      background: #161b22;
+      color: #e0e0e0;
+      font-size: 0.85rem;
+      font-weight: 600;
       cursor: pointer;
+      transition: background 0.15s, border-color 0.15s, transform 0.15s;
+    }
+    .icon-btn:hover { background: #21262d; border-color: #00d9ff; transform: none; }
+    .icon-btn:active { transform: scale(0.97); }
+    .icon-btn.copied { border-color: #00ff88; color: #00ff88; }
+    .close {
+      background: none;
+      border: none;
+      color: #888;
+      font-size: 2rem;
+      cursor: pointer;
+      line-height: 1;
     }
     .close:hover { color: #fff; }
     pre { 
@@ -179,12 +196,15 @@ export function getIndexHtml(): string {
     role="dialog"
     aria-modal="true"
     aria-labelledby="modalTitle"
-    onclick="if(event.target===this)closeModal()"
   >
     <div class="modal-content">
       <div class="modal-header">
         <h2 id="modalTitle"></h2>
-        <button class="close" type="button" aria-label="Close file preview" onclick="closeModal()">&times;</button>
+        <div class="modal-actions">
+          <button class="icon-btn" type="button" id="copyBtn">Copy</button>
+          <button class="icon-btn" type="button" id="downloadBtn">Download</button>
+          <button class="close" type="button" id="closeBtn" aria-label="Close file preview">&times;</button>
+        </div>
       </div>
       <pre id="modalContent"></pre>
     </div>
@@ -192,6 +212,7 @@ export function getIndexHtml(): string {
 
   <script>
     let currentJobId = null;
+    let currentFile = null;
 
     const fileDescriptions = {
       'BOOTCAMP': 'One-page overview',
@@ -342,9 +363,67 @@ export function getIndexHtml(): string {
 
     async function viewFile(filename) {
       const content = await fetch('/api/jobs/' + currentJobId + '/files/' + encodeURIComponent(filename)).then(r => r.text());
+      currentFile = { name: filename, content };
       document.getElementById('modalTitle').textContent = filename;
       document.getElementById('modalContent').textContent = content;
+      const copyBtn = document.getElementById('copyBtn');
+      copyBtn.textContent = 'Copy';
+      copyBtn.classList.remove('copied');
       document.getElementById('modal').classList.add('show');
+    }
+
+    function legacyCopy(text) {
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      ta.style.position = 'fixed';
+      ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.select();
+      let ok = false;
+      try { ok = document.execCommand('copy'); } catch (e) { ok = false; }
+      document.body.removeChild(ta);
+      return ok;
+    }
+
+    async function copyFile() {
+      if (!currentFile) return;
+      const btn = document.getElementById('copyBtn');
+      let copied = false;
+      try {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          // The async clipboard API can hang or be denied in some browsers;
+          // race it against a short timeout and fall back to execCommand.
+          await Promise.race([
+            navigator.clipboard.writeText(currentFile.content),
+            new Promise((_, reject) => setTimeout(() => reject(new Error('clipboard timeout')), 1000)),
+          ]);
+          copied = true;
+        } else {
+          copied = legacyCopy(currentFile.content);
+        }
+      } catch (err) {
+        copied = legacyCopy(currentFile.content);
+      }
+
+      btn.textContent = copied ? 'Copied!' : 'Copy failed';
+      btn.classList.toggle('copied', copied);
+      setTimeout(() => {
+        btn.textContent = 'Copy';
+        btn.classList.remove('copied');
+      }, 1500);
+    }
+
+    function downloadFile() {
+      if (!currentFile) return;
+      const blob = new Blob([currentFile.content], { type: 'text/plain;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = currentFile.name;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
     }
 
     function closeModal() {
@@ -360,6 +439,15 @@ export function getIndexHtml(): string {
     document.getElementById('analyzeForm').addEventListener('submit', (event) => {
       event.preventDefault();
       void analyze();
+    });
+
+    // Modal controls are wired here (not via inline onclick) to comply with the
+    // server's Content-Security-Policy, which blocks inline event handlers.
+    document.getElementById('copyBtn').addEventListener('click', () => { void copyFile(); });
+    document.getElementById('downloadBtn').addEventListener('click', downloadFile);
+    document.getElementById('closeBtn').addEventListener('click', closeModal);
+    document.getElementById('modal').addEventListener('click', (event) => {
+      if (event.target === document.getElementById('modal')) closeModal();
     });
 
     document.addEventListener('keydown', (e) => {

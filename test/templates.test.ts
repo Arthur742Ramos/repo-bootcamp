@@ -69,6 +69,23 @@ describe("getIndexHtml", () => {
       expect(html).toContain('id="modalTitle"');
       expect(html).toContain('id="modalContent"');
     });
+
+    it("has copy and download buttons in the modal", () => {
+      const html = getIndexHtml();
+      expect(html).toContain('id="copyBtn"');
+      expect(html).toContain('id="downloadBtn"');
+      expect(html).toContain('id="closeBtn"');
+    });
+
+    it("wires modal controls via addEventListener (no inline onclick, for CSP)", () => {
+      const html = getIndexHtml();
+      // The server sets a CSP that blocks inline event handlers, so the UI must
+      // not rely on onclick attributes anywhere.
+      expect(html).not.toContain("onclick=");
+      expect(html).toContain("getElementById('copyBtn').addEventListener('click'");
+      expect(html).toContain("getElementById('downloadBtn').addEventListener('click'");
+      expect(html).toContain("getElementById('closeBtn').addEventListener('click'");
+    });
   });
 
   describe("inline CSS", () => {
@@ -127,6 +144,32 @@ describe("getIndexHtml", () => {
     it("defines the closeModal function", () => {
       const html = getIndexHtml();
       expect(html).toContain("function closeModal()");
+    });
+
+    it("defines the copyFile and downloadFile functions", () => {
+      const html = getIndexHtml();
+      expect(html).toContain("async function copyFile()");
+      expect(html).toContain("function downloadFile()");
+    });
+
+    it("uses the clipboard API with a fallback for copy", () => {
+      const html = getIndexHtml();
+      expect(html).toContain("navigator.clipboard");
+      expect(html).toContain("function legacyCopy(");
+      expect(html).toContain("document.execCommand('copy')");
+    });
+
+    it("races the async clipboard write against a timeout", () => {
+      const html = getIndexHtml();
+      expect(html).toContain("Promise.race");
+      expect(html).toContain("clipboard timeout");
+    });
+
+    it("creates a Blob download with the file name", () => {
+      const html = getIndexHtml();
+      expect(html).toContain("new Blob(");
+      expect(html).toContain("a.download = currentFile.name");
+      expect(html).toContain("URL.revokeObjectURL");
     });
 
     it("handles Escape key to close modal", () => {
