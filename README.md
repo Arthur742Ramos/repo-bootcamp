@@ -145,8 +145,8 @@ Onboarding Risk: 18/100 (A) 🟢
 | GitHub stars | 29 |
 | Generated files | 14+ |
 | Test suite | 1,000+ tests |
-| Source files | 50 TypeScript modules |
-| Test files | 74 Vitest files |
+| Source files | 51 TypeScript modules |
+| Test files | 76 Vitest files |
 | Lines of code | 13,381 TypeScript LOC (src/) |
 | Languages supported | 10+ |
 | Generation time | < 60 seconds |
@@ -492,6 +492,22 @@ bootcamp health ./my-repo --json
 bootcamp health ./my-repo --check --min-score 80
 ```
 
+### Codebase Metrics
+
+```bash
+# Report languages, size, hotspots, and an approachability score
+bootcamp metrics https://github.com/owner/repo
+
+# Works on local paths too
+bootcamp metrics ./my-repo
+
+# Machine-readable output
+bootcamp metrics ./my-repo --json
+
+# CI gate: exit non-zero when approachability is below the minimum (default 70)
+bootcamp metrics ./my-repo --check --min-score 75
+```
+
 ### Auto-Create GitHub Issues
 
 ```bash
@@ -583,6 +599,7 @@ npm install -g @mermaid-js/mermaid-cli
 | `bootcamp web` | Start local web demo server |
 | `bootcamp docs <url>` | Analyze documentation drift (`--check`, `--fix`) |
 | `bootcamp health <url>` | Score onboarding-readiness (`--json`, `--check`, `--min-score`) |
+| `bootcamp metrics <url>` | Report codebase metrics & approachability (`--json`, `--check`, `--min-score`) |
 | `bootcamp init` | Scaffold a `.bootcamprc.json` config (`--force`, `--print`, `--style`) |
 | `bootcamp styles` | List the built-in style packs and the sections each enables (`--json`) |
 | `bootcamp doctor` | Diagnose your environment (`--json`) |
