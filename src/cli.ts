@@ -120,29 +120,11 @@ interface StylesActionOptions {
   json?: boolean;
 }
 
-interface HealthActionOptions {
-  [key: string]: unknown;
-  branch?: string;
-  check?: boolean;
-  minScore?: string;
-  json?: boolean;
-  maxFiles?: string;
-  keepTemp?: boolean;
-  verbose?: boolean;
-}
-
-interface MetricsActionOptions {
-  [key: string]: unknown;
-  branch?: string;
-  check?: boolean;
-  minScore?: string;
-  json?: boolean;
-  maxFiles?: string;
-  keepTemp?: boolean;
-  verbose?: boolean;
-}
-
-interface SecurityActionOptions {
+/**
+ * Shared option shape for the deterministic, scan-based report commands
+ * (`health`, `metrics`, `security`). They expose an identical flag surface.
+ */
+interface ScanActionOptions {
   [key: string]: unknown;
   branch?: string;
   check?: boolean;
@@ -195,6 +177,63 @@ function isNegativeOptionEnabled(
   positiveKey: string
 ): boolean {
   return opts[negativeKey] === true || opts[positiveKey] === false;
+}
+
+/** Resolved options passed to a scan-command runner. */
+interface ScanRunnerOptions {
+  branch: string;
+  check: boolean;
+  minScore: number;
+  json: boolean;
+  maxFiles: number;
+  keepTemp: boolean;
+  verbose: boolean;
+}
+
+type ScanCommandRunner = (repoUrl: string, options: ScanRunnerOptions) => Promise<void>;
+
+/**
+ * Register one of the deterministic, scan-based report commands (`health`,
+ * `metrics`, `security`). They share an identical flag surface and option
+ * plumbing — including the raw-argv fallback for `-b/--branch` and
+ * `-m/--max-files`, which collide with the root command's options — so this
+ * helper keeps the three registrations in lock-step and DRY.
+ */
+function registerScanCommand(config: {
+  name: string;
+  description: string;
+  checkHelp: string;
+  minScoreHelp: string;
+  jsonHelp: string;
+  run: ScanCommandRunner;
+}): void {
+  program
+    .command(`${config.name} <repo-url>`)
+    .description(config.description)
+    .option("-b, --branch <branch>", "Branch to analyze", "")
+    .option("--check", config.checkHelp)
+    .option("--min-score <score>", config.minScoreHelp, "70")
+    .option("--json", config.jsonHelp)
+    .option("-m, --max-files <number>", "Maximum files to scan")
+    .option("--keep-temp", "Keep temporary clone directory")
+    .option("-v, --verbose", "Show detailed output")
+    .action(async (repoUrl: string, rawOpts) => {
+      const opts = getActionOptions<ScanActionOptions>(rawOpts as Command | ScanActionOptions);
+      // `-b/--branch` and `-m/--max-files` collide with the root command's
+      // options, which can capture them before the subcommand does. Fall back
+      // to reading the raw argv (same approach as `diff --output`).
+      const branch = opts.branch || getCliFlagValue(["--branch", "-b"]) || "";
+      const maxFiles = opts.maxFiles || getCliFlagValue(["--max-files", "-m"]) || "500";
+      await config.run(repoUrl, {
+        branch,
+        check: opts.check || false,
+        minScore: parseInt(opts.minScore || "70", 10),
+        json: opts.json || false,
+        maxFiles: parseInt(maxFiles, 10),
+        keepTemp: opts.keepTemp || false,
+        verbose: opts.verbose || false,
+      });
+    });
 }
 
 program
@@ -372,89 +411,35 @@ program
     });
   });
 
-program
-  .command("health <repo-url>")
-  .description("Score a repository's onboarding-readiness: docs, community, quality, and automation (supports local paths)")
-  .option("-b, --branch <branch>", "Branch to analyze", "")
-  .option("--check", "Exit with code 1 if the health score is below --min-score (for CI)")
-  .option("--min-score <score>", "Minimum passing score for --check (0-100)", "70")
-  .option("--json", "Output the health report as JSON for machine consumption")
-  .option("-m, --max-files <number>", "Maximum files to scan")
-  .option("--keep-temp", "Keep temporary clone directory")
-  .option("-v, --verbose", "Show detailed output")
-  .action(async (repoUrl: string, rawOpts) => {
-    const opts = getActionOptions<HealthActionOptions>(rawOpts as Command | HealthActionOptions);
-    // `-b/--branch` and `-m/--max-files` collide with the root command's
-    // options, which can capture them before the subcommand does. Fall back to
-    // reading the raw argv (same approach as `diff --output`).
-    const branch = opts.branch || getCliFlagValue(["--branch", "-b"]) || "";
-    const maxFiles = opts.maxFiles || getCliFlagValue(["--max-files", "-m"]) || "500";
-    await runHealthCommand(repoUrl, {
-      branch,
-      check: opts.check || false,
-      minScore: parseInt(opts.minScore || "70", 10),
-      json: opts.json || false,
-      maxFiles: parseInt(maxFiles, 10),
-      keepTemp: opts.keepTemp || false,
-      verbose: opts.verbose || false,
-    });
-  });
+registerScanCommand({
+  name: "health",
+  description:
+    "Score a repository's onboarding-readiness: docs, community, quality, and automation (supports local paths)",
+  checkHelp: "Exit with code 1 if the health score is below --min-score (for CI)",
+  minScoreHelp: "Minimum passing score for --check (0-100)",
+  jsonHelp: "Output the health report as JSON for machine consumption",
+  run: runHealthCommand,
+});
 
-program
-  .command("metrics <repo-url>")
-  .description("Report deterministic codebase metrics: languages, size, hotspots, and an approachability score (supports local paths)")
-  .option("-b, --branch <branch>", "Branch to analyze", "")
-  .option("--check", "Exit with code 1 if the approachability score is below --min-score (for CI)")
-  .option("--min-score <score>", "Minimum passing approachability score for --check (0-100)", "70")
-  .option("--json", "Output the metrics report as JSON for machine consumption")
-  .option("-m, --max-files <number>", "Maximum files to scan")
-  .option("--keep-temp", "Keep temporary clone directory")
-  .option("-v, --verbose", "Show detailed output")
-  .action(async (repoUrl: string, rawOpts) => {
-    const opts = getActionOptions<MetricsActionOptions>(rawOpts as Command | MetricsActionOptions);
-    // `-b/--branch` and `-m/--max-files` collide with the root command's
-    // options, which can capture them before the subcommand does. Fall back to
-    // reading the raw argv (same approach as `health` and `diff --output`).
-    const branch = opts.branch || getCliFlagValue(["--branch", "-b"]) || "";
-    const maxFiles = opts.maxFiles || getCliFlagValue(["--max-files", "-m"]) || "500";
-    await runMetricsCommand(repoUrl, {
-      branch,
-      check: opts.check || false,
-      minScore: parseInt(opts.minScore || "70", 10),
-      json: opts.json || false,
-      maxFiles: parseInt(maxFiles, 10),
-      keepTemp: opts.keepTemp || false,
-      verbose: opts.verbose || false,
-    });
-  });
+registerScanCommand({
+  name: "metrics",
+  description:
+    "Report deterministic codebase metrics: languages, size, hotspots, and an approachability score (supports local paths)",
+  checkHelp: "Exit with code 1 if the approachability score is below --min-score (for CI)",
+  minScoreHelp: "Minimum passing approachability score for --check (0-100)",
+  jsonHelp: "Output the metrics report as JSON for machine consumption",
+  run: runMetricsCommand,
+});
 
-program
-  .command("security <repo-url>")
-  .description("Run deterministic security pattern analysis: findings, protections, and a 0-100 score (supports local paths)")
-  .option("-b, --branch <branch>", "Branch to analyze", "")
-  .option("--check", "Exit with code 1 if the security score is below --min-score (for CI)")
-  .option("--min-score <score>", "Minimum passing security score for --check (0-100)", "70")
-  .option("--json", "Output the security report as JSON for machine consumption")
-  .option("-m, --max-files <number>", "Maximum files to scan")
-  .option("--keep-temp", "Keep temporary clone directory")
-  .option("-v, --verbose", "Show detailed output")
-  .action(async (repoUrl: string, rawOpts) => {
-    const opts = getActionOptions<SecurityActionOptions>(rawOpts as Command | SecurityActionOptions);
-    // `-b/--branch` and `-m/--max-files` collide with the root command's
-    // options, which can capture them before the subcommand does. Fall back to
-    // reading the raw argv (same approach as `health`/`metrics`).
-    const branch = opts.branch || getCliFlagValue(["--branch", "-b"]) || "";
-    const maxFiles = opts.maxFiles || getCliFlagValue(["--max-files", "-m"]) || "500";
-    await runSecurityCommand(repoUrl, {
-      branch,
-      check: opts.check || false,
-      minScore: parseInt(opts.minScore || "70", 10),
-      json: opts.json || false,
-      maxFiles: parseInt(maxFiles, 10),
-      keepTemp: opts.keepTemp || false,
-      verbose: opts.verbose || false,
-    });
-  });
+registerScanCommand({
+  name: "security",
+  description:
+    "Run deterministic security pattern analysis: findings, protections, and a 0-100 score (supports local paths)",
+  checkHelp: "Exit with code 1 if the security score is below --min-score (for CI)",
+  minScoreHelp: "Minimum passing security score for --check (0-100)",
+  jsonHelp: "Output the security report as JSON for machine consumption",
+  run: runSecurityCommand,
+});
 
 program
   .command("init")
