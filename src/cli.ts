@@ -30,6 +30,7 @@ import { runDoctor } from "./commands/doctor-command.js";
 import { runHealthCommand } from "./commands/health-command.js";
 import { runInitCommand } from "./commands/init-command.js";
 import { runMainCommand } from "./commands/main-command.js";
+import { runStylesCommand } from "./commands/styles-command.js";
 import { STYLE_PACK_NAMES } from "./plugins.js";
 import { resolveOutputFormat } from "./services/config-resolution.js";
 import type { OutputFormat } from "./formatter.js";
@@ -106,6 +107,11 @@ interface DocsActionOptions {
 }
 
 interface DoctorActionOptions {
+  [key: string]: unknown;
+  json?: boolean;
+}
+
+interface StylesActionOptions {
   [key: string]: unknown;
   json?: boolean;
 }
@@ -385,6 +391,16 @@ program
   .action(async (rawOpts) => {
     const opts = getActionOptions<DoctorActionOptions>(rawOpts as Command | DoctorActionOptions);
     await runDoctor({ json: opts.json });
+  });
+
+program
+  .command("styles")
+  .alias("style")
+  .description("List the built-in style packs and the doc sections each one enables")
+  .option("--json", "Output the style packs as JSON for machine consumption")
+  .action((rawOpts) => {
+    const opts = getActionOptions<StylesActionOptions>(rawOpts as Command | StylesActionOptions);
+    runStylesCommand({ json: opts.json });
   });
 
 const cacheCommand = program
