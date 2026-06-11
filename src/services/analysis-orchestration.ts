@@ -12,6 +12,7 @@ import {
   generateRunbook,
 } from "../generator.js";
 import { generateImpactDocs } from "../impact.js";
+import { computeCodebaseMetrics, generateMetricsDocs, type CodebaseMetrics } from "../metrics.js";
 import { loadPlugins, runPlugins, type BootcampConfig, type StyleConfig } from "../plugins.js";
 import type { FormatterPlugin, OutputTargetPlugin } from "../plugin-api.js";
 import { ProgressTracker } from "../progress.js";
@@ -114,6 +115,7 @@ export interface PrepareOutputDocumentsResult {
   security: SecurityAnalysis;
   radar: TechRadar;
   deps: DependencyAnalysis | null;
+  metrics: CodebaseMetrics;
   outputTargets: OutputTargetPlugin[];
 }
 
@@ -178,6 +180,8 @@ export async function prepareOutputDocuments({
     pluginOutputTargets = pluginOutput.outputTargets ?? [];
   }
 
+  const metrics = computeCodebaseMetrics(scanResult);
+
   const documents: GeneratedDoc[] = [
     { name: "BOOTCAMP.md", content: generateBootcamp(finalFacts, options, styleConfig) },
     { name: "ONBOARDING.md", content: generateOnboarding(finalFacts, options) },
@@ -211,6 +215,13 @@ export async function prepareOutputDocuments({
     documents.push({
       name: "IMPACT.md",
       content: generateImpactDocs(impacts, repoInfo.repo),
+    });
+  }
+
+  if (styleConfig.sections.showMetrics) {
+    documents.push({
+      name: "METRICS.md",
+      content: generateMetricsDocs(metrics, repoInfo.repo),
     });
   }
 
@@ -265,6 +276,7 @@ export async function prepareOutputDocuments({
     security,
     radar,
     deps,
+    metrics,
     outputTargets: pluginOutputTargets,
   };
 }

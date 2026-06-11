@@ -108,6 +108,7 @@ Onboarding Risk: 18/100 (A) 🟢
   ├── SECURITY.md      → Security findings
   ├── RADAR.md         → Tech radar & risk score
   ├── IMPACT.md        → Change impact analysis
+  ├── METRICS.md       → Codebase metrics & hotspots
   ├── diagrams.mmd     → Mermaid diagrams
   └── repo_facts.json  → Structured data
 
@@ -249,6 +250,8 @@ The Copilot SDK transforms what would be a simple template-filler into an intell
 - **Phase-level Cache Management** - Reuses deps/security/impact analysis phases and supports `bootcamp cache list|prune|clear` (with `--json` listing for scripts)
 - **Tech Radar** - Identify modern, stable, legacy, and risky technologies
 - **Change Impact Analysis** - Understand how file changes affect the codebase
+- **Codebase Metrics & Hotspots** - Deterministic `METRICS.md` with language breakdown, largest-file hotspots, test-to-source ratio, and an Approachability score (0-100 + grade)
+- **Environment Doctor** - Diagnose Node, git, GitHub CLI/auth, mermaid-cli, and cache health with `bootcamp doctor` (`--json` for CI)
 - **Version & PR Comparison** - Compare refs with `--compare` or analyze pull requests with `bootcamp diff`
 - **Auto-Issue Creator** - Generate GitHub issues from starter tasks
 - **Web Demo Server** - Beautiful browser UI for analyzing repositories
@@ -348,6 +351,7 @@ Request → Options Merge → Hooks (before) → Fetch → Retry? → Hooks (aft
 | `SECURITY.md` | Security patterns and findings |
 | `RADAR.md` | Tech radar and onboarding risk score |
 | `IMPACT.md` | Change impact analysis for key files |
+| `METRICS.md` | Codebase metrics, hotspots & approachability score |
 | `DIFF.md` | Version comparison (with `--compare`) |
 | `diagrams.mmd` | Mermaid diagram sources |
 | `repo_facts.json` | Structured data for automation |
@@ -446,6 +450,16 @@ bootcamp https://github.com/owner/repo --watch --watch-interval 60
 bootcamp https://github.com/owner/repo --watch --watch-force
 ```
 
+### Environment Doctor
+
+```bash
+# Check Node, git, GitHub CLI/auth, mermaid-cli, and cache health
+bootcamp doctor
+
+# Machine-readable output (exits non-zero if a required check fails)
+bootcamp doctor --json
+```
+
 ### Auto-Create GitHub Issues
 
 ```bash
@@ -532,6 +546,9 @@ npm install -g @mermaid-js/mermaid-cli
 | `bootcamp ask <url>` | Interactive Q&A without full generation |
 | `bootcamp diff <owner/repo#pr>` | Generate onboarding diff for a PR |
 | `bootcamp web` | Start local web demo server |
+| `bootcamp docs <url>` | Analyze documentation drift (`--check`, `--fix`) |
+| `bootcamp doctor` | Diagnose your environment (`--json`) |
+| `bootcamp cache list\|prune\|clear` | Manage the analysis cache |
 
 ## Programmatic API
 

@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `METRICS.md` codebase metrics & hotspots report (flagship): a deterministic, AI-free analysis of language breakdown, source/test/doc/config counts, largest-file hotspots, top-level directory distribution, test-to-source ratio, size classification, and an **Approachability score (0-100 + A–F grade)** with human-readable drivers. Gated by the new `showMetrics` style-pack section (on for all packs except `minimal`) and surfaced in the run summary.
+- `bootcamp doctor` command to diagnose the local environment before a run: checks Node.js (>= 20, required), git (required), GitHub CLI + authentication, a Copilot/GitHub token env var, optional `mermaid-cli`, and analysis-cache health. Supports `--json` for scripting and exits non-zero when a required check fails (CI-friendly).
+- `./metrics` and `./doctor` package subpath exports, plus public re-exports from `src/api.ts` (`computeCodebaseMetrics`, `generateMetricsDocs`, `evaluateDoctor`, `gatherEnvironment`, and related types).
 - `bootcamp cache list` (alias `ls`) subcommand to inspect cached analysis entries, with a human-readable table and `--json` output for scripting. Surfaces repository, phase, SHA, age, size, model, and style, and reports `(legacy)`/`(malformed)` files so users can see disk usage from stray cache files instead of silently hiding them.
 - `bootcamp diff <owner/repo#pr>` command for onboarding-focused PR diffing
 - Developer workflow scripts: `format`, `format:check`, `typecheck`, and `dev:web`

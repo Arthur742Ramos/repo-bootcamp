@@ -56,6 +56,16 @@
       "import": "./dist/deps.js",
       "require": "./dist/cjs/deps.js"
     },
+    "./metrics": {
+      "types": "./dist/metrics.d.ts",
+      "import": "./dist/metrics.js",
+      "require": "./dist/cjs/metrics.js"
+    },
+    "./doctor": {
+      "types": "./dist/doctor.d.ts",
+      "import": "./dist/doctor.js",
+      "require": "./dist/cjs/doctor.js"
+    },
     "./diagrams": {
       "types": "./dist/diagrams.d.ts",
       "import": "./dist/diagrams.js",

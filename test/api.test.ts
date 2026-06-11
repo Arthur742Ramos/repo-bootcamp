@@ -57,6 +57,16 @@ describe("api.ts exports", () => {
       "generateDiagrams",
       "isLocalPath",
       "resolveRepo",
+      "evaluateDoctor",
+      "formatDoctorReport",
+      "gatherEnvironment",
+      "parseNodeMajor",
+      "MIN_NODE_MAJOR",
+      "TOKEN_ENV_VARS",
+      "computeCodebaseMetrics",
+      "generateMetricsDocs",
+      "getApproachabilityGrade",
+      "formatBytes",
     ];
     const runtimeExports = Object.keys(api);
     for (const key of runtimeExports) {

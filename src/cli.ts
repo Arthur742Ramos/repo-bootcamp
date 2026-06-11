@@ -26,6 +26,7 @@ import { runAskCommand } from "./commands/ask-command.js";
 import { runCacheList } from "./commands/cache-list.js";
 import { runPullRequestDiff } from "./commands/diff-command.js";
 import { runDocsCommand } from "./commands/docs-command.js";
+import { runDoctor } from "./commands/doctor-command.js";
 import { runMainCommand } from "./commands/main-command.js";
 import { STYLE_PACK_NAMES } from "./plugins.js";
 import { resolveOutputFormat } from "./services/config-resolution.js";
@@ -99,6 +100,11 @@ interface DocsActionOptions {
   fix?: boolean;
   branch?: string;
   verbose?: boolean;
+}
+
+interface DoctorActionOptions {
+  [key: string]: unknown;
+  json?: boolean;
 }
 
 interface CachePruneActionOptions {
@@ -309,6 +315,15 @@ program
   .action(async (repoUrl: string, rawOpts) => {
     const opts = getActionOptions<DocsActionOptions>(rawOpts as Command | DocsActionOptions);
     await runDocsCommand(repoUrl, opts);
+  });
+
+program
+  .command("doctor")
+  .description("Diagnose your environment for running bootcamp (Node, git, gh, auth, cache)")
+  .option("--json", "Output diagnostics as JSON for machine consumption")
+  .action(async (rawOpts) => {
+    const opts = getActionOptions<DoctorActionOptions>(rawOpts as Command | DoctorActionOptions);
+    await runDoctor({ json: opts.json });
   });
 
 const cacheCommand = program
