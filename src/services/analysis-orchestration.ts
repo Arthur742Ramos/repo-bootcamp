@@ -13,6 +13,7 @@ import {
 } from "../generator.js";
 import { generateImpactDocs } from "../impact.js";
 import { computeCodebaseMetrics, generateMetricsDocs, type CodebaseMetrics } from "../metrics.js";
+import { computeRepoHealth, generateHealthDocs, type RepoHealth } from "../health.js";
 import { loadPlugins, runPlugins, type BootcampConfig, type StyleConfig } from "../plugins.js";
 import type { FormatterPlugin, OutputTargetPlugin } from "../plugin-api.js";
 import { ProgressTracker } from "../progress.js";
@@ -116,6 +117,7 @@ export interface PrepareOutputDocumentsResult {
   radar: TechRadar;
   deps: DependencyAnalysis | null;
   metrics: CodebaseMetrics;
+  health: RepoHealth;
   outputTargets: OutputTargetPlugin[];
 }
 
@@ -181,6 +183,7 @@ export async function prepareOutputDocuments({
   }
 
   const metrics = computeCodebaseMetrics(scanResult);
+  const health = computeRepoHealth(scanResult);
 
   const documents: GeneratedDoc[] = [
     { name: "BOOTCAMP.md", content: generateBootcamp(finalFacts, options, styleConfig) },
@@ -222,6 +225,13 @@ export async function prepareOutputDocuments({
     documents.push({
       name: "METRICS.md",
       content: generateMetricsDocs(metrics, repoInfo.repo),
+    });
+  }
+
+  if (styleConfig.sections.showHealth) {
+    documents.push({
+      name: "HEALTH.md",
+      content: generateHealthDocs(health, repoInfo.repo),
     });
   }
 
@@ -277,6 +287,7 @@ export async function prepareOutputDocuments({
     radar,
     deps,
     metrics,
+    health,
     outputTargets: pluginOutputTargets,
   };
 }

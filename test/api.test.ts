@@ -67,6 +67,9 @@ describe("api.ts exports", () => {
       "generateMetricsDocs",
       "getApproachabilityGrade",
       "formatBytes",
+      "computeRepoHealth",
+      "generateHealthDocs",
+      "getHealthGrade",
     ];
     const runtimeExports = Object.keys(api);
     for (const key of runtimeExports) {

@@ -32,6 +32,15 @@ export {
   type Approachability,
 } from "./metrics.js";
 export {
+  computeRepoHealth,
+  generateHealthDocs,
+  getHealthGrade,
+  type RepoHealth,
+  type HealthCheck,
+  type HealthStatus,
+  type HealthCategory,
+} from "./health.js";
+export {
   generateBootcamp,
   generateOnboarding,
   generateArchitecture,
