@@ -129,6 +129,19 @@ describe("computeCodebaseMetrics", () => {
     expect(m.sourceFiles).toBe(2);
     expect(m.testFiles).toBe(2);
   });
+
+  it("classifies dotfile env files (.env, .env.*) as config", () => {
+    const m = computeCodebaseMetrics(
+      scan([
+        { path: "src/index.ts", size: 1000 },
+        { path: ".env", size: 100 },
+        { path: ".env.local", size: 120 },
+        { path: "config/.env.production", size: 140 },
+      ])
+    );
+    expect(m.configFiles).toBe(3); // .env, .env.local, .env.production
+    expect(m.otherFiles).toBe(0); // none misclassified as "other"
+  });
 });
 
 describe("getApproachabilityGrade", () => {

@@ -11,6 +11,7 @@
 
 import { execFile } from "child_process";
 import { promisify } from "util";
+import { readdir } from "fs/promises";
 import { isMermaidCliAvailable } from "./diagrams.js";
 import { getCacheDir, listCacheEntries } from "./cache.js";
 import { formatBytes } from "./metrics.js";
@@ -265,6 +266,17 @@ export async function gatherEnvironment(): Promise<EnvironmentSnapshot> {
   let cacheTotalBytes = 0;
   let cacheError: string | null = null;
   try {
+    // listCacheEntries() deliberately swallows readdir errors and returns [],
+    // so probe the directory directly to surface permission/read failures.
+    // A missing directory (ENOENT) is fine -- the cache just hasn't been
+    // created yet -- so only non-ENOENT errors are treated as a read failure.
+    try {
+      await readdir(cacheDir);
+    } catch (probeError: unknown) {
+      if ((probeError as NodeJS.ErrnoException).code !== "ENOENT") {
+        throw probeError;
+      }
+    }
     const entries = await listCacheEntries();
     cacheEntryCount = entries.length;
     cacheTotalBytes = entries.reduce((sum, e) => sum + e.sizeBytes, 0);

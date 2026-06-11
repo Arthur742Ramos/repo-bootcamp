@@ -203,6 +203,9 @@ function isConfigFile(path: string): boolean {
   if (CONFIG_EXTS.has(ext)) return true;
   const base = getBasename(path);
   if (CONFIG_BASENAMES.has(base)) return true;
+  // Environment files such as .env, .env.local, .env.production. These have no
+  // detectable extension (the leading dot is at index 0), so handle by basename.
+  if (base === ".env" || base.startsWith(".env.")) return true;
   // Tooling dotfiles such as .eslintrc.js / .eslintrc.cjs
   if (/^\.[a-z]+rc(\.[a-z]+)?$/.test(base)) return true;
   return false;
