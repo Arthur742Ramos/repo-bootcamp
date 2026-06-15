@@ -25,6 +25,7 @@ import { clearCache, getCacheDir, pruneCache } from "./cache.js";
 import { runAskCommand } from "./commands/ask-command.js";
 import { runCacheList } from "./commands/cache-list.js";
 import { runCompletionCommand } from "./commands/completion-command.js";
+import { runDepsCommand } from "./commands/deps-command.js";
 import { runPullRequestDiff } from "./commands/diff-command.js";
 import { runDocsCommand } from "./commands/docs-command.js";
 import { runDoctor } from "./commands/doctor-command.js";
@@ -94,6 +95,15 @@ interface DiffActionOptions {
   output?: string;
   format?: string;
   fullClone?: boolean;
+  keepTemp?: boolean;
+  verbose?: boolean;
+}
+
+interface DepsActionOptions {
+  [key: string]: unknown;
+  branch?: string;
+  json?: boolean;
+  diagram?: boolean;
   keepTemp?: boolean;
   verbose?: boolean;
 }
@@ -451,6 +461,30 @@ registerScanCommand({
   jsonHelp: "Output the security report as JSON for machine consumption",
   run: runSecurityCommand,
 });
+
+program
+  .command("deps <repo-url>")
+  .description(
+    "Report a repository's dependencies grouped by category and ecosystem (npm, Cargo, pip/Poetry, Go) without invoking the LLM (supports local paths)"
+  )
+  .option("-b, --branch <branch>", "Branch to analyze", "")
+  .option("--json", "Output the dependency analysis as JSON for machine consumption")
+  .option("--diagram", "Print the Mermaid dependency graph instead of the human-readable report")
+  .option("--keep-temp", "Keep temporary clone directory")
+  .option("-v, --verbose", "Show detailed output")
+  .action(async (repoUrl: string, rawOpts) => {
+    const opts = getActionOptions<DepsActionOptions>(rawOpts as Command | DepsActionOptions);
+    // `-b/--branch` collides with the root command's option, which can capture
+    // it before the subcommand does — fall back to the raw argv (same approach
+    // as the scan-based report commands).
+    await runDepsCommand(repoUrl, {
+      branch: opts.branch || getCliFlagValue(["--branch", "-b"]) || "",
+      json: opts.json || false,
+      diagram: opts.diagram || false,
+      keepTemp: opts.keepTemp || hasCliFlag(["--keep-temp"]),
+      verbose: opts.verbose || hasCliFlag(["--verbose", "-v"]),
+    });
+  });
 
 program
   .command("init")

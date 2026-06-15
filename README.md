@@ -542,6 +542,24 @@ bootcamp security ./my-repo --json
 bootcamp security ./my-repo --check --min-score 80
 ```
 
+### Dependency Report
+
+```bash
+# Detect the package manager and report dependencies grouped by category
+bootcamp deps https://github.com/owner/repo
+
+# Works on local paths too
+bootcamp deps ./my-repo
+
+# Machine-readable output (counts, categories, full lists)
+bootcamp deps ./my-repo --json
+
+# Emit the Mermaid dependency graph (pipe into a renderer or a Markdown fence)
+bootcamp deps ./my-repo --diagram
+```
+
+Supports npm, Cargo, pip/Poetry, and Go module manifests.
+
 ### Auto-Create GitHub Issues
 
 ```bash
@@ -636,6 +654,7 @@ npm install -g @mermaid-js/mermaid-cli
 | `bootcamp health <url>` | Score onboarding-readiness (`--json`, `--check`, `--min-score`) |
 | `bootcamp metrics <url>` | Report codebase metrics & approachability (`--json`, `--check`, `--min-score`) |
 | `bootcamp security <url>` | Analyze security patterns & score (`--json`, `--check`, `--min-score`) |
+| `bootcamp deps <url>` | Report dependencies by category & ecosystem (`--json`, `--diagram`) |
 | `bootcamp init` | Scaffold a `.bootcamprc.json` config (`--force`, `--print`, `--style`) |
 | `bootcamp styles` | List the built-in style packs and the sections each enables (`--json`) |
 | `bootcamp doctor` | Diagnose your environment (`--json`) |
