@@ -55,6 +55,36 @@ function extractImports(content: string, filePath: string): string[] {
 }
 
 /**
+ * Resolve a Python import (dotted module path) to a file in the scan set.
+ * Handles relative imports (`from .mod import x`, `from ..pkg.mod import x`)
+ * and package-absolute imports (`from pkg.mod import x` / `import pkg.mod`),
+ * probing both `<module>.py` and `<module>/__init__.py`.
+ */
+function resolvePythonImport(
+  importPath: string,
+  fromFile: string,
+  filePathSet: Set<string>
+): string | null {
+  let modulePath: string;
+  if (importPath.startsWith(".")) {
+    const dots = (/^\.+/.exec(importPath) ?? [""])[0].length;
+    const rest = importPath.slice(dots).replace(/\./g, "/");
+    // 1 leading dot = current package; each extra dot = one parent up.
+    let base = dirname(fromFile);
+    for (let i = 1; i < dots; i++) base = dirname(base);
+    modulePath = rest ? join(base, rest) : base;
+  } else {
+    // Package-absolute import — resolve the dotted path from the repo root.
+    modulePath = importPath.replace(/\./g, "/");
+  }
+  modulePath = modulePath.replace(/\\/g, "/").replace(/^\.\//, "");
+  for (const candidate of [`${modulePath}.py`, `${modulePath}/__init__.py`]) {
+    if (filePathSet.has(candidate)) return candidate;
+  }
+  return null;
+}
+
+/**
  * Resolve a relative import to an absolute path
  */
 function resolveImport(
@@ -62,6 +92,11 @@ function resolveImport(
   fromFile: string,
   filePathSet: Set<string>
 ): string | null {
+  // Python uses dotted module paths, not filesystem-relative specifiers.
+  if (fromFile.endsWith(".py")) {
+    return resolvePythonImport(importPath, fromFile, filePathSet);
+  }
+
   // Skip external packages
   if (!importPath.startsWith(".") && !importPath.startsWith("/")) {
     return null;
@@ -201,13 +236,16 @@ export async function buildImportGraph(
  */
 function findRelatedTests(filePath: string, files: FileInfo[]): string[] {
   const fileName = escapeRegex(basename(filePath).replace(/\.[^.]+$/, ""));
-  const fileDir = escapeRegex(dirname(filePath));
+  const dir = dirname(filePath);
+  // Root-level files have dirname ".", which must not become a literal "./"
+  // prefix — fast-glob scan keys carry no "./" prefix.
+  const dirPrefix = dir === "." ? "" : `${escapeRegex(dir)}/`;
 
   const testPatterns = [
     // Same directory with .test/.spec suffix
-    new RegExp(`^${fileDir}/${fileName}\\.(test|spec)\\.[^.]+$`),
+    new RegExp(`^${dirPrefix}${fileName}\\.(test|spec)\\.[^.]+$`),
     // __tests__ directory
-    new RegExp(`^${fileDir}/__tests__/${fileName}\\.[^.]+$`),
+    new RegExp(`^${dirPrefix}__tests__/${fileName}\\.[^.]+$`),
     // test directory at root
     new RegExp(`^test/.*${fileName}.*\\.[^.]+$`),
     new RegExp(`^tests/.*${fileName}.*\\.[^.]+$`),
@@ -232,15 +270,17 @@ function findRelatedDocs(filePath: string, files: FileInfo[]): string[] {
     !f.path.includes("node_modules")
   );
 
-  // Simple heuristic: docs in same directory or docs/ folder with similar names
+  // Heuristic: docs in the same directory, or whose name references this file.
+  // (A blanket "any file under docs/" match would tie every doc to every
+  // target, so it is intentionally excluded.)
+  const fileNameLower = fileName.toLowerCase();
   return docFiles
     .filter(f => {
       const docDir = dirname(f.path);
       const docName = basename(f.path).toLowerCase();
       return (
         docDir === fileDir ||
-        docDir.includes("docs") ||
-        docName.includes(fileName.toLowerCase())
+        (fileNameLower.length > 0 && docName.includes(fileNameLower))
       );
     })
     .map(f => f.path)
