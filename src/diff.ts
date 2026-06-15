@@ -52,7 +52,7 @@ async function getPackageJsonAtRef(
 /**
  * Get list of changed files between two refs
  */
-async function getChangedFiles(
+export async function getChangedFiles(
   repoPath: string,
   baseRef: string,
   headRef: string
@@ -70,8 +70,10 @@ async function getChangedFiles(
 
     for (const line of stdout.trim().split("\n")) {
       if (!line) continue;
-      const [status, ...pathParts] = line.split("\t");
-      const path = pathParts.join("\t");
+      const parts = line.split("\t");
+      const status = parts[0];
+      // Renames/copies emit `R<score>\toldpath\tnewpath`; the new path is last.
+      const path = parts[parts.length - 1];
 
       switch (status[0]) {
         case "A":
