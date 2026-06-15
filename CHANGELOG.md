@@ -49,6 +49,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Structured GitHub issue forms (`bug.yml`, `feature.yml`) and pull request template
 - npm provenance badge and related documentation updates in `README.md`
 
+### Changed
+
+- Refactored the three deterministic scan commands (`health`, `metrics`, `security`) in `src/cli.ts` to register through a single shared `registerScanCommand` helper. They expose an identical flag surface (`--branch`, `--check`, `--min-score`, `--json`, `--max-files`, `--keep-temp`, `--verbose`) and identical option plumbing (including the raw-argv fallback for the `-b`/`-m` root-collision), so a 4th scan command is now a small config object rather than a ~28-line copy-paste. No behavior change — verified by the existing unit and E2E suites.
+
 ### Fixed
 
 - Web demo modal controls (close button, click-outside-to-dismiss) were wired with inline `onclick` handlers that the server's Content-Security-Policy (`script-src-attr 'none'`) silently blocked, so they did nothing. All modal controls now use `addEventListener`, restoring close/dismiss behavior and enabling the new Copy/Download buttons under the same CSP.
