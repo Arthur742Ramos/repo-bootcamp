@@ -14,6 +14,20 @@ const RISKY_SIGNALS: Record<string, string> = radarSignals.risky;
 const STABLE_SIGNALS: Record<string, string> = radarSignals.stable;
 
 /**
+ * Look up a radar signal for a dependency name, matching either an exact key
+ * or a scope key — so a scope stub like `@remix-run` matches `@remix-run/react`,
+ * and a bare key like `trpc` matches the `@trpc/*` scope.
+ */
+function lookupSignal(name: string, signals: Record<string, string>): string | undefined {
+  if (signals[name]) return signals[name];
+  for (const key of Object.keys(signals)) {
+    const scope = key.startsWith("@") ? key : `@${key}`;
+    if (name.startsWith(`${scope}/`)) return signals[key];
+  }
+  return undefined;
+}
+
+/**
  * Analyze dependencies for radar signals
  */
 function analyzeDepSignals(deps: DependencyAnalysis | null): {
@@ -36,30 +50,19 @@ function analyzeDepSignals(deps: DependencyAnalysis | null): {
   for (const dep of allDeps) {
     const name = dep.name;
 
-    if (MODERN_SIGNALS[name]) {
-      result.modern.push({
-        name,
-        category: "modern",
-        reason: MODERN_SIGNALS[name],
-      });
-    } else if (RISKY_SIGNALS[name]) {
-      result.risky.push({
-        name,
-        category: "risky",
-        reason: RISKY_SIGNALS[name],
-      });
-    } else if (LEGACY_SIGNALS[name]) {
-      result.legacy.push({
-        name,
-        category: "legacy",
-        reason: LEGACY_SIGNALS[name],
-      });
-    } else if (STABLE_SIGNALS[name]) {
-      result.stable.push({
-        name,
-        category: "stable",
-        reason: STABLE_SIGNALS[name],
-      });
+    const modern = lookupSignal(name, MODERN_SIGNALS);
+    const risky = lookupSignal(name, RISKY_SIGNALS);
+    const legacy = lookupSignal(name, LEGACY_SIGNALS);
+    const stable = lookupSignal(name, STABLE_SIGNALS);
+
+    if (modern) {
+      result.modern.push({ name, category: "modern", reason: modern });
+    } else if (risky) {
+      result.risky.push({ name, category: "risky", reason: risky });
+    } else if (legacy) {
+      result.legacy.push({ name, category: "legacy", reason: legacy });
+    } else if (stable) {
+      result.stable.push({ name, category: "stable", reason: stable });
     }
   }
 
@@ -96,12 +99,21 @@ function calculateOnboardingRisk(
     factors.push("No CI/CD pipeline detected");
   }
 
-  // Tests
-  const hasTests = files.some(f => 
-    /\.(test|spec)\.(ts|js|tsx|jsx)$/.test(f.path) ||
-    f.path.includes("__tests__") ||
-    f.path.includes("test/")
-  );
+  // Tests — match on path segments (so `tests/` counts and `latest/` does not)
+  // and cover non-JS conventions (Go `*_test.go`, Python `test_*.py`/`*_test.py`).
+  const hasTests = files.some(f => {
+    const segments = f.path.split("/");
+    const inTestDir = segments.some(
+      s => s === "test" || s === "tests" || s === "spec" || s === "specs" || s === "__tests__"
+    );
+    return (
+      inTestDir ||
+      /\.(test|spec)\.[a-z0-9]+$/i.test(f.path) ||
+      /_test\.go$/.test(f.path) ||
+      /(^|\/)test_[^/]+\.py$/.test(f.path) ||
+      /_test\.py$/.test(f.path)
+    );
+  });
   if (!hasTests) {
     risk += 15;
     factors.push("No test files detected");
@@ -187,11 +199,22 @@ export function generateTechRadar(
 
   // Add stack-based signals
   if (stack.languages.includes("TypeScript")) {
-    depSignals.modern.push({
-      name: "TypeScript",
-      category: "modern",
-      reason: "Type-safe JavaScript",
-    });
+    // Avoid listing TypeScript in two rings: a `typescript` dependency is
+    // already categorized (stable) by analyzeDepSignals, so only add the
+    // language-derived signal when nothing else covers it.
+    const alreadyHasTs = [
+      ...depSignals.modern,
+      ...depSignals.stable,
+      ...depSignals.legacy,
+      ...depSignals.risky,
+    ].some(s => s.name.toLowerCase() === "typescript");
+    if (!alreadyHasTs) {
+      depSignals.modern.push({
+        name: "TypeScript",
+        category: "modern",
+        reason: "Type-safe JavaScript",
+      });
+    }
   }
 
   if (stack.hasCi) {
