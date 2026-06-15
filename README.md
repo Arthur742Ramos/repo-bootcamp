@@ -560,6 +560,25 @@ bootcamp deps ./my-repo --diagram
 
 Supports npm, Cargo, pip/Poetry, and Go module manifests.
 
+### Tech Radar & Onboarding Risk
+
+```bash
+# Map the stack onto a modern/stable/legacy/risky radar and score onboarding risk
+bootcamp radar https://github.com/owner/repo
+
+# Works on local paths too
+bootcamp radar ./my-repo
+
+# Machine-readable output (signals + onboarding-risk score, grade, factors)
+bootcamp radar ./my-repo --json
+
+# CI gate: exit non-zero when the onboarding-risk score exceeds the maximum
+bootcamp radar ./my-repo --check --max-risk 40
+```
+
+Onboarding risk is scored 0-100 where **lower is better**, so its gate is
+`--max-risk` (fail above the threshold) rather than `--min-score`.
+
 ### Auto-Create GitHub Issues
 
 ```bash
@@ -655,6 +674,7 @@ npm install -g @mermaid-js/mermaid-cli
 | `bootcamp metrics <url>` | Report codebase metrics & approachability (`--json`, `--check`, `--min-score`) |
 | `bootcamp security <url>` | Analyze security patterns & score (`--json`, `--check`, `--min-score`) |
 | `bootcamp deps <url>` | Report dependencies by category & ecosystem (`--json`, `--diagram`) |
+| `bootcamp radar <url>` | Tech radar + onboarding-risk score (`--json`, `--check`, `--max-risk`) |
 | `bootcamp init` | Scaffold a `.bootcamprc.json` config (`--force`, `--print`, `--style`) |
 | `bootcamp styles` | List the built-in style packs and the sections each enables (`--json`) |
 | `bootcamp doctor` | Diagnose your environment (`--json`) |

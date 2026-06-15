@@ -33,6 +33,7 @@ import { runHealthCommand } from "./commands/health-command.js";
 import { runInitCommand } from "./commands/init-command.js";
 import { runMainCommand } from "./commands/main-command.js";
 import { runMetricsCommand } from "./commands/metrics-command.js";
+import { runRadarCommand } from "./commands/radar-command.js";
 import { runScanCommand } from "./commands/scan-command.js";
 import { runSecurityCommand } from "./commands/security-command.js";
 import { runStylesCommand } from "./commands/styles-command.js";
@@ -104,6 +105,17 @@ interface DepsActionOptions {
   branch?: string;
   json?: boolean;
   diagram?: boolean;
+  keepTemp?: boolean;
+  verbose?: boolean;
+}
+
+interface RadarActionOptions {
+  [key: string]: unknown;
+  branch?: string;
+  check?: boolean;
+  maxRisk?: string;
+  json?: boolean;
+  maxFiles?: string;
   keepTemp?: boolean;
   verbose?: boolean;
 }
@@ -483,6 +495,36 @@ program
       diagram: opts.diagram || false,
       keepTemp: opts.keepTemp || hasCliFlag(["--keep-temp"]),
       verbose: opts.verbose || hasCliFlag(["--verbose", "-v"]),
+    });
+  });
+
+program
+  .command("radar <repo-url>")
+  .description(
+    "Map a repository's tech stack onto a modern/stable/legacy/risky radar and score its onboarding risk (supports local paths)"
+  )
+  .option("-b, --branch <branch>", "Branch to analyze", "")
+  .option("--check", "Exit with code 1 if the onboarding-risk score exceeds --max-risk (for CI)")
+  .option("--max-risk <score>", "Maximum acceptable onboarding-risk score for --check (0-100)", "50")
+  .option("--json", "Output the radar report as JSON for machine consumption")
+  .option("-m, --max-files <number>", "Maximum files to scan")
+  .option("--keep-temp", "Keep temporary clone directory")
+  .option("-v, --verbose", "Show detailed output")
+  .action(async (repoUrl: string, rawOpts) => {
+    const opts = getActionOptions<RadarActionOptions>(rawOpts as Command | RadarActionOptions);
+    // `-b/--branch` and `-m/--max-files` collide with the root command's
+    // options — fall back to the raw argv (same approach as the scan-based
+    // report commands).
+    const branch = opts.branch || getCliFlagValue(["--branch", "-b"]) || "";
+    const maxFiles = opts.maxFiles || getCliFlagValue(["--max-files", "-m"]) || "500";
+    await runRadarCommand(repoUrl, {
+      branch,
+      check: opts.check || false,
+      maxRisk: parseInt(opts.maxRisk || "50", 10),
+      json: opts.json || false,
+      maxFiles: parseInt(maxFiles, 10),
+      keepTemp: opts.keepTemp || false,
+      verbose: opts.verbose || false,
     });
   });
 
