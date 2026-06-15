@@ -30,6 +30,7 @@ import { runPullRequestDiff } from "./commands/diff-command.js";
 import { runDocsCommand } from "./commands/docs-command.js";
 import { runDoctor } from "./commands/doctor-command.js";
 import { runHealthCommand } from "./commands/health-command.js";
+import { runImpactCommand } from "./commands/impact-command.js";
 import { runInitCommand } from "./commands/init-command.js";
 import { runMainCommand } from "./commands/main-command.js";
 import { runMetricsCommand } from "./commands/metrics-command.js";
@@ -115,6 +116,16 @@ interface RadarActionOptions {
   check?: boolean;
   maxRisk?: string;
   json?: boolean;
+  maxFiles?: string;
+  keepTemp?: boolean;
+  verbose?: boolean;
+}
+
+interface ImpactActionOptions {
+  [key: string]: unknown;
+  branch?: string;
+  json?: boolean;
+  top?: string;
   maxFiles?: string;
   keepTemp?: boolean;
   verbose?: boolean;
@@ -522,6 +533,34 @@ program
       check: opts.check || false,
       maxRisk: parseInt(opts.maxRisk || "50", 10),
       json: opts.json || false,
+      maxFiles: parseInt(maxFiles, 10),
+      keepTemp: opts.keepTemp || false,
+      verbose: opts.verbose || false,
+    });
+  });
+
+program
+  .command("impact <repo-url> [file]")
+  .description(
+    "Map change impact (\"blast radius\") from the import graph: the files, tests, and docs a change would affect (supports local paths)"
+  )
+  .option("-b, --branch <branch>", "Branch to analyze", "")
+  .option("--json", "Output the impact analysis as JSON for machine consumption")
+  .option("--top <number>", "How many key files to analyze when no <file> is given", "10")
+  .option("-m, --max-files <number>", "Maximum files to scan")
+  .option("--keep-temp", "Keep temporary clone directory")
+  .option("-v, --verbose", "Show detailed output")
+  .action(async (repoUrl: string, file: string | undefined, rawOpts) => {
+    const opts = getActionOptions<ImpactActionOptions>(rawOpts as Command | ImpactActionOptions);
+    // `-b/--branch` and `-m/--max-files` collide with the root command's
+    // options — fall back to the raw argv (same approach as the other
+    // scan-based report commands).
+    const branch = opts.branch || getCliFlagValue(["--branch", "-b"]) || "";
+    const maxFiles = opts.maxFiles || getCliFlagValue(["--max-files", "-m"]) || "500";
+    await runImpactCommand(repoUrl, file, {
+      branch,
+      json: opts.json || false,
+      top: parseInt(opts.top || "10", 10),
       maxFiles: parseInt(maxFiles, 10),
       keepTemp: opts.keepTemp || false,
       verbose: opts.verbose || false,
