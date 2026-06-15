@@ -60,6 +60,22 @@ function categorizeDependency(name: string): string | null {
 }
 
 /**
+ * Extract a version string from a TOML dependency value, which may be a quoted
+ * scalar (`"1.0"`) or an inline table (`{ version = "1.0", features = [...] }`).
+ */
+function parseTomlVersion(value: string): string {
+  const trimmed = value.trim();
+  if (trimmed.startsWith("{")) {
+    const inline = /version\s*=\s*["']([^"']+)["']/.exec(trimmed);
+    return inline ? inline[1] : "*";
+  }
+  const quoted = /^["']([^"']+)["']/.exec(trimmed);
+  if (quoted) return quoted[1];
+  const token = trimmed.split(/[\s,]/)[0];
+  return token || "*";
+}
+
+/**
  * Extract dependencies from package.json
  */
 async function extractNpmDependencies(repoPath: string): Promise<DependencyAnalysis | null> {
@@ -103,6 +119,19 @@ async function extractNpmDependencies(repoPath: string): Promise<DependencyAnaly
       }
     }
 
+    // Extract optional dependencies (folded into the runtime list, tagged
+    // "optional" — they are installed at runtime when the platform allows).
+    if (pkg.optionalDependencies) {
+      for (const [name, version] of Object.entries(pkg.optionalDependencies)) {
+        runtime.push({ name, version: version as string, type: "optional" });
+        const cat = categorizeDependency(name);
+        if (cat) {
+          if (!categoryMap.has(cat)) categoryMap.set(cat, []);
+          categoryMap.get(cat)!.push(name);
+        }
+      }
+    }
+
     const categories: DependencyCategory[] = Array.from(categoryMap.entries())
       .map(([name, deps]) => ({ name, deps }))
       .sort((a, b) => b.deps.length - a.deps.length);
@@ -115,8 +144,9 @@ async function extractNpmDependencies(repoPath: string): Promise<DependencyAnaly
       peer,
       categories,
     };
-  } catch (err: unknown) {
-    console.debug?.(`npm dep extraction skipped: ${err instanceof Error ? err.message : err}`);
+  } catch {
+    // No package.json (or unparseable) — let the next extractor try. Stay silent
+    // so machine-readable (`--json`) output on non-npm repos is never polluted.
     return null;
   }
 }
@@ -130,36 +160,71 @@ async function extractCargoDependencies(repoPath: string): Promise<DependencyAna
 
     const runtime: Dependency[] = [];
     const dev: Dependency[] = [];
+    // Keyed `${section}:${name}` so a `[dependencies.<crate>]` table can fill in
+    // the version recorded by its header without creating a duplicate entry.
+    const seen = new Map<string, Dependency>();
 
-    // Simple TOML parsing for dependencies
-    const sections = content.split(/\[([^\]]+)\]/);
-    let currentSection = "";
+    const record = (
+      section: "dependencies" | "dev-dependencies",
+      name: string,
+      version: string
+    ): void => {
+      const key = `${section}:${name}`;
+      const existing = seen.get(key);
+      if (existing) {
+        if (version && version !== "*") existing.version = version;
+        return;
+      }
+      const dep: Dependency = {
+        name,
+        version: version || "*",
+        type: section === "dev-dependencies" ? "dev" : "runtime",
+      };
+      seen.set(key, dep);
+      (section === "dev-dependencies" ? dev : runtime).push(dep);
+    };
 
-    for (let i = 0; i < sections.length; i++) {
-      const section = sections[i].trim();
-      if (section === "dependencies" || section === "dev-dependencies") {
-        currentSection = section;
+    let section: "dependencies" | "dev-dependencies" | "" = "";
+    let tableCrate: string | null = null;
+
+    for (const raw of content.split("\n")) {
+      const line = raw.trim();
+      if (!line || line.startsWith("#")) continue;
+
+      const header = /^\[+([^\]]+)\]+$/.exec(line);
+      if (header) {
+        tableCrate = null;
+        const sub = /^(dependencies|dev-dependencies)(?:\.(.+))?$/.exec(header[1].trim());
+        if (sub) {
+          section = sub[1] as "dependencies" | "dev-dependencies";
+          if (sub[2]) {
+            // `[dependencies.<crate>]` detailed table — record the crate now;
+            // its version arrives on a later `version = "..."` line.
+            tableCrate = sub[2];
+            record(section, tableCrate, "*");
+          }
+        } else {
+          // Any other table (`[features]`, `[profile.release]`, `[[bin]]`, …)
+          // clears state so its keys are not parsed as dependencies.
+          section = "";
+        }
         continue;
       }
 
-      if (currentSection && i % 2 === 0) {
-        const lines = section.split("\n");
-        for (const line of lines) {
-          const match = line.match(/^([a-zA-Z0-9_-]+)\s*=\s*["']?([^"'\s]+)/);
-          if (match) {
-            const dep: Dependency = {
-              name: match[1],
-              version: match[2],
-              type: currentSection === "dev-dependencies" ? "dev" : "runtime",
-            };
-            if (currentSection === "dev-dependencies") {
-              dev.push(dep);
-            } else {
-              runtime.push(dep);
-            }
-          }
+      if (!section) continue;
+
+      const kv = /^([A-Za-z0-9_-]+)\s*=\s*(.+)$/.exec(line);
+      if (!kv) continue;
+
+      if (tableCrate) {
+        if (kv[1] === "version") {
+          const v = /["']([^"']+)["']/.exec(kv[2]);
+          record(section, tableCrate, v ? v[1] : "*");
         }
+        continue;
       }
+
+      record(section, kv[1], parseTomlVersion(kv[2]));
     }
 
     if (runtime.length === 0 && dev.length === 0) return null;
@@ -172,8 +237,9 @@ async function extractCargoDependencies(repoPath: string): Promise<DependencyAna
       peer: [],
       categories: [],
     };
-  } catch (err: unknown) {
-    console.debug?.(`Cargo dep extraction skipped: ${err instanceof Error ? err.message : err}`);
+  } catch {
+    // No Cargo.toml (or unparseable) — let the next extractor try. Silent so
+    // `--json` output on non-Cargo repos is never polluted.
     return null;
   }
 }
@@ -204,51 +270,39 @@ async function extractPythonDependencies(repoPath: string): Promise<DependencyAn
 
     if (packageManager === "pip") {
       // Parse requirements.txt
-      const lines = content.split("\n");
-      for (const line of lines) {
-        const trimmed = line.trim();
-        if (!trimmed || trimmed.startsWith("#")) continue;
-        
-        const match = trimmed.match(/^([a-zA-Z0-9_-]+)([=<>!]+)?(.+)?/);
+      for (const rawLine of content.split("\n")) {
+        const trimmed = rawLine.trim();
+        // Skip blanks, comments, and pip option/include lines
+        // (`-r`, `-e`, `-c`, `--hash`, `--index-url`, …).
+        if (!trimmed || trimmed.startsWith("#") || trimmed.startsWith("-")) continue;
+        // Drop inline comments, environment markers, and extras before parsing.
+        const cleaned = trimmed.split(/\s+#/)[0].split(";")[0].trim();
+        const match = cleaned.match(/^([A-Za-z0-9._-]+)(?:\[[^\]]*\])?\s*[=<>!~]*\s*(.*)$/);
         if (match) {
-          runtime.push({
-            name: match[1],
-            version: match[3] || "*",
-            type: "runtime",
-          });
+          const version = (match[2] || "").trim();
+          runtime.push({ name: match[1], version: version || "*", type: "runtime" });
         }
       }
     } else {
-      // Parse pyproject.toml (simplified)
-      const depsMatch = content.match(/\[tool\.poetry\.dependencies\]([\s\S]*?)(?:\[|$)/);
-      if (depsMatch) {
-        const lines = depsMatch[1].split("\n");
-        for (const line of lines) {
-          const match = line.match(/^([a-zA-Z0-9_-]+)\s*=\s*["']?([^"'\n]+)/);
-          if (match && match[1] !== "python") {
-            runtime.push({
-              name: match[1],
-              version: match[2],
-              type: "runtime",
-            });
-          }
+      // Parse pyproject.toml (Poetry). Terminate each section at the next TOML
+      // table header (a `[` at the start of a line) rather than at any `[`,
+      // since values such as `extras = ["d"]` contain brackets mid-line.
+      const parseSection = (body: string, type: "runtime" | "dev", target: Dependency[]): void => {
+        for (const line of body.split("\n")) {
+          const trimmed = line.trim();
+          if (!trimmed || trimmed.startsWith("#")) continue;
+          const match = trimmed.match(/^([A-Za-z0-9._-]+)\s*=\s*(.+)$/);
+          if (!match) continue;
+          if (type === "runtime" && match[1] === "python") continue;
+          target.push({ name: match[1], version: parseTomlVersion(match[2]), type });
         }
-      }
+      };
 
-      const devDepsMatch = content.match(/\[tool\.poetry\.dev-dependencies\]([\s\S]*?)(?:\[|$)/);
-      if (devDepsMatch) {
-        const lines = devDepsMatch[1].split("\n");
-        for (const line of lines) {
-          const match = line.match(/^([a-zA-Z0-9_-]+)\s*=\s*["']?([^"'\n]+)/);
-          if (match) {
-            dev.push({
-              name: match[1],
-              version: match[2],
-              type: "dev",
-            });
-          }
-        }
-      }
+      const depsMatch = content.match(/\[tool\.poetry\.dependencies\]([\s\S]*?)(?:\n\s*\[|$)/);
+      if (depsMatch) parseSection(depsMatch[1], "runtime", runtime);
+
+      const devDepsMatch = content.match(/\[tool\.poetry\.dev-dependencies\]([\s\S]*?)(?:\n\s*\[|$)/);
+      if (devDepsMatch) parseSection(devDepsMatch[1], "dev", dev);
     }
 
     if (runtime.length === 0 && dev.length === 0) return null;
@@ -274,30 +328,25 @@ async function extractGoDependencies(repoPath: string): Promise<DependencyAnalys
     const content = await readFile(join(repoPath, "go.mod"), "utf-8");
 
     const runtime: Dependency[] = [];
-    const requireMatch = content.match(/require\s*\(([\s\S]*?)\)/);
+    const seen = new Set<string>();
+    const add = (name: string, version: string): void => {
+      if (seen.has(name)) return;
+      seen.add(name);
+      runtime.push({ name, version, type: "runtime" });
+    };
 
-    if (requireMatch) {
-      const lines = requireMatch[1].split("\n");
-      for (const line of lines) {
+    // Iterate every `require ( ... )` block — gofmt emits separate blocks for
+    // direct and `// indirect` requirements.
+    for (const block of content.matchAll(/require\s*\(([\s\S]*?)\)/g)) {
+      for (const line of block[1].split("\n")) {
         const match = line.trim().match(/^([^\s]+)\s+(v[^\s]+)/);
-        if (match) {
-          runtime.push({
-            name: match[1],
-            version: match[2],
-            type: "runtime",
-          });
-        }
+        if (match) add(match[1], match[2]);
       }
     }
 
-    // Also check for single-line requires
-    const singleRequires = content.matchAll(/^require\s+([^\s]+)\s+(v[^\s]+)/gm);
-    for (const match of singleRequires) {
-      runtime.push({
-        name: match[1],
-        version: match[2],
-        type: "runtime",
-      });
+    // Single-line requires (`require x v1.2.3`).
+    for (const match of content.matchAll(/^require\s+([^\s]+)\s+(v[^\s]+)/gm)) {
+      add(match[1], match[2]);
     }
 
     if (runtime.length === 0) return null;
