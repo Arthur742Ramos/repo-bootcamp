@@ -56,6 +56,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- `bootcamp scan` now also reports the tech-radar **onboarding-risk** score (0-100, lower is better) in its single-clone dashboard alongside health, metrics, and security — a near-free addition since `scan` already computes the file scan, security analysis, and `package.json` that the radar needs. The top onboarding-risk factor joins the cross-report "Top suggestions", and `onboardingRisk` is included in `--json`. The `--check` gate is unchanged (still the lowest of the three higher-is-better scores; onboarding risk is shown but not gated).
 - Refactored the three deterministic scan commands (`health`, `metrics`, `security`) in `src/cli.ts` to register through a single shared `registerScanCommand` helper. They expose an identical flag surface (`--branch`, `--check`, `--min-score`, `--json`, `--max-files`, `--keep-temp`, `--verbose`) and identical option plumbing (including the raw-argv fallback for the `-b`/`-m` root-collision), so a 4th scan command is now a small config object rather than a ~28-line copy-paste. No behavior change — verified by the existing unit and E2E suites.
 
 ### Fixed

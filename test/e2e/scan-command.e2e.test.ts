@@ -55,6 +55,7 @@ describe("scan command", () => {
     expect(result.stdout).toContain("Health");
     expect(result.stdout).toContain("Metrics");
     expect(result.stdout).toContain("Security");
+    expect(result.stdout).toContain("Onboarding");
   }, 60_000);
 
   it("emits combined JSON with --json", async () => {
@@ -69,11 +70,13 @@ describe("scan command", () => {
     expect(typeof parsed.scores.health.score).toBe("number");
     expect(typeof parsed.scores.metrics.score).toBe("number");
     expect(typeof parsed.scores.security.score).toBe("number");
+    expect(typeof parsed.scores.onboardingRisk.score).toBe("number");
     expect(typeof parsed.scores.lowest).toBe("number");
     // Full per-area reports are embedded.
     expect(parsed.health.checks).toBeDefined();
     expect(parsed.metrics.approachability).toBeDefined();
     expect(parsed.security.headers).toBeDefined();
+    expect(parsed.onboardingRisk.factors).toBeDefined();
   }, 60_000);
 
   it("supports the --check gate on the lowest score", async () => {

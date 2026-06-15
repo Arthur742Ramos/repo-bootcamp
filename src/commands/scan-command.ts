@@ -2,8 +2,10 @@ import chalk from "chalk";
 import { readFile } from "fs/promises";
 import { join } from "path";
 
+import { extractDependencies } from "../deps.js";
 import { computeRepoHealth, type RepoHealth } from "../health.js";
 import { computeCodebaseMetrics, type CodebaseMetrics } from "../metrics.js";
+import { generateTechRadar, getRiskEmoji } from "../radar.js";
 import { resolveRepo, type RepoSource } from "../repo-resolver.js";
 import {
   analyzeSecurityPatterns,
@@ -11,6 +13,7 @@ import {
   type SecurityAnalysis,
 } from "../security.js";
 import { scanRepositoryFiles } from "../services/clone-service.js";
+import type { TechRadar } from "../types.js";
 
 /** Options accepted by the `bootcamp scan` command. */
 export interface ScanCommandOptions {
@@ -78,6 +81,7 @@ function printReport(
   health: RepoHealth,
   metrics: CodebaseMetrics,
   security: SecurityAnalysis,
+  radar: TechRadar,
   repoName: string,
   filesScanned: number
 ): void {
@@ -110,6 +114,12 @@ function printReport(
       `${secFindings} finding${secFindings === 1 ? "" : "s"}`
     )
   );
+  // Onboarding risk is lower-is-better, so it's shown distinctly (not gated).
+  const risk = radar.onboardingRisk;
+  console.log(
+    `  ${getRiskEmoji(risk.grade)} ${chalk.bold("Onboarding")} ` +
+      chalk.dim(`risk ${String(risk.score).padStart(3)}/100 (${risk.grade}) · lower is better`)
+  );
   console.log();
 
   // A few of the highest-impact recommendations across the reports.
@@ -129,6 +139,9 @@ function printReport(
       tips.push(`Metrics: ${negative}`);
     }
   }
+  if (risk.factors.length > 0) {
+    tips.push(`Onboarding: ${risk.factors[0]}`);
+  }
   if (tips.length > 0) {
     console.log(chalk.bold("Top suggestions"));
     for (const tip of tips) {
@@ -139,17 +152,19 @@ function printReport(
 
   console.log(
     chalk.dim("Run ") +
-      chalk.cyan("bootcamp health|metrics|security <repo>") +
+      chalk.cyan("bootcamp health|metrics|security|radar <repo>") +
       chalk.dim(" for the full per-area report.\n")
   );
 }
 
 /**
  * Run the standalone `bootcamp scan` command: clone/resolve the target repo
- * once, then run all three deterministic analyses (health, metrics, security)
- * from that single scan and print a combined dashboard (or `--json`). With
- * `--check`, exits non-zero when the lowest of the three scores is below
- * `--min-score`.
+ * once, then run the deterministic analyses (health, metrics, security, plus a
+ * tech-radar onboarding-risk score) from that single scan and print a combined
+ * dashboard (or `--json`). With `--check`, exits non-zero when the lowest of the
+ * three *higher-is-better* scores (health/metrics/security) is below
+ * `--min-score`; onboarding risk is shown but, being lower-is-better, is not
+ * part of the gate.
  */
 export async function runScanCommand(repoUrl: string, opts: ScanCommandOptions): Promise<void> {
   const minScore = typeof opts.minScore === "number" && Number.isFinite(opts.minScore) ? opts.minScore : 70;
@@ -175,6 +190,15 @@ export async function runScanCommand(repoUrl: string, opts: ScanCommandOptions):
     const health = computeRepoHealth(scan);
     const metrics = computeCodebaseMetrics(scan);
     const security = await analyzeSecurityPatterns(repoSource.path, scan.files, packageJson);
+    const deps = await extractDependencies(repoSource.path);
+    const radar = generateTechRadar(
+      scan.stack,
+      scan.files,
+      deps,
+      security,
+      !!scan.readme,
+      !!scan.contributing
+    );
     const scores = combinedScores(health, metrics, security);
     const filesScanned = scan.files.length;
 
@@ -188,18 +212,20 @@ export async function runScanCommand(repoUrl: string, opts: ScanCommandOptions):
               health: { score: health.score, grade: health.grade },
               metrics: { score: metrics.approachability.score, grade: metrics.approachability.grade },
               security: { score: security.score, grade: getSecurityGrade(security.score) },
+              onboardingRisk: { score: radar.onboardingRisk.score, grade: radar.onboardingRisk.grade },
               lowest: scores.lowest,
             },
             health,
             metrics,
             security,
+            onboardingRisk: radar.onboardingRisk,
           },
           null,
           2
         )
       );
     } else {
-      printReport(health, metrics, security, repoSource.repoInfo.fullName, filesScanned);
+      printReport(health, metrics, security, radar, repoSource.repoInfo.fullName, filesScanned);
     }
 
     if (opts.check && scores.lowest < minScore) {

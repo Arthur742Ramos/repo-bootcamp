@@ -481,18 +481,23 @@ bootcamp init --style corporate --path bootcamp.config.json
 ### Combined Scan
 
 ```bash
-# Clone once, then report health + metrics + security in a single dashboard
+# Clone once, then report health + metrics + security + onboarding risk in one dashboard
 bootcamp scan https://github.com/owner/repo
 
 # Works on local paths too
 bootcamp scan ./my-repo
 
-# Machine-readable output (all three reports plus a score summary)
+# Machine-readable output (all reports plus a score summary)
 bootcamp scan ./my-repo --json
 
 # CI gate: exit non-zero when the lowest of the three scores is below the minimum
 bootcamp scan ./my-repo --check --min-score 70
 ```
+
+The dashboard also includes the tech-radar **onboarding-risk** score (0-100,
+lower is better) alongside health/metrics/security. The `--check` gate stays on
+the lowest of the three higher-is-better scores (onboarding risk is reported but
+not gated, since for it lower is better).
 
 ### Repo Health Check
 
