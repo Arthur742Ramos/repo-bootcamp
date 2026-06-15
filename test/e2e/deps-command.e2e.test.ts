@@ -81,4 +81,20 @@ describe("deps command", () => {
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toContain("graph TD");
   }, 60_000);
+
+  it("emits clean JSON for a non-npm (Cargo) repo without stdout noise", async () => {
+    const tempDir = await mkdtemp(join(tmpdir(), "bootcamp-deps-e2e-"));
+    tempDirs.push(tempDir);
+    const repoPath = await createRepo(tempDir, {
+      "Cargo.toml": '[dependencies]\nserde = { version = "1.0", features = ["derive"] }\n',
+    });
+
+    const result = await runCli(["deps", repoPath, "--json"]);
+    expect(result.exitCode).toBe(0);
+    // The npm extractor runs first and finds no package.json; it must not print
+    // anything to stdout, so the JSON stays parseable.
+    const parsed = JSON.parse(result.stdout);
+    expect(parsed.packageManager).toBe("cargo");
+    expect(parsed.runtime.map((d: { name: string }) => d.name)).toContain("serde");
+  }, 60_000);
 });
