@@ -35,6 +35,7 @@ import { runImpactCommand } from "./commands/impact-command.js";
 import { runInitCommand } from "./commands/init-command.js";
 import { runMainCommand } from "./commands/main-command.js";
 import { runMetricsCommand } from "./commands/metrics-command.js";
+import { runPreflightCommand } from "./commands/preflight-command.js";
 import { runRadarCommand } from "./commands/radar-command.js";
 import { runScanCommand } from "./commands/scan-command.js";
 import { runSecurityCommand } from "./commands/security-command.js";
@@ -138,6 +139,15 @@ interface CouplingActionOptions {
   json?: boolean;
   top?: string;
   maxFiles?: string;
+  keepTemp?: boolean;
+  verbose?: boolean;
+}
+
+interface PreflightActionOptions {
+  [key: string]: unknown;
+  branch?: string;
+  check?: boolean;
+  json?: boolean;
   keepTemp?: boolean;
   verbose?: boolean;
 }
@@ -619,6 +629,27 @@ program
       print: opts.print || false,
       path: opts.path,
       style: opts.style || getCliFlagValue(["--style", "-s"]),
+    });
+  });
+
+program
+  .command("preflight <repo-url>")
+  .description(
+    "Check your machine against the target repo's declared toolchain — Node, package manager, Python, Go (supports local paths)"
+  )
+  .option("-b, --branch <branch>", "Branch to analyze", "")
+  .option("--check", "Exit with code 1 if any declared tool is missing or mismatched (for CI)")
+  .option("--json", "Output the preflight report as JSON for machine consumption")
+  .option("--keep-temp", "Keep temporary clone directory")
+  .option("-v, --verbose", "Show detailed output")
+  .action(async (repoUrl: string, rawOpts) => {
+    const opts = getActionOptions<PreflightActionOptions>(rawOpts as Command | PreflightActionOptions);
+    await runPreflightCommand(repoUrl, {
+      branch: opts.branch || getCliFlagValue(["--branch", "-b"]) || "",
+      check: opts.check || false,
+      json: opts.json || false,
+      keepTemp: opts.keepTemp || hasCliFlag(["--keep-temp"]),
+      verbose: opts.verbose || hasCliFlag(["--verbose", "-v"]),
     });
   });
 

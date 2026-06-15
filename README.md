@@ -619,6 +619,26 @@ best place to start reading), the **orchestrator hubs** (highest fan-out),
 and **possibly-orphaned** modules (isolated in the import graph — candidate
 dead code). Use `--top <n>` to widen each section.
 
+### Preflight ("Can My Machine Build This?")
+
+```bash
+# Check YOUR machine against the target repo's declared toolchain
+bootcamp preflight https://github.com/owner/repo
+
+# Works on local paths too
+bootcamp preflight ./my-repo
+
+# CI gate: exit non-zero if any required tool is missing or mismatched
+bootcamp preflight ./my-repo --check
+```
+
+Reads the repo's declared toolchain — Node (`engines.node`, `.nvmrc`,
+`.node-version`), package manager (`packageManager` / Corepack), Python
+(`requires-python`, `.python-version`), and Go (`go.mod`) — and checks each
+against your local machine with a per-row remedy. Unlike `bootcamp doctor`
+(which checks whether *your* machine can run bootcamp itself), `preflight`
+checks your machine against the *target* repo's requirements.
+
 ### Auto-Create GitHub Issues
 
 ```bash
@@ -717,6 +737,7 @@ npm install -g @mermaid-js/mermaid-cli
 | `bootcamp radar <url>` | Tech radar + onboarding-risk score (`--json`, `--check`, `--max-risk`) |
 | `bootcamp impact <url> [file]` | Change impact / blast radius from the import graph (`--json`, `--top`) |
 | `bootcamp coupling <url>` | Rank modules by import coupling: load-bearing core, hubs, orphans (`--json`, `--top`) |
+| `bootcamp preflight <url>` | Check your machine against the repo's declared toolchain (`--json`, `--check`) |
 | `bootcamp init` | Scaffold a `.bootcamprc.json` config (`--force`, `--print`, `--style`) |
 | `bootcamp styles` | List the built-in style packs and the sections each enables (`--json`) |
 | `bootcamp doctor` | Diagnose your environment (`--json`) |
