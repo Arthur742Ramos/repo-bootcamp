@@ -1,7 +1,7 @@
 {
   "concernPatterns": [
     {
-      "pattern": "eval\\s*\\(",
+      "pattern": "\\beval\\s*\\(",
       "title": "Use of eval()",
       "severity": "high",
       "category": "Code Injection",
@@ -9,7 +9,7 @@
       "recommendation": "Use safer alternatives like JSON.parse() or Function constructor with validation"
     },
     {
-      "pattern": "innerHTML\\s*=",
+      "pattern": "innerHTML\\s*\\+?=(?!=)",
       "title": "Direct innerHTML assignment",
       "severity": "medium",
       "category": "XSS",
@@ -33,7 +33,7 @@
       "recommendation": "Ensure sensitive values are not logged or exposed"
     },
     {
-      "pattern": "\\$\\{.*\\}.*(?:SELECT|INSERT|UPDATE|DELETE)",
+      "pattern": "(?:SELECT|INSERT|UPDATE|DELETE)[^\\n]*\\$\\{|\\$\\{[^\\n]*\\}[^\\n]*(?:SELECT|INSERT|UPDATE|DELETE)",
       "flags": "i",
       "title": "Potential SQL injection",
       "severity": "critical",
@@ -59,7 +59,7 @@
       "recommendation": "Use environment variables or a secrets manager"
     },
     {
-      "pattern": "api[_-]?key\\s*[=:]\\s*['\"][A-Za-z0-9]{20,}['\"]",
+      "pattern": "api[_-]?key\\s*[=:]\\s*['\"][A-Za-z0-9_\\-.+/=]{20,}['\"]",
       "flags": "i",
       "title": "Potential hardcoded API key",
       "severity": "high",
@@ -77,7 +77,7 @@
       "recommendation": "Use environment variables or a secrets manager"
     },
     {
-      "pattern": "disable.*ssl|ssl.*false|verify.*false",
+      "pattern": "rejectUnauthorized\\s*[:=]\\s*false|strictSSL\\s*[:=]\\s*false|(?:ssl|tls)\\w*\\s*[:=]\\s*false|disable[^\\n]*(?:ssl|tls)",
       "flags": "i",
       "title": "SSL verification disabled",
       "severity": "high",

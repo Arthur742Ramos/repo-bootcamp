@@ -168,8 +168,8 @@ export async function analyzeSecurityPatterns(
 
   // Check for env files and gitignore
   const fileNames = files.map(f => f.path);
-  analysis.secretsHandling.envFiles = fileNames.filter(f => 
-    /^\.env(\..+)?$/.test(basename(f)) && !f.includes(".example")
+  analysis.secretsHandling.envFiles = fileNames.filter(f =>
+    /^\.env(\..+)?$/.test(basename(f)) && !/\.(example|sample|template)$/i.test(basename(f))
   );
   analysis.secretsHandling.hasEnvExample = fileNames.some(f => 
     f.includes(".env.example") || f.includes(".env.sample")
