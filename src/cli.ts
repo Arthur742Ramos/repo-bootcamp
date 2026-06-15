@@ -32,6 +32,7 @@ import { runHealthCommand } from "./commands/health-command.js";
 import { runInitCommand } from "./commands/init-command.js";
 import { runMainCommand } from "./commands/main-command.js";
 import { runMetricsCommand } from "./commands/metrics-command.js";
+import { runScanCommand } from "./commands/scan-command.js";
 import { runSecurityCommand } from "./commands/security-command.js";
 import { runStylesCommand } from "./commands/styles-command.js";
 import { STYLE_PACK_NAMES } from "./plugins.js";
@@ -193,11 +194,11 @@ interface ScanRunnerOptions {
 type ScanCommandRunner = (repoUrl: string, options: ScanRunnerOptions) => Promise<void>;
 
 /**
- * Register one of the deterministic, scan-based report commands (`health`,
- * `metrics`, `security`). They share an identical flag surface and option
- * plumbing — including the raw-argv fallback for `-b/--branch` and
+ * Register one of the deterministic, scan-based report commands (`scan`,
+ * `health`, `metrics`, `security`). They share an identical flag surface and
+ * option plumbing — including the raw-argv fallback for `-b/--branch` and
  * `-m/--max-files`, which collide with the root command's options — so this
- * helper keeps the three registrations in lock-step and DRY.
+ * helper keeps the registrations in lock-step and DRY.
  */
 function registerScanCommand(config: {
   name: string;
@@ -410,6 +411,16 @@ program
       verbose: opts.verbose || hasCliFlag(["--verbose", "-v"]),
     });
   });
+
+registerScanCommand({
+  name: "scan",
+  description:
+    "Scan a repository once and report a combined health + metrics + security dashboard, gated on the lowest of the three scores (supports local paths)",
+  checkHelp: "Exit with code 1 if the lowest of the three scores is below --min-score (for CI)",
+  minScoreHelp: "Minimum passing score for --check, applied to the lowest of the three scores (0-100)",
+  jsonHelp: "Output the combined report (all three analyses plus a score summary) as JSON",
+  run: runScanCommand,
+});
 
 registerScanCommand({
   name: "health",
