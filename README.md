@@ -596,6 +596,24 @@ For a specific file it lists what it imports, what imports it, and the
 transitively affected files, tests, and docs. With no file it summarizes
 the top key files (use `--top <n>` to widen).
 
+### Module Coupling ("Where Do I Start Reading?")
+
+```bash
+# Rank modules by import coupling across the whole repo
+bootcamp coupling https://github.com/owner/repo
+
+# Works on local paths too
+bootcamp coupling ./my-repo
+
+# Machine-readable output (core, hubs, orphans with fan-in/fan-out)
+bootcamp coupling ./my-repo --json
+```
+
+Surfaces the **load-bearing core** (modules with the highest fan-in — the
+best place to start reading), the **orchestrator hubs** (highest fan-out),
+and **possibly-orphaned** modules (isolated in the import graph — candidate
+dead code). Use `--top <n>` to widen each section.
+
 ### Auto-Create GitHub Issues
 
 ```bash
@@ -693,6 +711,7 @@ npm install -g @mermaid-js/mermaid-cli
 | `bootcamp deps <url>` | Report dependencies by category & ecosystem (`--json`, `--diagram`) |
 | `bootcamp radar <url>` | Tech radar + onboarding-risk score (`--json`, `--check`, `--max-risk`) |
 | `bootcamp impact <url> [file]` | Change impact / blast radius from the import graph (`--json`, `--top`) |
+| `bootcamp coupling <url>` | Rank modules by import coupling: load-bearing core, hubs, orphans (`--json`, `--top`) |
 | `bootcamp init` | Scaffold a `.bootcamprc.json` config (`--force`, `--print`, `--style`) |
 | `bootcamp styles` | List the built-in style packs and the sections each enables (`--json`) |
 | `bootcamp doctor` | Diagnose your environment (`--json`) |
