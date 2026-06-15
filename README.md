@@ -478,6 +478,22 @@ bootcamp init --print
 bootcamp init --style corporate --path bootcamp.config.json
 ```
 
+### Combined Scan
+
+```bash
+# Clone once, then report health + metrics + security in a single dashboard
+bootcamp scan https://github.com/owner/repo
+
+# Works on local paths too
+bootcamp scan ./my-repo
+
+# Machine-readable output (all three reports plus a score summary)
+bootcamp scan ./my-repo --json
+
+# CI gate: exit non-zero when the lowest of the three scores is below the minimum
+bootcamp scan ./my-repo --check --min-score 70
+```
+
 ### Repo Health Check
 
 ```bash
@@ -616,6 +632,7 @@ npm install -g @mermaid-js/mermaid-cli
 | `bootcamp diff <owner/repo#pr>` | Generate onboarding diff for a PR |
 | `bootcamp web` | Start local web demo server |
 | `bootcamp docs <url>` | Analyze documentation drift (`--check`, `--fix`) |
+| `bootcamp scan <url>` | Combined health + metrics + security dashboard from one scan (`--json`, `--check`, `--min-score`) |
 | `bootcamp health <url>` | Score onboarding-readiness (`--json`, `--check`, `--min-score`) |
 | `bootcamp metrics <url>` | Report codebase metrics & approachability (`--json`, `--check`, `--min-score`) |
 | `bootcamp security <url>` | Analyze security patterns & score (`--json`, `--check`, `--min-score`) |
