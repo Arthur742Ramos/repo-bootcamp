@@ -244,6 +244,8 @@ function classifySize(sourceFiles: number): CodebaseSizeClass {
 function computeApproachability(input: {
   sizeClass: CodebaseSizeClass;
   sourceFiles: number;
+  testFiles: number;
+  totalFiles: number;
   testToSourceRatio: number;
   averageCodeBytes: number;
   largestCodeBytes: number;
@@ -259,17 +261,25 @@ function computeApproachability(input: {
     large: 18,
     "very-large": 30,
   };
-  score -= sizePenalty[input.sizeClass];
-  if (input.sizeClass === "tiny" || input.sizeClass === "small") {
+  // When no recognized source language is detected, size by total file count so
+  // a large unrecognized-language repo is not labelled "tiny" with a 100/A score.
+  const effectiveSizeClass =
+    input.sourceFiles > 0 ? input.sizeClass : classifySize(input.totalFiles);
+  score -= sizePenalty[effectiveSizeClass];
+  if (input.sourceFiles === 0) {
+    factors.push(
+      `${input.totalFiles} files, but no recognized source language — approachability is approximate`
+    );
+  } else if (effectiveSizeClass === "tiny" || effectiveSizeClass === "small") {
     factors.push(`Compact codebase (${input.sourceFiles} source files) is quick to navigate`);
   } else {
-    factors.push(`${input.sizeClass} codebase (${input.sourceFiles} source files) takes longer to learn`);
+    factors.push(`${effectiveSizeClass} codebase (${input.sourceFiles} source files) takes longer to learn`);
   }
 
   if (input.sourceFiles === 0) {
     // Avoid punishing test coverage when there is nothing to cover.
     factors.push("No source files detected to assess test coverage");
-  } else if (input.testToSourceRatio === 0) {
+  } else if (input.testFiles === 0) {
     score -= 18;
     factors.push("No test files detected — behavior is harder to verify safely");
   } else if (input.testToSourceRatio < 0.2) {
@@ -366,7 +376,13 @@ export function computeCodebaseMetrics(scan: ScanResult): CodebaseMetrics {
     const ext = getExtension(file.path);
     const language = LANGUAGE_BY_EXT[ext];
 
-    if (language) {
+    if (language && isGenerated(file.path)) {
+      // Generated/vendored code (e.g. a committed *.min.js bundle) is excluded
+      // from the language breakdown, source/test counts, average/largest-file
+      // bytes, and hotspots alike — counting it skews the language share and
+      // the size-based approachability penalties. It is recorded as "other".
+      otherFiles += 1;
+    } else if (language) {
       const isTest = isTestPath(file.path);
       const agg = languageMap.get(language) ?? { files: 0, bytes: 0 };
       agg.files += 1;
@@ -381,10 +397,8 @@ export function computeCodebaseMetrics(scan: ScanResult): CodebaseMetrics {
         sourceBytes += bytes;
       }
 
-      if (!isGenerated(file.path)) {
-        codeFiles.push({ path: file.path, bytes, language });
-        if (bytes > largestCodeBytes) largestCodeBytes = bytes;
-      }
+      codeFiles.push({ path: file.path, bytes, language });
+      if (bytes > largestCodeBytes) largestCodeBytes = bytes;
     } else if (DOC_EXTS.has(ext)) {
       docFiles += 1;
     } else if (isConfigFile(file.path)) {
@@ -426,7 +440,12 @@ export function computeCodebaseMetrics(scan: ScanResult): CodebaseMetrics {
   const approachability = computeApproachability({
     sizeClass,
     sourceFiles,
-    testToSourceRatio,
+    testFiles,
+    totalFiles: files.length,
+    // Pass the UNROUNDED ratio so the no-tests decision and the <0.2/<0.5
+    // thresholds aren't skewed by rounding (a large, sparsely-tested repo whose
+    // ratio rounds to 0.00 must not be treated as having zero tests).
+    testToSourceRatio: sourceFiles > 0 ? testFiles / sourceFiles : 0,
     averageCodeBytes,
     largestCodeBytes,
     languageCount: languages.length,
