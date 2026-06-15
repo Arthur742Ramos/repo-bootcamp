@@ -42,6 +42,18 @@ vi.mock("../src/security.js", async (importOriginal) => {
   return { ...actual, analyzeSecurityPatterns: (...a: any[]) => analyzeSecurityPatternsMock(...a) };
 });
 
+const extractDependenciesMock = vi.fn();
+vi.mock("../src/deps.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../src/deps.js")>();
+  return { ...actual, extractDependencies: (...a: any[]) => extractDependenciesMock(...a) };
+});
+
+const generateTechRadarMock = vi.fn();
+vi.mock("../src/radar.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../src/radar.js")>();
+  return { ...actual, generateTechRadar: (...a: any[]) => generateTechRadarMock(...a) };
+});
+
 vi.mock("fs/promises", () => ({
   readFile: vi.fn().mockRejectedValue(new Error("no package.json")),
 }));
@@ -135,10 +147,18 @@ describe("runScanCommand", () => {
     mockExit.mockClear();
     logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
     errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
-    scanMock.mockResolvedValue({ files: [], readme: null, stack: {} });
+    scanMock.mockResolvedValue({ files: [], readme: null, contributing: null, stack: { languages: [] } });
     computeRepoHealthMock.mockReturnValue(makeHealth(88));
     computeCodebaseMetricsMock.mockReturnValue(makeMetrics(82));
     analyzeSecurityPatternsMock.mockResolvedValue(makeSecurity(100));
+    extractDependenciesMock.mockResolvedValue(null);
+    generateTechRadarMock.mockReturnValue({
+      modern: [],
+      stable: [],
+      legacy: [],
+      risky: [],
+      onboardingRisk: { score: 20, grade: "A", factors: ["Missing CONTRIBUTING guide"] },
+    });
     resolveRepoMock.mockResolvedValue(remoteSource());
   });
 
@@ -159,10 +179,12 @@ describe("runScanCommand", () => {
     expect(parsed.scores.health.score).toBe(88);
     expect(parsed.scores.metrics.score).toBe(82);
     expect(parsed.scores.security.score).toBe(100);
+    expect(parsed.scores.onboardingRisk.score).toBe(20);
     expect(parsed.scores.lowest).toBe(82);
     expect(parsed.health).toBeDefined();
     expect(parsed.metrics).toBeDefined();
     expect(parsed.security).toBeDefined();
+    expect(parsed.onboardingRisk).toBeDefined();
   });
 
   it("exits non-zero with --check when the lowest score is below the minimum", async () => {
