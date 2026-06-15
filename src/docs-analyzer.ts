@@ -138,7 +138,10 @@ export async function analyzeVersionMismatches(repoPath: string): Promise<Versio
   // Check npm/yarn version mentions
   const pkgManager = pkg.packageManager as string | undefined;
   if (pkgManager) {
-    const [manager, version] = pkgManager.split("@");
+    const [manager, rawVersion] = pkgManager.split("@");
+    // Strip a Corepack integrity suffix (e.g. "pnpm@8.6.0+sha512.<hash>") so the
+    // machine-generated hash isn't compared against the README's plain version.
+    const version = (rawVersion ?? "").split("+")[0];
     const managerPattern = new RegExp(`${manager}\\s*(?:>=?\\s*)?v?([\\d.]+)`, "gi");
     const matches = readme.matchAll(managerPattern);
 
@@ -231,8 +234,16 @@ export async function analyzeFrameworkDocs(repoPath: string): Promise<FrameworkI
     );
 
     if (inDeps) {
-      // Check if mentioned in README
-      const mentioned = searchTerms.some((term) => readmeLower.includes(term.toLowerCase()));
+      // Check if mentioned in README. Short/ambiguous terms (e.g. "ts", "vue")
+      // must match as a whole word — "ts" as a substring appears in "scripts",
+      // "tests", etc., which would make the check a false negative for everyone.
+      const mentioned = searchTerms.some((term) => {
+        const t = term.toLowerCase();
+        if (t.length <= 4 && /^[a-z0-9]+$/.test(t)) {
+          return new RegExp(`(^|[^a-z0-9])${t}([^a-z0-9]|$)`, "i").test(readme);
+        }
+        return readmeLower.includes(t);
+      });
       if (!mentioned) {
         issues.push({
           framework,
@@ -260,7 +271,9 @@ export async function analyzeCLIDrift(repoPath: string): Promise<CLIDrift[]> {
   const bin = pkg.bin as Record<string, string> | string | undefined;
   if (!bin) return drift;
 
-  const binName = typeof bin === "string" ? Object.keys(pkg.bin as Record<string, string>)[0] : Object.keys(bin)[0];
+  // A string `bin` takes the package's `name` as the command (npm convention);
+  // `Object.keys` of a string would yield character indices ("0", "1", …).
+  const binName = typeof bin === "string" ? ((pkg.name as string) || "") : Object.keys(bin)[0];
   if (!binName) return drift;
 
   // Try to get --help output
