@@ -422,7 +422,9 @@ async function extractMakefileCommands(repoPath: string): Promise<Command[]> {
 
   try {
     const content = await readFile(join(repoPath, "Makefile"), "utf-8");
-    const targetPattern = /^([a-zA-Z_][a-zA-Z0-9_-]*)\s*:/gm;
+    // `:(?!=)` matches a real target colon but rejects `:=`/assignment lines
+    // (e.g. `CC := gcc`, `PREFIX := /usr/local`).
+    const targetPattern = /^([a-zA-Z_][a-zA-Z0-9_-]*)\s*:(?!=)/gm;
     let match;
 
     while ((match = targetPattern.exec(content)) !== null) {
@@ -441,6 +443,42 @@ async function extractMakefileCommands(repoPath: string): Promise<Command[]> {
 }
 
 /**
+ * Parse the `on:` triggers of a GitHub Actions workflow, handling both the
+ * inline list form (`on: [push, pull_request]`) and the block form (`on:` on
+ * its own line followed by indented `push:`/`pull_request:` keys). Only the
+ * top-level trigger keys are returned — nested keys such as `branches:` are
+ * skipped.
+ */
+function parseWorkflowTriggers(content: string): string[] {
+  const inline = content.match(/^on:[ \t]*(\S.*)$/m);
+  if (inline && !inline[1].trim().startsWith("#")) {
+    const list = inline[1].trim().replace(/^\[|\]$/g, "");
+    return list
+      .split(",")
+      .map((t) => t.trim().replace(/:$/, ""))
+      .filter(Boolean);
+  }
+
+  const lines = content.split("\n");
+  const onIdx = lines.findIndex((l) => /^on:[ \t]*(#.*)?$/.test(l));
+  if (onIdx === -1) return [];
+
+  const triggers: string[] = [];
+  let baseIndent: number | null = null;
+  for (let i = onIdx + 1; i < lines.length; i++) {
+    const line = lines[i];
+    if (/^\S/.test(line)) break; // dedented back to a top-level key → end of `on:`
+    if (!line.trim() || line.trim().startsWith("#")) continue;
+    const indent = line.length - line.trimStart().length;
+    if (baseIndent === null) baseIndent = indent;
+    if (indent !== baseIndent) continue; // skip deeper-nested keys (branches:, etc.)
+    const keyMatch = line.trim().match(/^([A-Za-z_][\w-]*):/);
+    if (keyMatch) triggers.push(keyMatch[1]);
+  }
+  return triggers;
+}
+
+/**
  * Parse GitHub Actions workflows
  */
 async function parseWorkflows(repoPath: string, files: FileInfo[]): Promise<CIWorkflow[]> {
@@ -455,12 +493,11 @@ async function parseWorkflows(repoPath: string, files: FileInfo[]): Promise<CIWo
 
       // Simple YAML parsing for workflow name and triggers
       const nameMatch = content.match(/^name:\s*['"]?([^'"\n]+)/m);
-      const onMatch = content.match(/^on:\s*\[?([^\]\n]+)/m);
 
       workflows.push({
         name: nameMatch ? nameMatch[1].trim() : basename(wf.path, ".yml"),
         file: wf.path,
-        triggers: onMatch ? onMatch[1].split(",").map((t) => t.trim()) : [],
+        triggers: parseWorkflowTriggers(content),
         mainSteps: [],
       });
     } catch (err: unknown) {
@@ -476,12 +513,19 @@ async function parseWorkflows(repoPath: string, files: FileInfo[]): Promise<CIWo
  * Read important documentation files
  */
 async function readDocFile(repoPath: string, filename: string): Promise<string | null> {
+  const capitalized = filename.charAt(0).toUpperCase() + filename.slice(1).toLowerCase();
   const possibleNames = [
     filename,
     filename.toLowerCase(),
     filename.toUpperCase(),
     `${filename}.md`,
     `${filename.toLowerCase()}.md`,
+    `${capitalized}.md`,
+    `${filename.toUpperCase()}.MD`,
+    `${filename}.rst`,
+    `${filename.toLowerCase()}.rst`,
+    `${filename}.txt`,
+    `${filename.toLowerCase()}.txt`,
   ];
 
   for (const name of possibleNames) {
@@ -662,13 +706,13 @@ function scoreFile(filePath: string, size: number): FilePriority {
 
   // Entry points (very high priority)
   const entryPatterns = [
-    /^(src\/)?index\.(ts|js|tsx|jsx|py|go|rs)$/,
-    /^(src\/)?main\.(ts|js|py|go|rs)$/,
-    /^(src\/)?app\.(ts|js|tsx|jsx|py)$/,
-    /^(src\/)?server\.(ts|js)$/,
-    /^(src\/)?cli\.(ts|js)$/,
-    /^(lib\/)?[^/]+\.(ts|js|py|go|rs)$/, // top-level lib files
-    /^(source\/)?index\.(ts|js)$/,
+    /^(src\/)?index\.(ts|js|tsx|jsx|mjs|cjs|mts|cts|py|go|rs)$/,
+    /^(src\/)?main\.(ts|js|mjs|cjs|mts|cts|py|go|rs)$/,
+    /^(src\/)?app\.(ts|js|tsx|jsx|mjs|cjs|py)$/,
+    /^(src\/)?server\.(ts|js|mjs|cjs)$/,
+    /^(src\/)?cli\.(ts|js|mjs|cjs)$/,
+    /^(lib\/)?[^/]+\.(ts|js|mjs|cjs|mts|cts|py|go|rs)$/, // top-level lib files
+    /^(source\/)?index\.(ts|js|mjs|cjs|mts|cts)$/,
   ];
   if (entryPatterns.some(p => p.test(filePath))) {
     score = Math.max(score, 90);
@@ -677,9 +721,9 @@ function scoreFile(filePath: string, size: number): FilePriority {
 
   // Core source files (high priority)
   const corePatterns = [
-    /^(src|lib|source)\/[^/]+\.(ts|js|py|go|rs)$/, // Top-level src
-    /^(src|lib|source)\/core\/[^/]+\.(ts|js|py|go|rs)$/, // Core modules
-    /^(src|lib|source)\/utils?\/[^/]+\.(ts|js|py|go|rs)$/, // Utils
+    /^(src|lib|source)\/[^/]+\.(ts|js|mjs|cjs|mts|cts|py|go|rs)$/, // Top-level src
+    /^(src|lib|source)\/core\/[^/]+\.(ts|js|mjs|cjs|mts|cts|py|go|rs)$/, // Core modules
+    /^(src|lib|source)\/utils?\/[^/]+\.(ts|js|mjs|cjs|mts|cts|py|go|rs)$/, // Utils
   ];
   if (corePatterns.some(p => p.test(filePath)) && score < 80) {
     score = 80;
@@ -711,7 +755,7 @@ function scoreFile(filePath: string, size: number): FilePriority {
   }
 
   // Regular source files
-  if (score === 0 && /\.(ts|js|tsx|jsx|py|go|rs|java|cs|rb|php)$/.test(filePath)) {
+  if (score === 0 && /\.(ts|js|tsx|jsx|mjs|cjs|mts|cts|py|go|rs|java|cs|rb|php)$/.test(filePath)) {
     score = 30;
     category = "source";
   }
