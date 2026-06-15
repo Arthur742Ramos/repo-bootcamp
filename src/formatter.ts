@@ -55,7 +55,7 @@ function convertInlineFormatting(line: string): string {
   // Italic
   line = line.replace(/\*(.+?)\*/g, "<em>$1</em>");
   // Inline code
-  line = line.replace(/`([^`]+)`/g, "<code>$1</code>");
+  line = line.replace(/`([^`]+)`/g, (_m, code) => `<code>${escapeHtml(code)}</code>`);
   return line;
 }
 

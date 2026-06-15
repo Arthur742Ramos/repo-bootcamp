@@ -335,7 +335,7 @@ program
       createIssues: opts.createIssues || false,
       dryRun: opts.dryRun || false,
       style: opts.style as StylePack | undefined,
-      renderDiagrams: opts.renderDiagrams !== undefined,
+      renderDiagrams: getOptionSource(command, "renderDiagrams") === "cli",
       diagramFormat: (opts.renderDiagrams === true ? "svg" : opts.renderDiagrams) as BootcampOptions["diagramFormat"],
       fullClone: opts.fullClone || false,
       noCache: isNegativeOptionEnabled(opts, "noCache", "cache"),

@@ -133,10 +133,14 @@ export function startWatch(
           chalk.cyan("\n  🔄 New commits detected ") +
             chalk.dim(`(${lastSha.slice(0, 8)} → ${result.newSha.slice(0, 8)})`)
         );
-        lastSha = result.newSha;
 
         console.log(chalk.cyan("  Re-running analysis...\n"));
         await opts.onChangeDetected();
+        // Advance the cursor only AFTER a successful re-analysis. The working
+        // tree is already at newSha, so if onChangeDetected() throws (a transient
+        // failure), the next poll re-detects the still-unprocessed commit and
+        // retries instead of silently leaving the docs stale.
+        lastSha = result.newSha;
         console.log(
           chalk.green("\n  ✓ Watch: analysis updated. Waiting for next change...\n")
         );
