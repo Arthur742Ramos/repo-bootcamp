@@ -87,9 +87,27 @@ function resolveImport(
     }
   }
 
-  // Try index files
+  // ESM/TypeScript projects import the compiled `.js` (or `.mjs`/`.cjs`)
+  // specifier even though the on-disk source is `.ts`/`.tsx` — e.g.
+  // `import "./util.js"` resolves to `util.ts`. When the literal path didn't
+  // match a real file, strip a JS-family extension and retry the source
+  // extensions. (A real `.js` file is still preferred via the exact-match
+  // check above.)
+  const jsExtMatch = resolved.match(/\.(js|jsx|mjs|cjs)$/);
+  if (jsExtMatch) {
+    const base = resolved.slice(0, resolved.length - jsExtMatch[0].length);
+    for (const ext of [".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs"]) {
+      const candidate = base + ext;
+      if (filePathSet.has(candidate)) {
+        return candidate;
+      }
+    }
+  }
+
+  // Try index files. Normalize separators: join() emits OS-native separators
+  // (backslashes on Windows), but the file set is keyed on forward slashes.
   for (const ext of extensions) {
-    const indexPath = join(resolved, `index${ext}`);
+    const indexPath = join(resolved, `index${ext}`).replace(/\\/g, "/");
     if (filePathSet.has(indexPath)) {
       return indexPath;
     }
