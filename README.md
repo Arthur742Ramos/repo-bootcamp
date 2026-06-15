@@ -579,6 +579,23 @@ bootcamp radar ./my-repo --check --max-risk 40
 Onboarding risk is scored 0-100 where **lower is better**, so its gate is
 `--max-risk` (fail above the threshold) rather than `--min-score`.
 
+### Change Impact ("Blast Radius")
+
+```bash
+# Summarize the impact of the repo's key entry-point files
+bootcamp impact https://github.com/owner/repo
+
+# Focus on one file: what does changing it affect?
+bootcamp impact ./my-repo src/auth/session.ts
+
+# Machine-readable output (imports, importedBy, affected files/tests/docs)
+bootcamp impact ./my-repo src/auth/session.ts --json
+```
+
+For a specific file it lists what it imports, what imports it, and the
+transitively affected files, tests, and docs. With no file it summarizes
+the top key files (use `--top <n>` to widen).
+
 ### Auto-Create GitHub Issues
 
 ```bash
@@ -675,6 +692,7 @@ npm install -g @mermaid-js/mermaid-cli
 | `bootcamp security <url>` | Analyze security patterns & score (`--json`, `--check`, `--min-score`) |
 | `bootcamp deps <url>` | Report dependencies by category & ecosystem (`--json`, `--diagram`) |
 | `bootcamp radar <url>` | Tech radar + onboarding-risk score (`--json`, `--check`, `--max-risk`) |
+| `bootcamp impact <url> [file]` | Change impact / blast radius from the import graph (`--json`, `--top`) |
 | `bootcamp init` | Scaffold a `.bootcamprc.json` config (`--force`, `--print`, `--style`) |
 | `bootcamp styles` | List the built-in style packs and the sections each enables (`--json`) |
 | `bootcamp doctor` | Diagnose your environment (`--json`) |
