@@ -25,6 +25,7 @@ import { clearCache, getCacheDir, pruneCache } from "./cache.js";
 import { runAskCommand } from "./commands/ask-command.js";
 import { runCacheList } from "./commands/cache-list.js";
 import { runCompletionCommand } from "./commands/completion-command.js";
+import { runCouplingCommand } from "./commands/coupling-command.js";
 import { runDepsCommand } from "./commands/deps-command.js";
 import { runPullRequestDiff } from "./commands/diff-command.js";
 import { runDocsCommand } from "./commands/docs-command.js";
@@ -122,6 +123,16 @@ interface RadarActionOptions {
 }
 
 interface ImpactActionOptions {
+  [key: string]: unknown;
+  branch?: string;
+  json?: boolean;
+  top?: string;
+  maxFiles?: string;
+  keepTemp?: boolean;
+  verbose?: boolean;
+}
+
+interface CouplingActionOptions {
   [key: string]: unknown;
   branch?: string;
   json?: boolean;
@@ -561,6 +572,33 @@ program
       branch,
       json: opts.json || false,
       top: parseInt(opts.top || "10", 10),
+      maxFiles: parseInt(maxFiles, 10),
+      keepTemp: opts.keepTemp || false,
+      verbose: opts.verbose || false,
+    });
+  });
+
+program
+  .command("coupling <repo-url>")
+  .description(
+    "Rank modules by import coupling: the load-bearing core (most depended-upon), orchestrator hubs, and possibly-orphaned modules (supports local paths)"
+  )
+  .option("-b, --branch <branch>", "Branch to analyze", "")
+  .option("--json", "Output the coupling map as JSON for machine consumption")
+  .option("--top <number>", "How many entries to show per section", "12")
+  .option("-m, --max-files <number>", "Maximum files to scan")
+  .option("--keep-temp", "Keep temporary clone directory")
+  .option("-v, --verbose", "Show detailed output")
+  .action(async (repoUrl: string, rawOpts) => {
+    const opts = getActionOptions<CouplingActionOptions>(rawOpts as Command | CouplingActionOptions);
+    // `-b/--branch` and `-m/--max-files` collide with the root command's
+    // options — fall back to the raw argv (same approach as the other commands).
+    const branch = opts.branch || getCliFlagValue(["--branch", "-b"]) || "";
+    const maxFiles = opts.maxFiles || getCliFlagValue(["--max-files", "-m"]) || "500";
+    await runCouplingCommand(repoUrl, {
+      branch,
+      json: opts.json || false,
+      top: parseInt(opts.top || "12", 10),
       maxFiles: parseInt(maxFiles, 10),
       keepTemp: opts.keepTemp || false,
       verbose: opts.verbose || false,
