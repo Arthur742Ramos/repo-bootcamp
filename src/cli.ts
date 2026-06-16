@@ -35,6 +35,7 @@ import { runImpactCommand } from "./commands/impact-command.js";
 import { runInitCommand } from "./commands/init-command.js";
 import { runMainCommand } from "./commands/main-command.js";
 import { runMetricsCommand } from "./commands/metrics-command.js";
+import { runOwnersCommand } from "./commands/owners-command.js";
 import { runPreflightCommand } from "./commands/preflight-command.js";
 import { runRadarCommand } from "./commands/radar-command.js";
 import { runScanCommand } from "./commands/scan-command.js";
@@ -148,6 +149,15 @@ interface PreflightActionOptions {
   branch?: string;
   check?: boolean;
   json?: boolean;
+  keepTemp?: boolean;
+  verbose?: boolean;
+}
+
+interface OwnersActionOptions {
+  [key: string]: unknown;
+  branch?: string;
+  json?: boolean;
+  maxFiles?: string;
   keepTemp?: boolean;
   verbose?: boolean;
 }
@@ -609,6 +619,29 @@ program
       branch,
       json: opts.json || false,
       top: parseInt(opts.top || "12", 10),
+      maxFiles: parseInt(maxFiles, 10),
+      keepTemp: opts.keepTemp || false,
+      verbose: opts.verbose || false,
+    });
+  });
+
+program
+  .command("owners <repo-url>")
+  .description(
+    "Answer \"who do I ask?\": parse CODEOWNERS, map owners to each top-level area, and list maintainers + top committers (supports local paths)"
+  )
+  .option("-b, --branch <branch>", "Branch to analyze", "")
+  .option("--json", "Output the ownership map as JSON for machine consumption")
+  .option("-m, --max-files <number>", "Maximum files to scan")
+  .option("--keep-temp", "Keep temporary clone directory")
+  .option("-v, --verbose", "Show detailed output")
+  .action(async (repoUrl: string, rawOpts) => {
+    const opts = getActionOptions<OwnersActionOptions>(rawOpts as Command | OwnersActionOptions);
+    const branch = opts.branch || getCliFlagValue(["--branch", "-b"]) || "";
+    const maxFiles = opts.maxFiles || getCliFlagValue(["--max-files", "-m"]) || "500";
+    await runOwnersCommand(repoUrl, {
+      branch,
+      json: opts.json || false,
       maxFiles: parseInt(maxFiles, 10),
       keepTemp: opts.keepTemp || false,
       verbose: opts.verbose || false,
