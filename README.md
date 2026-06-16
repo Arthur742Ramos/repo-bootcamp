@@ -639,6 +639,25 @@ against your local machine with a per-row remedy. Unlike `bootcamp doctor`
 (which checks whether *your* machine can run bootcamp itself), `preflight`
 checks your machine against the *target* repo's requirements.
 
+### Who Do I Ask? (Ownership Map)
+
+```bash
+# Parse CODEOWNERS and map owners to each area of the repo
+bootcamp owners https://github.com/owner/repo
+
+# Works on local paths too
+bootcamp owners ./my-repo
+
+# Machine-readable output (default owners, maintainers, per-area mapping)
+bootcamp owners ./my-repo --json
+```
+
+Parses the repo's `CODEOWNERS` file, lists the **default owners** (the `*`
+rule), maps owners to each **top-level area** (last-match-wins, the canonical
+CODEOWNERS semantics), and lists all **maintainers** plus a best-effort
+**top committers** list from whatever git history is available. Answers the
+classic Day-1 question: *"who do I ask when I'm stuck?"*
+
 ### Auto-Create GitHub Issues
 
 ```bash
@@ -738,6 +757,7 @@ npm install -g @mermaid-js/mermaid-cli
 | `bootcamp impact <url> [file]` | Change impact / blast radius from the import graph (`--json`, `--top`) |
 | `bootcamp coupling <url>` | Rank modules by import coupling: load-bearing core, hubs, orphans (`--json`, `--top`) |
 | `bootcamp preflight <url>` | Check your machine against the repo's declared toolchain (`--json`, `--check`) |
+| `bootcamp owners <url>` | "Who do I ask?" — CODEOWNERS map + maintainers + top committers (`--json`) |
 | `bootcamp init` | Scaffold a `.bootcamprc.json` config (`--force`, `--print`, `--style`) |
 | `bootcamp styles` | List the built-in style packs and the sections each enables (`--json`) |
 | `bootcamp doctor` | Diagnose your environment (`--json`) |
