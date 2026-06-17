@@ -155,6 +155,7 @@ describe("runParallelAnalysis", () => {
     expect(result.security).toEqual(mockSecurity);
     expect(result.radar).toEqual(mockRadar);
     expect(result.impacts).toEqual([mockImpact]);
+    expect(result.cycles).toEqual({ moduleCount: 0, cycles: [], rings: [] });
   });
 
   it("calls all analyzers with correct arguments", async () => {

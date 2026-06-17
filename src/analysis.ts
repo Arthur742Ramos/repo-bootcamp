@@ -13,6 +13,7 @@ import { extractDependencies, type DependencyAnalysis } from "./deps.js";
 import { analyzeSecurityPatterns, type SecurityAnalysis } from "./security.js";
 import { generateTechRadar } from "./radar.js";
 import { buildImportGraph, analyzeChangeImpact, getKeyFilesForImpact } from "./impact.js";
+import { detectCyclesInImportGraph, type CyclesSummary } from "./cycles.js";
 import { ProgressTracker } from "./progress.js";
 import type { ScanResult, TechRadar, ChangeImpact } from "./types.js";
 
@@ -21,6 +22,7 @@ export interface ParallelAnalysisResult {
   security: SecurityAnalysis;
   radar: TechRadar;
   impacts: ChangeImpact[];
+  cycles: CyclesSummary;
 }
 
 export interface ParallelAnalysisCacheOptions {
@@ -114,11 +116,17 @@ export async function runParallelAnalysis(
 
   const MAX_KEY_FILES_FOR_IMPACT = 10;
 
+  // Build the import graph once and share it between the (cached) impact phase
+  // and the cycle detection below. Cycles are NOT cached — they are a cheap
+  // Tarjan pass over the in-memory graph, recomputed each run, so caching them
+  // would needlessly change the impact cache value's shape and version.
+  const importGraphPromise = buildImportGraph(repoPath, scanResult.files);
+
   const impactsPromise = runCachedPhase<ChangeImpact[]>(
     "impact",
     "impact",
     async () => {
-      const importGraph = await buildImportGraph(repoPath, scanResult.files);
+      const importGraph = await importGraphPromise;
       const keyFiles = getKeyFilesForImpact(scanResult.files);
       return await Promise.all(
         keyFiles.slice(0, MAX_KEY_FILES_FOR_IMPACT).map(file =>
@@ -127,6 +135,8 @@ export async function runParallelAnalysis(
       );
     }
   );
+
+  const cyclesPromise = importGraphPromise.then(detectCyclesInImportGraph);
 
   // radar depends on deps + security, but runs as soon as both resolve
   const radarPromise = Promise.all([depsPromise, securityPromise]).then(([deps, security]) => {
@@ -142,13 +152,14 @@ export async function runParallelAnalysis(
     return radar;
   });
 
-  // wait for all four analyzers concurrently
-  const [deps, security, radar, impacts] = await Promise.all([
+  // wait for all analyzers concurrently
+  const [deps, security, radar, impacts, cycles] = await Promise.all([
     depsPromise,
     securityPromise,
     radarPromise,
     impactsPromise,
+    cyclesPromise,
   ]);
 
-  return { deps, security, radar, impacts };
+  return { deps, security, radar, impacts, cycles };
 }

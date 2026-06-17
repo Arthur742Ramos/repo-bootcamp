@@ -161,3 +161,56 @@ export function describeCycle(cycle: Cycle, graph: Map<string, GraphNode>): stri
   }
   return cycle.files.join(", ");
 }
+
+/** Source-code extensions the import graph actually parses (mirrors impact.ts). */
+export const SOURCE_EXT = /\.(ts|tsx|js|jsx|mjs|cjs|py|go)$/;
+
+/**
+ * Whether a path is a test file. Shared by the import-graph commands and the
+ * generated-docs cycle detection so they treat test files identically.
+ * Circular imports among test fixtures are noise (bundlers never ship them),
+ * so they are excluded from cycle detection.
+ */
+export function isTestFile(path: string): boolean {
+  if (/\.(test|spec)\.[^./]+$/.test(path)) return true;
+  const base = path.split("/").pop() ?? "";
+  if (/_test\.[^.]+$/.test(base)) return true;
+  if (/^test_.+\.py$/.test(base)) return true;
+  return path
+    .split("/")
+    .some((s) => s === "test" || s === "tests" || s === "spec" || s === "specs" || s === "__tests__" || s === "__mocks__");
+}
+
+/** Result of running cycle detection over a full import graph. */
+export interface CyclesSummary {
+  /** Number of non-test source modules considered. */
+  moduleCount: number;
+  /** Detected cycles, sorted by size descending then first member. */
+  cycles: Cycle[];
+  /** Human-readable ring for each cycle (parallel to `cycles`). */
+  rings: string[];
+}
+
+/**
+ * Detect circular dependencies in a full import graph (as returned by
+ * `buildImportGraph`). Restricts the graph to non-test source modules and
+ * rebuilds each node's imports against that restricted set, so test and
+ * non-source edges can neither form nor inflate a cycle. Generic over the node
+ * shape so callers can pass either the wide `{ imports, importedBy }` graph or a
+ * narrow `{ imports }` graph without a type cast.
+ */
+export function detectCyclesInImportGraph<T extends { imports: string[] }>(
+  fullGraph: Map<string, T>
+): CyclesSummary {
+  const included = new Set(
+    [...fullGraph.keys()].filter((file) => SOURCE_EXT.test(file) && !isTestFile(file))
+  );
+  const graph = new Map<string, GraphNode>();
+  for (const file of included) {
+    const imports = (fullGraph.get(file)?.imports ?? []).filter((target) => included.has(target));
+    graph.set(file, { imports });
+  }
+  const cycles = findCycles(graph);
+  const rings = cycles.map((cycle) => describeCycle(cycle, graph));
+  return { moduleCount: included.size, cycles, rings };
+}

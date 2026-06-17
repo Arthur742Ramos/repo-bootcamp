@@ -133,6 +133,46 @@ describe("Change Impact Map", () => {
 
       expect(docs).toContain("... and 10 more");
     });
+
+    it("appends a Circular Dependencies section when cycles are provided", () => {
+      const docs = generateImpactDocs(mockImpacts, "test-repo", {
+        moduleCount: 3,
+        cycles: [{ size: 2, files: ["a", "b"] }],
+        rings: ["a → b → a"],
+      });
+      expect(docs).toContain("## Circular Dependencies");
+      expect(docs).toContain("a → b → a");
+      expect(docs).toContain("(2 files)");
+    });
+
+    it("labels a self-import cycle", () => {
+      const docs = generateImpactDocs(mockImpacts, "test-repo", {
+        moduleCount: 1,
+        cycles: [{ size: 1, files: ["x"] }],
+        rings: ["x → x"],
+      });
+      expect(docs).toContain("(self-import)");
+    });
+
+    it("omits the Circular Dependencies section when there are no cycles", () => {
+      const docs = generateImpactDocs(mockImpacts, "test-repo", {
+        moduleCount: 5,
+        cycles: [],
+        rings: [],
+      });
+      expect(docs).not.toContain("Circular Dependencies");
+    });
+
+    it("is unchanged when the cycles argument is omitted (additive)", () => {
+      const withArg = generateImpactDocs(mockImpacts, "test-repo", {
+        moduleCount: 5,
+        cycles: [],
+        rings: [],
+      });
+      const withoutArg = generateImpactDocs(mockImpacts, "test-repo");
+      expect(withoutArg).toBe(withArg);
+      expect(withoutArg).not.toContain("Circular Dependencies");
+    });
   });
 
   describe("analyzeChangeImpact related-test detection", () => {

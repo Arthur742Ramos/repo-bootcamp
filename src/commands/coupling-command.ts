@@ -3,6 +3,7 @@ import chalk from "chalk";
 import { buildImportGraph } from "../impact.js";
 import { resolveRepo, type RepoSource } from "../repo-resolver.js";
 import { scanRepositoryFiles } from "../services/clone-service.js";
+import { SOURCE_EXT, isTestFile } from "../cycles.js";
 
 /** Options accepted by the `bootcamp coupling` command. */
 export interface CouplingCommandOptions {
@@ -26,23 +27,6 @@ interface ModuleCoupling {
   /** How many internal modules this one imports (dependencies — high = hub). */
   fanOut: number;
 }
-
-function isTestFile(path: string): boolean {
-  // JS/TS conventions: foo.test.ts, foo.spec.js
-  if (/\.(test|spec)\.[^./]+$/.test(path)) return true;
-  // Go (`*_test.go`) and Python (`*_test.py`, `test_*.py`) conventions.
-  const base = path.split("/").pop() ?? "";
-  if (/_test\.[^.]+$/.test(base)) return true;
-  if (/^test_.+\.py$/.test(base)) return true;
-  // Directory-based conventions (consistent with the test-path detection in
-  // metrics.ts and health.ts).
-  return path
-    .split("/")
-    .some((s) => s === "test" || s === "tests" || s === "spec" || s === "specs" || s === "__tests__" || s === "__mocks__");
-}
-
-/** Source-code extensions the import graph actually parses (mirrors impact.ts). */
-const SOURCE_EXT = /\.(ts|tsx|js|jsx|mjs|cjs|py|go)$/;
 
 /** Tooling entry points (loaded by tools, not imported) — not dead code. */
 function isConfigOrScript(path: string): boolean {

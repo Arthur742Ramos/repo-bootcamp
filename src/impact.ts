@@ -6,6 +6,7 @@
 import { readFile } from "fs/promises";
 import { join, dirname, basename } from "path";
 import type { FileInfo, ChangeImpact } from "./types.js";
+import type { CyclesSummary } from "./cycles.js";
 import { escapeRegex } from "./utils.js";
 import importPatternsJson from "./data/import-patterns.json" with { type: "json" };
 
@@ -348,11 +349,15 @@ export async function analyzeChangeImpact(
 }
 
 /**
- * Generate IMPACT.md documentation
+ * Generate IMPACT.md documentation. When `cycles` is provided and contains at
+ * least one circular-dependency group, a "Circular Dependencies" section is
+ * appended; otherwise the output is unchanged (the parameter is optional and
+ * the section is purely additive).
  */
 export function generateImpactDocs(
   impacts: ChangeImpact[],
-  projectName: string
+  projectName: string,
+  cycles?: CyclesSummary
 ): string {
   const lines: string[] = [];
 
@@ -422,6 +427,20 @@ export function generateImpactDocs(
     }
 
     lines.push("---");
+    lines.push("");
+  }
+
+  if (cycles && cycles.cycles.length > 0) {
+    lines.push("## Circular Dependencies");
+    lines.push("");
+    lines.push(
+      `Detected ${cycles.cycles.length} circular dependency group(s) — modules that import each other directly or transitively. These are worth untangling, as they complicate load order, testing, and onboarding.`
+    );
+    lines.push("");
+    cycles.cycles.forEach((cycle, i) => {
+      const suffix = cycle.size === 1 ? " (self-import)" : ` (${cycle.size} files)`;
+      lines.push(`${i + 1}. ${cycles.rings[i]}${suffix}`);
+    });
     lines.push("");
   }
 

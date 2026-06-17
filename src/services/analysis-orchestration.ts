@@ -135,7 +135,7 @@ export async function prepareOutputDocuments({
     ...facts,
     firstTasks: facts.firstTasks.slice(0, styleConfig.firstTasksCount),
   };
-  const { deps, security, radar, impacts } = await runParallelAnalysis(
+  const { deps, security, radar, impacts, cycles } = await runParallelAnalysis(
     repoPath,
     scanResult,
     progress,
@@ -217,7 +217,7 @@ export async function prepareOutputDocuments({
   if (impacts.length > 0 && styleConfig.sections.showImpact) {
     documents.push({
       name: "IMPACT.md",
-      content: generateImpactDocs(impacts, repoInfo.repo),
+      content: generateImpactDocs(impacts, repoInfo.repo, cycles),
     });
   }
 
