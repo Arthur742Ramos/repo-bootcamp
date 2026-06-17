@@ -4,9 +4,18 @@
 
 import { describe, it, expect } from "vitest";
 import { mkdtemp, rm, writeFile } from "fs/promises";
-import { join } from "path";
+import { join, resolve } from "path";
 import { tmpdir } from "os";
-import { SKIP_DIRS, README_NAMES, readFileSafe, escapeRegex, getFlagValue, hasFlag } from "../src/utils.js";
+import {
+  SKIP_DIRS,
+  README_NAMES,
+  readFileSafe,
+  escapeRegex,
+  getFlagValue,
+  hasFlag,
+  toPosixPath,
+  isPathInsideDir,
+} from "../src/utils.js";
 
 describe("SKIP_DIRS", () => {
   it("is a Set containing common directories to skip", () => {
@@ -141,5 +150,64 @@ describe("hasFlag", () => {
 
   it("returns false when absent", () => {
     expect(hasFlag(["--json"], ["--full-clone"])).toBe(false);
+  });
+});
+
+describe("toPosixPath", () => {
+  it("converts backslashes to forward slashes", () => {
+    expect(toPosixPath("a\\b\\c")).toBe("a/b/c");
+  });
+
+  it("leaves forward-slash paths unchanged", () => {
+    expect(toPosixPath("a/b/c")).toBe("a/b/c");
+  });
+
+  it("converts a Windows-style absolute path", () => {
+    expect(toPosixPath("C:\\Users\\me\\repo")).toBe("C:/Users/me/repo");
+  });
+
+  it("handles mixed separators", () => {
+    expect(toPosixPath("a\\b/c\\d")).toBe("a/b/c/d");
+  });
+
+  it("returns an empty string unchanged", () => {
+    expect(toPosixPath("")).toBe("");
+  });
+});
+
+describe("isPathInsideDir", () => {
+  const parent = resolve("/tmp/project");
+
+  it("returns true for the same path", () => {
+    expect(isPathInsideDir(parent, parent)).toBe(true);
+  });
+
+  it("returns true for a direct child", () => {
+    expect(isPathInsideDir(parent, resolve(parent, "src"))).toBe(true);
+  });
+
+  it("returns true for a deeply nested descendant", () => {
+    expect(isPathInsideDir(parent, resolve(parent, "src/a/b/c.ts"))).toBe(true);
+  });
+
+  it("returns false for a parent directory", () => {
+    expect(isPathInsideDir(parent, resolve(parent, ".."))).toBe(false);
+  });
+
+  it("returns false for a sibling directory", () => {
+    expect(isPathInsideDir(parent, resolve(parent, "../sibling"))).toBe(false);
+  });
+
+  it("returns false for a same-prefixed sibling directory", () => {
+    // /tmp/project-evil shares a string prefix with /tmp/project but is not inside it.
+    expect(isPathInsideDir(parent, resolve("/tmp/project-evil/file"))).toBe(false);
+  });
+
+  it("returns false for a traversal escape out of the parent", () => {
+    expect(isPathInsideDir(parent, resolve(parent, "src/../../escape"))).toBe(false);
+  });
+
+  it("normalizes mixed/relative inputs before comparing", () => {
+    expect(isPathInsideDir(parent, resolve(parent, "./nested/./file.ts"))).toBe(true);
   });
 });
