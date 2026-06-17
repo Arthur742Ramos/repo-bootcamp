@@ -81,6 +81,93 @@ describe("dependency manifest parsers", () => {
     expect(names(deps!.dev)).toEqual(["criterion"]);
   });
 
+  it("Cargo: classifies [build-dependencies] (and detailed tables) as dev", async () => {
+    const dir = await repoWith({
+      "Cargo.toml": [
+        "[dependencies]",
+        'serde = "1.0"',
+        "[build-dependencies]",
+        'cc = "1.0"',
+        "[build-dependencies.bindgen]",
+        'version = "0.69"',
+        'features = ["runtime"]',
+      ].join("\n"),
+    });
+    const deps = await extractDependencies(dir);
+    expect(names(deps!.runtime)).toEqual(["serde"]);
+    expect(names(deps!.dev).sort()).toEqual(["bindgen", "cc"]);
+    // The detailed-table version still arrives on a later line.
+    expect(deps!.dev.find((d) => d.name === "bindgen")?.version).toBe("0.69");
+    expect(names(deps!.dev)).not.toContain("features");
+  });
+
+  it("Cargo: classifies [target.<spec>.dependencies] as runtime (cfg and triple)", async () => {
+    const dir = await repoWith({
+      "Cargo.toml": [
+        "[target.'cfg(unix)'.dependencies]",
+        'nix = "0.27"',
+        "[target.x86_64-pc-windows-msvc.dependencies]",
+        'winapi = "0.3"',
+      ].join("\n"),
+    });
+    const deps = await extractDependencies(dir);
+    expect(names(deps!.runtime).sort()).toEqual(["nix", "winapi"]);
+    expect(deps!.dev).toHaveLength(0);
+  });
+
+  it("Cargo: classifies target dev/build deps as dev, target deps as runtime", async () => {
+    const dir = await repoWith({
+      "Cargo.toml": [
+        "[target.'cfg(windows)'.build-dependencies]",
+        'embed-resource = "2.4"',
+        "[target.'cfg(unix)'.dev-dependencies]",
+        'rstest = "0.18"',
+        "[target.aarch64-apple-darwin.dependencies]",
+        'core-foundation = "0.9"',
+      ].join("\n"),
+    });
+    const deps = await extractDependencies(dir);
+    expect(names(deps!.dev).sort()).toEqual(["embed-resource", "rstest"]);
+    expect(names(deps!.runtime)).toEqual(["core-foundation"]);
+  });
+
+  it("Cargo: still ignores [features]/[profile] when build/target tables are present", async () => {
+    const dir = await repoWith({
+      "Cargo.toml": [
+        "[dependencies]",
+        'serde = "1.0"',
+        "[features]",
+        'default = ["std"]',
+        "std = []",
+        "[profile.release]",
+        "opt-level = 3",
+        "[build-dependencies]",
+        'cc = "1.0"',
+      ].join("\n"),
+    });
+    const deps = await extractDependencies(dir);
+    expect(names(deps!.runtime)).toEqual(["serde"]);
+    expect(names(deps!.dev)).toEqual(["cc"]);
+    const all = names(deps!.runtime).concat(names(deps!.dev));
+    expect(all).not.toContain("default");
+    expect(all).not.toContain("opt-level");
+    expect(all).not.toContain("std");
+  });
+
+  it("Cargo: dedups a crate present in both [dependencies] and a target table", async () => {
+    const dir = await repoWith({
+      "Cargo.toml": [
+        "[dependencies]",
+        'libc = "0.2"',
+        "[target.'cfg(unix)'.dependencies]",
+        'libc = "0.2.150"',
+      ].join("\n"),
+    });
+    const deps = await extractDependencies(dir);
+    expect(deps!.runtime.filter((d) => d.name === "libc")).toHaveLength(1);
+    expect(deps!.runtime.find((d) => d.name === "libc")?.version).toBe("0.2.150");
+  });
+
   it("Poetry: keeps deps after an inline-table line and parses versions", async () => {
     const dir = await repoWith({
       "pyproject.toml": [
