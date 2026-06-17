@@ -284,25 +284,128 @@ async function extractPythonDependencies(repoPath: string): Promise<DependencyAn
         }
       }
     } else {
-      // Parse pyproject.toml (Poetry). Terminate each section at the next TOML
-      // table header (a `[` at the start of a line) rather than at any `[`,
-      // since values such as `extras = ["d"]` contain brackets mid-line.
-      const parseSection = (body: string, type: "runtime" | "dev", target: Dependency[]): void => {
+      // Parse pyproject.toml. We split the file into TOML sections keyed by
+      // their table header so each section's body ends cleanly at the next
+      // `[header]` line (values like `extras = ["d"]` contain mid-line brackets
+      // that naive regexes terminate on).
+      const sections = new Map<string, string>();
+      let currentHeader = "";
+      let currentLines: string[] = [];
+      const flush = (): void => {
+        if (currentHeader) sections.set(currentHeader, currentLines.join("\n"));
+      };
+      for (const line of content.split("\n")) {
+        const header = line.trim().match(/^\[\[?([^\]]+)\]\]?\s*$/);
+        if (header) {
+          flush();
+          currentHeader = header[1].trim();
+          currentLines = [];
+        } else {
+          currentLines.push(line);
+        }
+      }
+      flush();
+
+      // `key = value` TOML tables (legacy Poetry + dependency groups).
+      const parseTable = (body: string, type: "runtime" | "dev", target: Dependency[]): void => {
         for (const line of body.split("\n")) {
           const trimmed = line.trim();
           if (!trimmed || trimmed.startsWith("#")) continue;
           const match = trimmed.match(/^([A-Za-z0-9._-]+)\s*=\s*(.+)$/);
           if (!match) continue;
           if (type === "runtime" && match[1] === "python") continue;
-          target.push({ name: match[1], version: parseTomlVersion(match[2]), type });
+          if (!target.some((d) => d.name === match[1])) {
+            target.push({ name: match[1], version: parseTomlVersion(match[2]), type });
+          }
         }
       };
 
-      const depsMatch = content.match(/\[tool\.poetry\.dependencies\]([\s\S]*?)(?:\n\s*\[|$)/);
-      if (depsMatch) parseSection(depsMatch[1], "runtime", runtime);
+      // PEP 508 array-of-strings (`["flask>=2.0", "requests[security]>=2.28"]`).
+      // Strips extras and environment markers, mirroring requirements.txt.
+      const parseRequirementArray = (body: string, type: "runtime" | "dev", target: Dependency[]): void => {
+        for (const rawItem of body.split(",")) {
+          const item = rawItem.replace(/["'\n\r]/g, "").trim();
+          if (!item || item.startsWith("#")) continue;
+          const cleaned = item.split(";")[0].trim();
+          const match = cleaned.match(/^([A-Za-z0-9._-]+)(?:\[[^\]]*\])?\s*(.*)$/);
+          if (!match) continue;
+          const version = (match[2] || "").trim();
+          if (!target.some((d) => d.name === match[1])) {
+            target.push({ name: match[1], version: version || "*", type });
+          }
+        }
+      };
 
-      const devDepsMatch = content.match(/\[tool\.poetry\.dev-dependencies\]([\s\S]*?)(?:\n\s*\[|$)/);
-      if (devDepsMatch) parseSection(devDepsMatch[1], "dev", dev);
+      // Return each top-level `[ ... ]` array body in a section, bracket-balanced
+      // so nested brackets (PEP 508 extras like `requests[security]`) don't
+      // terminate extraction early.
+      const arrayBodies = (body: string): string[] => {
+        const out: string[] = [];
+        for (let i = 0; i < body.length; i++) {
+          if (body[i] !== "[") continue;
+          let depth = 1;
+          let j = i + 1;
+          for (; j < body.length && depth > 0; j++) {
+            if (body[j] === "[") depth++;
+            else if (body[j] === "]") depth--;
+          }
+          out.push(body.slice(i + 1, j - 1));
+          i = j - 1;
+        }
+        return out;
+      };
+
+      // Legacy Poetry (`[tool.poetry.dependencies]` / `dev-dependencies`).
+      if (sections.has("tool.poetry.dependencies")) {
+        parseTable(sections.get("tool.poetry.dependencies")!, "runtime", runtime);
+      }
+      if (sections.has("tool.poetry.dev-dependencies")) {
+        parseTable(sections.get("tool.poetry.dev-dependencies")!, "dev", dev);
+      }
+
+      // Poetry 1.2+ dependency groups: `[tool.poetry.group.<name>.dependencies]`.
+      // `dev`/`test` groups → dev; everything else → runtime.
+      for (const [header, body] of sections) {
+        const groupMatch = header.match(/^tool\.poetry\.group\.([A-Za-z0-9._-]+)\.dependencies$/);
+        if (!groupMatch) continue;
+        const groupName = groupMatch[1].toLowerCase();
+        const isDev = groupName === "dev" || groupName === "test";
+        parseTable(body, isDev ? "dev" : "runtime", isDev ? dev : runtime);
+      }
+
+      // PEP 621 `[project]` (uv, hatch, pdm, setuptools, modern Poetry): the
+      // `dependencies = [...]` array. The first balanced array in the section
+      // body is the dependencies list.
+      if (sections.has("project")) {
+        const projectBody = sections.get("project")!;
+        const depsArray = projectBody.match(/dependencies\s*=\s*\[/);
+        if (depsArray) {
+          const tail = projectBody.slice(depsArray.index! + depsArray[0].length - 1);
+          parseRequirementArray(arrayBodies(tail)[0] ?? "", "runtime", runtime);
+        }
+      }
+
+      // PEP 621 optional dependencies: each extra is its own array. Treated as
+      // runtime (installable features, not dev tooling).
+      if (sections.has("project.optional-dependencies")) {
+        for (const arr of arrayBodies(sections.get("project.optional-dependencies")!)) {
+          parseRequirementArray(arr, "runtime", runtime);
+        }
+      }
+
+      // PEP 735 dependency groups: `[dependency-groups]` (dev tooling).
+      if (sections.has("dependency-groups")) {
+        for (const arr of arrayBodies(sections.get("dependency-groups")!)) {
+          parseRequirementArray(arr, "dev", dev);
+        }
+      }
+
+      // Prefer a more specific package-manager label when detectable.
+      if ([...sections.keys()].some((h) => h.startsWith("tool.poetry"))) {
+        packageManager = "poetry";
+      } else if (sections.has("project") || sections.has("dependency-groups")) {
+        packageManager = "pip";
+      }
     }
 
     if (runtime.length === 0 && dev.length === 0) return null;
