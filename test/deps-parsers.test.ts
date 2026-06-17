@@ -230,6 +230,19 @@ describe("dependency manifest parsers", () => {
     expect(deps!.totalCount).toBe(2);
   });
 
+  it("requirements.txt: keeps a normal requirement with a URL in its inline comment", async () => {
+    const dir = await repoWith({
+      "requirements.txt": [
+        "requests==2.31.0  # see https://pypi.org/project/requests/",
+        "flask>=2.0 # https://flask.palletsprojects.com",
+      ].join("\n"),
+    });
+    const deps = await extractDependencies(dir);
+    // The URL lives in a trailing comment, so the requirement must not be skipped.
+    expect(names(deps!.runtime).sort()).toEqual(["flask", "requests"]);
+    expect(deps!.runtime.find((d) => d.name === "requests")?.version).toBe("2.31.0");
+  });
+
   it("go.mod: reads every require block and dedupes", async () => {
     const dir = await repoWith({
       "go.mod": [
