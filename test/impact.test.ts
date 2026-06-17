@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { getKeyFilesForImpact, generateImpactDocs } from "../src/impact.js";
+import { getKeyFilesForImpact, generateImpactDocs, analyzeChangeImpact } from "../src/impact.js";
 import type { FileInfo, ChangeImpact } from "../src/types.js";
 
 describe("Change Impact Map", () => {
@@ -132,6 +132,41 @@ describe("Change Impact Map", () => {
       const docs = generateImpactDocs([manyImports], "test-repo");
 
       expect(docs).toContain("... and 10 more");
+    });
+  });
+
+  describe("analyzeChangeImpact related-test detection", () => {
+    const files: FileInfo[] = [
+      { path: "pkg/server.go", size: 1, isDirectory: false },
+      { path: "pkg/server_test.go", size: 1, isDirectory: false },
+      { path: "app/calc.py", size: 1, isDirectory: false },
+      { path: "app/test_calc.py", size: 1, isDirectory: false },
+      { path: "app/widget.py", size: 1, isDirectory: false },
+      { path: "app/widget_test.py", size: 1, isDirectory: false },
+      { path: "src/foo.ts", size: 1, isDirectory: false },
+      { path: "src/foo.test.ts", size: 1, isDirectory: false },
+    ];
+    // Empty edges — isolate related-test detection from import-graph traversal.
+    const graph = new Map(files.map((f) => [f.path, { imports: [], importedBy: [] }]));
+
+    it("links a Go file to its *_test.go sibling", async () => {
+      const impact = await analyzeChangeImpact("/repo", files, "pkg/server.go", graph);
+      expect(impact.affectedTests).toEqual(["pkg/server_test.go"]);
+    });
+
+    it("links a Python file to its test_*.py sibling", async () => {
+      const impact = await analyzeChangeImpact("/repo", files, "app/calc.py", graph);
+      expect(impact.affectedTests).toEqual(["app/test_calc.py"]);
+    });
+
+    it("links a Python file to its *_test.py sibling", async () => {
+      const impact = await analyzeChangeImpact("/repo", files, "app/widget.py", graph);
+      expect(impact.affectedTests).toEqual(["app/widget_test.py"]);
+    });
+
+    it("still links a TS file to its .test.ts sibling", async () => {
+      const impact = await analyzeChangeImpact("/repo", files, "src/foo.ts", graph);
+      expect(impact.affectedTests).toEqual(["src/foo.test.ts"]);
     });
   });
 });

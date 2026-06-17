@@ -244,6 +244,10 @@ function findRelatedTests(filePath: string, files: FileInfo[]): string[] {
   const testPatterns = [
     // Same directory with .test/.spec suffix
     new RegExp(`^${dirPrefix}${fileName}\\.(test|spec)\\.[^.]+$`),
+    // Go sibling test: `server.go` → `server_test.go`
+    new RegExp(`^${dirPrefix}${fileName}_test\\.go$`),
+    // Python sibling tests: `calc.py` → `test_calc.py` or `calc_test.py`
+    new RegExp(`^${dirPrefix}(?:test_${fileName}|${fileName}_test)\\.py$`),
     // __tests__ directory
     new RegExp(`^${dirPrefix}__tests__/${fileName}\\.[^.]+$`),
     // test directory at root
