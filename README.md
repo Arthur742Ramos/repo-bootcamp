@@ -270,6 +270,7 @@ The Copilot SDK transforms what would be a simple template-filler into an intell
 - **Environment Doctor** - Diagnose Node, git, GitHub CLI/auth, mermaid-cli, and cache health with `bootcamp doctor` (`--json` for CI)
 - **Combined Scan Dashboard** - `bootcamp scan` reports health, metrics, security, and onboarding risk from a single clone, with a `--check` CI gate on the lowest score
 - **Module Coupling Map** - `bootcamp coupling` ranks modules by import coupling to reveal the load-bearing core, orchestrator hubs, and possibly-orphaned dead code
+- **Circular Dependency Detection** - `bootcamp cycles` finds circular import groups (Tarjan SCC) on the import graph, with a `--check` CI gate
 - **Machine Preflight** - `bootcamp preflight` checks your machine against the target repo's declared toolchain (Node, package manager, Python, Go) with a per-row remedy
 - **Ownership Map** - `bootcamp owners` parses `CODEOWNERS` to answer "who do I ask?" with default owners, per-area maintainers, and top committers
 - **Style Pack Explorer** - `bootcamp styles` lists the built-in style packs and the doc sections each one enables
@@ -658,6 +659,32 @@ best place to start reading), the **orchestrator hubs** (highest fan-out),
 and **possibly-orphaned** modules (isolated in the import graph — candidate
 dead code). Use `--top <n>` to widen each section.
 
+### Circular Dependencies
+
+```bash
+# Detect circular import groups across the repo
+bootcamp cycles https://github.com/owner/repo
+
+# Works on local paths too
+bootcamp cycles ./my-repo
+
+# Machine-readable output (cycles with their member files)
+bootcamp cycles ./my-repo --json
+
+# CI gate: exit non-zero if any circular dependency exists
+bootcamp cycles ./my-repo --check
+
+# Ratchet legacy cycles: allow up to N known groups
+bootcamp cycles ./my-repo --check --max-cycles 3
+```
+
+Finds **strongly-connected import groups** (modules that mutually depend on
+each other, directly or transitively) using Tarjan's algorithm on the same
+import graph as `coupling` and `IMPACT.md`. Each cycle is shown as a ring
+(`a.ts → b.ts → a.ts`). Test files are excluded. Circular imports are a
+common source of fragile load order and hard-to-test modules, so `--check`
+makes a useful CI guardrail.
+
 ### Preflight ("Can My Machine Build This?")
 
 ```bash
@@ -851,6 +878,7 @@ cache ls` is an alias for `list`.
 | `bootcamp radar <url>` | Tech radar + onboarding-risk score (`--json`, `--check`, `--max-risk`) |
 | `bootcamp impact <url> [file]` | Change impact / blast radius from the import graph (`--json`, `--top`) |
 | `bootcamp coupling <url>` | Rank modules by import coupling: load-bearing core, hubs, orphans (`--json`, `--top`) |
+| `bootcamp cycles <url>` | Detect circular import dependencies (`--json`, `--check`, `--max-cycles`) |
 | `bootcamp preflight <url>` | Check your machine against the repo's declared toolchain (`--json`, `--check`) |
 | `bootcamp owners <url>` | "Who do I ask?" — CODEOWNERS map + maintainers + top committers (`--json`) |
 
