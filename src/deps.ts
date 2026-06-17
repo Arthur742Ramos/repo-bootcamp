@@ -275,6 +275,18 @@ async function extractPythonDependencies(repoPath: string): Promise<DependencyAn
         // Skip blanks, comments, and pip option/include lines
         // (`-r`, `-e`, `-c`, `--hash`, `--index-url`, …).
         if (!trimmed || trimmed.startsWith("#") || trimmed.startsWith("-")) continue;
+        // Skip VCS, URL, archive, and local-path requirements — these have no
+        // PyPI name to extract and the name regex below would otherwise coin a
+        // bogus one (`git+https://…` → "git", a bare URL → "https", `./pkg` →
+        // "."), inflating totalCount (which also feeds radar onboarding-risk).
+        if (
+          trimmed.includes("://") ||
+          /^(?:git|hg|svn|bzr)\+/.test(trimmed) ||
+          trimmed.startsWith(".") ||
+          trimmed.startsWith("/")
+        ) {
+          continue;
+        }
         // Drop inline comments, environment markers, and extras before parsing.
         const cleaned = trimmed.split(/\s+#/)[0].split(";")[0].trim();
         const match = cleaned.match(/^([A-Za-z0-9._-]+)(?:\[[^\]]*\])?\s*[=<>!~]*\s*(.*)$/);
