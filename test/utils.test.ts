@@ -4,7 +4,7 @@
 
 import { describe, it, expect } from "vitest";
 import { mkdtemp, rm, writeFile } from "fs/promises";
-import { join } from "path";
+import { join, resolve } from "path";
 import { tmpdir } from "os";
 import {
   SKIP_DIRS,
@@ -16,7 +16,6 @@ import {
   toPosixPath,
   isPathInsideDir,
 } from "../src/utils.js";
-import { resolve } from "path";
 
 describe("SKIP_DIRS", () => {
   it("is a Set containing common directories to skip", () => {
@@ -199,7 +198,7 @@ describe("isPathInsideDir", () => {
     expect(isPathInsideDir(parent, resolve(parent, "../sibling"))).toBe(false);
   });
 
-  it("returns false for a `..` escape that stays under a same-prefixed sibling", () => {
+  it("returns false for a same-prefixed sibling directory", () => {
     // /tmp/project-evil shares a string prefix with /tmp/project but is not inside it.
     expect(isPathInsideDir(parent, resolve("/tmp/project-evil/file"))).toBe(false);
   });
