@@ -26,6 +26,7 @@ import { runAskCommand } from "./commands/ask-command.js";
 import { runCacheList } from "./commands/cache-list.js";
 import { runCompletionCommand } from "./commands/completion-command.js";
 import { runCouplingCommand } from "./commands/coupling-command.js";
+import { runCyclesCommand } from "./commands/cycles-command.js";
 import { runDepsCommand } from "./commands/deps-command.js";
 import { runPullRequestDiff } from "./commands/diff-command.js";
 import { runDocsCommand } from "./commands/docs-command.js";
@@ -139,6 +140,17 @@ interface CouplingActionOptions {
   branch?: string;
   json?: boolean;
   top?: string;
+  maxFiles?: string;
+  keepTemp?: boolean;
+  verbose?: boolean;
+}
+
+interface CyclesActionOptions {
+  [key: string]: unknown;
+  branch?: string;
+  json?: boolean;
+  check?: boolean;
+  maxCycles?: string;
   maxFiles?: string;
   keepTemp?: boolean;
   verbose?: boolean;
@@ -619,6 +631,35 @@ program
       branch,
       json: opts.json || false,
       top: parseInt(opts.top || "12", 10),
+      maxFiles: parseInt(maxFiles, 10),
+      keepTemp: opts.keepTemp || false,
+      verbose: opts.verbose || false,
+    });
+  });
+
+program
+  .command("cycles <repo-url>")
+  .description(
+    "Detect circular import dependencies (strongly-connected import groups) in the codebase (supports local paths)"
+  )
+  .option("-b, --branch <branch>", "Branch to analyze", "")
+  .option("--json", "Output the cycle report as JSON for machine consumption")
+  .option("--check", "Exit with code 1 if circular dependencies exceed --max-cycles (for CI)")
+  .option("--max-cycles <number>", "Maximum acceptable number of cycles for --check", "0")
+  .option("-m, --max-files <number>", "Maximum files to scan")
+  .option("--keep-temp", "Keep temporary clone directory")
+  .option("-v, --verbose", "Show detailed output")
+  .action(async (repoUrl: string, rawOpts) => {
+    const opts = getActionOptions<CyclesActionOptions>(rawOpts as Command | CyclesActionOptions);
+    // `-b/--branch` and `-m/--max-files` collide with the root command's
+    // options — fall back to the raw argv (same approach as the other commands).
+    const branch = opts.branch || getCliFlagValue(["--branch", "-b"]) || "";
+    const maxFiles = opts.maxFiles || getCliFlagValue(["--max-files", "-m"]) || "500";
+    await runCyclesCommand(repoUrl, {
+      branch,
+      json: opts.json || false,
+      check: opts.check || false,
+      maxCycles: parseInt(opts.maxCycles || "0", 10),
       maxFiles: parseInt(maxFiles, 10),
       keepTemp: opts.keepTemp || false,
       verbose: opts.verbose || false,
