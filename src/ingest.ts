@@ -121,6 +121,28 @@ export function parseGitHubUrl(url: string): RepoInfo {
       };
     }
 
+    // Bare `owner/repo` shorthand (as accepted by `gh` and `npm`) → expand to
+    // github.com. Only a plain two-segment slug with no scheme, host, `@`, or
+    // extra path segments qualifies; anything richer falls through to URL
+    // parsing below. Local relative paths (`./owner/repo`) never reach here —
+    // the caller routes those through isLocalPath first.
+    if (
+      !trimmedUrl.includes("://") &&
+      !trimmedUrl.includes("@") &&
+      /^[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+$/.test(trimmedUrl)
+    ) {
+      const { owner, repo } = parseSegmentsForOwnerRepo("github.com", trimmedUrl.split("/"));
+      return {
+        owner,
+        repo,
+        url: `https://github.com/${owner}/${repo}`,
+        branch: "main",
+        fullName: `${owner}/${repo}`,
+        provider: "github",
+        host: "github.com",
+      };
+    }
+
     const normalizedUrl = /^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//.test(trimmedUrl)
       ? trimmedUrl
       : `https://${trimmedUrl}`;
