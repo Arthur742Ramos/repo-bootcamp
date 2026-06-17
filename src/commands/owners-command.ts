@@ -188,7 +188,11 @@ export async function runOwnersCommand(repoUrl: string, opts: OwnersCommandOptio
     const rules = codeownersContent ? parseCodeowners(codeownersContent) : [];
     const defaultRule = [...rules].reverse().find((r) => r.pattern === "*");
     const defaultOwners = defaultRule?.owners ?? [];
-    const areas = topLevelDirs(scan.files).map((dir) => ({ dir, owners: ownersForPath(dir, rules) }));
+    // Resolve each area against a directory path (trailing slash) so the common
+    // `/packages/** @team` CODEOWNERS idiom matches — patternMatches anchors a
+    // `**` rule with a `/` separator, which a bare dir name lacks. A `/dir` or
+    // `/dir/` rule still matches the trailing-slash form too.
+    const areas = topLevelDirs(scan.files).map((dir) => ({ dir, owners: ownersForPath(`${dir}/`, rules) }));
     const allOwners = [...new Set(rules.flatMap((r) => r.owners))].sort((a, b) => a.localeCompare(b));
     const committers = await topCommitters(repoSource.path, 8);
 
