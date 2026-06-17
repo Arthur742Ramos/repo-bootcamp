@@ -165,7 +165,7 @@ async function extractCargoDependencies(repoPath: string): Promise<DependencyAna
     const seen = new Map<string, Dependency>();
 
     const record = (
-      section: "dependencies" | "dev-dependencies",
+      section: "dependencies" | "dev-dependencies" | "build-dependencies",
       name: string,
       version: string
     ): void => {
@@ -178,13 +178,17 @@ async function extractCargoDependencies(repoPath: string): Promise<DependencyAna
       const dep: Dependency = {
         name,
         version: version || "*",
-        type: section === "dev-dependencies" ? "dev" : "runtime",
+        // Build-deps run only at compile time (build.rs) and dev-deps only in
+        // tests/benches — neither ships in the runtime artifact, so both map to
+        // "dev". Only `[dependencies]` (and target-specific `.dependencies`) are
+        // runtime.
+        type: section === "dependencies" ? "runtime" : "dev",
       };
       seen.set(key, dep);
-      (section === "dev-dependencies" ? dev : runtime).push(dep);
+      (section === "dependencies" ? runtime : dev).push(dep);
     };
 
-    let section: "dependencies" | "dev-dependencies" | "" = "";
+    let section: "dependencies" | "dev-dependencies" | "build-dependencies" | "" = "";
     let tableCrate: string | null = null;
 
     for (const raw of content.split("\n")) {
@@ -194,11 +198,20 @@ async function extractCargoDependencies(repoPath: string): Promise<DependencyAna
       const header = /^\[+([^\]]+)\]+$/.exec(line);
       if (header) {
         tableCrate = null;
-        const sub = /^(dependencies|dev-dependencies)(?:\.(.+))?$/.exec(header[1].trim());
+        // Accept top-level and platform-specific dependency tables:
+        //   [dependencies] / [dev-dependencies] / [build-dependencies]
+        //   [target.<triple-or-cfg>.<kind>]  (e.g. [target.'cfg(windows)'.dependencies])
+        // and their detailed `.<crate>` forms. The optional `target.<spec>.`
+        // prefix backtracks so the kind alternation anchors correctly even when
+        // the target spec contains dots/quotes/parens.
+        const sub =
+          /^(?:target\..+\.)?(dependencies|dev-dependencies|build-dependencies)(?:\.(.+))?$/.exec(
+            header[1].trim()
+          );
         if (sub) {
-          section = sub[1] as "dependencies" | "dev-dependencies";
+          section = sub[1] as "dependencies" | "dev-dependencies" | "build-dependencies";
           if (sub[2]) {
-            // `[dependencies.<crate>]` detailed table — record the crate now;
+            // `[<kind>.<crate>]` detailed table — record the crate now;
             // its version arrives on a later `version = "..."` line.
             tableCrate = sub[2];
             record(section, tableCrate, "*");
