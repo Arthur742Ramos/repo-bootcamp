@@ -182,6 +182,27 @@ function compare(a: number[], b: number[]): number {
 export function satisfiesVersion(required: string, installed: string): boolean | null {
   const inst = parseVersion(installed);
   if (inst.length === 0) return null;
+
+  // A requirement may be a comma-separated compound range (PEP 621 style,
+  // e.g. `>=3.8,<4.0`). Every constraint must hold, so evaluate each and AND
+  // the results. A single constraint is just a one-element range.
+  const constraints = required
+    .split(",")
+    .map((c) => c.trim())
+    .filter(Boolean);
+  if (constraints.length === 0) return null;
+
+  let result: boolean | null = null;
+  for (const constraint of constraints) {
+    const single = satisfiesSingleConstraint(constraint, inst);
+    if (single === null) return null; // can't compare deterministically
+    result = result === null ? single : result && single;
+  }
+  return result;
+}
+
+/** Evaluate one parsed-version constraint against an already-parsed install. */
+function satisfiesSingleConstraint(required: string, inst: number[]): boolean | null {
   const opMatch = required.trim().match(/^(>=|>|<=|<|\^|~|=)?\s*v?(\d+(?:\.\d+){0,2})/);
   if (!opMatch) return null;
   const op = opMatch[1] || "=";

@@ -27,6 +27,19 @@ describe("satisfiesVersion", () => {
     expect(satisfiesVersion("lts/iron", "20.0.0")).toBeNull();
     expect(satisfiesVersion("stable", "1.2.3")).toBeNull();
   });
+
+  it("evaluates compound comma-separated ranges (PEP 621 requires-python)", () => {
+    // Both bounds must hold — the upper bound was previously ignored.
+    expect(satisfiesVersion(">=3.8,<4.0", "3.11.2")).toBe(true);
+    expect(satisfiesVersion(">=3.8,<4.0", "3.8.0")).toBe(true);
+    expect(satisfiesVersion(">=3.8,<4.0", "4.0.0")).toBe(false); // excluded by <4.0
+    expect(satisfiesVersion(">=3.8,<4.0", "3.7.9")).toBe(false); // below >=3.8
+    expect(satisfiesVersion(">=3.8, <4.0", "3.9.0")).toBe(true); // tolerates spaces
+  });
+
+  it("returns null when any constraint in a compound range is non-numeric", () => {
+    expect(satisfiesVersion(">=3.8,foo", "3.9.0")).toBeNull();
+  });
 });
 
 const dirs: string[] = [];
