@@ -116,17 +116,23 @@ export async function runParallelAnalysis(
 
   const MAX_KEY_FILES_FOR_IMPACT = 10;
 
-  // Build the import graph once and share it between the (cached) impact phase
-  // and the cycle detection below. Cycles are NOT cached — they are a cheap
-  // Tarjan pass over the in-memory graph, recomputed each run, so caching them
-  // would needlessly change the impact cache value's shape and version.
-  const importGraphPromise = buildImportGraph(repoPath, scanResult.files);
+  // Lazily build the import graph at most once, and only if a consumer actually
+  // needs it. Both the impact and cycles phases are cached independently, so on
+  // a warm run where BOTH hit the cache the graph is never built — restoring the
+  // pre-cycles behavior where a cache hit skipped graph construction entirely.
+  let importGraphPromise: ReturnType<typeof buildImportGraph> | undefined;
+  const getImportGraph = (): ReturnType<typeof buildImportGraph> => {
+    if (!importGraphPromise) {
+      importGraphPromise = buildImportGraph(repoPath, scanResult.files);
+    }
+    return importGraphPromise;
+  };
 
   const impactsPromise = runCachedPhase<ChangeImpact[]>(
     "impact",
     "impact",
     async () => {
-      const importGraph = await importGraphPromise;
+      const importGraph = await getImportGraph();
       const keyFiles = getKeyFilesForImpact(scanResult.files);
       return await Promise.all(
         keyFiles.slice(0, MAX_KEY_FILES_FOR_IMPACT).map(file =>
@@ -136,7 +142,14 @@ export async function runParallelAnalysis(
     }
   );
 
-  const cyclesPromise = importGraphPromise.then(detectCyclesInImportGraph);
+  // Cached as its own phase so a warm run skips both the Tarjan pass and the
+  // graph build. The compute closure shares getImportGraph(), so when the impact
+  // phase misses too, the graph is still built only once.
+  const cyclesPromise = runCachedPhase<CyclesSummary>(
+    "cycles",
+    "cycles",
+    async () => detectCyclesInImportGraph(await getImportGraph())
+  );
 
   // radar depends on deps + security, but runs as soon as both resolve
   const radarPromise = Promise.all([depsPromise, securityPromise]).then(([deps, security]) => {

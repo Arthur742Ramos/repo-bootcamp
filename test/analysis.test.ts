@@ -326,6 +326,37 @@ describe("runParallelAnalysis", () => {
       expect(result.security).toEqual(cachedSecurity);
     });
 
+    it("does not build the import graph when impact and cycles both cache-hit", async () => {
+      // Restores the pre-cycles behavior: a warm run skips graph construction.
+      readPhaseCacheMock.mockImplementation(async (phase: string) => {
+        if (phase === "impact") return { hit: true, value: [mockImpact] };
+        if (phase === "cycles") {
+          return { hit: true, value: { moduleCount: 0, cycles: [], rings: [] } };
+        }
+        return { hit: false };
+      });
+
+      const result = await runParallelAnalysis("/repo", mockScanResult, undefined, cacheOptions);
+
+      expect(buildImportGraphMock).not.toHaveBeenCalled();
+      expect(result.impacts).toEqual([mockImpact]);
+      expect(result.cycles).toEqual({ moduleCount: 0, cycles: [], rings: [] });
+    });
+
+    it("builds the import graph only once when a graph consumer misses", async () => {
+      readPhaseCacheMock.mockImplementation(async (phase: string) => {
+        // impact misses (needs graph); cycles hits (does not).
+        if (phase === "cycles") {
+          return { hit: true, value: { moduleCount: 0, cycles: [], rings: [] } };
+        }
+        return { hit: false };
+      });
+
+      await runParallelAnalysis("/repo", mockScanResult, undefined, cacheOptions);
+
+      expect(buildImportGraphMock).toHaveBeenCalledTimes(1);
+    });
+
     it("tolerates cache write failures", async () => {
       writePhaseCacheMock.mockRejectedValue(new Error("disk full"));
 
