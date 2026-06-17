@@ -101,6 +101,99 @@ describe("dependency manifest parsers", () => {
     expect(names(deps!.dev)).toEqual(["pytest"]);
   });
 
+  it("Poetry 1.2+: parses [tool.poetry.group.<name>.dependencies] groups", async () => {
+    const dir = await repoWith({
+      "pyproject.toml": [
+        "[tool.poetry.dependencies]",
+        'python = "^3.11"',
+        'httpx = "^0.27"',
+        "[tool.poetry.group.dev.dependencies]",
+        'pytest = "^8.0"',
+        "[tool.poetry.group.test.dependencies]",
+        'coverage = "^7.0"',
+        "[tool.poetry.group.docs.dependencies]",
+        'sphinx = "^7.0"',
+      ].join("\n"),
+    });
+    const deps = await extractDependencies(dir);
+    expect(deps?.packageManager).toBe("poetry");
+    // dev + test groups → dev; runtime deps and other groups (docs) → runtime.
+    expect(names(deps!.runtime).sort()).toEqual(["httpx", "sphinx"]);
+    expect(names(deps!.dev).sort()).toEqual(["coverage", "pytest"]);
+  });
+
+  it("PEP 621: parses [project] dependencies and optional-dependencies", async () => {
+    const dir = await repoWith({
+      "pyproject.toml": [
+        "[project]",
+        'name = "myapp"',
+        'requires-python = ">=3.10"',
+        "dependencies = [",
+        '  "flask>=2.0",',
+        '  "requests[security]>=2.28",',
+        '  "rich; python_version >= \'3.8\'",',
+        "]",
+        "[project.optional-dependencies]",
+        'test = ["pytest>=7", "coverage"]',
+        "[build-system]",
+        'requires = ["hatchling"]',
+        'build-backend = "hatchling.build"',
+      ].join("\n"),
+    });
+    const deps = await extractDependencies(dir);
+    expect(deps?.packageManager).toBe("pip");
+    // Extras (`[security]`) and env markers (`; python_version …`) are stripped.
+    expect(names(deps!.runtime).sort()).toEqual(["coverage", "flask", "pytest", "requests", "rich"]);
+    expect(deps!.runtime.find((d) => d.name === "requests")?.version).toContain("2.28");
+    // The build-system requires array must not leak in as a dependency.
+    expect(names(deps!.runtime)).not.toContain("hatchling");
+  });
+
+  it("PEP 735: parses [dependency-groups] as dev dependencies", async () => {
+    const dir = await repoWith({
+      "pyproject.toml": [
+        "[project]",
+        'name = "x"',
+        'dependencies = ["click"]',
+        "[dependency-groups]",
+        'dev = ["ruff", "mypy"]',
+      ].join("\n"),
+    });
+    const deps = await extractDependencies(dir);
+    expect(names(deps!.runtime)).toContain("click");
+    expect(names(deps!.dev).sort()).toEqual(["mypy", "ruff"]);
+  });
+
+  it("PEP 621: does not split on commas inside an environment marker", async () => {
+    const dir = await repoWith({
+      "pyproject.toml": [
+        "[project]",
+        'name = "x"',
+        "dependencies = [",
+        '  "flask>=2.0",',
+        "  \"pywin32; sys_platform in ('win32', 'cygwin')\",",
+        "]",
+      ].join("\n"),
+    });
+    const deps = await extractDependencies(dir);
+    // The comma inside the marker must not produce bogus win32/cygwin deps.
+    expect(names(deps!.runtime).sort()).toEqual(["flask", "pywin32"]);
+  });
+
+  it("PEP 621: recognizes table headers with trailing inline comments", async () => {
+    const dir = await repoWith({
+      "pyproject.toml": [
+        "[project]  # project metadata",
+        'name = "x"',
+        'dependencies = ["click"]',
+        "[project.optional-dependencies]  # extras",
+        'test = ["pytest"]',
+      ].join("\n"),
+    });
+    const deps = await extractDependencies(dir);
+    expect(names(deps!.runtime).sort()).toEqual(["click", "pytest"]);
+  });
+
   it("requirements.txt: skips pip option/include lines", async () => {
     const dir = await repoWith({
       "requirements.txt": [
