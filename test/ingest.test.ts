@@ -130,6 +130,14 @@ describe("parseGitHubUrl", () => {
     expect(() => parseGitHubUrl("owner/repo/extra")).toThrow("Invalid GitHub URL");
   });
 
+  it("does not treat a scheme-less host/owner as shorthand", () => {
+    // `github.com/owner` is a scheme-less URL missing its repo, not an
+    // owner/repo slug — it must keep throwing, never expand to
+    // github.com/github.com/owner.
+    expect(() => parseGitHubUrl("github.com/owner")).toThrow("Invalid GitHub URL");
+    expect(() => parseGitHubUrl("gitlab.com/group")).toThrow("Invalid GitHub URL");
+  });
+
   it("throws on empty URL", () => {
     expect(() => parseGitHubUrl("")).toThrow("Invalid GitHub URL");
   });
