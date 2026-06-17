@@ -21,12 +21,27 @@
 [![npm provenance](https://img.shields.io/badge/npm-provenance-enabled-2ea44f?logo=npm)](https://docs.npmjs.com/generating-provenance-statements)
 [![codecov](https://codecov.io/gh/Arthur742Ramos/repo-bootcamp/branch/main/graph/badge.svg)](https://codecov.io/gh/Arthur742Ramos/repo-bootcamp)
 [![Node.js](https://img.shields.io/badge/node-%3E%3D20-brightgreen)](https://nodejs.org/)
-[![TypeScript](https://img.shields.io/badge/TypeScript-5.6-blue)](https://www.typescriptlang.org/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-6.0-blue)](https://www.typescriptlang.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 [Features](#features) • [Quick Start](#quick-start) • [How It Uses Copilot SDK](#how-it-uses-the-github-copilot-sdk) • [Examples](#example-output)
 
 </div>
+
+---
+
+<details>
+<summary><b>Table of contents</b></summary>
+
+- [The Problem](#the-problem) · [The Solution](#the-solution) · [Why This Tool Wins](#why-this-tool-wins)
+- [How It Uses the GitHub Copilot SDK](#how-it-uses-the-github-copilot-sdk) · [Features](#features)
+- [Example Output](#example-output) · [Generated Documentation](#generated-documentation)
+- [Quick Start](#quick-start) · [Usage](#usage) · [CLI Options](#cli-options) · [Commands](#commands)
+- [Programmatic API](#programmatic-api) · [Architecture](#architecture) · [How It Works](#how-it-works)
+- [Configuration](#configuration) · [Development](#development) · [Requirements](#requirements)
+- [Model Configuration](#model-configuration) · [Tech Stack](#tech-stack) · [Contributing](#contributing) · [License](#license)
+
+</details>
 
 ---
 
@@ -134,20 +149,19 @@ Onboarding Risk: 18/100 (A) 🟢
 1. **Powered by GitHub Copilot SDK** - Leverages the official SDK for agentic AI with tool-calling
 2. **Truly Agentic** - Claude autonomously explores codebases, not just template filling
 3. **Schema Validated** - All output is validated with Zod schemas and auto-retried on failures
-4. **Production Ready** - 1,000+ tests, TypeScript, proper error handling
-5. **Full Feature Set** - Interactive mode, web UI, docs drift analyzer, cache management, version diffing
+4. **Production Ready** - 1,270+ tests, TypeScript, proper error handling
+5. **Full Feature Set** - A 20-command CLI: interactive Q&A, a combined scan dashboard, health/metrics/security scoring, coupling & impact graphs, machine preflight, ownership maps, docs-drift analysis, and a web UI
 6. **Beautiful Output** - Mermaid diagrams, structured markdown, professional formatting
 
 ### By the Numbers
 
 | Metric | Value |
 |--------|-------|
-| GitHub stars | 29 |
 | Generated files | 14+ |
-| Test suite | 1,000+ tests |
-| Source files | 52 TypeScript modules |
-| Test files | 79 Vitest files |
-| Lines of code | 13,381 TypeScript LOC (src/) |
+| Test suite | 1,270+ tests |
+| Source files | 59 TypeScript modules |
+| Test files | 102 Vitest files |
+| Lines of code | 18,326 TypeScript LOC (src/) |
 | Languages supported | 10+ |
 | Generation time | < 60 seconds |
 
@@ -254,6 +268,11 @@ The Copilot SDK transforms what would be a simple template-filler into an intell
 - **Codebase Metrics & Hotspots** - Deterministic `METRICS.md` with language breakdown, largest-file hotspots, test-to-source ratio, and an Approachability score (0-100 + grade)
 - **Repo Health Check** - Deterministic `HEALTH.md` scoring onboarding-readiness across documentation, community, quality, and automation signals (0-100 + grade) with prioritized, actionable recommendations
 - **Environment Doctor** - Diagnose Node, git, GitHub CLI/auth, mermaid-cli, and cache health with `bootcamp doctor` (`--json` for CI)
+- **Combined Scan Dashboard** - `bootcamp scan` reports health, metrics, security, and onboarding risk from a single clone, with a `--check` CI gate on the lowest score
+- **Module Coupling Map** - `bootcamp coupling` ranks modules by import coupling to reveal the load-bearing core, orchestrator hubs, and possibly-orphaned dead code
+- **Machine Preflight** - `bootcamp preflight` checks your machine against the target repo's declared toolchain (Node, package manager, Python, Go) with a per-row remedy
+- **Ownership Map** - `bootcamp owners` parses `CODEOWNERS` to answer "who do I ask?" with default owners, per-area maintainers, and top committers
+- **Style Pack Explorer** - `bootcamp styles` lists the built-in style packs and the doc sections each one enables
 - **Version & PR Comparison** - Compare refs with `--compare` or analyze pull requests with `bootcamp diff`
 - **Auto-Issue Creator** - Generate GitHub issues from starter tasks
 - **Web Demo Server** - Beautiful browser UI for analyzing repositories
@@ -478,6 +497,26 @@ bootcamp init --print
 bootcamp init --style corporate --path bootcamp.config.json
 ```
 
+### Docs Drift Analyzer
+
+```bash
+# Detect stale or mismatched docs (versions, frameworks, CLI flags, badges)
+bootcamp docs https://github.com/owner/repo
+
+# Works on local paths too
+bootcamp docs ./my-repo
+
+# Auto-fix the stale sections it can repair
+bootcamp docs ./my-repo --fix
+
+# CI gate: exit non-zero when docs are stale
+bootcamp docs ./my-repo --check
+```
+
+Flags version mismatches, undocumented frameworks/prerequisites, CLI drift, and
+broken badges. Pair `--check` with `--fix` in CI to fail the build and propose
+repairs in one pass.
+
 ### Combined Scan
 
 ```bash
@@ -697,6 +736,19 @@ bootcamp https://github.com/owner/repo --style academic   # Technical, research-
 bootcamp https://github.com/owner/repo --style minimal    # Lean and concise
 ```
 
+### Inspect Style Packs
+
+```bash
+# List the built-in style packs and the doc sections each one enables
+bootcamp styles
+
+# Machine-readable output (sections, tone, depth, first-tasks count)
+bootcamp styles --json
+```
+
+Review every `--style` option and its section coverage before you pick one.
+`bootcamp style` is an accepted alias.
+
 ### Diagram Rendering
 
 ```bash
@@ -709,6 +761,39 @@ bootcamp https://github.com/owner/repo --render-diagrams png
 # Install mermaid-cli globally
 npm install -g @mermaid-js/mermaid-cli
 ```
+
+### Shell Completion
+
+```bash
+# Print a completion script for your shell (bash, zsh, or fish)
+bootcamp completion zsh
+
+# Install it (zsh example)
+bootcamp completion zsh > ~/.zsh/completions/_bootcamp
+```
+
+The script is generated from the live command tree, so it always matches the
+installed version. Supported shells: `bash`, `zsh`, `fish`.
+
+### Cache Management
+
+```bash
+# List cache entries (repo, phase, age, size)
+bootcamp cache list
+
+# Machine-readable listing for scripts
+bootcamp cache list --json
+
+# Remove entries older than N days (default 7)
+bootcamp cache prune --max-age 14
+
+# Clear the entire analysis cache
+bootcamp cache clear
+```
+
+Bootcamp reuses the deps/security/impact analysis phases between runs; manage
+that cache here, or bypass it for a single run with `--no-cache`. `bootcamp
+cache ls` is an alias for `list`.
 
 ## CLI Options
 
@@ -730,6 +815,9 @@ npm install -g @mermaid-js/mermaid-cli
 | `--render-diagrams [format]` | Render Mermaid to SVG/PNG (requires mermaid-cli) | `svg` |
 | `--json-only` | Only generate repo_facts.json | false |
 | `--no-clone` | Use a local directory path instead of cloning | false |
+| `--full-clone` | Full clone instead of shallow (slower, full history) | false |
+| `--repo-prompts <path>` | Path to custom prompts file (default: `.bootcamp-prompts.md` in target repo) | - |
+| `--no-cache` | Skip reading/writing the analysis cache | false |
 | `--fast` | Fast mode: inline key files, skip tools, much faster (~15-30s) | false |
 | `--keep-temp` | Keep temporary clone | false |
 | `-w, --watch` | Watch mode: re-run analysis on new commits | false |
@@ -741,12 +829,19 @@ npm install -g @mermaid-js/mermaid-cli
 
 ## Commands
 
+### Generate & explore
+
 | Command | Description |
 |---------|-------------|
 | `bootcamp <url>` | Generate full bootcamp documentation |
 | `bootcamp ask <url>` | Interactive Q&A without full generation |
 | `bootcamp diff <owner/repo#pr>` | Generate onboarding diff for a PR |
-| `bootcamp web` | Start local web demo server |
+| `bootcamp web` | Start local web demo server (alias: `serve`) |
+
+### Analyze & score
+
+| Command | Description |
+|---------|-------------|
 | `bootcamp docs <url>` | Analyze documentation drift (`--check`, `--fix`) |
 | `bootcamp scan <url>` | Combined health + metrics + security dashboard from one scan (`--json`, `--check`, `--min-score`) |
 | `bootcamp health <url>` | Score onboarding-readiness (`--json`, `--check`, `--min-score`) |
@@ -758,8 +853,13 @@ npm install -g @mermaid-js/mermaid-cli
 | `bootcamp coupling <url>` | Rank modules by import coupling: load-bearing core, hubs, orphans (`--json`, `--top`) |
 | `bootcamp preflight <url>` | Check your machine against the repo's declared toolchain (`--json`, `--check`) |
 | `bootcamp owners <url>` | "Who do I ask?" — CODEOWNERS map + maintainers + top committers (`--json`) |
-| `bootcamp init` | Scaffold a `.bootcamprc.json` config (`--force`, `--print`, `--style`) |
-| `bootcamp styles` | List the built-in style packs and the sections each enables (`--json`) |
+
+### Configure & maintain
+
+| Command | Description |
+|---------|-------------|
+| `bootcamp init` | Scaffold a `.bootcamprc.json` config (`--force`, `--print`, `--path`, `--style`) |
+| `bootcamp styles` | List the built-in style packs and the sections each enables (`--json`, alias: `style`) |
 | `bootcamp doctor` | Diagnose your environment (`--json`) |
 | `bootcamp completion <shell>` | Print a shell completion script (bash, zsh, fish) |
 | `bootcamp cache list\|prune\|clear` | Manage the analysis cache |
@@ -925,7 +1025,7 @@ npm run build
 npm run lint
 npm run typecheck
 
-# Run tests (1,000+ tests)
+# Run tests (1,270+ tests)
 npm test
 
 # Check formatting (or apply it)
@@ -969,9 +1069,9 @@ Set `--model` to override.
 ## Tech Stack
 
 - **Runtime:** Node.js 20+
-- **Language:** TypeScript 5.6
+- **Language:** TypeScript 6.0
 - **AI:** GitHub Copilot SDK with Claude
-- **Testing:** Vitest (1,000+ tests)
+- **Testing:** Vitest (1,270+ tests)
 - **CLI:** Commander.js
 - **Validation:** Zod schemas
 - **Web:** Express 5 with SSE
