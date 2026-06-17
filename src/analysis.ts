@@ -13,6 +13,7 @@ import { extractDependencies, type DependencyAnalysis } from "./deps.js";
 import { analyzeSecurityPatterns, type SecurityAnalysis } from "./security.js";
 import { generateTechRadar } from "./radar.js";
 import { buildImportGraph, analyzeChangeImpact, getKeyFilesForImpact } from "./impact.js";
+import { detectCyclesInImportGraph, type CyclesSummary } from "./cycles.js";
 import { ProgressTracker } from "./progress.js";
 import type { ScanResult, TechRadar, ChangeImpact } from "./types.js";
 
@@ -21,6 +22,7 @@ export interface ParallelAnalysisResult {
   security: SecurityAnalysis;
   radar: TechRadar;
   impacts: ChangeImpact[];
+  cycles: CyclesSummary;
 }
 
 export interface ParallelAnalysisCacheOptions {
@@ -114,11 +116,23 @@ export async function runParallelAnalysis(
 
   const MAX_KEY_FILES_FOR_IMPACT = 10;
 
+  // Lazily build the import graph at most once, and only if a consumer actually
+  // needs it. Both the impact and cycles phases are cached independently, so on
+  // a warm run where BOTH hit the cache the graph is never built — restoring the
+  // pre-cycles behavior where a cache hit skipped graph construction entirely.
+  let importGraphPromise: ReturnType<typeof buildImportGraph> | undefined;
+  const getImportGraph = (): ReturnType<typeof buildImportGraph> => {
+    if (!importGraphPromise) {
+      importGraphPromise = buildImportGraph(repoPath, scanResult.files);
+    }
+    return importGraphPromise;
+  };
+
   const impactsPromise = runCachedPhase<ChangeImpact[]>(
     "impact",
     "impact",
     async () => {
-      const importGraph = await buildImportGraph(repoPath, scanResult.files);
+      const importGraph = await getImportGraph();
       const keyFiles = getKeyFilesForImpact(scanResult.files);
       return await Promise.all(
         keyFiles.slice(0, MAX_KEY_FILES_FOR_IMPACT).map(file =>
@@ -126,6 +140,15 @@ export async function runParallelAnalysis(
         )
       );
     }
+  );
+
+  // Cached as its own phase so a warm run skips both the Tarjan pass and the
+  // graph build. The compute closure shares getImportGraph(), so when the impact
+  // phase misses too, the graph is still built only once.
+  const cyclesPromise = runCachedPhase<CyclesSummary>(
+    "cycles",
+    "cycles",
+    async () => detectCyclesInImportGraph(await getImportGraph())
   );
 
   // radar depends on deps + security, but runs as soon as both resolve
@@ -142,13 +165,14 @@ export async function runParallelAnalysis(
     return radar;
   });
 
-  // wait for all four analyzers concurrently
-  const [deps, security, radar, impacts] = await Promise.all([
+  // wait for all analyzers concurrently
+  const [deps, security, radar, impacts, cycles] = await Promise.all([
     depsPromise,
     securityPromise,
     radarPromise,
     impactsPromise,
+    cyclesPromise,
   ]);
 
-  return { deps, security, radar, impacts };
+  return { deps, security, radar, impacts, cycles };
 }

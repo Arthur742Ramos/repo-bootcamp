@@ -19,7 +19,7 @@ export function getCacheVersion(): number {
   return CACHE_VERSION;
 }
 
-export type CachePhase = "facts" | "deps" | "security" | "impact";
+export type CachePhase = "facts" | "deps" | "security" | "impact" | "cycles";
 export type AnalysisPhase = Exclude<CachePhase, "facts">;
 
 interface CacheEntry<T = unknown> {
@@ -297,6 +297,7 @@ const VALID_PHASES: ReadonlySet<CachePhase> = new Set<CachePhase>([
   "deps",
   "security",
   "impact",
+  "cycles",
 ]);
 
 function hasRequiredShape(raw: unknown): raw is Required<

@@ -3,7 +3,7 @@ import chalk from "chalk";
 import { buildImportGraph } from "../impact.js";
 import { resolveRepo, type RepoSource } from "../repo-resolver.js";
 import { scanRepositoryFiles } from "../services/clone-service.js";
-import { findCycles, describeCycle, type Cycle } from "../cycles.js";
+import { detectCyclesInImportGraph, type Cycle } from "../cycles.js";
 
 /** Options accepted by the `bootcamp cycles` command. */
 export interface CyclesCommandOptions {
@@ -19,25 +19,6 @@ export interface CyclesCommandOptions {
   /** Keep the temporary clone (remote repos only). */
   keepTemp?: boolean;
   verbose?: boolean;
-}
-
-/** Source-code extensions the import graph actually parses (mirrors impact.ts/coupling). */
-const SOURCE_EXT = /\.(ts|tsx|js|jsx|mjs|cjs|py|go)$/;
-
-/**
- * Whether a path is a test file. Mirrors coupling-command.ts so the two
- * import-graph commands treat test files consistently. Circular imports among
- * test fixtures are noise (bundlers never ship them), so they are excluded
- * from cycle detection.
- */
-function isTestFile(path: string): boolean {
-  if (/\.(test|spec)\.[^./]+$/.test(path)) return true;
-  const base = path.split("/").pop() ?? "";
-  if (/_test\.[^.]+$/.test(base)) return true;
-  if (/^test_.+\.py$/.test(base)) return true;
-  return path
-    .split("/")
-    .some((s) => s === "test" || s === "tests" || s === "spec" || s === "specs" || s === "__tests__" || s === "__mocks__");
 }
 
 function printReport(repoName: string, moduleCount: number, cycles: Cycle[], rings: string[]): void {
@@ -99,28 +80,14 @@ export async function runCyclesCommand(repoUrl: string, opts: CyclesCommandOptio
   try {
     const scan = await scanRepositoryFiles(repoSource.path, maxFiles);
     const fullGraph = await buildImportGraph(repoSource.path, scan.files);
-
-    // Restrict the graph to non-test source modules, then rebuild each node's
-    // imports against that restricted set so test/non-source edges can't form
-    // or inflate a cycle.
-    const included = new Set(
-      [...fullGraph.keys()].filter((file) => SOURCE_EXT.test(file) && !isTestFile(file))
-    );
-    const graph = new Map<string, { imports: string[] }>();
-    for (const file of included) {
-      const imports = (fullGraph.get(file)?.imports ?? []).filter((target) => included.has(target));
-      graph.set(file, { imports });
-    }
-
-    const cycles = findCycles(graph);
-    const rings = cycles.map((cycle) => describeCycle(cycle, graph));
+    const { moduleCount, cycles, rings } = detectCyclesInImportGraph(fullGraph);
 
     if (opts.json) {
       console.log(
         JSON.stringify(
           {
             repo: repoSource.repoInfo.fullName,
-            moduleCount: included.size,
+            moduleCount,
             cycleCount: cycles.length,
             largestCycleSize: cycles.length > 0 ? cycles[0].size : 0,
             cycles,
@@ -130,7 +97,7 @@ export async function runCyclesCommand(repoUrl: string, opts: CyclesCommandOptio
         )
       );
     } else {
-      printReport(repoSource.repoInfo.fullName, included.size, cycles, rings);
+      printReport(repoSource.repoInfo.fullName, moduleCount, cycles, rings);
     }
 
     if (opts.check && cycles.length > maxCycles) {

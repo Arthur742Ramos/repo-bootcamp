@@ -372,7 +372,7 @@ Request → Options Merge → Hooks (before) → Fetch → Retry? → Hooks (aft
 | `DEPENDENCIES.md` | Dependency graph and analysis |
 | `SECURITY.md` | Security patterns and findings |
 | `RADAR.md` | Tech radar and onboarding risk score |
-| `IMPACT.md` | Change impact analysis for key files |
+| `IMPACT.md` | Change impact analysis for key files, plus any circular dependencies |
 | `METRICS.md` | Codebase metrics, hotspots & approachability score |
 | `HEALTH.md` | Onboarding-readiness health score & recommendations |
 | `DIFF.md` | Version comparison (with `--compare`) |

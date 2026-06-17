@@ -1,6 +1,11 @@
 import { describe, it, expect } from "vitest";
 
-import { findCycles, describeCycle, type GraphNode } from "../src/cycles.js";
+import {
+  findCycles,
+  describeCycle,
+  detectCyclesInImportGraph,
+  type GraphNode,
+} from "../src/cycles.js";
 
 function graphOf(entries: Record<string, string[]>): Map<string, GraphNode> {
   return new Map(Object.entries(entries).map(([file, imports]) => [file, { imports }]));
@@ -99,5 +104,50 @@ describe("describeCycle", () => {
     const desc = describeCycle(cycle, g);
     expect(desc).not.toContain("→");
     expect(desc).toBe("a, b, c");
+  });
+});
+
+describe("detectCyclesInImportGraph", () => {
+  // Mirrors buildImportGraph's wide node shape ({ imports, importedBy }).
+  function fullGraph(entries: Record<string, string[]>) {
+    return new Map(
+      Object.entries(entries).map(([file, imports]) => [file, { imports, importedBy: [] }])
+    );
+  }
+
+  it("detects a cycle and excludes test files from modules and edges", () => {
+    const summary = detectCyclesInImportGraph(
+      fullGraph({
+        "src/a.ts": ["src/b.ts"],
+        "src/b.ts": ["src/a.ts"],
+        // Test-only cycle — must not appear.
+        "src/a.test.ts": ["src/b.test.ts"],
+        "src/b.test.ts": ["src/a.test.ts"],
+      })
+    );
+    expect(summary.cycles).toEqual([{ size: 2, files: ["src/a.ts", "src/b.ts"] }]);
+    expect(summary.rings).toEqual(["src/a.ts → src/b.ts → src/a.ts"]);
+    expect(summary.moduleCount).toBe(2); // test files excluded
+  });
+
+  it("excludes non-source files so they cannot form a false cycle", () => {
+    const summary = detectCyclesInImportGraph(
+      fullGraph({
+        "src/a.ts": ["src/b.ts", "README.md"],
+        "src/b.ts": ["src/a.ts"],
+        "README.md": [],
+        "data.json": [],
+      })
+    );
+    expect(summary.moduleCount).toBe(2);
+    expect(summary.cycles).toHaveLength(1);
+  });
+
+  it("returns an empty summary for an empty graph", () => {
+    expect(detectCyclesInImportGraph(new Map())).toEqual({
+      moduleCount: 0,
+      cycles: [],
+      rings: [],
+    });
   });
 });
