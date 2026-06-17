@@ -211,6 +211,38 @@ describe("dependency manifest parsers", () => {
     expect(deps!.runtime.find((d) => d.name === "requests")?.version).toBe("2.31.0");
   });
 
+  it("requirements.txt: skips VCS, URL, archive, and local-path requirements", async () => {
+    const dir = await repoWith({
+      "requirements.txt": [
+        "requests==2.31.0",
+        "git+https://github.com/psf/requests.git#egg=requests2",
+        "hg+https://bitbucket.org/x/y",
+        "svn+https://svn.example.com/z",
+        "https://example.com/pkg/archive.tar.gz",
+        "./local/package",
+        "/abs/path/pkg",
+        "flask>=2.0",
+      ].join("\n"),
+    });
+    const deps = await extractDependencies(dir);
+    // None of the VCS/URL/local lines should coin a bogus package name.
+    expect(names(deps!.runtime).sort()).toEqual(["flask", "requests"]);
+    expect(deps!.totalCount).toBe(2);
+  });
+
+  it("requirements.txt: keeps a normal requirement with a URL in its inline comment", async () => {
+    const dir = await repoWith({
+      "requirements.txt": [
+        "requests==2.31.0  # see https://pypi.org/project/requests/",
+        "flask>=2.0 # https://flask.palletsprojects.com",
+      ].join("\n"),
+    });
+    const deps = await extractDependencies(dir);
+    // The URL lives in a trailing comment, so the requirement must not be skipped.
+    expect(names(deps!.runtime).sort()).toEqual(["flask", "requests"]);
+    expect(deps!.runtime.find((d) => d.name === "requests")?.version).toBe("2.31.0");
+  });
+
   it("go.mod: reads every require block and dedupes", async () => {
     const dir = await repoWith({
       "go.mod": [
