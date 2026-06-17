@@ -34,7 +34,8 @@ function isTestFile(path: string): boolean {
   const base = path.split("/").pop() ?? "";
   if (/_test\.[^.]+$/.test(base)) return true;
   if (/^test_.+\.py$/.test(base)) return true;
-  // Directory-based conventions (mirrors metrics.ts / radar.ts).
+  // Directory-based conventions (consistent with the test-path detection in
+  // metrics.ts and health.ts).
   return path
     .split("/")
     .some((s) => s === "test" || s === "tests" || s === "spec" || s === "specs" || s === "__tests__" || s === "__mocks__");
