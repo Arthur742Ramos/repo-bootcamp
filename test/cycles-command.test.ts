@@ -209,6 +209,20 @@ describe("runCyclesCommand", () => {
     expect(mockCleanup).not.toHaveBeenCalled();
   });
 
+  it("keeps stdout valid JSON when --json is combined with --keep-temp", async () => {
+    buildImportGraphMock.mockResolvedValueOnce(
+      graphOf({ "src/a.ts": ["src/b.ts"], "src/b.ts": ["src/a.ts"] })
+    );
+    await runCyclesCommand("https://github.com/test/repo", { json: true, keepTemp: true });
+    // stdout must be parseable JSON — the keep-temp note goes to stderr.
+    const out = jsonOut();
+    expect(out.cycleCount).toBe(1);
+    const stdout = logSpy.mock.calls.map((c) => String(c[0])).join("\n");
+    expect(stdout).not.toContain("Temporary clone kept");
+    const stderr = errSpy.mock.calls.map((c) => String(c[0])).join("\n");
+    expect(stderr).toContain("Temporary clone kept");
+  });
+
   it("exits 1 when the repository cannot be resolved", async () => {
     resolveRepoMock.mockRejectedValueOnce(new Error("nope"));
     await expect(

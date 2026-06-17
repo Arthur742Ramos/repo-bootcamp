@@ -90,4 +90,14 @@ describe("describeCycle", () => {
     // Greedy walk a → b → c → a visits all three members.
     expect(describeCycle(cycle, g)).toBe("a → b → c → a");
   });
+
+  it("does not imply a closing edge that does not exist", () => {
+    // SCC {a,b,c}: a→b, b→{a,c}, c→b. The greedy walk a→b→c can't close back to
+    // a (c only imports b), so the ring must NOT be rendered as `a → b → c → a`.
+    const g = graphOf({ "a": ["b"], "b": ["a", "c"], "c": ["b"] });
+    const [cycle] = findCycles(g);
+    const desc = describeCycle(cycle, g);
+    expect(desc).not.toContain("→");
+    expect(desc).toBe("a, b, c");
+  });
 });

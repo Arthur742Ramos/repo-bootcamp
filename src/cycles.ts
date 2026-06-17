@@ -120,17 +120,22 @@ export function findCycles(graph: Map<string, GraphNode>): Cycle[] {
 }
 
 /**
- * Build a human-readable "ring" for a cycle by greedily following edges between
- * its members, e.g. `a.ts → b.ts → c.ts → a.ts`. Falls back to the sorted
- * member list joined by ` → ` if the walk can't form a closed ring. For a
- * single self-importing module it returns `x.ts → x.ts`.
+ * Build a human-readable description of a cycle by greedily following real
+ * import edges between its members, e.g. `a.ts → b.ts → c.ts → a.ts`. Every
+ * arrow shown corresponds to an actual import:
+ *   - the ring is only closed (`… → start`) when the last walked member really
+ *     imports the start module, so we never imply an edge that doesn't exist;
+ *   - if the walk can't form a closed ring of real edges, the members are
+ *     listed as a set (comma-separated) rather than with misleading arrows.
+ * For a single self-importing module it returns `x.ts → x.ts`.
  */
 export function describeCycle(cycle: Cycle, graph: Map<string, GraphNode>): string {
-  const members = new Set(cycle.files);
   if (cycle.size === 1) {
+    // Size-1 cycles are self-imports, so the edge x → x is real.
     return `${cycle.files[0]} → ${cycle.files[0]}`;
   }
 
+  const members = new Set(cycle.files);
   const start = cycle.files[0];
   const ring: string[] = [start];
   const visited = new Set<string>([start]);
@@ -146,9 +151,13 @@ export function describeCycle(cycle: Cycle, graph: Map<string, GraphNode>): stri
     current = next;
   }
 
-  // A clean ring visits every member; otherwise show the deterministic member list.
-  if (ring.length === cycle.size) {
+  // Only close the ring if every member was visited via real edges AND the last
+  // member actually imports the start — otherwise the closing arrow would imply
+  // an edge that doesn't exist. When that doesn't hold, present the members as
+  // a set rather than with misleading arrows.
+  const closesRing = (graph.get(current)?.imports ?? []).includes(start);
+  if (ring.length === cycle.size && closesRing) {
     return `${ring.join(" → ")} → ${start}`;
   }
-  return cycle.files.join(" → ");
+  return cycle.files.join(", ");
 }

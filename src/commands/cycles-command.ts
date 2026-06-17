@@ -77,6 +77,12 @@ export async function runCyclesCommand(repoUrl: string, opts: CyclesCommandOptio
     typeof opts.maxCycles === "number" && Number.isFinite(opts.maxCycles) && opts.maxCycles >= 0
       ? opts.maxCycles
       : 0;
+  // Guard against a NaN/invalid --max-files (e.g. `--max-files nope`), which
+  // would otherwise disable the scan cap (`files.length >= NaN` is never true).
+  const maxFiles =
+    typeof opts.maxFiles === "number" && Number.isFinite(opts.maxFiles) && opts.maxFiles > 0
+      ? opts.maxFiles
+      : 500;
 
   let repoSource: RepoSource;
   try {
@@ -91,7 +97,7 @@ export async function runCyclesCommand(repoUrl: string, opts: CyclesCommandOptio
 
   let exitCode = 0;
   try {
-    const scan = await scanRepositoryFiles(repoSource.path, opts.maxFiles ?? 500);
+    const scan = await scanRepositoryFiles(repoSource.path, maxFiles);
     const fullGraph = await buildImportGraph(repoSource.path, scan.files);
 
     // Restrict the graph to non-test source modules, then rebuild each node's
@@ -144,7 +150,13 @@ export async function runCyclesCommand(repoUrl: string, opts: CyclesCommandOptio
     exitCode = 1;
   } finally {
     if (opts.keepTemp && !repoSource.isLocal) {
-      console.log(chalk.gray(`Temporary clone kept at: ${repoSource.path}`));
+      // Route to stderr under --json so stdout stays valid JSON for consumers.
+      const note = chalk.gray(`Temporary clone kept at: ${repoSource.path}`);
+      if (opts.json) {
+        console.error(note);
+      } else {
+        console.log(note);
+      }
     } else {
       await repoSource.cleanup();
     }
