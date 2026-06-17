@@ -28,8 +28,16 @@ interface ModuleCoupling {
 }
 
 function isTestFile(path: string): boolean {
+  // JS/TS conventions: foo.test.ts, foo.spec.js
   if (/\.(test|spec)\.[^./]+$/.test(path)) return true;
-  return path.split("/").some((s) => s === "test" || s === "tests" || s === "spec" || s === "__tests__");
+  // Go (`*_test.go`) and Python (`*_test.py`, `test_*.py`) conventions.
+  const base = path.split("/").pop() ?? "";
+  if (/_test\.[^.]+$/.test(base)) return true;
+  if (/^test_.+\.py$/.test(base)) return true;
+  // Directory-based conventions (mirrors metrics.ts / radar.ts).
+  return path
+    .split("/")
+    .some((s) => s === "test" || s === "tests" || s === "spec" || s === "specs" || s === "__tests__" || s === "__mocks__");
 }
 
 /** Source-code extensions the import graph actually parses (mirrors impact.ts). */

@@ -90,6 +90,25 @@ describe("runCouplingCommand", () => {
     expect(mockCleanup).toHaveBeenCalled();
   });
 
+  it("does not flag isolated Go/Python test files as orphaned dead code (JSON)", async () => {
+    buildImportGraphMock.mockResolvedValueOnce(
+      new Map<string, { imports: string[]; importedBy: string[] }>([
+        ["pkg/server.go", node([], ["pkg/handler.go"])], // fanIn 1
+        ["pkg/handler.go", node(["pkg/server.go"], [])], // entry
+        ["pkg/server_test.go", node([], [])], // isolated Go test - NOT an orphan
+        ["app/test_utils.py", node([], [])], // isolated Python test - NOT an orphan
+        ["app/widget_test.py", node([], [])], // isolated Python test - NOT an orphan
+        ["app/__mocks__/db.py", node([], [])], // mock dir - NOT an orphan
+        ["app/legacy.py", node([], [])], // genuine isolated source - orphan
+      ])
+    );
+    await runCouplingCommand("https://github.com/test/repo", { json: true });
+    const printed = logSpy.mock.calls.map((c) => String(c[0])).join("\n");
+    const parsed = JSON.parse(printed);
+    // Only the genuine isolated source file is reported; test/mock files excluded.
+    expect(parsed.orphans).toEqual(["app/legacy.py"]);
+  });
+
   it("prints a human-readable coupling report", async () => {
     await runCouplingCommand("https://github.com/test/repo", {});
     const printed = logSpy.mock.calls.map((c) => String(c[0])).join("\n");
