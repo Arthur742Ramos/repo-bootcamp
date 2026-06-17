@@ -104,6 +104,40 @@ describe("parseGitHubUrl", () => {
     expect(result.repo).toBe("repo");
   });
 
+  it("expands bare owner/repo shorthand to github.com", () => {
+    const result = parseGitHubUrl("sindresorhus/ky");
+    expect(result.owner).toBe("sindresorhus");
+    expect(result.repo).toBe("ky");
+    expect(result.host).toBe("github.com");
+    expect(result.provider).toBe("github");
+    expect(result.url).toBe("https://github.com/sindresorhus/ky");
+    expect(result.fullName).toBe("sindresorhus/ky");
+  });
+
+  it("trims whitespace around owner/repo shorthand", () => {
+    const result = parseGitHubUrl("  facebook/react  ");
+    expect(result.url).toBe("https://github.com/facebook/react");
+  });
+
+  it("preserves dots and dashes in shorthand repo names", () => {
+    const result = parseGitHubUrl("vercel/next.js");
+    expect(result.repo).toBe("next.js");
+    expect(result.url).toBe("https://github.com/vercel/next.js");
+  });
+
+  it("does not treat a three-segment slug as shorthand", () => {
+    // Falls through to URL parsing (host `owner` is unsupported) and throws.
+    expect(() => parseGitHubUrl("owner/repo/extra")).toThrow("Invalid GitHub URL");
+  });
+
+  it("does not treat a scheme-less host/owner as shorthand", () => {
+    // `github.com/owner` is a scheme-less URL missing its repo, not an
+    // owner/repo slug — it must keep throwing, never expand to
+    // github.com/github.com/owner.
+    expect(() => parseGitHubUrl("github.com/owner")).toThrow("Invalid GitHub URL");
+    expect(() => parseGitHubUrl("gitlab.com/group")).toThrow("Invalid GitHub URL");
+  });
+
   it("throws on empty URL", () => {
     expect(() => parseGitHubUrl("")).toThrow("Invalid GitHub URL");
   });
