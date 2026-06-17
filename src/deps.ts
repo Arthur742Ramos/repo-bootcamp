@@ -295,7 +295,9 @@ async function extractPythonDependencies(repoPath: string): Promise<DependencyAn
         if (currentHeader) sections.set(currentHeader, currentLines.join("\n"));
       };
       for (const line of content.split("\n")) {
-        const header = line.trim().match(/^\[\[?([^\]]+)\]\]?\s*$/);
+        // Allow a trailing inline comment after the table header
+        // (e.g. `[project]  # metadata`), which TOML permits.
+        const header = line.trim().match(/^\[\[?([^\]]+)\]\]?\s*(?:#.*)?$/);
         if (header) {
           flush();
           currentHeader = header[1].trim();
@@ -321,10 +323,13 @@ async function extractPythonDependencies(repoPath: string): Promise<DependencyAn
       };
 
       // PEP 508 array-of-strings (`["flask>=2.0", "requests[security]>=2.28"]`).
+      // Each requirement is its own quoted string, so we extract the quoted
+      // literals directly rather than splitting on commas — a comma can appear
+      // inside an environment marker (e.g. `sys_platform in ("win32", "cygwin")`).
       // Strips extras and environment markers, mirroring requirements.txt.
       const parseRequirementArray = (body: string, type: "runtime" | "dev", target: Dependency[]): void => {
-        for (const rawItem of body.split(",")) {
-          const item = rawItem.replace(/["'\n\r]/g, "").trim();
+        for (const quoted of body.matchAll(/"([^"]*)"|'([^']*)'/g)) {
+          const item = (quoted[1] ?? quoted[2] ?? "").trim();
           if (!item || item.startsWith("#")) continue;
           const cleaned = item.split(";")[0].trim();
           const match = cleaned.match(/^([A-Za-z0-9._-]+)(?:\[[^\]]*\])?\s*(.*)$/);

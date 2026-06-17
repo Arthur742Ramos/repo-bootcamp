@@ -164,6 +164,36 @@ describe("dependency manifest parsers", () => {
     expect(names(deps!.dev).sort()).toEqual(["mypy", "ruff"]);
   });
 
+  it("PEP 621: does not split on commas inside an environment marker", async () => {
+    const dir = await repoWith({
+      "pyproject.toml": [
+        "[project]",
+        'name = "x"',
+        "dependencies = [",
+        '  "flask>=2.0",',
+        "  \"pywin32; sys_platform in ('win32', 'cygwin')\",",
+        "]",
+      ].join("\n"),
+    });
+    const deps = await extractDependencies(dir);
+    // The comma inside the marker must not produce bogus win32/cygwin deps.
+    expect(names(deps!.runtime).sort()).toEqual(["flask", "pywin32"]);
+  });
+
+  it("PEP 621: recognizes table headers with trailing inline comments", async () => {
+    const dir = await repoWith({
+      "pyproject.toml": [
+        "[project]  # project metadata",
+        'name = "x"',
+        'dependencies = ["click"]',
+        "[project.optional-dependencies]  # extras",
+        'test = ["pytest"]',
+      ].join("\n"),
+    });
+    const deps = await extractDependencies(dir);
+    expect(names(deps!.runtime).sort()).toEqual(["click", "pytest"]);
+  });
+
   it("requirements.txt: skips pip option/include lines", async () => {
     const dir = await repoWith({
       "requirements.txt": [
