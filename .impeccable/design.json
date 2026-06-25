@@ -1,0 +1,96 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-06-25T14:08:03-04:00",
+  "title": "Design System: Repo Bootcamp",
+  "extensions": {
+    "colorMeta": {
+      "canvas": { "role": "neutral", "displayName": "GitHub Canvas", "canonical": "oklch(17.6% 0.014 264)", "tonalRamp": ["#0d1117", "#161b22", "#21262d"] },
+      "surface": { "role": "neutral", "displayName": "Surface", "canonical": "oklch(21.3% 0.013 264)", "tonalRamp": ["#161b22", "#21262d", "#30363d"] },
+      "border": { "role": "neutral", "displayName": "Hairline Border", "canonical": "oklch(33% 0.013 264)" },
+      "ink": { "role": "neutral", "displayName": "Ink", "canonical": "oklch(93% 0.012 248)" },
+      "ink-muted": { "role": "neutral", "displayName": "Ink Muted", "canonical": "oklch(67% 0.025 254)" },
+      "accent": { "role": "primary", "displayName": "Signal Cyan", "canonical": "oklch(80% 0.13 215)", "tonalRamp": ["#1f9fbf", "#2bb8d9", "#00d9ff"] },
+      "success": { "role": "tertiary", "displayName": "Grade Green", "canonical": "oklch(68% 0.17 148)" },
+      "danger": { "role": "tertiary", "displayName": "Error Red", "canonical": "oklch(63% 0.21 25)" },
+      "warning": { "role": "tertiary", "displayName": "Attention Amber", "canonical": "oklch(72% 0.14 75)" }
+    },
+    "typographyMeta": {
+      "display": { "displayName": "Display / Wordmark", "purpose": "Page title and brand wordmark. Solid ink, never gradient." },
+      "data": { "displayName": "Data Readout", "purpose": "Monospace score and count values in stat cards." },
+      "mono": { "displayName": "Mono", "purpose": "URLs, file names, code previews, progress-log lines." }
+    },
+    "shadows": [
+      { "name": "none-at-rest", "value": "none", "purpose": "Surfaces are flat at rest; depth comes from the tonal ramp + 1px borders." },
+      { "name": "focus-ring", "value": "0 0 0 2px #0d1117, 0 0 0 4px #00d9ff", "purpose": "2px cyan :focus-visible ring with a canvas-colored offset gap." }
+    ],
+    "motion": [
+      { "name": "ease-out-quart", "value": "cubic-bezier(0.165, 0.84, 0.44, 1)", "purpose": "Default easing for state transitions (hover, focus, color shifts)." },
+      { "name": "duration-fast", "value": "150ms", "purpose": "Color and border state changes." },
+      { "name": "duration-base", "value": "200ms", "purpose": "Hover/active feedback on buttons and cards." },
+      { "name": "reduced-motion", "value": "0ms", "purpose": "Under prefers-reduced-motion: reduce, transitions collapse to instant / crossfade." }
+    ],
+    "breakpoints": [
+      { "name": "sm", "value": "640px" },
+      { "name": "md", "value": "900px" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "The single primary action (Analyze). Solid cyan, never gradient.",
+      "html": "<button class=\"ds-btn-primary\" type=\"submit\">Analyze</button>",
+      "css": ".ds-btn-primary { background: #00d9ff; color: #0d1117; font: 600 0.8125rem/1.3 -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; padding: 12px 24px; border: none; border-radius: 6px; cursor: pointer; transition: background 200ms cubic-bezier(0.165,0.84,0.44,1); } .ds-btn-primary:hover { background: #2bb8d9; } .ds-btn-primary:active { background: #1f9fbf; } .ds-btn-primary:focus-visible { outline: none; box-shadow: 0 0 0 2px #0d1117, 0 0 0 4px #00d9ff; } .ds-btn-primary:disabled { background: #21262d; color: #6e7681; cursor: not-allowed; } @media (prefers-reduced-motion: reduce) { .ds-btn-primary { transition: none; } }"
+    },
+    {
+      "name": "Repo URL Input",
+      "kind": "input",
+      "refersTo": "input-url",
+      "description": "Monospace field holding a repository URL. Flat canvas ground, hairline border, cyan focus.",
+      "html": "<input class=\"ds-input-url\" type=\"text\" placeholder=\"https://github.com/owner/repo\" />",
+      "css": ".ds-input-url { width: 100%; background: #0d1117; color: #e6edf3; font: 400 0.875rem/1.5 ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace; padding: 12px 16px; border: 1px solid #30363d; border-radius: 8px; transition: border-color 150ms cubic-bezier(0.165,0.84,0.44,1); } .ds-input-url::placeholder { color: #8b949e; } .ds-input-url:focus-visible { outline: none; border-color: #00d9ff; box-shadow: 0 0 0 2px rgba(0,217,255,0.25); } @media (prefers-reduced-motion: reduce) { .ds-input-url { transition: none; } }"
+    },
+    {
+      "name": "Progress Log Line",
+      "kind": "custom",
+      "refersTo": "progress-log",
+      "description": "One honest, streamed status line. Phase = cyan, success = green, error = red, step = muted.",
+      "html": "<div class=\"ds-log\"><div class=\"ds-log-line is-phase\">\u25b6 Cloning repository</div><div class=\"ds-log-line is-step\">Scanned 45 files</div><div class=\"ds-log-line is-success\">\u2713 Analysis complete</div></div>",
+      "css": ".ds-log { background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 24px; font: 400 0.875rem/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; } .ds-log-line { padding: 4px 0; } .ds-log-line.is-phase { color: #00d9ff; font-weight: 600; } .ds-log-line.is-step { color: #8b949e; } .ds-log-line.is-success { color: #3fb950; } .ds-log-line.is-error { color: #f85149; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Terminal Readout",
+    "overview": "Repo Bootcamp is a tool that lives in the terminal; its web surface should feel like the calmest, clearest console a developer has ever read. The system is anchored on GitHub's own dark canvas and Primer-dark surface ramp because the audience already trusts that environment. Data is monospace, status is streamed and honest, and one confident cyan is the single signal color spent only on what the user acts on or waits for. It rejects the saturated AI dark-mode look the project shipped with: the navy gradient ground, the cyan-to-green gradient wordmark and button, and washed-out #888 text.",
+    "keyCharacteristics": [
+      "GitHub Primer-dark surface ramp (canvas \u2192 surface \u2192 surface-raised) as the identity anchor",
+      "One committed cyan accent, used solid for primary action / focus / active only",
+      "Monospace for code, paths, URLs, and scores; sans for human prose",
+      "Flat by default \u2014 depth via tonal layers and 1px borders, no decorative shadows",
+      "Honest streamed status as the signature interaction"
+    ],
+    "rules": [
+      { "name": "The One Signal Rule", "body": "Cyan appears on \u226410% of any screen. If two things are cyan at once, one is wrong. Scores use the semantic set, not the accent.", "section": "colors" },
+      { "name": "The Earned-Dark Rule", "body": "The dark ground is GitHub's flat #0d1117, never the #1a1a2e \u2192 #16213e navy gradient or any tinted-navy body.", "section": "colors" },
+      { "name": "The Mono-For-Machines Rule", "body": "Paths, URLs, scores, grades, and generated content are monospace; sentences written for humans are sans.", "section": "typography" },
+      { "name": "The Flat-By-Default Rule", "body": "Surfaces are flat and bordered at rest; the only depth that moves is focus (a ring) and hover (a one-step tonal shift).", "section": "elevation" }
+    ],
+    "dos": [
+      "Do anchor on the GitHub Primer-dark ramp and convey depth with tonal layers + 1px borders",
+      "Do keep one committed cyan accent, solid, for primary action / focus / active only",
+      "Do set monospace for repo URLs, file names, scores, and code previews",
+      "Do give every control all states and keep transitions 150\u2013250ms",
+      "Do honor prefers-reduced-motion with a non-animated fallback",
+      "Do keep body prose at 65\u201375ch, #e6edf3 primary text, #8b949e muted floor"
+    ],
+    "donts": [
+      "Don't use gradient text (background-clip: text) on the wordmark or anywhere",
+      "Don't fill the primary button with the cyan-to-green gradient; use a single solid accent",
+      "Don't reintroduce the navy gradient background (#1a1a2e \u2192 #16213e) or any tinted-navy ground",
+      "Don't use #888 or lighter gray for text on dark; #8b949e is the floor, body prefers #e6edf3",
+      "Don't make transform: scale(1.05) the button's hover feedback; shift background/border instead",
+      "Don't reach for glassmorphism, backdrop blur, the hero-metric template, or per-section uppercase eyebrows"
+    ]
+  }
+}
