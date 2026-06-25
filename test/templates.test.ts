@@ -10,7 +10,7 @@ describe("getIndexHtml", () => {
   it("returns valid HTML5 document", () => {
     const html = getIndexHtml();
     expect(html).toMatch(/^<!DOCTYPE html>/);
-    expect(html).toContain("<html lang=\"en\">");
+    expect(html).toContain('<html lang="en">');
     expect(html).toContain("</html>");
   });
 
@@ -95,10 +95,10 @@ describe("getIndexHtml", () => {
       expect(html).toContain("</style>");
     });
 
-    it("styles body with dark background", () => {
+    it("styles body with the flat GitHub-dark canvas", () => {
       const html = getIndexHtml();
-      expect(html).toContain("background: linear-gradient");
-      expect(html).toContain("#1a1a2e");
+      expect(html).toContain("--canvas: #0d1117");
+      expect(html).toContain("background: var(--canvas)");
     });
 
     it("has responsive container styles", () => {
@@ -110,7 +110,7 @@ describe("getIndexHtml", () => {
     it("defines modal overlay styles", () => {
       const html = getIndexHtml();
       expect(html).toContain("position: fixed");
-      expect(html).toContain("z-index: 1000");
+      expect(html).toContain("z-index: var(--z-modal)");
     });
   });
 
@@ -214,9 +214,17 @@ describe("getIndexHtml", () => {
     it("maps all expected file types", () => {
       const html = getIndexHtml();
       const expectedKeys = [
-        "BOOTCAMP", "ONBOARDING", "ARCHITECTURE", "CODEMAP",
-        "FIRST_TASKS", "RUNBOOK", "DEPENDENCIES", "SECURITY",
-        "RADAR", "diagrams", "repo_facts.json",
+        "BOOTCAMP",
+        "ONBOARDING",
+        "ARCHITECTURE",
+        "CODEMAP",
+        "FIRST_TASKS",
+        "RUNBOOK",
+        "DEPENDENCIES",
+        "SECURITY",
+        "RADAR",
+        "diagrams",
+        "repo_facts.json",
       ];
       for (const key of expectedKeys) {
         expect(html).toContain(`'${key}'`);

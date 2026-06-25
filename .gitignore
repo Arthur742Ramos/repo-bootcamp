@@ -31,3 +31,6 @@ coverage/
 # Environment
 .env
 .env.local
+
+# Impeccable per-session hook cache (machine-local, not for VCS)
+.impeccable/hook.cache.json

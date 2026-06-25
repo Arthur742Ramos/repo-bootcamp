@@ -1,0 +1,6 @@
+{
+  "files": ["src/web/templates.ts"],
+  "insertBefore": "</body>",
+  "commentSyntax": "html",
+  "cspChecked": true
+}
