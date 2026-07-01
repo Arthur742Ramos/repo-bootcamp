@@ -113,3 +113,71 @@ export function isPathInsideDir(parent: string, child: string): boolean {
   const rel = relative(resolvedParent, resolvedChild);
   return rel === "" || (!rel.startsWith("..") && !isAbsolute(rel));
 }
+
+/**
+ * Coerce a possibly-invalid number to a safe fallback.
+ *
+ * Returns `value` when it is a finite number (i.e. not `NaN` or `±Infinity`)
+ * and — when `opts.min` is provided — at least `opts.min`. Otherwise returns
+ * `fallback`. Intended for sanitising numeric CLI flags such as `--max-files`,
+ * where `Number(flag)` can yield `NaN` and silently poison later comparisons.
+ */
+export function finiteOr(value: unknown, fallback: number, opts?: { min?: number }): number {
+  if (typeof value !== "number" || !Number.isFinite(value)) return fallback;
+  if (opts?.min !== undefined && value < opts.min) return fallback;
+  return value;
+}
+
+/**
+ * Extract a human-readable message from an unknown thrown value.
+ *
+ * Returns `error.message` for `Error` instances, otherwise `String(error)`.
+ * Falls back to `fallback` when the resulting message is empty or whitespace,
+ * so callers always have something non-empty to surface to the user.
+ */
+export function getErrorMessage(error: unknown, fallback = "Unknown error"): string {
+  const message = error instanceof Error ? error.message : String(error);
+  return message.trim().length > 0 ? message : fallback;
+}
+
+/**
+ * Canonical, case-insensitive predicate for whether a path denotes a test (or
+ * mock) file. This is the single source of truth shared by the metrics, health,
+ * cycles and radar commands so they all classify test code identically.
+ *
+ * It is a superset of every former per-module variant and recognises:
+ *  - `.test.` / `.spec.` filename infixes (`foo.test.ts`, `foo.spec.tsx`)
+ *  - `_test` filename suffix for any extension (`foo_test.go`, `foo_test.py`),
+ *    kept extension-agnostic to stay a superset of the original cycles.ts check
+ *  - `_spec` filename suffix for the Ruby/Go/Python conventions (`foo_spec.rb`)
+ *  - Python `test_*.py` files
+ *  - `test` / `tests` / `spec` / `specs` / `__tests__` / `__mocks__` path segments
+ *
+ * Backslashes are normalised and matching is case-insensitive, so mixed-case or
+ * Windows-style paths (`Tests\Foo.Test.ts`) are classified consistently.
+ */
+export function isTestFile(path: string): boolean {
+  const normalized = toPosixPath(path).toLowerCase();
+  // `.test.` / `.spec.` infix in the filename (JS/TS and friends).
+  if (/\.(test|spec)\.[^./]+$/.test(normalized)) return true;
+  const base = normalized.slice(normalized.lastIndexOf("/") + 1);
+  // `_test` suffix (Go, Python, Rust, …); extension-agnostic on purpose so this
+  // remains a superset of the former cycles.ts predicate.
+  if (/_test\.[^.]+$/.test(base)) return true;
+  // `_spec` suffix for the Ruby (RSpec)/Go/Python underscore conventions.
+  if (/_spec\.(go|py|rb)$/.test(base)) return true;
+  // Python `test_*.py` naming convention.
+  if (/^test_.+\.py$/.test(base)) return true;
+  // Directory segments that denote test/mock trees.
+  return normalized
+    .split("/")
+    .some(
+      (segment) =>
+        segment === "test" ||
+        segment === "tests" ||
+        segment === "spec" ||
+        segment === "specs" ||
+        segment === "__tests__" ||
+        segment === "__mocks__",
+    );
+}

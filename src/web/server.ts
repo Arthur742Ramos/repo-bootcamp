@@ -11,6 +11,11 @@ import { getIndexHtml } from "./templates.js";
 import { registerRoutes, startJobPruner, stopJobPruner } from "./routes.js";
 
 const DEFAULT_PORT = 3000;
+// Bind to loopback by default so the demo is not reachable from the LAN/VPN.
+// CORS only governs browser cross-origin reads, not who can reach the socket,
+// so the localhost-only intent must be enforced at the bind address. A
+// `--host` override can be wired through this parameter for opt-in exposure.
+const DEFAULT_HOST = "127.0.0.1";
 
 /**
  * Create Express app
@@ -65,10 +70,13 @@ export function createApp(): express.Application {
 /**
  * Start the server
  */
-export function startServer(port: number = DEFAULT_PORT): ReturnType<express.Application["listen"]> {
+export function startServer(
+  port: number = DEFAULT_PORT,
+  host: string = DEFAULT_HOST
+): ReturnType<express.Application["listen"]> {
   const app = createApp();
 
-  const server = app.listen(port, () => {
+  const server = app.listen(port, host, () => {
     startJobPruner();
     console.log(chalk.bold.cyan("\n=== Repo Bootcamp Web Demo ===\n"));
     console.log(chalk.white(`Server running at: ${chalk.underline(`http://localhost:${port}`)}`));

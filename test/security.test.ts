@@ -476,6 +476,47 @@ describe("analyzeSecurityPatterns", () => {
     const result = await analyzeSecurityPatterns(testDir, files);
 
     expect(result.score).toBe(100);
+    // A source file was genuinely scanned, so 100/Grade A is earned coverage, not a gap.
+    expect(result.sourceFilesScanned).toBe(1);
+    expect(getSecurityGrade(result.score, result.sourceFilesScanned)).toBe("A");
+  });
+
+  it("reports insufficient coverage instead of grade A when no source files are scanned", async () => {
+    // Docs-only repo: nothing matches the source-file filter, so nothing is audited.
+    const files = await setupTestRepo({
+      "README.md": "# Docs only\n",
+      "notes.txt": "no code here\n",
+    });
+
+    const result = await analyzeSecurityPatterns(testDir, files);
+
+    expect(result.sourceFilesScanned).toBe(0);
+    expect(result.findings.length).toBe(0);
+    // The grade must NOT be a clean "A" when zero files were scanned.
+    expect(getSecurityGrade(result.score, result.sourceFilesScanned)).not.toBe("A");
+
+    const docs = generateSecurityDocs(result, "docs-only");
+    expect(docs).toContain("Insufficient coverage");
+    expect(docs).not.toContain("No security concerns detected");
+  });
+
+  it("importance-sorts files so a secret past the 50-file scan cap is still caught", async () => {
+    const repo: Record<string, string> = {};
+    // 60 trivial, security-irrelevant modules with neutral names (priority from src/ only).
+    for (let i = 0; i < 60; i++) {
+      repo[`src/mod${i}.ts`] = `export const v${i} = ${i};\n`;
+    }
+    // A high-value file (config.ts) carrying a secret, added last in traversal order.
+    repo["src/config.ts"] = 'export const password = "s3cr3t-p@ssw0rd-value";\n';
+
+    const files = await setupTestRepo(repo);
+    const result = await analyzeSecurityPatterns(testDir, files);
+
+    // Only MAX_SECURITY_SCAN_FILES (50) source files are read...
+    expect(result.sourceFilesScanned).toBe(50);
+    // ...but importance ranking pulls config.ts into that window, so the secret is found
+    // regardless of the walker's traversal order.
+    expect(result.findings.some((f) => f.title === "Hardcoded password")).toBe(true);
   });
 
   it("deducts score for security findings", async () => {

@@ -471,18 +471,35 @@ async function extractGoDependencies(repoPath: string): Promise<DependencyAnalys
       runtime.push({ name, version, type: "runtime" });
     };
 
-    // Iterate every `require ( ... )` block — gofmt emits separate blocks for
-    // direct and `// indirect` requirements.
-    for (const block of content.matchAll(/require\s*\(([\s\S]*?)\)/g)) {
-      for (const line of block[1].split("\n")) {
-        const match = line.trim().match(/^([^\s]+)\s+(v[^\s]+)/);
-        if (match) add(match[1], match[2]);
-      }
-    }
+    // Parse line-by-line with an inside-block flag (mirrors the Cargo parser)
+    // rather than a paren-terminated regex: a trailing comment containing ')'
+    // (e.g. `// see issue (123)`) must not end a `require ( ... )` block early
+    // and silently drop every dependency listed below it.
+    let inRequireBlock = false;
+    for (const raw of content.split("\n")) {
+      const line = raw.trim();
+      if (!line || line.startsWith("//")) continue;
 
-    // Single-line requires (`require x v1.2.3`).
-    for (const match of content.matchAll(/^require\s+([^\s]+)\s+(v[^\s]+)/gm)) {
-      add(match[1], match[2]);
+      if (inRequireBlock) {
+        // The block closes on its own `)` line; dependency lines never start
+        // with ')', so a comment paren elsewhere on a line can't close it.
+        if (line.startsWith(")")) {
+          inRequireBlock = false;
+          continue;
+        }
+        // Anchor at the line start so a trailing `// ...` comment is ignored.
+        const match = line.match(/^([^\s]+)\s+(v[^\s]+)/);
+        if (match) add(match[1], match[2]);
+        continue;
+      }
+
+      if (/^require\s*\(/.test(line)) {
+        inRequireBlock = true;
+        continue;
+      }
+      // Single-line require (`require x v1.2.3`).
+      const single = line.match(/^require\s+([^\s]+)\s+(v[^\s]+)/);
+      if (single) add(single[1], single[2]);
     }
 
     if (runtime.length === 0) return null;

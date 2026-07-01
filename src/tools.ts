@@ -6,11 +6,11 @@
 
 import { defineTool } from "@github/copilot-sdk";
 import type { Tool } from "@github/copilot-sdk";
-import { readFile, readdir, stat } from "fs/promises";
+import { readFile, readdir, realpath, stat } from "fs/promises";
 import { isAbsolute, join, relative, resolve } from "path";
 import { execFile } from "child_process";
 import { promisify } from "util";
-import { SKIP_DIRS, toPosixPath } from "./utils.js";
+import { SKIP_DIRS, toPosixPath, isPathInsideDir } from "./utils.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -93,6 +93,17 @@ function createReadFileTool(context: ToolContext): Tool<ReadFileToolArgs> {
     context.onToolCall?.("read_file", { path });
 
     try {
+      // Symlink containment: safePath's check is purely lexical, so a symlink
+      // *inside* the repo could still resolve to a target outside it. Dereference
+      // both the repo root and the resolved target, then re-check containment.
+      // Realpath BOTH sides so a canonicalized root (e.g. macOS /var ->
+      // /private/var) never false-rejects a legitimate read.
+      const realRoot = await realpath(context.repoPath);
+      const realTarget = await realpath(fullPath);
+      if (!isPathInsideDir(realRoot, realTarget)) {
+        throw new Error("Path escapes repository root");
+      }
+
       const content = await readFile(fullPath, "utf-8");
       const lines = content.split("\n");
       const truncated = lines.slice(0, maxLines).join("\n");
@@ -253,9 +264,22 @@ function createSearchTool(context: ToolContext): Tool<SearchToolArgs> {
         String(maxResults),
       ];
       if (filePattern) {
+        // The glob is passed as the value of `--glob`, before the `--`
+        // separator, so a leading dash could be parsed as a ripgrep flag.
+        // Reject it — a real glob never begins with `-`.
+        if (filePattern.startsWith("-")) {
+          const errorMsg = `Error searching: invalid file pattern (must not start with '-'): ${filePattern}`;
+          context.onToolResult?.("search", errorMsg);
+          return { textResultForLlm: errorMsg, resultType: "failure" as const };
+        }
         rgArgs.push("--glob", filePattern);
       }
-      rgArgs.push(pattern, rgTarget);
+      // `--` makes ripgrep treat everything after it as positional (the pattern
+      // and the path), neutralizing flag injection via a model-controlled
+      // pattern such as `--pre=<cmd>` or `-f<file>`. The pattern itself may
+      // legitimately begin with `-` (e.g. `->`, `-webkit-`), so we rely on the
+      // `--` guard rather than rejecting dash-prefixed patterns.
+      rgArgs.push("--", pattern, rgTarget);
 
       const { stdout } = await execFileAsync("rg", rgArgs, {
         cwd: repoRoot,

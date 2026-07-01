@@ -97,3 +97,67 @@ describe("cloneRepo error boundaries", () => {
     );
   });
 });
+
+describe("cloneRepo hardening", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockRm.mockResolvedValue(undefined);
+  });
+
+  it("hardens the clone env and forbids the file:// transport", async () => {
+    const calls: { args: string[]; opts: Record<string, unknown> | undefined }[] = [];
+    mockExecFile.mockImplementation(
+      (_cmd: unknown, args: unknown, optsOrCb: unknown, maybeCb?: unknown) => {
+        const opts =
+          typeof optsOrCb === "object" && optsOrCb !== null
+            ? (optsOrCb as Record<string, unknown>)
+            : undefined;
+        calls.push({ args: args as string[], opts });
+        invokeExecCallback(optsOrCb, maybeCb, null, { stdout: "main\n", stderr: "" });
+        return {} as never;
+      },
+    );
+
+    await cloneRepo(makeRepoInfo(), "/tmp/target");
+
+    const cloneCall = calls[0];
+    // `-c protocol.file.allow=never` is a global option, so it must precede the
+    // `clone` subcommand.
+    expect(cloneCall.args).toContain("-c");
+    expect(cloneCall.args).toContain("protocol.file.allow=never");
+    expect(cloneCall.args.indexOf("-c")).toBeLessThan(cloneCall.args.indexOf("clone"));
+
+    const env = (cloneCall.opts?.env ?? {}) as Record<string, string | undefined>;
+    expect(env.GIT_TERMINAL_PROMPT).toBe("0");
+    expect(env.GIT_ASKPASS).toBe("echo");
+    expect(env.GIT_CONFIG_GLOBAL).toBe("/dev/null");
+    expect(env.GIT_CONFIG_SYSTEM).toBe("/dev/null");
+    // The ambient environment is preserved (env is spread from process.env).
+    expect(env.PATH).toBe(process.env.PATH);
+  });
+
+  it("threads the requested branch into the clone and records the resulting branch", async () => {
+    const calls: string[][] = [];
+    mockExecFile.mockImplementation(
+      (_cmd: unknown, args: unknown, optsOrCb: unknown, maybeCb?: unknown) => {
+        calls.push(args as string[]);
+        // The clone is call[0]; the follow-up `git rev-parse` reads feed
+        // repoInfo.branch / repoInfo.commitSha. Report "feature" as HEAD.
+        invokeExecCallback(optsOrCb, maybeCb, null, { stdout: "feature\n", stderr: "" });
+        return {} as never;
+      },
+    );
+
+    const repoInfo = makeRepoInfo();
+    await cloneRepo(repoInfo, "/tmp/target", "feature", true);
+
+    const cloneArgs = calls[0];
+    expect(cloneArgs).toContain("--branch");
+    expect(cloneArgs[cloneArgs.indexOf("--branch") + 1]).toBe("feature");
+    // fullClone=true keeps full history — no shallow --depth / blob filter.
+    expect(cloneArgs).not.toContain("--depth");
+    expect(cloneArgs).not.toContain("--filter=blob:none");
+    // repoInfo.branch is updated from `git rev-parse --abbrev-ref HEAD`.
+    expect(repoInfo.branch).toBe("feature");
+  });
+});

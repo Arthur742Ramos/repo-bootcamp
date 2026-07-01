@@ -19,6 +19,7 @@ import type {
 import { getStyleConfig, type StyleConfig } from "./plugins.js";
 import { getRepoTools } from "./tools.js";
 import { validateRepoFacts, getMissingFieldsSummary, type ValidatedRepoFacts } from "./schema.js";
+import { getErrorMessage } from "./utils.js";
 
 /**
  * System prompt for the repo analysis agent
@@ -147,11 +148,6 @@ function createResponseStreamHandler(
       emitProgress(true);
     },
   };
-}
-
-function getErrorMessage(error: unknown): string {
-  if (error instanceof Error) return error.message;
-  return String(error);
 }
 
 function isTimeoutError(error: unknown): boolean {
@@ -283,7 +279,7 @@ export function readCustomPrompt(repoPath: string, overridePath?: string): strin
     return content.substring(0, CUSTOM_PROMPT_MAX_CHARS);
   } catch (err: unknown) {
     // Log and return null on failure
-    if (process.env.DEBUG) console.error("[debug]", (err as Error).message);
+    if (process.env.DEBUG) console.error("[debug]", getErrorMessage(err));
     return null;
   }
 }
@@ -353,6 +349,34 @@ ${styleSection}
 ${customSection}`;
 }
 
+/**
+ * Canonical RepoFacts enum value lists, kept in sync with the zod enums in
+ * schema.ts (the runtime source of truth). Interpolated into both the standard
+ * ({@link buildJsonSchema}) and fast ({@link createFastAnalysisPrompt}) prompt
+ * builders so the two hand-authored copies cannot silently drift apart again —
+ * the standard prompt's entrypoint list had already fallen behind the schema
+ * (it was missing "binary" and "web").
+ *
+ * NOTE: firstTasks `category` is intentionally not shared here — the two prompt
+ * blocks list its values in different orders, so a single constant cannot
+ * reproduce both verbatim. Its value *set* already matches the schema.
+ */
+const CONFIDENCE_VALUES = ["high", "medium", "low"] as const;
+const ENTRYPOINT_TYPE_VALUES = ["main", "binary", "server", "cli", "web", "library"] as const;
+const DIFFICULTY_VALUES = ["beginner", "intermediate", "advanced"] as const;
+
+/** Render enum values as a pipe-joined JSON placeholder, e.g. `high|medium|low`. */
+function enumPipeList(values: readonly string[]): string {
+  return values.join("|");
+}
+
+/** Render enum values as a quoted, comma-separated "or" list, e.g. `"high", "medium", or "low"`. */
+function enumQuotedOrList(values: readonly string[]): string {
+  const quoted = values.map((value) => `"${value}"`);
+  if (quoted.length <= 1) return quoted.join("");
+  return `${quoted.slice(0, -1).join(", ")}, or ${quoted[quoted.length - 1]}`;
+}
+
 function buildJsonSchema(repoInfo: RepoInfo): string {
   return `Return a JSON object with this exact structure. Include "sources" arrays citing which files informed each section:
 
@@ -362,7 +386,7 @@ function buildJsonSchema(repoInfo: RepoInfo): string {
   "purpose": "one-line description",
   "description": "2-3 sentence technical description (NO welcome/intro text — just describe the project)",
   "sources": ["README.md", "package.json"],
-  "confidence": "high|medium|low",
+  "confidence": "${enumPipeList(CONFIDENCE_VALUES)}",
   "stack": {
     "languages": [],
     "frameworks": [],
@@ -380,7 +404,7 @@ function buildJsonSchema(repoInfo: RepoInfo): string {
   },
   "structure": {
     "keyDirs": [{"path": "", "purpose": "", "keyFiles": []}],
-    "entrypoints": [{"path": "", "type": "main|cli|server|library", "description": ""}],
+    "entrypoints": [{"path": "", "type": "${enumPipeList(ENTRYPOINT_TYPE_VALUES)}", "description": ""}],
     "testDirs": [],
     "docsDirs": [],
     "sources": []
@@ -408,7 +432,7 @@ function buildJsonSchema(repoInfo: RepoInfo): string {
     {
       "title": "",
       "description": "",
-      "difficulty": "beginner|intermediate|advanced",
+      "difficulty": "${enumPipeList(DIFFICULTY_VALUES)}",
       "category": "test|docs|refactor|feature|bug-fix",
       "files": [],
       "why": ""
@@ -516,7 +540,7 @@ function createFastAnalysisPrompt(
         inlineContents.push(`### ${filename}\n\`\`\`\n${content}\n\`\`\``);
       } catch (err: unknown) {
         // Skip unreadable files
-        if (process.env.DEBUG) console.error("[debug]", (err as Error).message);
+        if (process.env.DEBUG) console.error("[debug]", getErrorMessage(err));
       }
     }
   }
@@ -542,7 +566,7 @@ function createFastAnalysisPrompt(
         break; // Only include first found entry point
       } catch (err: unknown) {
         // Skip
-        if (process.env.DEBUG) console.error("[debug]", (err as Error).message);
+        if (process.env.DEBUG) console.error("[debug]", getErrorMessage(err));
       }
     }
   }
@@ -577,9 +601,9 @@ Based on the above information, produce a JSON object. Follow this EXACT structu
 ## CRITICAL SCHEMA REQUIREMENTS:
 
 ### Enum Values (use EXACTLY these strings):
-- confidence: "high", "medium", or "low"
-- entrypoints[].type: "main", "binary", "server", "cli", "web", or "library"
-- firstTasks[].difficulty: "beginner", "intermediate", or "advanced"
+- confidence: ${enumQuotedOrList(CONFIDENCE_VALUES)}
+- entrypoints[].type: ${enumQuotedOrList(ENTRYPOINT_TYPE_VALUES)}
+- firstTasks[].difficulty: ${enumQuotedOrList(DIFFICULTY_VALUES)}
 - firstTasks[].category: "bug-fix", "test", "docs", "refactor", or "feature"
 
 ### Required Fields:
@@ -703,7 +727,7 @@ function parseAndValidateRepoFacts(
       parsed = JSON.parse(jsonMatch[1]);
     } catch (e: unknown) {
       if (verbose) {
-        console.error("Failed to parse JSON from code block:", (e as Error).message);
+        console.error("Failed to parse JSON from code block:", getErrorMessage(e));
       }
     }
   }
@@ -716,7 +740,7 @@ function parseAndValidateRepoFacts(
         parsed = JSON.parse(jsonObjectMatch[0]);
       } catch (e: unknown) {
         if (verbose) {
-          console.error("Failed to parse extracted JSON object:", (e as Error).message);
+          console.error("Failed to parse extracted JSON object:", getErrorMessage(e));
         }
       }
     }
@@ -728,7 +752,7 @@ function parseAndValidateRepoFacts(
       parsed = JSON.parse(response);
     } catch (e: unknown) {
       if (verbose) {
-        console.error("Failed to parse response as JSON:", (e as Error).message);
+        console.error("Failed to parse response as JSON:", getErrorMessage(e));
       }
       return { facts: null, errors: ["Could not find valid JSON in response"] };
     }
@@ -759,12 +783,12 @@ export const PREFERRED_MODELS = [
   "claude-sonnet-4-20250514",
 ];
 
-async function createDefaultLlmClient(): Promise<LlmClient> {
+export async function createDefaultLlmClient(): Promise<LlmClient> {
   const { CopilotClient } = await import("@github/copilot-sdk");
   return new CopilotClient() as unknown as LlmClient;
 }
 
-function createFixtureLlmClient(response: string): LlmClient {
+export function createFixtureLlmClient(response: string): LlmClient {
   return {
     async createSession() {
       const listeners: Array<(event: LlmSessionEvent) => void> = [];
@@ -777,9 +801,9 @@ function createFixtureLlmClient(response: string): LlmClient {
         async sendAndWait() {
           for (const listener of listeners) {
             listener({
-              type: "assistant.message",
+              type: "assistant.message_delta",
               data: {
-                content: response,
+                deltaContent: response,
               },
             });
           }

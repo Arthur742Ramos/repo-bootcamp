@@ -8,6 +8,7 @@
  */
 
 import type { FileInfo, ScanResult } from "./types.js";
+import { isTestFile } from "./utils.js";
 
 /** Per-language aggregate over code files. */
 export interface LanguageMetric {
@@ -186,16 +187,6 @@ function getExtension(path: string): string {
 
 function getBasename(path: string): string {
   return path.slice(path.lastIndexOf("/") + 1).toLowerCase();
-}
-
-function isTestPath(path: string): boolean {
-  const lower = path.toLowerCase();
-  if (/(^|\/)(tests?|__tests__|specs?|__mocks__)(\/|$)/.test(lower)) return true;
-  const base = getBasename(path);
-  if (/\.(test|spec)\.[^.]+$/.test(base)) return true;
-  if (/_test\.[^.]+$/.test(base)) return true; // Go, Python
-  if (/^test_.+\.py$/.test(base)) return true; // Python
-  return false;
 }
 
 function isConfigFile(path: string): boolean {
@@ -383,7 +374,7 @@ export function computeCodebaseMetrics(scan: ScanResult): CodebaseMetrics {
       // the size-based approachability penalties. It is recorded as "other".
       otherFiles += 1;
     } else if (language) {
-      const isTest = isTestPath(file.path);
+      const isTest = isTestFile(file.path);
       const agg = languageMap.get(language) ?? { files: 0, bytes: 0 };
       agg.files += 1;
       agg.bytes += bytes;

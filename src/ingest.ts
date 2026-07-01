@@ -5,9 +5,10 @@
 
 import { execFile } from "child_process";
 import { promisify } from "util";
-import { readFile, rm } from "fs/promises";
+import { readFile, rm, realpath, stat } from "fs/promises";
 import { join, basename, resolve, relative, isAbsolute, dirname } from "path";
 import fg from "fast-glob";
+import { Readable } from "stream";
 import type {
   RepoInfo,
   FileInfo,
@@ -212,7 +213,10 @@ export async function cloneRepo(
   }
 
   const cloneUrl = repoInfo.url.endsWith(".git") ? repoInfo.url : `${repoInfo.url}.git`;
-  const cloneArgs = ["clone"];
+  // `-c protocol.file.allow=never` forbids the file:// transport (and file-based
+  // submodule fetches). https:// clones — the only URLs parseGitHubUrl yields —
+  // are unaffected. It is a global option, so it must precede `clone`.
+  const cloneArgs = ["-c", "protocol.file.allow=never", "clone"];
   if (!fullClone) {
     cloneArgs.push("--filter=blob:none", "--depth", "1");
   }
@@ -266,7 +270,20 @@ export async function cloneRepo(
   await rm(clonePath, { recursive: true, force: true });
 
   try {
-    await execFileAsync("git", cloneArgs, { timeout: CLONE_TIMEOUT_MS });
+    // Harden the clone environment: never prompt for or fetch credentials, and
+    // ignore the operator's global/system gitconfig so an untrusted repo URL
+    // cannot reach private repositories via stored credential helpers or
+    // `insteadOf`/`http.extraheader` rewrites.
+    await execFileAsync("git", cloneArgs, {
+      timeout: CLONE_TIMEOUT_MS,
+      env: {
+        ...process.env,
+        GIT_TERMINAL_PROMPT: "0",
+        GIT_ASKPASS: "echo",
+        GIT_CONFIG_GLOBAL: "/dev/null",
+        GIT_CONFIG_SYSTEM: "/dev/null",
+      },
+    });
   } catch (error: unknown) {
     throw new Error(getCloneErrorMessage(error), { cause: error });
   }
@@ -293,10 +310,26 @@ export async function cloneRepo(
 /**
  * Scan directory tree using fast-glob
  */
-async function scanDirectory(basePath: string, maxFiles: number): Promise<FileInfo[]> {
-  const ignorePatterns = Array.from(SKIP_DIRS).flatMap((dir) => [`**/${dir}`, `**/${dir}/**`]);
-  const entries = await fg("**/*", {
-    cwd: basePath,
+async function scanDirectory(
+  basePath: string,
+  maxFiles: number,
+  options: { exclude?: string[]; subdir?: string } = {}
+): Promise<FileInfo[]> {
+  const { exclude = [], subdir } = options;
+  // `subdir` scopes the walk to a sub-path of the repo (e.g. a monorepo
+  // package); `exclude` drops additional trees (generated/vendored fixtures).
+  // Both default to a no-op — the CLI wiring arrives in a later wave.
+  const scanRoot = subdir ? resolve(basePath, subdir) : basePath;
+  const ignorePatterns = [
+    ...Array.from(SKIP_DIRS).flatMap((dir) => [`**/${dir}`, `**/${dir}/**`]),
+    ...exclude,
+  ];
+
+  // Stream entries lazily so `maxFiles` bounds the actual directory walk and its
+  // stat() calls — not just how many results we retain. Destroying the stream
+  // halts the remaining traversal in the underlying @nodelib/fs.walk source.
+  const stream = fg.stream("**/*", {
+    cwd: scanRoot,
     onlyFiles: false,
     stats: true,
     dot: true,
@@ -305,21 +338,56 @@ async function scanDirectory(basePath: string, maxFiles: number): Promise<FileIn
     followSymbolicLinks: false,
     suppressErrors: true,
     ignore: ignorePatterns,
-  });
+  }) as Readable;
 
   const files: FileInfo[] = [];
-  for (const entry of entries) {
-    if (files.length >= maxFiles) break;
+  for await (const entry of stream as AsyncIterable<fg.Entry>) {
+    // Symlinks are untrusted: a repo can commit `pkg.json -> /etc/passwd`, which
+    // fast-glob (with followSymbolicLinks:false) still reports as a file entry.
+    // Skip them so they never enter the file set and are never read downstream.
+    if (entry.dirent?.isSymbolicLink()) continue;
     const isDirectory = entry.dirent?.isDirectory() ?? false;
     files.push({
       path: entry.path,
       size: isDirectory ? 0 : entry.stats?.size ?? 0,
       isDirectory,
     });
+    if (files.length >= maxFiles) {
+      stream.destroy();
+      break;
+    }
   }
 
   return files;
 }
+
+/**
+ * Language detection patterns, compiled once at module load from the static
+ * framework-maps JSON (mirrors the module-level regex tables in
+ * impact.ts/deps.ts/security.ts instead of recompiling them on every scan).
+ */
+const LANG_PATTERNS: Record<string, RegExp> = Object.fromEntries(
+  Object.entries(frameworkMaps.langPatterns).map(([lang, pat]) => [lang, new RegExp(pat)])
+);
+
+/**
+ * Config-file → framework/build/pm patterns, compiled once at module load.
+ * Only entries flagged `isRegex` become RegExps; the rest stay literal filename
+ * strings matched against the file-name set.
+ */
+const CONFIG_PATTERNS: Record<string, { file: RegExp | string; type: "framework" | "build" | "pm" }> =
+  Object.fromEntries(
+    Object.entries(frameworkMaps.configPatterns).map(([name, entry]) => {
+      const e = entry as { file: string; type: string; isRegex?: boolean };
+      return [
+        name,
+        {
+          file: e.isRegex ? new RegExp(e.file) : e.file,
+          type: e.type as "framework" | "build" | "pm",
+        },
+      ];
+    })
+  );
 
 /**
  * Detect stack from file patterns
@@ -338,12 +406,8 @@ function detectStack(files: FileInfo[]): StackInfo {
     hasCi: false,
   };
 
-  // Language detection
-  const langPatterns: Record<string, RegExp> = Object.fromEntries(
-    Object.entries(frameworkMaps.langPatterns).map(([lang, pat]) => [lang, new RegExp(pat)])
-  );
-
-  for (const [lang, pattern] of Object.entries(langPatterns)) {
+  // Language detection (patterns compiled once at module load)
+  for (const [lang, pattern] of Object.entries(LANG_PATTERNS)) {
     if (filePaths.some((p) => pattern.test(p))) {
       stack.languages.push(lang);
     }
@@ -353,21 +417,7 @@ function detectStack(files: FileInfo[]): StackInfo {
   // NOTE: Frameworks like React, Express, Flask are NOT detected by file path patterns
   // as that causes false positives. They should be detected via dependency analysis (deps.ts).
   // Only config files that definitively indicate framework usage are listed here.
-  const configPatterns: Record<string, { file: RegExp | string; type: "framework" | "build" | "pm" }> =
-    Object.fromEntries(
-      Object.entries(frameworkMaps.configPatterns).map(([name, entry]) => {
-        const e = entry as { file: string; type: string; isRegex?: boolean };
-        return [
-          name,
-          {
-            file: e.isRegex ? new RegExp(e.file) : e.file,
-            type: e.type as "framework" | "build" | "pm",
-          },
-        ];
-      })
-    );
-
-  for (const [name, { file, type }] of Object.entries(configPatterns)) {
+  for (const [name, { file, type }] of Object.entries(CONFIG_PATTERNS)) {
     const matches =
       typeof file === "string"
         ? fileNameSet.has(file)
@@ -416,11 +466,66 @@ function detectStack(files: FileInfo[]): StackInfo {
 /**
  * Extract commands from package.json scripts
  */
+/**
+ * Best-effort HEAD commit SHA for a local git repo ("" if unavailable). Lets the
+ * analysis cache key on the commit for --no-clone local repos (cloned repos get
+ * their SHA from cloneRepo).
+ */
+export async function getHeadCommitSha(repoPath: string): Promise<string> {
+  try {
+    const { stdout } = await execFileAsync("git", ["rev-parse", "HEAD"], { cwd: repoPath });
+    return stdout.trim();
+  } catch {
+    return "";
+  }
+}
+
+/**
+ * True if the local git working tree has uncommitted changes. Best-effort:
+ * returns true on any error so callers fail safe (disable the analysis cache
+ * rather than risk serving results from a stale HEAD).
+ */
+export async function isWorkingTreeDirty(repoPath: string): Promise<boolean> {
+  try {
+    const { stdout } = await execFileAsync("git", ["status", "--porcelain"], { cwd: repoPath });
+    return stdout.trim().length > 0;
+  } catch {
+    return true;
+  }
+}
+
+/** Cap for a fixed-name metadata/doc file read via readContainedFile — guards
+ *  against a committed huge file (or a /dev/zero-style device symlink) buffering
+ *  unbounded memory. */
+const MAX_CONTAINED_FILE_BYTES = 10 * 1024 * 1024;
+
+/**
+ * Read a repo-relative file, refusing to follow a symlink that escapes the repo.
+ * A malicious repo can commit a fixed-name file (README.md, package.json,
+ * Makefile, …) as a symlink to an arbitrary host path (~/.ssh/id_rsa, .env).
+ * scanDirectory already drops symlink entries, but these fixed-name readers
+ * bypass the scan set, so we resolve the real path and verify containment before
+ * reading. Both sides are realpath'd so macOS's /var -> /private/var alias (or a
+ * symlinked parent of the clone dir) doesn't cause a false rejection.
+ */
+export async function readContainedFile(repoPath: string, relPath: string): Promise<string> {
+  const fullPath = join(repoPath, relPath);
+  const [realRoot, realTarget] = await Promise.all([realpath(repoPath), realpath(fullPath)]);
+  if (!isPathInsideDir(realRoot, realTarget)) {
+    throw new Error(`Refusing to read '${relPath}': symlink escapes repository root`);
+  }
+  const { size } = await stat(realTarget);
+  if (size > MAX_CONTAINED_FILE_BYTES) {
+    throw new Error(`Refusing to read '${relPath}': ${size} bytes exceeds cap`);
+  }
+  return readFile(realTarget, "utf-8");
+}
+
 async function extractPackageJsonCommands(repoPath: string): Promise<Command[]> {
   const commands: Command[] = [];
 
   try {
-    const content = await readFile(join(repoPath, "package.json"), "utf-8");
+    const content = await readContainedFile(repoPath, "package.json");
     const pkg = JSON.parse(content);
 
     if (pkg.scripts) {
@@ -448,7 +553,7 @@ async function extractMakefileCommands(repoPath: string): Promise<Command[]> {
   const commands: Command[] = [];
 
   try {
-    const content = await readFile(join(repoPath, "Makefile"), "utf-8");
+    const content = await readContainedFile(repoPath, "Makefile");
     // `:(?!=)` matches a real target colon but rejects `:=`/assignment lines
     // (e.g. `CC := gcc`, `PREFIX := /usr/local`).
     const targetPattern = /^([a-zA-Z_][a-zA-Z0-9_-]*)\s*:(?!=)/gm;
@@ -557,7 +662,7 @@ async function readDocFile(repoPath: string, filename: string): Promise<string |
 
   for (const name of possibleNames) {
     try {
-      return await readFile(join(repoPath, name), "utf-8");
+      return await readContainedFile(repoPath, name);
     } catch (err: unknown) {
       // Try next
       if (process.env.DEBUG) console.error("[debug]", (err as Error).message);
@@ -818,9 +923,15 @@ async function readKeySourceFiles(
     .filter((f) => f.score > 0)
     .sort((a, b) => b.score - a.score);
 
-  // Read files in parallel with concurrency limiter, then assemble in priority order
+  // Read files in parallel with concurrency limiter, then assemble in priority
+  // order. scoredFiles is sorted by score descending, so stop launching reads
+  // once we have gathered enough bytes to satisfy the assembly budget. Read a
+  // little past `maxBytes` (2x) so the skip-large-file heuristic below still has
+  // smaller, lower-priority files to fall back on.
   const CONCURRENCY = 8;
+  const READ_BUDGET = maxBytes * 2;
   const readResults: { path: string; content: string | null; size: number }[] = [];
+  let readBytes = 0;
 
   for (let i = 0; i < scoredFiles.length; i += CONCURRENCY) {
     const batch = scoredFiles.slice(i, i + CONCURRENCY);
@@ -838,6 +949,8 @@ async function readKeySourceFiles(
       })
     );
     readResults.push(...batchResults);
+    for (const result of batchResults) readBytes += result.size;
+    if (readBytes >= READ_BUDGET) break;
   }
 
   // Assemble in priority order until budget exhausted
@@ -860,9 +973,13 @@ async function readKeySourceFiles(
 /**
  * Full scan of a cloned repository
  */
-export async function scanRepo(repoPath: string, maxFiles: number): Promise<ScanResult> {
-  // Scan files
-  const files = await scanDirectory(repoPath, maxFiles);
+export async function scanRepo(
+  repoPath: string,
+  maxFiles: number,
+  options: { exclude?: string[]; subdir?: string } = {}
+): Promise<ScanResult> {
+  // Scan files (`options` scopes/excludes the walk; see scanDirectory)
+  const files = await scanDirectory(repoPath, maxFiles, options);
 
   // Detect stack
   const stack = detectStack(files);
@@ -908,7 +1025,13 @@ export async function readRepoFile(repoPath: string, filePath: string): Promise<
   if (rel.startsWith("..") || isAbsolute(rel)) {
     throw new Error("Path escapes repository root");
   }
-  return await readFile(fullPath, "utf-8");
+  // Defense against a committed symlink whose lexical path is inside the repo but
+  // whose real target is not: resolve both and re-check containment before read.
+  const [realRoot, realTarget] = await Promise.all([realpath(resolvedRepo), realpath(fullPath)]);
+  if (!isPathInsideDir(realRoot, realTarget)) {
+    throw new Error("Path escapes repository root");
+  }
+  return await readFile(realTarget, "utf-8");
 }
 
 /**

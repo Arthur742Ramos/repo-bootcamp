@@ -67,6 +67,19 @@ describe("impact import graph — modern TS/Python forms", () => {
     expect(graph.get("pkg/b.py")?.importedBy).toContain("pkg/a.py");
   });
 
+  it("resolves Python src-layout package-absolute imports", async () => {
+    // `from pkg.mod import x` in a `src/`-rooted package: the package sits at
+    // src/pkg, not the repo root, so resolution must probe the `src` root.
+    const { repoPath, fileInfos } = await makeRepo({
+      "src/pkg/__init__.py": "",
+      "src/pkg/mod.py": "value = 1\n",
+      "src/pkg/other.py": "from pkg.mod import value\nimport pkg.mod\n",
+    });
+    const graph = await buildImportGraph(repoPath, fileInfos);
+    expect(graph.get("src/pkg/other.py")?.imports).toContain("src/pkg/mod.py");
+    expect(graph.get("src/pkg/mod.py")?.importedBy).toContain("src/pkg/other.py");
+  });
+
   it("finds co-located tests for a repo-root file (dirname '.')", async () => {
     const files = [fi("index.ts"), fi("index.test.ts"), fi("index.spec.ts")];
     const impact = await analyzeChangeImpact("/repo", files, "index.ts", new Map());

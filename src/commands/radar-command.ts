@@ -4,10 +4,11 @@ import { join } from "path";
 
 import { extractDependencies } from "../deps.js";
 import { generateTechRadar, getRiskEmoji } from "../radar.js";
-import { resolveRepo, type RepoSource } from "../repo-resolver.js";
 import { analyzeSecurityPatterns } from "../security.js";
 import { scanRepositoryFiles } from "../services/clone-service.js";
 import type { TechRadar } from "../types.js";
+import { finiteOr } from "../utils.js";
+import { withResolvedRepo } from "./_shared.js";
 
 /** Options accepted by the `bootcamp radar` command. */
 export interface RadarCommandOptions {
@@ -82,22 +83,10 @@ function printReport(radar: TechRadar, repoName: string, filesScanned: number): 
  * `RADAR.md`, so it never invokes the LLM.
  */
 export async function runRadarCommand(repoUrl: string, opts: RadarCommandOptions): Promise<void> {
-  const maxRisk = typeof opts.maxRisk === "number" && Number.isFinite(opts.maxRisk) ? opts.maxRisk : 50;
+  const maxRisk = finiteOr(opts.maxRisk, 50);
 
-  let repoSource: RepoSource;
-  try {
-    repoSource = await resolveRepo(repoUrl, process.cwd(), opts.branch || undefined);
-  } catch (error: unknown) {
-    console.error(
-      chalk.red(`Failed to resolve repository: ${error instanceof Error ? error.message : String(error)}`)
-    );
-    process.exit(1);
-    return;
-  }
-
-  let exitCode = 0;
-  try {
-    const scan = await scanRepositoryFiles(repoSource.path, opts.maxFiles ?? 500);
+  await withResolvedRepo(repoUrl, opts, "Radar analysis failed", async (repoSource) => {
+    const scan = await scanRepositoryFiles(repoSource.path, finiteOr(opts.maxFiles, 500, { min: 1 }));
     const packageJson = await readFile(join(repoSource.path, "package.json"), "utf-8")
       .then((content) => JSON.parse(content) as Record<string, unknown>)
       .catch(() => undefined);
@@ -142,22 +131,9 @@ export async function runRadarCommand(repoUrl: string, opts: RadarCommandOptions
           )
         );
       }
-      exitCode = 1;
+      return 1;
     }
-  } catch (error: unknown) {
-    console.error(
-      chalk.red(`Radar analysis failed: ${error instanceof Error ? error.message : String(error)}`)
-    );
-    exitCode = 1;
-  } finally {
-    if (opts.keepTemp && !repoSource.isLocal) {
-      console.log(chalk.gray(`Temporary clone kept at: ${repoSource.path}`));
-    } else {
-      await repoSource.cleanup();
-    }
-  }
 
-  if (exitCode !== 0) {
-    process.exit(exitCode);
-  }
+    return 0;
+  });
 }

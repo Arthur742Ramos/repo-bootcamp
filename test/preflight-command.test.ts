@@ -40,6 +40,34 @@ describe("satisfiesVersion", () => {
   it("returns null when any constraint in a compound range is non-numeric", () => {
     expect(satisfiesVersion(">=3.8,foo", "3.9.0")).toBeNull();
   });
+
+  it("enforces the tilde upper bound and patch floor (~1.2.3 => >=1.2.3 <1.3.0)", () => {
+    expect(satisfiesVersion("~1.2.3", "1.2.3")).toBe(true); // at the floor
+    expect(satisfiesVersion("~1.2.3", "1.2.9")).toBe(true); // within the patch range
+    expect(satisfiesVersion("~1.2.3", "1.2.0")).toBe(false); // below the patch floor
+    expect(satisfiesVersion("~1.2.3", "1.9.0")).toBe(false); // above the <1.3.0 cap
+    expect(satisfiesVersion("~1.2.3", "2.0.0")).toBe(false); // wrong major
+    // No minor named → tilde only locks the major (~1 => >=1.0.0 <2.0.0).
+    expect(satisfiesVersion("~1", "1.9.9")).toBe(true);
+    expect(satisfiesVersion("~1", "2.0.0")).toBe(false);
+    // Reachable case: engines.node style pin.
+    expect(satisfiesVersion("~18.2.0", "18.2.5")).toBe(true);
+    expect(satisfiesVersion("~18.2.0", "18.3.0")).toBe(false);
+  });
+
+  it("locks the caret range to the first non-zero component for 0.x (^0.2.3 => >=0.2.3 <0.3.0)", () => {
+    expect(satisfiesVersion("^0.2.3", "0.2.3")).toBe(true); // at the floor
+    expect(satisfiesVersion("^0.2.3", "0.2.9")).toBe(true); // within the minor range
+    expect(satisfiesVersion("^0.2.3", "0.1.0")).toBe(false); // below the floor
+    expect(satisfiesVersion("^0.2.3", "0.9.0")).toBe(false); // above the <0.3.0 cap
+    expect(satisfiesVersion("^0.2.3", "1.0.0")).toBe(false); // wrong major
+    // ^0.0.z locks through the patch (^0.0.3 => 0.0.3 only).
+    expect(satisfiesVersion("^0.0.3", "0.0.3")).toBe(true);
+    expect(satisfiesVersion("^0.0.3", "0.0.4")).toBe(false);
+    // Caret on a >=1 major is unchanged: it locks the major only.
+    expect(satisfiesVersion("^1.2.3", "1.9.0")).toBe(true);
+    expect(satisfiesVersion("^1.2.3", "2.0.0")).toBe(false);
+  });
 });
 
 const dirs: string[] = [];

@@ -1,5 +1,6 @@
 import { analyzeRepo, type AnalysisStats } from "../agent.js";
 import { runParallelAnalysis } from "../analysis.js";
+import { readCache, writeCache, type CacheGenerationOptions } from "../cache.js";
 import { analyzeDiff, generateDiffDocs } from "../diff.js";
 import { generateDependencyDocs, type DependencyAnalysis } from "../deps.js";
 import {
@@ -79,6 +80,46 @@ export async function orchestrateAnalysis({
   progress,
   analysisStart,
 }: OrchestrateAnalysisParams): Promise<OrchestratedAnalysisResult> {
+  // The LLM "facts" phase is by far the most expensive step (a Copilot call
+  // against a ~10-minute budget). Cache it by repo + commit + generation
+  // options so a same-commit re-run — e.g. changing --format/--style, adding
+  // --stats, or regenerating after a delete — can reuse the previous result
+  // instead of re-paying the model. A cache key needs a commit SHA; local
+  // --no-clone runs without one simply skip the cache.
+  const generationOptions: CacheGenerationOptions = {
+    focus: options.focus,
+    style: options.style,
+    model: options.model,
+    audience: options.audience,
+  };
+  const cacheEligible = !options.noCache && Boolean(repoInfo.commitSha);
+
+  if (cacheEligible) {
+    const cachedFacts = await readCache(repoInfo.fullName, repoInfo.commitSha!, generationOptions);
+    if (cachedFacts) {
+      progress.succeed("Analysis complete (cached)");
+      // A cache hit skips the live model call, so there are no fresh tool
+      // calls or model name to report; synthesize a stats object marked
+      // "cache" so --stats stays well-defined and downstream code that reads
+      // stats.model/toolCalls does not break.
+      const cachedStats: AnalysisStats = {
+        model: "cache",
+        toolCalls: [],
+        totalEvents: 0,
+        responseLength: 0,
+        startTime: analysisStart,
+        endTime: Date.now(),
+      };
+      return {
+        facts: cachedFacts,
+        analysisStats: cachedStats,
+        durationMs: Date.now() - analysisStart,
+        toolCalls: 0,
+        model: "cache",
+      };
+    }
+  }
+
   const result = await analyzeRepo(repoPath, repoInfo, scanResult, options, (msg) => {
     if (msg.startsWith("Tool:")) {
       const toolName = msg.replace("Tool:", "").trim();
@@ -89,6 +130,12 @@ export async function orchestrateAnalysis({
 
   const durationMs = Date.now() - analysisStart;
   progress.succeed("Analysis complete");
+
+  if (cacheEligible) {
+    // Persist on a miss so the next same-commit run is a hit. Failures are
+    // swallowed by writeCache's own error handling — caching is best-effort.
+    await writeCache(repoInfo.fullName, repoInfo.commitSha!, result.facts, generationOptions);
+  }
 
   return {
     facts: result.facts,
@@ -188,9 +235,9 @@ export async function prepareOutputDocuments({
   const documents: GeneratedDoc[] = [
     { name: "BOOTCAMP.md", content: generateBootcamp(finalFacts, options, styleConfig) },
     { name: "ONBOARDING.md", content: generateOnboarding(finalFacts, options) },
-    { name: "ARCHITECTURE.md", content: generateArchitecture(finalFacts, options) },
-    { name: "CODEMAP.md", content: generateCodemap(finalFacts) },
-    { name: "FIRST_TASKS.md", content: generateFirstTasks(finalFacts, options, styleConfig) },
+    { name: "ARCHITECTURE.md", content: generateArchitecture(finalFacts, options, repoInfo) },
+    { name: "CODEMAP.md", content: generateCodemap(finalFacts, repoInfo) },
+    { name: "FIRST_TASKS.md", content: generateFirstTasks(finalFacts, options, styleConfig, repoInfo) },
     { name: "diagrams.mmd", content: generateDiagrams(finalFacts) },
     { name: "repo_facts.json", content: JSON.stringify(finalFacts, null, 2) },
   ];

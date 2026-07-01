@@ -239,4 +239,132 @@ describe("getIndexHtml", () => {
       expect(first).toBe(second);
     });
   });
+
+  describe("file preview modal (E4b)", () => {
+    it("opens the modal immediately with a loading placeholder", () => {
+      const html = getIndexHtml();
+      expect(html).toContain("modalContent.textContent = 'Loading");
+      // The modal is shown from openModal(), invoked before the fetch resolves.
+      expect(html).toContain("openModal();");
+      expect(html).toContain("function openModal()");
+    });
+
+    it("checks response.ok and renders a distinct error state, not the error body", () => {
+      const html = getIndexHtml();
+      expect(html).toContain("if (!res.ok)");
+      expect(html).toContain("Couldn't load ");
+      expect(html).toContain("classList.add('load-error')");
+      expect(html).toContain("#modalContent.load-error");
+    });
+
+    it("keeps currentFile null until a successful load so copy/download can't act on errors", () => {
+      const html = getIndexHtml();
+      expect(html).toContain("currentFile = null");
+    });
+  });
+
+  describe("SSE resilience (E4b)", () => {
+    it("distinguishes a settled stream from an interruption", () => {
+      const html = getIndexHtml();
+      expect(html).toContain("let settled = false");
+      expect(html).toContain("if (settled) return");
+    });
+
+    it("shows a visible retry notice and falls back to polling on interruption", () => {
+      const html = getIndexHtml();
+      expect(html).toContain("Connection lost");
+      expect(html).toContain("function pollJobStatus(jobId)");
+      expect(html).toContain("job.status === 'complete'");
+      expect(html).toContain("job.status === 'error'");
+    });
+  });
+
+  describe("modal background isolation and focus trap (E4b)", () => {
+    it("makes the container inert with an aria-hidden fallback and locks body scroll", () => {
+      const html = getIndexHtml();
+      expect(html).toContain("container.inert = true");
+      expect(html).toContain("setAttribute('aria-hidden', 'true')");
+      expect(html).toContain("document.body.style.overflow = 'hidden'");
+    });
+
+    it("reverses the isolation when the modal closes", () => {
+      const html = getIndexHtml();
+      expect(html).toContain("container.inert = false");
+      expect(html).toContain("removeAttribute('aria-hidden')");
+      expect(html).toContain("document.body.style.overflow = ''");
+    });
+
+    it("builds the focus trap from a runtime query, not a hard-coded list", () => {
+      const html = getIndexHtml();
+      expect(html).toContain("content.querySelectorAll(selector)");
+      expect(html).toContain("Array.prototype.filter.call");
+      // The old hard-coded [copyBtn, downloadBtn, closeBtn] array is gone.
+      expect(html).not.toContain("document.getElementById('copyBtn'),");
+    });
+  });
+
+  describe("URL field validation (E4b)", () => {
+    it("adds URL-appropriate input affordances", () => {
+      const html = getIndexHtml();
+      expect(html).toContain('inputmode="url"');
+      expect(html).toContain('autocapitalize="none"');
+      expect(html).toContain('spellcheck="false"');
+    });
+
+    it("links an inline error region via aria-describedby instead of a blocking alert()", () => {
+      const html = getIndexHtml();
+      expect(html).toContain('aria-describedby="repoUrlError"');
+      expect(html).toContain('id="repoUrlError"');
+      expect(html).toContain("function setUrlError(");
+      expect(html).toContain("setUrlError('Please enter a repository URL')");
+      expect(html).toContain("setAttribute('aria-invalid', 'true')");
+      expect(html).not.toContain("alert(");
+    });
+
+    it("does not impose native type=url validation (backend accepts owner/repo and SSH forms)", () => {
+      const html = getIndexHtml();
+      expect(html).toContain('type="text"');
+      expect(html).not.toContain('type="url"');
+    });
+  });
+
+  describe("completion announcement and focus (E4b)", () => {
+    it("no longer wraps the bulk-rendered results in an always-on live region", () => {
+      const html = getIndexHtml();
+      expect(html).toContain('<div class="results" id="results">');
+      expect(html).not.toContain('id="results" aria-live');
+    });
+
+    it("gives the progress log role=log and adds a concise status region", () => {
+      const html = getIndexHtml();
+      expect(html).toContain('role="log"');
+      expect(html).toContain('id="statusMsg"');
+      expect(html).toContain('role="status"');
+    });
+
+    it("moves focus to the results heading and announces completion", () => {
+      const html = getIndexHtml();
+      expect(html).toContain('id="filesHeading"');
+      expect(html).toContain('tabindex="-1"');
+      expect(html).toContain("heading.focus()");
+      expect(html).toContain("heading.scrollIntoView(");
+      expect(html).toContain("Analysis complete");
+    });
+  });
+
+  describe("headline stats (E4b)", () => {
+    it("replaces internal Tool Calls telemetry with a user-relevant stat", () => {
+      const html = getIndexHtml();
+      expect(html).not.toContain("'Tool Calls'");
+      expect(html).not.toContain("data.stats.toolCalls");
+      expect(html).toContain("data.files.length, 'Files Generated'");
+    });
+
+    it("keeps the onboarding-relevant headline stats", () => {
+      const html = getIndexHtml();
+      expect(html).toContain("Security Score (");
+      expect(html).toContain("Onboarding Risk (");
+      expect(html).toContain("'Dependencies'");
+    });
+  });
 });

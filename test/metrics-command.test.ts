@@ -113,6 +113,16 @@ describe("runMetricsCommand", () => {
     expect(scanMock).toHaveBeenCalledWith("/tmp/cloned-repo", 123);
   });
 
+  it("falls back to 500 for a NaN or non-positive maxFiles so the scan cap is never disabled", async () => {
+    // A NaN survives `?? 500`, so `files.length >= NaN` would silently disable
+    // the cap — finiteOr guards against it and restores the 500 default.
+    await runMetricsCommand("https://github.com/test/repo", { maxFiles: Number("nope") });
+    expect(scanMock).toHaveBeenCalledWith("/tmp/cloned-repo", 500);
+    scanMock.mockClear();
+    await runMetricsCommand("https://github.com/test/repo", { maxFiles: 0 });
+    expect(scanMock).toHaveBeenCalledWith("/tmp/cloned-repo", 500);
+  });
+
   it("emits JSON when --json is set", async () => {
     await runMetricsCommand("https://github.com/test/repo", { json: true });
     const printed = logSpy.mock.calls.map((c) => String(c[0])).join("\n");
@@ -150,6 +160,17 @@ describe("runMetricsCommand", () => {
 
   it("keeps the temporary clone with --keep-temp for remote repos", async () => {
     await runMetricsCommand("https://github.com/test/repo", { keepTemp: true });
+    expect(mockCleanup).not.toHaveBeenCalled();
+  });
+
+  it("routes the keep-temp note to stderr under --json so stdout stays valid JSON", async () => {
+    await runMetricsCommand("https://github.com/test/repo", { json: true, keepTemp: true });
+    // stdout must remain parseable JSON — the keep-temp note goes to stderr.
+    const stdout = logSpy.mock.calls.map((c) => String(c[0])).join("\n");
+    expect(() => JSON.parse(stdout)).not.toThrow();
+    expect(stdout).not.toContain("Temporary clone kept");
+    const stderr = errorSpy.mock.calls.map((c) => String(c[0])).join("\n");
+    expect(stderr).toContain("Temporary clone kept");
     expect(mockCleanup).not.toHaveBeenCalled();
   });
 

@@ -213,12 +213,17 @@ export function validateRepoFacts(data: unknown): ValidationResult {
 }
 
 /**
- * Get a summary of what's missing for retry prompts
+ * Get a summary of what's missing for retry prompts.
+ *
+ * Recognises "missing field" issues across zod versions: v3 phrased them as
+ * "Required", while v4 (pinned here) emits "Invalid input: expected <type>,
+ * received undefined". Matching only "Required" left the primary branch dead
+ * under zod v4, so both phrasings are detected.
  */
 export function getMissingFieldsSummary(errors: string[]): string {
   const missingFields = errors
-    .filter((e) => e.includes("Required"))
-    .map((e) => e.split(":")[0]);
+    .filter((e) => /required|received undefined/i.test(e))
+    .map((e) => e.split(":")[0].trim());
 
   if (missingFields.length > 0) {
     return `Missing required fields: ${missingFields.join(", ")}`;

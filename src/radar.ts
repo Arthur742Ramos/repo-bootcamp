@@ -6,6 +6,7 @@
 import type { TechRadar, RadarSignal, StackInfo, FileInfo } from "./types.js";
 import type { DependencyAnalysis } from "./deps.js";
 import type { SecurityAnalysis } from "./security.js";
+import { isTestFile } from "./utils.js";
 import radarSignals from "./data/radar-signals.json" with { type: "json" };
 
 const MODERN_SIGNALS: Record<string, string> = radarSignals.modern;
@@ -99,21 +100,10 @@ function calculateOnboardingRisk(
     factors.push("No CI/CD pipeline detected");
   }
 
-  // Tests — match on path segments (so `tests/` counts and `latest/` does not)
-  // and cover non-JS conventions (Go `*_test.go`, Python `test_*.py`/`*_test.py`).
-  const hasTests = files.some(f => {
-    const segments = f.path.split("/");
-    const inTestDir = segments.some(
-      s => s === "test" || s === "tests" || s === "spec" || s === "specs" || s === "__tests__"
-    );
-    return (
-      inTestDir ||
-      /\.(test|spec)\.[a-z0-9]+$/i.test(f.path) ||
-      /_test\.go$/.test(f.path) ||
-      /(^|\/)test_[^/]+\.py$/.test(f.path) ||
-      /_test\.py$/.test(f.path)
-    );
-  });
+  // Tests — reuse the canonical predicate so path segments like `tests/` count
+  // (and `latest/` does not) and non-JS conventions (Go `*_test.go`, Python
+  // `test_*.py`/`*_test.py`) are recognized consistently with the other analyzers.
+  const hasTests = files.some((f) => isTestFile(f.path));
   if (!hasTests) {
     risk += 15;
     factors.push("No test files detected");

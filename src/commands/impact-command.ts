@@ -1,9 +1,10 @@
 import chalk from "chalk";
 
 import { analyzeChangeImpact, buildImportGraph, getKeyFilesForImpact } from "../impact.js";
-import { resolveRepo, type RepoSource } from "../repo-resolver.js";
 import { scanRepositoryFiles } from "../services/clone-service.js";
 import type { ChangeImpact } from "../types.js";
+import { finiteOr } from "../utils.js";
+import { withResolvedRepo } from "./_shared.js";
 
 /** Options accepted by the `bootcamp impact` command. */
 export interface ImpactCommandOptions {
@@ -81,22 +82,10 @@ export async function runImpactCommand(
   file: string | undefined,
   opts: ImpactCommandOptions
 ): Promise<void> {
-  const top = typeof opts.top === "number" && Number.isFinite(opts.top) && opts.top > 0 ? opts.top : 10;
+  const top = finiteOr(opts.top, 10, { min: 1 });
 
-  let repoSource: RepoSource;
-  try {
-    repoSource = await resolveRepo(repoUrl, process.cwd(), opts.branch || undefined);
-  } catch (error: unknown) {
-    console.error(
-      chalk.red(`Failed to resolve repository: ${error instanceof Error ? error.message : String(error)}`)
-    );
-    process.exit(1);
-    return;
-  }
-
-  let exitCode = 0;
-  try {
-    const scan = await scanRepositoryFiles(repoSource.path, opts.maxFiles ?? 500);
+  await withResolvedRepo(repoUrl, opts, "Impact analysis failed", async (repoSource) => {
+    const scan = await scanRepositoryFiles(repoSource.path, finiteOr(opts.maxFiles, 500, { min: 1 }));
     const graph = await buildImportGraph(repoSource.path, scan.files);
 
     const normalized = file ? normalizePath(file) : undefined;
@@ -105,51 +94,36 @@ export async function runImpactCommand(
       console.error(
         chalk.dim("Pass a repository-relative path to a scanned source file (e.g. src/index.ts).")
       );
-      exitCode = 1;
+      return 1;
+    }
+
+    const targets = normalized ? [normalized] : getKeyFilesForImpact(scan.files).slice(0, top);
+
+    const impacts: ChangeImpact[] = [];
+    for (const target of targets) {
+      impacts.push(await analyzeChangeImpact(repoSource.path, scan.files, target, graph));
+    }
+
+    if (opts.json) {
+      console.log(JSON.stringify({ repo: repoSource.repoInfo.fullName, impacts }, null, 2));
+    } else if (impacts.length === 0) {
+      console.log(chalk.yellow("\n🎯 No key source files detected to analyze."));
+      console.log(chalk.dim("Pass a specific file: bootcamp impact <repo> <path>\n"));
     } else {
-      const targets = normalized
-        ? [normalized]
-        : getKeyFilesForImpact(scan.files).slice(0, top);
-
-      const impacts: ChangeImpact[] = [];
-      for (const target of targets) {
-        impacts.push(await analyzeChangeImpact(repoSource.path, scan.files, target, graph));
-      }
-
-      if (opts.json) {
-        console.log(JSON.stringify({ repo: repoSource.repoInfo.fullName, impacts }, null, 2));
-      } else if (impacts.length === 0) {
-        console.log(chalk.yellow("\n🎯 No key source files detected to analyze."));
-        console.log(chalk.dim("Pass a specific file: bootcamp impact <repo> <path>\n"));
+      console.log(chalk.bold("\n🎯 Change Impact"));
+      console.log(chalk.dim(`Repository: ${repoSource.repoInfo.fullName}`));
+      if (normalized) {
+        printDetail(impacts[0]);
+        console.log();
       } else {
-        console.log(chalk.bold("\n🎯 Change Impact"));
-        console.log(chalk.dim(`Repository: ${repoSource.repoInfo.fullName}`));
-        if (normalized) {
-          printDetail(impacts[0]);
-          console.log();
-        } else {
-          console.log(
-            chalk.dim(`Top ${impacts.length} key files — run with a file path for full detail\n`)
-          );
-          printSummary(impacts);
-          console.log();
-        }
+        console.log(
+          chalk.dim(`Top ${impacts.length} key files — run with a file path for full detail\n`)
+        );
+        printSummary(impacts);
+        console.log();
       }
     }
-  } catch (error: unknown) {
-    console.error(
-      chalk.red(`Impact analysis failed: ${error instanceof Error ? error.message : String(error)}`)
-    );
-    exitCode = 1;
-  } finally {
-    if (opts.keepTemp && !repoSource.isLocal) {
-      console.log(chalk.gray(`Temporary clone kept at: ${repoSource.path}`));
-    } else {
-      await repoSource.cleanup();
-    }
-  }
 
-  if (exitCode !== 0) {
-    process.exit(exitCode);
-  }
+    return 0;
+  });
 }

@@ -141,25 +141,46 @@ describe("validateRepoFacts", () => {
 });
 
 describe("getMissingFieldsSummary", () => {
-  it("extracts missing field names", () => {
-    const errors = [
-      "purpose: Required",
-      "description: Required",
-      "stack.languages: Required",
-    ];
-    const summary = getMissingFieldsSummary(errors);
+  it("summarises real validator output for missing fields (integration)", () => {
+    // Feed the ACTUAL zod-v4 errors (not hand-written strings) through the
+    // summary so this pins real production behaviour. Under zod 4.x the
+    // missing-field message is "expected <type>, received undefined", which the
+    // pre-fix filter (`includes("Required")`) never matched — so this asserts
+    // the clean "Missing required fields:" format rather than merely that field
+    // names appear (the slice fallback already contains those).
+    const result = validateRepoFacts({ repoName: "only-name" });
+    expect(result.success).toBe(false);
+    const summary = getMissingFieldsSummary(result.errors!);
+    expect(summary.startsWith("Missing required fields:")).toBe(true);
     expect(summary).toContain("purpose");
     expect(summary).toContain("description");
+    // Must NOT fall through to the raw slice(0,3) fallback of formatted errors.
+    expect(summary).not.toContain("Invalid input");
   });
 
-  it("handles non-required errors", () => {
+  it("recognises the zod v4 'received undefined' phrasing", () => {
+    const errors = [
+      "purpose: Invalid input: expected string, received undefined",
+      "stack: Invalid input: expected object, received undefined",
+    ];
+    const summary = getMissingFieldsSummary(errors);
+    expect(summary).toBe("Missing required fields: purpose, stack");
+  });
+
+  it("still recognises the legacy 'Required' phrasing", () => {
+    const errors = ["purpose: Required", "description: Required"];
+    const summary = getMissingFieldsSummary(errors);
+    expect(summary).toBe("Missing required fields: purpose, description");
+  });
+
+  it("falls back to the first few errors for non-missing-field problems", () => {
     const errors = ["stack.languages: Expected array, got string"];
     const summary = getMissingFieldsSummary(errors);
     expect(summary).toContain("Expected array");
   });
 
-  it("limits error count", () => {
-    const errors = Array(10).fill("field: Error message");
+  it("limits the fallback error count", () => {
+    const errors = Array(10).fill("field: some other problem");
     const summary = getMissingFieldsSummary(errors);
     // Should not include all 10
     expect(summary.split(";").length).toBeLessThanOrEqual(3);

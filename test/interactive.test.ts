@@ -32,6 +32,7 @@ import {
   renderInteractiveHelp,
   renderFileList,
 } from "../src/interactive.js";
+import { createFixtureLlmClient } from "../src/agent.js";
 import { getRepoTools } from "../src/tools.js";
 import { writeFile } from "fs/promises";
 
@@ -496,6 +497,28 @@ describe("quickAsk", () => {
     expect(mockGetRepoTools).toHaveBeenCalledWith(
       expect.objectContaining({ verbose: true }),
     );
+  });
+});
+
+describe("shared LLM client fixture (agent.ts dedup)", () => {
+  // interactive.ts reuses agent.ts's createFixtureLlmClient instead of a local
+  // copy; the REPL handler only understands assistant.message_delta, so the
+  // shared fixture must emit exactly that shape (a single delta with the
+  // response). Accumulation of that delta by InteractiveSession.ask is covered
+  // by the "captures responses and citations" case above.
+  it("emits a single assistant.message_delta carrying the response", async () => {
+    const client = createFixtureLlmClient("answer from the shared fixture");
+    const session = await client.createSession({});
+
+    const events: Array<{ type: string; data: { deltaContent?: string } }> = [];
+    session.on((event) => {
+      events.push(event as { type: string; data: { deltaContent?: string } });
+    });
+    await session.sendAndWait({ prompt: "anything" });
+
+    expect(events).toEqual([
+      { type: "assistant.message_delta", data: { deltaContent: "answer from the shared fixture" } },
+    ]);
   });
 });
 

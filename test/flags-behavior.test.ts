@@ -1,5 +1,5 @@
 import { execSync } from "child_process";
-import { mkdtemp, mkdir, readFile, rm, writeFile } from "fs/promises";
+import { mkdtemp, mkdir, rm, writeFile } from "fs/promises";
 import { tmpdir } from "os";
 import { join } from "path";
 import { pathToFileURL } from "url";
@@ -7,10 +7,11 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { clearCache, readCache, writeCache } from "../src/cache.js";
 import { generateBootcamp } from "../src/generator.js";
-import { cloneRepo, scanRepo } from "../src/ingest.js";
+import { scanRepo } from "../src/ingest.js";
 import { getStyleConfig, type BootcampConfig } from "../src/plugins.js";
 import { ProgressTracker } from "../src/progress.js";
 import { prepareOutputDocuments } from "../src/services/analysis-orchestration.js";
+import { scanRepositoryFiles } from "../src/services/clone-service.js";
 import type { BootcampOptions, RepoFacts, RepoInfo } from "../src/types.js";
 
 interface FixtureRepo {
@@ -261,27 +262,6 @@ describe("critical flag behavior", () => {
       await rm(fixture.rootDir, { recursive: true, force: true });
     }
   });
-
-  it("respects --branch by cloning the requested branch", async () => {
-    const fixture = await createFixtureRepo();
-    try {
-      const repoInfo: RepoInfo = {
-        owner: "local",
-        repo: "fixture-remote",
-        url: `file://${join(fixture.rootDir, "fixture-remote")}`,
-        branch: "main",
-        fullName: "local/fixture-remote",
-      };
-
-      const clonePath = await cloneRepo(repoInfo, fixture.rootDir, "feature", true);
-      const branchMarker = await readFile(join(clonePath, "src", "branch.txt"), "utf-8");
-
-      expect(branchMarker.trim()).toBe("feature");
-      expect(repoInfo.branch).toBe("feature");
-    } finally {
-      await rm(fixture.rootDir, { recursive: true, force: true });
-    }
-  });
 });
 
 describe("cache option sensitivity", () => {
@@ -316,5 +296,57 @@ describe("cache option sensitivity", () => {
     expect(startupHit).not.toBeNull();
     expect(startupHit!.repoName).toBe("cache-owner/cache-repo");
     expect(ossMiss).toBeNull();
+  });
+});
+
+describe("scan scope threading (--exclude / --subdir)", () => {
+  it("scopes the file scan to --subdir via scanRepositoryFiles", async () => {
+    const fixture = await createFixtureRepo();
+    try {
+      const scoped = await scanRepositoryFiles(fixture.sourceRepoPath, 200, { subdir: "src" });
+      const paths = scoped.files.filter((f) => !f.isDirectory).map((f) => f.path);
+
+      // fast-glob runs with cwd=<repo>/src, so entries are relative to src/ and
+      // the root-level files fall outside the scanned tree.
+      expect(paths).toContain("index.ts");
+      expect(paths).toContain("branch.txt");
+      expect(paths).not.toContain("package.json");
+      expect(paths).not.toContain("README.md");
+    } finally {
+      await rm(fixture.rootDir, { recursive: true, force: true });
+    }
+  });
+
+  it("drops --exclude trees from the scan via scanRepositoryFiles", async () => {
+    const fixture = await createFixtureRepo();
+    try {
+      const full = await scanRepositoryFiles(fixture.sourceRepoPath, 200);
+      const excluded = await scanRepositoryFiles(fixture.sourceRepoPath, 200, {
+        exclude: ["src", "src/**"],
+      });
+
+      const fullPaths = full.files.filter((f) => !f.isDirectory).map((f) => f.path);
+      const exclPaths = excluded.files.filter((f) => !f.isDirectory).map((f) => f.path);
+
+      expect(fullPaths).toContain("src/index.ts");
+      expect(exclPaths).not.toContain("src/index.ts");
+      // Unrelated root files are still scanned.
+      expect(exclPaths).toContain("package.json");
+    } finally {
+      await rm(fixture.rootDir, { recursive: true, force: true });
+    }
+  });
+
+  it("keeps the plain scan unchanged when no scope is passed", async () => {
+    const fixture = await createFixtureRepo();
+    try {
+      const paths = (await scanRepositoryFiles(fixture.sourceRepoPath, 200)).files
+        .filter((f) => !f.isDirectory)
+        .map((f) => f.path);
+      expect(paths).toContain("package.json");
+      expect(paths).toContain("src/index.ts");
+    } finally {
+      await rm(fixture.rootDir, { recursive: true, force: true });
+    }
   });
 });

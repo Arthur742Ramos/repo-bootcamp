@@ -172,6 +172,14 @@ describe("web routes analysis lifecycle", () => {
     const fileResponse = await http.get(`/api/jobs/${jobId}/files/BOOTCAMP.md`);
     expect(fileResponse.status).toBe(200);
     expect(fileResponse.text).toContain("Bootcamp");
+    // Generated files are served as inert text/plain (stored-XSS defense),
+    // never as an active content type the dashboard origin would render.
+    expect(fileResponse.headers["content-type"]).toContain("text/plain");
+
+    const jsonFileResponse = await http.get(`/api/jobs/${jobId}/files/repo_facts.json`);
+    expect(jsonFileResponse.status).toBe(200);
+    expect(jsonFileResponse.headers["content-type"]).toContain("text/plain");
+    expect(jsonFileResponse.headers["content-type"]).not.toContain("application/json");
 
     expect(mocks.parseGitHubUrl).toHaveBeenCalled();
     expect(mocks.cloneRepository).toHaveBeenCalled();
@@ -195,7 +203,12 @@ describe("web routes analysis lifecycle", () => {
 
     const statusResponse = await waitForTerminalStatus(http, jobId);
     expect(statusResponse.body.status).toBe("error");
-    expect(statusResponse.body.error).toBe("scan failed");
+    // Client sees a generic message; the raw "scan failed" detail (which for
+    // real clone/scan failures embeds git stderr / FS paths) is logged instead.
+    expect(statusResponse.body.error).toBe(
+      "Analysis failed. Please check the repository URL and try again."
+    );
+    expect(statusResponse.body.error).not.toContain("scan failed");
 
     const streamResponse = await http.get(`/api/jobs/${jobId}/stream`);
     expect(streamResponse.status).toBe(200);
@@ -207,6 +220,7 @@ describe("web routes analysis lifecycle", () => {
   });
 
   it("rejects unsafe filenames and returns file read errors", async () => {
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
     const { app, mocks } = await setupRoutes();
     const http = request(app);
 
@@ -222,7 +236,35 @@ describe("web routes analysis lifecycle", () => {
     mocks.readFile.mockRejectedValueOnce(new Error("disk failure"));
     const failedReadResponse = await http.get(`/api/jobs/${jobId}/files/BOOTCAMP.md`);
     expect(failedReadResponse.status).toBe(500);
-    expect(failedReadResponse.body.error).toBe("disk failure");
+    // Generic message only; the raw FS error (which can leak paths) is logged.
+    expect(failedReadResponse.body.error).toBe("Failed to read generated file");
+    expect(failedReadResponse.body.error).not.toContain("disk failure");
+    expect(errorSpy).toHaveBeenCalled();
+  });
+
+  it("clamps and allowlists client-supplied options", async () => {
+    const { app, mocks } = await setupRoutes();
+    const http = request(app);
+
+    const startResponse = await http.post("/api/analyze").send({
+      repoUrl: "https://github.com/owner/repo",
+      options: {
+        maxFiles: 5_000_000,
+        fullClone: true,
+        focus: "not-a-real-focus",
+        format: "exe",
+      },
+    });
+    const jobId = startResponse.body.jobId as string;
+    const statusResponse = await waitForTerminalStatus(http, jobId);
+
+    // Invalid enum values are allowlisted back to safe defaults, so the job
+    // still completes rather than erroring on the attacker-supplied payload.
+    expect(statusResponse.body.status).toBe("complete");
+    // maxFiles is clamped to the web ceiling (1000), not the 5,000,000 requested.
+    expect(mocks.scanRepositoryFiles).toHaveBeenCalledWith("/tmp/mock-routes-repo", 1000);
+    // fullClone is forced off regardless of the request payload.
+    expect(mocks.cloneRepository).toHaveBeenCalledWith(expect.anything(), undefined, false);
   });
 
   it("starts and stops the job pruner idempotently", async () => {

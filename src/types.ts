@@ -40,6 +40,10 @@ export interface BootcampOptions {
   noCache?: boolean;
   repoPrompts?: string;
   systemPrompt?: string;
+  /** Extra glob patterns to drop from the file scan (in addition to the built-in ignores). */
+  exclude?: string[];
+  /** Restrict the scan to a sub-path of the repository (e.g. a single monorepo package). */
+  subdir?: string;
   optionSource?: Partial<Record<"audience" | "focus" | "maxFiles" | "model" | "style", "cli" | "default">>;
 }
 

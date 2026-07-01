@@ -39,8 +39,13 @@ export async function cloneRepository(
   return cloneRepo(repoInfo, process.cwd(), branch, fullClone);
 }
 
-export async function scanRepositoryFiles(repoPath: string, maxFiles: number): Promise<ScanResult> {
-  return scanRepo(repoPath, maxFiles);
+export async function scanRepositoryFiles(
+  repoPath: string,
+  maxFiles: number,
+  options?: { exclude?: string[]; subdir?: string }
+): Promise<ScanResult> {
+  // Only forward the scope object when set so the common call stays two-argument.
+  return options ? scanRepo(repoPath, maxFiles, options) : scanRepo(repoPath, maxFiles);
 }
 
 export async function cleanupRepository(repoPath: string): Promise<void> {

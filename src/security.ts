@@ -66,6 +66,12 @@ export interface SecurityAnalysis {
   hasRateLimiting: boolean;
   hasInputValidation: boolean;
   hasSqlInjectionPrevention: boolean;
+  /**
+   * Number of source files actually read and scanned for patterns, capped at
+   * MAX_SECURITY_SCAN_FILES. `0` means nothing scannable was found, so a clean
+   * result is a coverage gap rather than evidence of a secure codebase.
+   */
+  sourceFilesScanned?: number;
 }
 
 import securityPackagesJson from "./data/security-packages.json" with { type: "json" };
@@ -190,18 +196,27 @@ export async function analyzeSecurityPatterns(
   }
 
   // Scan source files for security patterns and concerns
-  const sourceFiles = files.filter(f => 
-    !f.isDirectory && 
+  const sourceFiles = files.filter(f =>
+    !f.isDirectory &&
     /\.(ts|js|tsx|jsx|py|go|rs|java)$/.test(f.path) &&
     !f.path.includes("node_modules") &&
     !f.path.includes(".min.") &&
     f.size < MAX_SECURITY_FILE_SIZE
   );
 
+  // Rank the most security-relevant files first so the MAX_SECURITY_SCAN_FILES cap
+  // samples config/auth/db/secret code instead of whatever order the walker yielded.
+  // The path tiebreak keeps the sampled subset (and therefore the score) deterministic.
+  sourceFiles.sort((a, b) => {
+    const byPriority = securityScanPriority(b) - securityScanPriority(a);
+    return byPriority !== 0 ? byPriority : a.path.localeCompare(b.path);
+  });
+
   const authPatternMap = new Map<string, AuthPattern>();
 
   // Read all source files in parallel batches for performance
   const BATCH_SIZE = 10;
+  let sourceFilesScanned = 0;
   for (let i = 0; i < sourceFiles.length && i < MAX_SECURITY_SCAN_FILES; i += BATCH_SIZE) {
     const batch = sourceFiles.slice(i, Math.min(i + BATCH_SIZE, MAX_SECURITY_SCAN_FILES));
     const contents = await Promise.all(
@@ -216,6 +231,7 @@ export async function analyzeSecurityPatterns(
 
     for (const result of contents) {
       if (!result) continue;
+      sourceFilesScanned++;
       const { file, content } = result;
 
       // Check for auth patterns
@@ -276,6 +292,7 @@ export async function analyzeSecurityPatterns(
   }
 
   analysis.authPatterns = Array.from(authPatternMap.values());
+  analysis.sourceFilesScanned = sourceFilesScanned;
 
   // Calculate security score
   analysis.score = calculateSecurityScore(analysis);
@@ -312,6 +329,30 @@ const MAX_SECURITY_SCAN_FILES = 50;
 /** Maximum file size (bytes) to scan for security patterns */
 const MAX_SECURITY_FILE_SIZE = 100_000;
 
+/** Filename/path fragments that tend to carry secrets, auth, or query-building code. */
+const SECURITY_RELEVANT_NAME =
+  /auth|login|logout|session|secret|credential|password|passwd|token|jwt|oauth|config|env|security|crypto|db|database|sql|query|api|server|middleware|user|account|admin|payment|billing/i;
+
+/**
+ * Rank a source file by how likely it is to hold a security-relevant pattern, so the
+ * MAX_SECURITY_SCAN_FILES cap keeps the highest-value files. Higher is scanned first.
+ */
+function securityScanPriority(file: FileInfo): number {
+  const path = file.path.toLowerCase();
+  const name = basename(path);
+  let priority = 0;
+  if (SECURITY_RELEVANT_NAME.test(name)) priority += 10;
+  else if (SECURITY_RELEVANT_NAME.test(path)) priority += 5;
+  // De-prioritise tests/fixtures/examples/generated code — findings there are noise.
+  if (/\.(?:test|spec)\./.test(name) ||
+      /(?:^|\/)(?:tests?|__tests__|__mocks__|fixtures?|examples?|mocks?|dist|build|vendor)\//.test(path)) {
+    priority -= 8;
+  }
+  // Prefer first-party source over co-located config/scripts at the repo root.
+  if (path.startsWith("src/")) priority += 1;
+  return priority;
+}
+
 /**
  * Calculate a security score based on findings
  */
@@ -343,9 +384,15 @@ function calculateSecurityScore(analysis: SecurityAnalysis): number {
 }
 
 /**
- * Get a letter grade from score
+ * Get a letter grade from score.
+ *
+ * When `sourceFilesScanned` is passed and is `0`, no source was actually audited,
+ * so we withhold the letter grade ("N/A") rather than implying a clean "A" from a
+ * score that only ever subtracts penalties. Callers that omit the argument keep the
+ * original numeric-only behaviour.
  */
-export function getSecurityGrade(score: number): string {
+export function getSecurityGrade(score: number, sourceFilesScanned?: number): string {
+  if (sourceFilesScanned === 0) return "N/A";
   if (score >= 90) return "A";
   if (score >= 80) return "B";
   if (score >= 70) return "C";
@@ -358,7 +405,9 @@ export function getSecurityGrade(score: number): string {
  */
 export function generateSecurityDocs(analysis: SecurityAnalysis, projectName: string): string {
   const lines: string[] = [];
-  const grade = getSecurityGrade(analysis.score);
+  // A `0` scan count means nothing was audited, so refuse to present a clean grade.
+  const insufficientCoverage = analysis.sourceFilesScanned === 0;
+  const grade = getSecurityGrade(analysis.score, analysis.sourceFilesScanned);
 
   lines.push("# Security Overview");
   lines.push("");
@@ -368,8 +417,12 @@ export function generateSecurityDocs(analysis: SecurityAnalysis, projectName: st
   // Score badge
   lines.push("## Security Score");
   lines.push("");
-  const scoreColor = analysis.score >= 80 ? "🟢" : analysis.score >= 60 ? "🟡" : "🔴";
-  lines.push(`${scoreColor} **${analysis.score}/100** (Grade: ${grade})`);
+  if (insufficientCoverage) {
+    lines.push("⚠️ **Insufficient coverage** — no source files were scanned, so no security grade can be assigned.");
+  } else {
+    const scoreColor = analysis.score >= 80 ? "🟢" : analysis.score >= 60 ? "🟡" : "🔴";
+    lines.push(`${scoreColor} **${analysis.score}/100** (Grade: ${grade})`);
+  }
   lines.push("");
 
   // Security measures in place
@@ -481,7 +534,11 @@ export function generateSecurityDocs(analysis: SecurityAnalysis, projectName: st
   } else {
     lines.push("## Findings");
     lines.push("");
-    lines.push("✅ No security concerns detected in the scanned files.");
+    if (insufficientCoverage) {
+      lines.push("⚠️ No source files were scanned, so the absence of findings is not evidence of a clean codebase.");
+    } else {
+      lines.push("✅ No security concerns detected in the scanned files.");
+    }
     lines.push("");
   }
 

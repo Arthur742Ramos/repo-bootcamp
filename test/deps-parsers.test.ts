@@ -355,4 +355,45 @@ describe("dependency manifest parsers", () => {
     ]);
     expect(deps!.totalCount).toBe(4);
   });
+
+  it("go.mod: keeps deps below a comment that contains ')'", async () => {
+    // A paren inside a trailing comment must not terminate the require block
+    // early (the old non-greedy `require ( ... )` regex stopped at the first ')'
+    // and dropped every dependency below it).
+    const dir = await repoWith({
+      "go.mod": [
+        "module example.com/m",
+        "go 1.21",
+        "require (",
+        "\tgithub.com/a/a v1.0.0 // provides foo(bar)",
+        "\tgithub.com/b/b v2.0.0 // see issue (123)",
+        "\tgithub.com/c/c v3.0.0",
+        ")",
+      ].join("\n"),
+    });
+    const deps = await extractDependencies(dir);
+    expect(deps?.packageManager).toBe("go");
+    expect(names(deps!.runtime).sort()).toEqual([
+      "github.com/a/a",
+      "github.com/b/b",
+      "github.com/c/c",
+    ]);
+    expect(deps!.totalCount).toBe(3);
+  });
+
+  it("polyglot repo: first manifest wins (npm over cargo) — known single-manifest limitation", async () => {
+    // extractDependencies returns the FIRST non-null extractor in the fixed
+    // order npm -> cargo -> python -> go, so a repo carrying both package.json
+    // and Cargo.toml reports only npm and silently drops the Rust deps. This
+    // pins that lossy contract; aggregating across manifests would be a
+    // deliberate, test-visible change rather than a silent regression.
+    const dir = await repoWith({
+      "package.json": JSON.stringify({ name: "poly", dependencies: { express: "^5.0.0" } }),
+      "Cargo.toml": ["[dependencies]", 'serde = "1.0"'].join("\n"),
+    });
+    const deps = await extractDependencies(dir);
+    expect(deps?.packageManager).toBe("npm");
+    expect(names(deps!.runtime)).toEqual(["express"]);
+    expect(names(deps!.runtime)).not.toContain("serde");
+  });
 });
