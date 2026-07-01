@@ -121,10 +121,10 @@ describe("cloneRepo hardening", () => {
     await cloneRepo(makeRepoInfo(), "/tmp/target");
 
     const cloneCall = calls[0];
-    // `-c protocol.file.allow=never` is a global option, so it must precede the
+    // `-c protocol.file.allow=user` is a global option, so it must precede the
     // `clone` subcommand.
     expect(cloneCall.args).toContain("-c");
-    expect(cloneCall.args).toContain("protocol.file.allow=never");
+    expect(cloneCall.args).toContain("protocol.file.allow=user");
     expect(cloneCall.args.indexOf("-c")).toBeLessThan(cloneCall.args.indexOf("clone"));
 
     const env = (cloneCall.opts?.env ?? {}) as Record<string, string | undefined>;

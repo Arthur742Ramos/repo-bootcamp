@@ -253,7 +253,9 @@ describe("read_file tool", () => {
     expect(mockReadFile).not.toHaveBeenCalled();
   });
 
-  it("allows reads when realpath canonicalizes the repo root (e.g. /var -> /private/var)", async () => {
+  // POSIX-only: uses absolute /var paths and a /var -> /private/var realpath mock;
+  // on Windows those are not absolute and the substring never matches, so skip.
+  it.skipIf(process.platform === "win32")("allows reads when realpath canonicalizes the repo root (e.g. /var -> /private/var)", async () => {
     const ctx = makeContext({ repoPath: "/var/folders/repo" });
     const tool = getTool(ctx, "read_file");
     // Both the root and the target canonicalize the same way; realpathing BOTH

@@ -213,10 +213,14 @@ export async function cloneRepo(
   }
 
   const cloneUrl = repoInfo.url.endsWith(".git") ? repoInfo.url : `${repoInfo.url}.git`;
-  // `-c protocol.file.allow=never` forbids the file:// transport (and file-based
-  // submodule fetches). https:// clones — the only URLs parseGitHubUrl yields —
-  // are unaffected. It is a global option, so it must precede `clone`.
-  const cloneArgs = ["-c", "protocol.file.allow=never", "clone"];
+  // `-c protocol.file.allow=user` is git's post-CVE-2022-39253 default: it permits
+  // the top-level, user-initiated clone (https in production; also local file://
+  // used by tests and legitimate local clones) while blocking file:// smuggled via
+  // submodule / recursive fetches. We never pass --recurse-submodules, so this is
+  // defense in depth. `never` additionally broke file:// clones for no production
+  // gain (parseGitHubUrl only yields https). It is a global option, so it must
+  // precede `clone`.
+  const cloneArgs = ["-c", "protocol.file.allow=user", "clone"];
   if (!fullClone) {
     cloneArgs.push("--filter=blob:none", "--depth", "1");
   }
