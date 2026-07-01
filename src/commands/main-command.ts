@@ -1,5 +1,6 @@
 import chalk from "chalk";
-import { mkdir } from "fs/promises";
+import { mkdir, writeFile } from "fs/promises";
+import { join } from "path";
 
 import { analyzeRepo, type AnalysisStats } from "../agent.js";
 import { formatDocName, type OutputFormat } from "../formatter.js";
@@ -12,7 +13,7 @@ import { isLocalPath, resolveRepo, type RepoSource } from "../repo-resolver.js";
 import { getSecurityGrade } from "../security.js";
 import { cloneRepository, cleanupRepository, scanRepositoryFiles } from "../services/clone-service.js";
 import { resolveRunConfiguration } from "../services/config-resolution.js";
-import { orchestrateAnalysis, prepareOutputDocuments } from "../services/analysis-orchestration.js";
+import { orchestrateAnalysis, prepareOutputDocuments, type GeneratedDoc } from "../services/analysis-orchestration.js";
 import { writeGeneratedOutputs } from "../services/output-writer.js";
 import type { BootcampOptions, RepoFacts, RepoInfo, ScanResult } from "../types.js";
 import type { StyleConfig } from "../plugins.js";
@@ -52,6 +53,70 @@ interface GenerateOutputsParams {
   allowIssueCreation?: boolean;
 }
 
+interface WriteRunSummaryParams {
+  outputDir: string;
+  repoInfo: RepoInfo;
+  options: BootcampOptions;
+  outputFormat: OutputFormat;
+  documents: GeneratedDoc[];
+  security: GenerationResult["security"];
+  radar: GenerationResult["radar"];
+  deps: GenerationResult["deps"];
+  metrics: GenerationResult["metrics"];
+  health: GenerationResult["health"];
+}
+
+/**
+ * Write a machine-readable summary.json alongside the markdown kit so CI/tools
+ * can read the deterministic scores (security, onboarding risk, approachability,
+ * health) and dependency counts without re-running the separate `scan` command.
+ * Guarded per-field so a missing score object (e.g. metrics off) never throws.
+ */
+async function writeRunSummary({
+  outputDir,
+  repoInfo,
+  options,
+  outputFormat,
+  documents,
+  security,
+  radar,
+  deps,
+  metrics,
+  health,
+}: WriteRunSummaryParams): Promise<void> {
+  const summary = {
+    repo: repoInfo.fullName,
+    commitSha: repoInfo.commitSha ?? null,
+    generatedAt: new Date().toISOString(),
+    files: options.jsonOnly
+      ? ["repo_facts.json"]
+      : documents.map((doc) => formatDocName(doc.name, outputFormat)),
+    scores: {
+      security: security ? { score: security.score, grade: getSecurityGrade(security.score, security.sourceFilesScanned) } : null,
+      onboardingRisk: radar?.onboardingRisk
+        ? { score: radar.onboardingRisk.score, grade: radar.onboardingRisk.grade }
+        : null,
+      approachability: metrics?.approachability
+        ? { score: metrics.approachability.score, grade: metrics.approachability.grade }
+        : null,
+      health: health
+        ? {
+            score: health.score,
+            grade: health.grade,
+            passCount: health.passCount,
+            warnCount: health.warnCount,
+            failCount: health.failCount,
+          }
+        : null,
+    },
+    deps: deps
+      ? { total: deps.totalCount, runtime: deps.runtime.length, dev: deps.dev.length }
+      : { total: 0, runtime: 0, dev: 0 },
+  };
+
+  await writeFile(join(outputDir, "summary.json"), JSON.stringify(summary, null, 2), "utf-8");
+}
+
 async function generateOutputs({
   repoPath,
   repoInfo,
@@ -86,6 +151,22 @@ async function generateOutputs({
     progress,
     allowIssueCreation,
     outputTargets,
+  });
+
+  // Always emit a machine-readable summary so CI can read the scores without
+  // re-cloning via `scan`. Written from here (not writeGeneratedOutputs) so the
+  // deterministic score objects are already in scope.
+  await writeRunSummary({
+    outputDir,
+    repoInfo,
+    options,
+    outputFormat,
+    documents,
+    security,
+    radar,
+    deps,
+    metrics,
+    health,
   });
 
   return {
@@ -176,9 +257,17 @@ export async function runMainCommand(repoUrl: string, options: BootcampOptions):
 
   const scanStart = Date.now();
   progress.startPhase("scan", `max ${options.maxFiles} files`);
+  // `--exclude`/`--subdir` scope the walk (normalized in resolveRunConfiguration);
+  // keep the plain two-argument scan call when neither is set.
+  const scanScope =
+    (options.exclude && options.exclude.length > 0) || options.subdir
+      ? { exclude: options.exclude, subdir: options.subdir }
+      : undefined;
   let scanResult: ScanResult;
   try {
-    scanResult = await scanRepositoryFiles(repoPath, options.maxFiles);
+    scanResult = scanScope
+      ? await scanRepositoryFiles(repoPath, options.maxFiles, scanScope)
+      : await scanRepositoryFiles(repoPath, options.maxFiles);
     runStats.scanTime = Date.now() - scanStart;
     runStats.filesScanned = scanResult.files.length;
     progress.succeed(`Scanned ${scanResult.files.length} files (${scanResult.keySourceFiles.size} key files read)`);
@@ -258,7 +347,7 @@ export async function runMainCommand(repoUrl: string, options: BootcampOptions):
     progress.succeed(`Generated ${documentCount} files`);
 
     if (!quiet && !options.jsonOnly) {
-      const grade = getSecurityGrade(security.score);
+      const grade = getSecurityGrade(security.score, security.sourceFilesScanned);
       const scoreColor = security.score >= 80 ? chalk.green : security.score >= 60 ? chalk.yellow : chalk.red;
       console.log(chalk.cyan("\nSecurity Score: ") + scoreColor(`${security.score}/100 (${grade})`));
 
@@ -411,7 +500,9 @@ export async function runMainCommand(repoUrl: string, options: BootcampOptions):
         const wp = new ProgressTracker(options.verbose, quiet);
 
         wp.startPhase("scan", `max ${options.maxFiles} files`);
-        const newScan = await scanRepositoryFiles(repoPath, options.maxFiles);
+        const newScan = scanScope
+          ? await scanRepositoryFiles(repoPath, options.maxFiles, scanScope)
+          : await scanRepositoryFiles(repoPath, options.maxFiles);
         wp.succeed(`Scanned ${newScan.files.length} files`);
 
         wp.startPhase("analyze");

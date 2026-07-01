@@ -105,6 +105,17 @@ describe("startServer", () => {
     logSpy.mockRestore();
   });
 
+  it("binds to the loopback interface by default", async () => {
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+    server = startServer(0);
+    await new Promise<void>((resolve) => server?.once("listening", resolve));
+
+    // CORS is not a network boundary; the demo must not be reachable off-host.
+    const addr = server.address() as AddressInfo;
+    expect(addr.address).toBe("127.0.0.1");
+    logSpy.mockRestore();
+  });
+
   it("uses default port when none is provided", () => {
     // startServer signature accepts optional port defaulting to 3000
     expect(typeof startServer).toBe("function");

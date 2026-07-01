@@ -12,6 +12,8 @@
  * straightforward to unit-test.
  */
 
+import { isTestFile } from "./utils.js";
+
 /** A detected circular-dependency group: 2+ mutually-reachable modules, or a self-import. */
 export interface Cycle {
   /** Number of modules in the cycle. */
@@ -166,20 +168,14 @@ export function describeCycle(cycle: Cycle, graph: Map<string, GraphNode>): stri
 export const SOURCE_EXT = /\.(ts|tsx|js|jsx|mjs|cjs|py|go)$/;
 
 /**
- * Whether a path is a test file. Shared by the import-graph commands and the
- * generated-docs cycle detection so they treat test files identically.
- * Circular imports among test fixtures are noise (bundlers never ship them),
- * so they are excluded from cycle detection.
+ * Whether a path is a test file. Re-exported from the canonical `isTestFile` in
+ * `utils.ts` — the single source of truth shared by the import-graph commands
+ * and the generated-docs cycle detection so they treat test files identically.
+ * Circular imports among test fixtures are noise (bundlers never ship them), so
+ * they are excluded from cycle detection. Kept exported from here because
+ * `coupling-command` imports it alongside {@link SOURCE_EXT}.
  */
-export function isTestFile(path: string): boolean {
-  if (/\.(test|spec)\.[^./]+$/.test(path)) return true;
-  const base = path.split("/").pop() ?? "";
-  if (/_test\.[^.]+$/.test(base)) return true;
-  if (/^test_.+\.py$/.test(base)) return true;
-  return path
-    .split("/")
-    .some((s) => s === "test" || s === "tests" || s === "spec" || s === "specs" || s === "__tests__" || s === "__mocks__");
-}
+export { isTestFile };
 
 /** Result of running cycle detection over a full import graph. */
 export interface CyclesSummary {

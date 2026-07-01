@@ -85,6 +85,8 @@ interface MainActionOptions {
   watchInterval?: string;
   watchForce?: boolean;
   repoPrompts?: string;
+  exclude?: string[];
+  subdir?: string;
 }
 
 interface AskActionOptions {
@@ -94,6 +96,7 @@ interface AskActionOptions {
   noClone?: boolean;
   model?: string;
   verbose?: boolean;
+  question?: string;
 }
 
 interface DiffActionOptions {
@@ -177,6 +180,7 @@ interface OwnersActionOptions {
 interface WebActionOptions {
   [key: string]: unknown;
   port?: string;
+  host?: string;
 }
 
 interface DocsActionOptions {
@@ -352,6 +356,8 @@ program
   .option("--repo-prompts <path>", "Path to custom prompts file (default: .bootcamp-prompts.md in target repo)")
   .option("--full-clone", "Perform a full clone instead of shallow clone (slower but includes full history)")
   .option("--no-cache", "Skip reading/writing analysis cache")
+  .option("--exclude <globs...>", "Extra glob patterns to skip during the file scan (repeatable)")
+  .option("--subdir <path>", "Restrict analysis to a sub-path of the repository (e.g. a monorepo package)")
   .option("-w, --watch", "Watch mode: re-run analysis when target repo gets new commits")
   .option("--watch-interval <seconds>", "Polling interval for watch mode in seconds", "30")
   .option("--watch-force", "Allow destructive git reset --hard fallback in watch mode")
@@ -386,6 +392,8 @@ program
       watchInterval: parseInt(opts.watchInterval || "30", 10),
       watchForce: opts.watchForce || false,
       repoPrompts: opts.repoPrompts,
+      exclude: opts.exclude,
+      subdir: opts.subdir,
       optionSource: {
         focus: getOptionSource(command, "focus"),
         audience: getOptionSource(command, "audience"),
@@ -426,19 +434,22 @@ program
   });
 
 program
-  .command("ask <repo-url>")
-  .description("Start interactive Q&A mode without full generation (supports local paths with --no-clone)")
+  .command("ask <repo-url> [question]")
+  .description("Ask one question and print the answer, or start interactive Q&A mode (supports local paths with --no-clone)")
   .option("-b, --branch <branch>", "Branch to analyze")
   .option("--no-clone", "Use a local directory path instead of cloning")
   .option("--model <model>", "Override model selection (e.g., claude-opus-4-5)")
+  .option("-q, --question <text>", "Ask a single question non-interactively and print the answer to stdout")
   .option("-v, --verbose", "Show detailed output")
-  .action(async (repoUrl: string, rawOpts) => {
+  .action(async (repoUrl: string, question: string | undefined, rawOpts) => {
     const opts = getActionOptions<AskActionOptions>(rawOpts as Command | AskActionOptions);
     await runAskCommand(repoUrl, {
       branch: opts.branch || getCliFlagValue(["--branch", "-b"]),
       model: opts.model || getCliFlagValue(["--model"]),
       noClone: isNegativeOptionEnabled(opts, "noClone", "clone"),
       verbose: opts.verbose,
+      // Positional wins over the -q/--question flag when both are given.
+      question: question ?? opts.question,
     });
   });
 
@@ -466,9 +477,10 @@ program
   .alias("serve")
   .description("Start local web demo server")
   .option("-p, --port <port>", "Port to listen on", "3000")
+  .option("--host <addr>", "Address to bind (default: 127.0.0.1; use 0.0.0.0 to expose on your network)")
   .action((rawOpts) => {
     const opts = getActionOptions<WebActionOptions>(rawOpts as Command | WebActionOptions);
-    startServer(parseInt(opts.port || "3000", 10));
+    startServer(parseInt(opts.port || "3000", 10), opts.host);
   });
 
 program

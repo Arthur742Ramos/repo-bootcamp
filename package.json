@@ -8,103 +8,83 @@
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
-      "import": "./dist/index.js",
-      "require": "./dist/cjs/index.js"
+      "import": "./dist/index.js"
     },
     "./api": {
       "types": "./dist/api.d.ts",
-      "import": "./dist/api.js",
-      "require": "./dist/cjs/api.js"
+      "import": "./dist/api.js"
     },
     "./lib": {
       "types": "./dist/lib.d.ts",
-      "import": "./dist/lib.js",
-      "require": "./dist/cjs/lib.js"
+      "import": "./dist/lib.js"
     },
     "./agent": {
       "types": "./dist/agent.d.ts",
-      "import": "./dist/agent.js",
-      "require": "./dist/cjs/agent.js"
+      "import": "./dist/agent.js"
     },
     "./analysis": {
       "types": "./dist/analysis.d.ts",
-      "import": "./dist/analysis.js",
-      "require": "./dist/cjs/analysis.js"
+      "import": "./dist/analysis.js"
     },
     "./generator": {
       "types": "./dist/generator.d.ts",
-      "import": "./dist/generator.js",
-      "require": "./dist/cjs/generator.js"
+      "import": "./dist/generator.js"
     },
     "./repo-resolver": {
       "types": "./dist/repo-resolver.d.ts",
-      "import": "./dist/repo-resolver.js",
-      "require": "./dist/cjs/repo-resolver.js"
+      "import": "./dist/repo-resolver.js"
     },
     "./plugins": {
       "types": "./dist/plugins.d.ts",
-      "import": "./dist/plugins.js",
-      "require": "./dist/cjs/plugins.js"
+      "import": "./dist/plugins.js"
     },
     "./security": {
       "types": "./dist/security.d.ts",
-      "import": "./dist/security.js",
-      "require": "./dist/cjs/security.js"
+      "import": "./dist/security.js"
     },
     "./deps": {
       "types": "./dist/deps.d.ts",
-      "import": "./dist/deps.js",
-      "require": "./dist/cjs/deps.js"
+      "import": "./dist/deps.js"
     },
     "./metrics": {
       "types": "./dist/metrics.d.ts",
-      "import": "./dist/metrics.js",
-      "require": "./dist/cjs/metrics.js"
+      "import": "./dist/metrics.js"
     },
     "./health": {
       "types": "./dist/health.d.ts",
-      "import": "./dist/health.js",
-      "require": "./dist/cjs/health.js"
+      "import": "./dist/health.js"
     },
     "./doctor": {
       "types": "./dist/doctor.d.ts",
-      "import": "./dist/doctor.js",
-      "require": "./dist/cjs/doctor.js"
+      "import": "./dist/doctor.js"
     },
     "./diagrams": {
       "types": "./dist/diagrams.d.ts",
-      "import": "./dist/diagrams.js",
-      "require": "./dist/cjs/diagrams.js"
+      "import": "./dist/diagrams.js"
     },
     "./diff": {
       "types": "./dist/diff.d.ts",
-      "import": "./dist/diff.js",
-      "require": "./dist/cjs/diff.js"
+      "import": "./dist/diff.js"
     },
     "./docs-analyzer": {
       "types": "./dist/docs-analyzer.d.ts",
-      "import": "./dist/docs-analyzer.js",
-      "require": "./dist/cjs/docs-analyzer.js"
+      "import": "./dist/docs-analyzer.js"
     },
     "./docs-fixer": {
       "types": "./dist/docs-fixer.d.ts",
-      "import": "./dist/docs-fixer.js",
-      "require": "./dist/cjs/docs-fixer.js"
+      "import": "./dist/docs-fixer.js"
     },
     "./cache": {
       "types": "./dist/cache.d.ts",
-      "import": "./dist/cache.js",
-      "require": "./dist/cjs/cache.js"
+      "import": "./dist/cache.js"
     },
     "./watch": {
       "types": "./dist/watch.d.ts",
-      "import": "./dist/watch.js",
-      "require": "./dist/cjs/watch.js"
+      "import": "./dist/watch.js"
     },
     "./types": {
       "types": "./dist/types.d.ts",
-      "import": "./dist/types.js",
-      "require": "./dist/cjs/types.js"
+      "import": "./dist/types.js"
     },
     "./package.json": "./package.json"
   },
@@ -140,15 +120,15 @@
     "url": "https://github.com/Arthur742Ramos/repo-bootcamp/issues"
   },
   "scripts": {
-    "build": "tsc -p tsconfig.build.json && npm run build:cjs && npm run copy:data",
-    "build:cjs": "node ./scripts/build-cjs.mjs",
-    "copy:data": "node --input-type=module -e \"import { cpSync, mkdirSync, writeFileSync } from 'node:fs'; cpSync('src/data','dist/data',{ recursive: true, force: true }); mkdirSync('dist/cjs',{ recursive: true }); cpSync('src/data','dist/cjs/data',{ recursive: true, force: true }); writeFileSync('dist/cjs/package.json', JSON.stringify({ type: 'commonjs' }, null, 2));\"",
+    "build": "tsc -p tsconfig.build.json && npm run copy:data",
+    "copy:data": "node --input-type=module -e \"import { cpSync } from 'node:fs'; cpSync('src/data','dist/data',{ recursive: true, force: true });\"",
+    "verify:packaging": "node ./scripts/check-packaging.mjs",
     "start": "tsx src/cli.ts",
     "dev": "tsx watch src/cli.ts",
     "dev:web": "tsx watch src/cli.ts web",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "lint": "eslint \"src/**/*.{ts,tsx}\"",
+    "lint": "eslint \"src/**/*.{ts,tsx}\" --max-warnings=0",
     "typecheck": "tsc -p tsconfig.build.json --noEmit",
     "test": "vitest run",
     "test:e2e": "npm run test:e2e:cli && npm run test:e2e:web",

@@ -3,7 +3,7 @@
  * Generates markdown documentation from repo_facts.json
  */
 
-import type { RepoFacts, BootcampOptions } from "./types.js";
+import type { RepoFacts, BootcampOptions, RepoInfo } from "./types.js";
 import { getStyleConfig, type StyleConfig } from "./plugins.js";
 
 /** Maximum items shown in summary sections of BOOTCAMP.md */
@@ -222,6 +222,52 @@ ${sources.map(s => `- \`${s}\``).join("\n")}
 }
 
 /**
+ * Whether repoInfo points at a real remote we can build blob links against.
+ * Local/--no-clone runs (owner/branch "local", or no detected host) fall back
+ * to bare paths so we never emit a dead link.
+ */
+function hasRemoteBlobTarget(repoInfo?: RepoInfo): repoInfo is RepoInfo & { host: string } {
+  return Boolean(
+    repoInfo &&
+      repoInfo.host &&
+      repoInfo.owner &&
+      repoInfo.owner !== "local" &&
+      repoInfo.branch &&
+      repoInfo.branch !== "local"
+  );
+}
+
+/**
+ * Build a provider-aware remote blob URL for a repo-relative file path, or null
+ * when repoInfo has no usable remote. Supports GitHub (`/blob/`), GitLab
+ * (`/-/blob/`), and Bitbucket (`/src/`) rather than hardcoding github.com.
+ */
+function buildBlobUrl(repoInfo: RepoInfo | undefined, filePath: string): string | null {
+  if (!hasRemoteBlobTarget(repoInfo)) return null;
+  const cleanPath = filePath.replace(/^\.?\/+/, "");
+  if (!cleanPath) return null;
+  const encoded = cleanPath.split("/").map(encodeURIComponent).join("/");
+  const base = `https://${repoInfo.host}/${repoInfo.owner}/${repoInfo.repo}`;
+  switch (repoInfo.provider) {
+    case "gitlab":
+      return `${base}/-/blob/${repoInfo.branch}/${encoded}`;
+    case "bitbucket":
+      return `${base}/src/${repoInfo.branch}/${encoded}`;
+    default:
+      return `${base}/blob/${repoInfo.branch}/${encoded}`;
+  }
+}
+
+/**
+ * Render a file path as a clickable markdown link to its remote blob when a
+ * remote is known, otherwise as a bare inline-code span (local reading).
+ */
+function fileLink(filePath: string, repoInfo?: RepoInfo): string {
+  const url = buildBlobUrl(repoInfo, filePath);
+  return url ? `[\`${filePath}\`](${url})` : `\`${filePath}\``;
+}
+
+/**
  * Generate BOOTCAMP.md - the main 1-page overview
  */
 export function generateBootcamp(
@@ -248,6 +294,19 @@ export function generateBootcamp(
     .slice(0, Math.min(depthLimits.quickTasks, resolvedStyle.firstTasksCount))
     .map((t) => `- **${t.title}**: ${t.description}`)
     .join("\n");
+
+  // Only promise "Run the dev server" when a dev/start/serve command actually
+  // exists. Libraries (no dev script) fall back to a neutral build/verify label
+  // instead of telling a newcomer to "Run the dev server: npm install".
+  const devCommand = facts.quickstart.commands.find(
+    (c) => /dev|start|serve/i.test(c.name) || /dev|start|serve/i.test(c.command)
+  );
+  const fallbackCommand = facts.quickstart.commands[0]?.command;
+  const runVerifyStep = devCommand
+    ? `Run the dev server: \`${devCommand.command}\``
+    : fallbackCommand
+      ? `Build/verify: \`${fallbackCommand}\``
+      : "Build/verify the project to confirm your setup works";
 
   const nextStepLinks = [
     "- 📖 [ONBOARDING.md](./ONBOARDING.md) - Full setup guide",
@@ -299,7 +358,7 @@ ${keyDirs}
 ## If You Only Have 30 Minutes
 
 1. Read this document
-2. Run the dev server: \`${facts.quickstart.commands.find((c) => c.name.includes("dev"))?.command || facts.quickstart.commands[0]?.command || "npm run dev"}\`
+2. ${runVerifyStep}
 3. Pick one of these starter tasks:
 
 ${quickTasks || "- _No beginner tasks suggested_"}
@@ -342,6 +401,15 @@ export function generateOnboarding(
     .map((task) => `- **${task.title}** (${task.category}) - ${task.files[0] ? `start in \`${task.files[0]}\`` : "pick the implementation file from FIRST_TASKS.md"}`)
     .join("\n");
 
+  // Mirror the BOOTCAMP fix: only tell newcomers to start a dev server when one
+  // exists; libraries get a build/verify loop instead.
+  const devCommand = facts.quickstart.commands.find(
+    (c) => /dev|start|serve|watch/i.test(c.name) || /dev|start|serve|watch/i.test(c.command)
+  );
+  const devLoopStep = devCommand
+    ? `Start the dev server/watch mode (\`${devCommand.command}\`)`
+    : "Build the project and run it to verify your setup";
+
   return `# Onboarding Guide: ${facts.repoName}
 
 ## Prerequisites Checklist
@@ -365,7 +433,7 @@ ${commands}
 
 ## Development Loop
 
-1. Start the dev server/watch mode
+1. ${devLoopStep}
 2. Make changes to files in \`${facts.structure.keyDirs[0]?.path || "src/"}\`
 3. Changes should hot-reload (if applicable)
 4. Run tests before committing
@@ -415,7 +483,8 @@ Recommended extensions:
  */
 export function generateArchitecture(
   facts: RepoFacts,
-  options?: Pick<BootcampOptions, "audience">
+  options?: Pick<BootcampOptions, "audience">,
+  repoInfo?: RepoInfo
 ): string {
   const profile = getAudienceProfile(options?.audience);
   const components = facts.architecture.components
@@ -524,7 +593,7 @@ ${abstractions}
 | Path | Type | Description |
 |------|------|-------------|
 ${facts.structure.entrypoints.length > 0
-  ? facts.structure.entrypoints.map((e) => `| \`${e.path}\` | ${e.type} | ${e.description || "-"} |`).join("\n")
+  ? facts.structure.entrypoints.map((e) => `| ${fileLink(e.path, repoInfo)} | ${e.type} | ${e.description || "-"} |`).join("\n")
   : "| _None detected_ | - | - |"}
 
 ## Where to Change What
@@ -569,10 +638,10 @@ ${links.join("\n")}`;
 /**
  * Generate CODEMAP.md
  */
-export function generateCodemap(facts: RepoFacts): string {
+export function generateCodemap(facts: RepoFacts, repoInfo?: RepoInfo): string {
   const dirs = facts.structure.keyDirs
     .map((d) => {
-      const files = d.keyFiles?.map((f) => `  - \`${f}\``).join("\n") || "";
+      const files = d.keyFiles?.map((f) => `  - ${fileLink(f, repoInfo)}`).join("\n") || "";
       return `### \`${d.path}\`
 
 ${d.purpose}
@@ -582,7 +651,7 @@ ${files ? `Key files:\n${files}` : ""}`;
     .join("\n\n");
 
   const entrypoints = facts.structure.entrypoints
-    .map((e) => `- [\`${e.path}\`](./${e.path}) - ${e.description || e.type}`)
+    .map((e) => `- [\`${e.path}\`](${buildBlobUrl(repoInfo, e.path) ?? `./${e.path}`}) - ${e.description || e.type}`)
     .join("\n");
 
   return `# Code Map: ${facts.repoName}
@@ -634,7 +703,8 @@ ${facts.ci.workflows.length > 0
 export function generateFirstTasks(
   facts: RepoFacts,
   options?: Pick<BootcampOptions, "audience" | "style">,
-  styleConfig?: StyleConfig
+  styleConfig?: StyleConfig,
+  repoInfo?: RepoInfo
 ): string {
   const resolvedStyle = resolveStyleConfig(options, styleConfig);
   const profile = getAudienceProfile(options?.audience);
@@ -663,8 +733,8 @@ ${t.description}
 ${includeFullTaskDetails ? `**Why this matters:** ${t.why}` : ""}
 
 ${includeFullTaskDetails
-    ? `**Files to look at:**\n${t.files.map((f) => `- \`${f}\``).join("\n")}`
-    : `**Start in:** ${t.files[0] ? `\`${t.files[0]}\`` : "_No file provided_"}`}
+    ? `**Files to look at:**\n${t.files.map((f) => `- ${fileLink(f, repoInfo)}`).join("\n")}`
+    : `**Start in:** ${t.files[0] ? fileLink(t.files[0], repoInfo) : "_No file provided_"}`}
 `;
 
   return `# First Tasks: ${facts.repoName}

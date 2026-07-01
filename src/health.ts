@@ -12,6 +12,7 @@
  */
 
 import type { FileInfo, ScanResult } from "./types.js";
+import { isTestFile } from "./utils.js";
 
 /** Outcome of a single health check. */
 export type HealthStatus = "pass" | "warn" | "fail";
@@ -83,15 +84,6 @@ function hasMetaFile(paths: string[], namePattern: RegExp): boolean {
 
 function hasPath(paths: string[], pattern: RegExp): boolean {
   return paths.some((path) => pattern.test(path));
-}
-
-function isTestPath(path: string): boolean {
-  if (/(^|\/)(tests?|__tests__|specs?|__mocks__)(\/|$)/.test(path)) return true;
-  const base = path.slice(path.lastIndexOf("/") + 1);
-  if (/\.(test|spec)\.[^.]+$/.test(base)) return true;
-  if (/_test\.[^.]+$/.test(base)) return true; // Go, Python
-  if (/^test_.+\.py$/.test(base)) return true; // Python
-  return false;
 }
 
 interface DetectionContext {
@@ -296,7 +288,7 @@ const CHECK_SPECS: CheckSpec[] = [
     category: "Quality",
     weight: 3,
     evaluate: (ctx) =>
-      ctx.paths.some((p) => isTestPath(p))
+      ctx.paths.some((p) => isTestFile(p))
         ? present("Automated tests")
         : missing(
             "Automated tests",

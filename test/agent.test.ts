@@ -2007,3 +2007,60 @@ describe("onProgress with tool dispatch", () => {
     expect(onProgress).not.toHaveBeenCalledWith(expect.stringContaining("Tool: read_file"));
   });
 });
+
+// ─── Output schema enum lists ───────────────────────────────────────────────
+
+describe("output schema enum lists", () => {
+  it("standard prompt lists the full entrypoint-type enum (regression: drift fix)", async () => {
+    (fs.existsSync as Mock).mockReturnValue(false);
+    const mockSession = configureSessionResponse(VALID_REPO_FACTS_JSON);
+
+    await analyzeRepo("/tmp/repo", makeMockRepoInfo(), makeMockScanResult(), makeMockOptions());
+
+    const prompt = mockSession.sendAndWait.mock.calls[0][0].prompt as string;
+    // The standard prompt used to under-instruct with "main|cli|server|library",
+    // omitting the "binary"/"web" types that its own validator (schema.ts
+    // EntrypointSchema) accepts. It must now match the schema / fast prompt.
+    expect(prompt).toContain('"type": "main|binary|server|cli|web|library"');
+    expect(prompt).not.toContain("main|cli|server|library");
+  });
+
+  it("standard prompt keeps confidence and difficulty placeholders byte-identical", async () => {
+    (fs.existsSync as Mock).mockReturnValue(false);
+    const mockSession = configureSessionResponse(VALID_REPO_FACTS_JSON);
+
+    await analyzeRepo("/tmp/repo", makeMockRepoInfo(), makeMockScanResult(), makeMockOptions());
+
+    const prompt = mockSession.sendAndWait.mock.calls[0][0].prompt as string;
+    // These enums were already consistent; extracting them into shared consts
+    // must not change a single emitted character.
+    expect(prompt).toContain('"confidence": "high|medium|low"');
+    expect(prompt).toContain('"difficulty": "beginner|intermediate|advanced"');
+  });
+
+  it("fast prompt renders the exact CRITICAL SCHEMA enum lines", async () => {
+    (fs.existsSync as Mock).mockReturnValue(false);
+    const mockSession = configureSessionResponse(VALID_REPO_FACTS_JSON);
+
+    await analyzeRepo(
+      "/tmp/repo",
+      makeMockRepoInfo(),
+      makeMockScanResult(),
+      makeMockOptions({ fast: true })
+    );
+
+    const prompt = mockSession.sendAndWait.mock.calls[0][0].prompt as string;
+    // Shared consts must reproduce every fast-mode enum line verbatim (the
+    // category line is deliberately hand-authored and must also stay intact).
+    expect(prompt).toContain('- confidence: "high", "medium", or "low"');
+    expect(prompt).toContain(
+      '- entrypoints[].type: "main", "binary", "server", "cli", "web", or "library"'
+    );
+    expect(prompt).toContain(
+      '- firstTasks[].difficulty: "beginner", "intermediate", or "advanced"'
+    );
+    expect(prompt).toContain(
+      '- firstTasks[].category: "bug-fix", "test", "docs", "refactor", or "feature"'
+    );
+  });
+});

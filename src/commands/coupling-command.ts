@@ -1,9 +1,10 @@
 import chalk from "chalk";
 
 import { buildImportGraph } from "../impact.js";
-import { resolveRepo, type RepoSource } from "../repo-resolver.js";
 import { scanRepositoryFiles } from "../services/clone-service.js";
 import { SOURCE_EXT, isTestFile } from "../cycles.js";
+import { finiteOr } from "../utils.js";
+import { withResolvedRepo } from "./_shared.js";
 
 /** Options accepted by the `bootcamp coupling` command. */
 export interface CouplingCommandOptions {
@@ -109,22 +110,10 @@ export async function runCouplingCommand(
   repoUrl: string,
   opts: CouplingCommandOptions
 ): Promise<void> {
-  const top = typeof opts.top === "number" && Number.isFinite(opts.top) && opts.top > 0 ? opts.top : 12;
+  const top = finiteOr(opts.top, 12, { min: 1 });
 
-  let repoSource: RepoSource;
-  try {
-    repoSource = await resolveRepo(repoUrl, process.cwd(), opts.branch || undefined);
-  } catch (error: unknown) {
-    console.error(
-      chalk.red(`Failed to resolve repository: ${error instanceof Error ? error.message : String(error)}`)
-    );
-    process.exit(1);
-    return;
-  }
-
-  let exitCode = 0;
-  try {
-    const scan = await scanRepositoryFiles(repoSource.path, opts.maxFiles ?? 500);
+  await withResolvedRepo(repoUrl, opts, "Coupling analysis failed", async (repoSource) => {
+    const scan = await scanRepositoryFiles(repoSource.path, finiteOr(opts.maxFiles, 500, { min: 1 }));
     const graph = await buildImportGraph(repoSource.path, scan.files);
 
     const modules: ModuleCoupling[] = [...graph.entries()]
@@ -166,20 +155,5 @@ export async function runCouplingCommand(
     } else {
       printReport(modules, orphans, repoSource.repoInfo.fullName, edgeCount, top);
     }
-  } catch (error: unknown) {
-    console.error(
-      chalk.red(`Coupling analysis failed: ${error instanceof Error ? error.message : String(error)}`)
-    );
-    exitCode = 1;
-  } finally {
-    if (opts.keepTemp && !repoSource.isLocal) {
-      console.log(chalk.gray(`Temporary clone kept at: ${repoSource.path}`));
-    } else {
-      await repoSource.cleanup();
-    }
-  }
-
-  if (exitCode !== 0) {
-    process.exit(exitCode);
-  }
+  });
 }

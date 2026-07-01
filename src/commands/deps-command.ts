@@ -6,7 +6,7 @@ import {
   type Dependency,
   type DependencyAnalysis,
 } from "../deps.js";
-import { resolveRepo, type RepoSource } from "../repo-resolver.js";
+import { withResolvedRepo } from "./_shared.js";
 
 /** Options accepted by the `bootcamp deps` command. */
 export interface DepsCommandOptions {
@@ -87,19 +87,7 @@ function printReport(deps: DependencyAnalysis, repoName: string): void {
  * so it never invokes the LLM.
  */
 export async function runDepsCommand(repoUrl: string, opts: DepsCommandOptions): Promise<void> {
-  let repoSource: RepoSource;
-  try {
-    repoSource = await resolveRepo(repoUrl, process.cwd(), opts.branch || undefined);
-  } catch (error: unknown) {
-    console.error(
-      chalk.red(`Failed to resolve repository: ${error instanceof Error ? error.message : String(error)}`)
-    );
-    process.exit(1);
-    return;
-  }
-
-  let exitCode = 0;
-  try {
+  await withResolvedRepo(repoUrl, opts, "Dependency analysis failed", async (repoSource) => {
     const deps = await extractDependencies(repoSource.path);
 
     if (!deps) {
@@ -145,20 +133,5 @@ export async function runDepsCommand(repoUrl: string, opts: DepsCommandOptions):
     } else {
       printReport(deps, repoSource.repoInfo.fullName);
     }
-  } catch (error: unknown) {
-    console.error(
-      chalk.red(`Dependency analysis failed: ${error instanceof Error ? error.message : String(error)}`)
-    );
-    exitCode = 1;
-  } finally {
-    if (opts.keepTemp && !repoSource.isLocal) {
-      console.log(chalk.gray(`Temporary clone kept at: ${repoSource.path}`));
-    } else {
-      await repoSource.cleanup();
-    }
-  }
-
-  if (exitCode !== 0) {
-    process.exit(exitCode);
-  }
+  });
 }

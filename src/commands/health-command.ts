@@ -1,8 +1,9 @@
 import chalk from "chalk";
 
 import { computeRepoHealth, type HealthCategory, type HealthStatus, type RepoHealth } from "../health.js";
-import { resolveRepo, type RepoSource } from "../repo-resolver.js";
 import { scanRepositoryFiles } from "../services/clone-service.js";
+import { finiteOr } from "../utils.js";
+import { withResolvedRepo } from "./_shared.js";
 
 /** Options accepted by the `bootcamp health` command. */
 export interface HealthCommandOptions {
@@ -76,22 +77,10 @@ function printReport(health: RepoHealth, repoName: string, filesScanned: number)
  * (human-readable or JSON). With `--check`, exits non-zero below `--min-score`.
  */
 export async function runHealthCommand(repoUrl: string, opts: HealthCommandOptions): Promise<void> {
-  const minScore = typeof opts.minScore === "number" && Number.isFinite(opts.minScore) ? opts.minScore : 70;
+  const minScore = finiteOr(opts.minScore, 70);
 
-  let repoSource: RepoSource;
-  try {
-    repoSource = await resolveRepo(repoUrl, process.cwd(), opts.branch || undefined);
-  } catch (error: unknown) {
-    console.error(
-      chalk.red(`Failed to resolve repository: ${error instanceof Error ? error.message : String(error)}`)
-    );
-    process.exit(1);
-    return;
-  }
-
-  let exitCode = 0;
-  try {
-    const scan = await scanRepositoryFiles(repoSource.path, opts.maxFiles ?? 500);
+  await withResolvedRepo(repoUrl, opts, "Health analysis failed", async (repoSource) => {
+    const scan = await scanRepositoryFiles(repoSource.path, finiteOr(opts.maxFiles, 500, { min: 1 }));
     const health = computeRepoHealth(scan);
     const filesScanned = scan.files.length;
 
@@ -125,22 +114,9 @@ export async function runHealthCommand(repoUrl: string, opts: HealthCommandOptio
           chalk.red(`❌ Repo health ${health.score}/100 is below the required minimum of ${minScore}.`)
         );
       }
-      exitCode = 1;
+      return 1;
     }
-  } catch (error: unknown) {
-    console.error(
-      chalk.red(`Health analysis failed: ${error instanceof Error ? error.message : String(error)}`)
-    );
-    exitCode = 1;
-  } finally {
-    if (opts.keepTemp && !repoSource.isLocal) {
-      console.log(chalk.gray(`Temporary clone kept at: ${repoSource.path}`));
-    } else {
-      await repoSource.cleanup();
-    }
-  }
 
-  if (exitCode !== 0) {
-    process.exit(exitCode);
-  }
+    return 0;
+  });
 }

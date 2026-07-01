@@ -3,10 +3,12 @@
  */
 
 import { describe, it, expect } from "vitest";
-import { mkdtemp, mkdir, rm, writeFile } from "fs/promises";
+import { mkdtemp, mkdir, rm, writeFile, symlink } from "fs/promises";
+import { execFile } from "child_process";
+import { promisify } from "util";
 import { join } from "path";
 import { tmpdir } from "os";
-import { parseGitHubUrl, detectFrameworksFromDeps, mergeFrameworksFromDeps, scanRepo } from "../src/ingest.js";
+import { parseGitHubUrl, detectFrameworksFromDeps, mergeFrameworksFromDeps, scanRepo, readRepoFile, getHeadCommitSha, isWorkingTreeDirty } from "../src/ingest.js";
 import type { StackInfo } from "../src/types.js";
 
 describe("parseGitHubUrl", () => {
@@ -367,6 +369,170 @@ describe("scanRepo", () => {
       expect(scan.monorepo?.workspacePackages.some((pkg) => pkg.path === "packages/shared")).toBe(true);
     } finally {
       await rm(repoPath, { recursive: true, force: true });
+    }
+  });
+
+  it("skips symlinked entries so they never enter the file set", async () => {
+    const repoPath = await mkdtemp(join(tmpdir(), "bootcamp-ingest-symlink-"));
+    const outside = await mkdtemp(join(tmpdir(), "bootcamp-outside-"));
+    try {
+      await mkdir(join(repoPath, "src"), { recursive: true });
+      await writeFile(join(repoPath, "src", "index.ts"), "export const x = 1;\n", "utf-8");
+      await writeFile(join(outside, "secret.txt"), "TOP SECRET\n", "utf-8");
+      // A malicious repo can commit a symlink that points outside the clone.
+      // fast-glob still reports it as a file; scanDirectory must drop it.
+      await symlink(join(outside, "secret.txt"), join(repoPath, "src", "leak.ts"));
+
+      const scan = await scanRepo(repoPath, 200);
+      expect(scan.files.some((f) => f.path === "src/index.ts")).toBe(true);
+      expect(scan.files.some((f) => f.path === "src/leak.ts")).toBe(false);
+      // And the symlink target's contents never reach the key-source-file map.
+      expect([...scan.keySourceFiles.keys()]).not.toContain("src/leak.ts");
+    } finally {
+      await rm(repoPath, { recursive: true, force: true });
+      await rm(outside, { recursive: true, force: true });
+    }
+  });
+
+  it("drops trees matched by the exclude option", async () => {
+    const repoPath = await mkdtemp(join(tmpdir(), "bootcamp-ingest-exclude-"));
+    try {
+      await mkdir(join(repoPath, "src"), { recursive: true });
+      await mkdir(join(repoPath, "generated"), { recursive: true });
+      await writeFile(join(repoPath, "src", "index.ts"), "export const x = 1;\n", "utf-8");
+      await writeFile(join(repoPath, "generated", "output.ts"), "export const y = 2;\n", "utf-8");
+
+      const scan = await scanRepo(repoPath, 500, { exclude: ["**/generated/**"] });
+      expect(scan.files.some((f) => f.path === "src/index.ts")).toBe(true);
+      expect(scan.files.some((f) => f.path.startsWith("generated/"))).toBe(false);
+    } finally {
+      await rm(repoPath, { recursive: true, force: true });
+    }
+  });
+
+  it("roots the scan at the subdir option", async () => {
+    const repoPath = await mkdtemp(join(tmpdir(), "bootcamp-ingest-subdir-"));
+    try {
+      await mkdir(join(repoPath, "packages", "app"), { recursive: true });
+      await mkdir(join(repoPath, "packages", "lib"), { recursive: true });
+      await writeFile(join(repoPath, "packages", "app", "index.ts"), "export const app = 1;\n", "utf-8");
+      await writeFile(join(repoPath, "packages", "lib", "index.ts"), "export const lib = 1;\n", "utf-8");
+      await writeFile(join(repoPath, "README.md"), "# root\n", "utf-8");
+
+      const scan = await scanRepo(repoPath, 500, { subdir: "packages/app" });
+      // Paths are relative to the subdir; the sibling package and root files
+      // are outside the scan root and never appear.
+      expect(scan.files.some((f) => f.path === "index.ts")).toBe(true);
+      expect(scan.files.some((f) => f.path.includes("lib"))).toBe(false);
+      expect(scan.files.some((f) => f.path === "README.md")).toBe(false);
+    } finally {
+      await rm(repoPath, { recursive: true, force: true });
+    }
+  });
+
+  it("caps key source files at the byte budget while keeping the top-priority file", async () => {
+    const repoPath = await mkdtemp(join(tmpdir(), "bootcamp-ingest-budget-"));
+    try {
+      await mkdir(join(repoPath, "src"), { recursive: true });
+      // ~6 KB per file, so the ~100 KB assembly budget spans ~16 files (well
+      // past one 8-file read batch). Total (~245 KB) exceeds the 2x read budget,
+      // so the early-stop path also triggers.
+      const chunk = "const filler = 1;\n".repeat(340); // ~6.1 KB
+      await writeFile(join(repoPath, "src", "index.ts"), `export const entry = 0;\n${chunk}`, "utf-8");
+      for (let i = 0; i < 40; i++) {
+        await writeFile(join(repoPath, "src", `mod-${i}.ts`), `export const m${i} = ${i};\n${chunk}`, "utf-8");
+      }
+
+      const scan = await scanRepo(repoPath, 500);
+      const totalBytes = [...scan.keySourceFiles.values()].reduce((sum, c) => sum + c.length, 0);
+      // The budget is actually filled (guards against the early-stop reading too
+      // few files) but not wildly exceeded (assembly stops near ~100 KB).
+      expect(totalBytes).toBeGreaterThanOrEqual(90_000);
+      expect(totalBytes).toBeLessThanOrEqual(110_000);
+      // Enough files to span multiple read batches, but not the whole tree.
+      expect(scan.keySourceFiles.size).toBeGreaterThanOrEqual(10);
+      expect(scan.keySourceFiles.size).toBeLessThan(41);
+      // The highest-priority entry file is retained despite the early-stop.
+      expect(scan.keySourceFiles.has("src/index.ts")).toBe(true);
+    } finally {
+      await rm(repoPath, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("readRepoFile symlink hardening", () => {
+  it("reads a normal file inside the repo", async () => {
+    const repoPath = await mkdtemp(join(tmpdir(), "bootcamp-readrepo-"));
+    try {
+      await writeFile(join(repoPath, "hello.txt"), "hi\n", "utf-8");
+      expect(await readRepoFile(repoPath, "hello.txt")).toBe("hi\n");
+    } finally {
+      await rm(repoPath, { recursive: true, force: true });
+    }
+  });
+
+  it("refuses to follow a symlink whose real target escapes the repo", async () => {
+    const repoPath = await mkdtemp(join(tmpdir(), "bootcamp-readrepo-symlink-"));
+    const outside = await mkdtemp(join(tmpdir(), "bootcamp-readrepo-outside-"));
+    try {
+      await writeFile(join(outside, "secret.txt"), "TOP SECRET\n", "utf-8");
+      // Lexically "secret.txt" is inside repoPath, but its real target is not:
+      // the lexical traversal guard passes, so only the realpath check catches it.
+      await symlink(join(outside, "secret.txt"), join(repoPath, "secret.txt"));
+      await expect(readRepoFile(repoPath, "secret.txt")).rejects.toThrow(
+        "Path escapes repository root"
+      );
+    } finally {
+      await rm(repoPath, { recursive: true, force: true });
+      await rm(outside, { recursive: true, force: true });
+    }
+  });
+
+  it("still allows a symlink that resolves to a file inside the repo", async () => {
+    const repoPath = await mkdtemp(join(tmpdir(), "bootcamp-readrepo-inlink-"));
+    try {
+      await mkdir(join(repoPath, "docs"), { recursive: true });
+      await writeFile(join(repoPath, "docs", "real.txt"), "inside\n", "utf-8");
+      await symlink(join(repoPath, "docs", "real.txt"), join(repoPath, "link.txt"));
+      expect(await readRepoFile(repoPath, "link.txt")).toBe("inside\n");
+    } finally {
+      await rm(repoPath, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("local git cache-key helpers", () => {
+  const execFileAsync = promisify(execFile);
+
+  it("reports clean vs dirty working tree and yields a HEAD sha", async () => {
+    const repo = await mkdtemp(join(tmpdir(), "bootcamp-gitkey-"));
+    try {
+      const git = (args: string[]) => execFileAsync("git", args, { cwd: repo });
+      await git(["init", "-q"]);
+      await git(["config", "user.email", "t@e.st"]);
+      await git(["config", "user.name", "Test"]);
+      await writeFile(join(repo, "a.txt"), "1\n", "utf-8");
+      await git(["add", "."]);
+      await git(["commit", "-q", "-m", "init"]);
+      // Clean right after commit -> cache may key on the SHA.
+      expect(await isWorkingTreeDirty(repo)).toBe(false);
+      expect(await getHeadCommitSha(repo)).toMatch(/^[0-9a-f]{40}$/);
+      // An uncommitted edit must read as dirty so the analysis cache is disabled
+      // (HEAD no longer reflects the working-tree content that gets analyzed).
+      await writeFile(join(repo, "a.txt"), "2\n", "utf-8");
+      expect(await isWorkingTreeDirty(repo)).toBe(true);
+    } finally {
+      await rm(repo, { recursive: true, force: true });
+    }
+  });
+
+  it("treats a non-git directory as dirty (fail-safe) with no sha", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "bootcamp-nogit-"));
+    try {
+      expect(await isWorkingTreeDirty(dir)).toBe(true);
+      expect(await getHeadCommitSha(dir)).toBe("");
+    } finally {
+      await rm(dir, { recursive: true, force: true });
     }
   });
 });

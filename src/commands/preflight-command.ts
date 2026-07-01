@@ -5,7 +5,7 @@ import { promisify } from "util";
 
 import chalk from "chalk";
 
-import { resolveRepo, type RepoSource } from "../repo-resolver.js";
+import { withResolvedRepo } from "./_shared.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -42,9 +42,15 @@ interface PreflightResult {
   remedy?: string;
 }
 
-async function readJson(repoPath: string, name: string): Promise<Record<string, any> | null> {
+/** The subset of package.json fields preflight inspects. */
+interface PackageManifest {
+  engines?: Record<string, string>;
+  packageManager?: unknown;
+}
+
+async function readJson(repoPath: string, name: string): Promise<PackageManifest | null> {
   try {
-    return JSON.parse(await readFile(join(repoPath, name), "utf-8")) as Record<string, any>;
+    return JSON.parse(await readFile(join(repoPath, name), "utf-8")) as PackageManifest;
   } catch {
     return null;
   }
@@ -218,10 +224,20 @@ function satisfiesSingleConstraint(required: string, inst: number[]): boolean | 
       return c <= 0;
     case "<":
       return c < 0;
-    case "^":
-      return inst[0] === req[0] && c >= 0;
+    case "^": {
+      // Caret allows changes that don't modify the left-most non-zero component.
+      // For a 0-major requirement that means the range narrows to the next
+      // non-zero component: `^0.2.3` is `>=0.2.3 <0.3.0`, `^0.0.3` is `0.0.3`.
+      if (c < 0) return false; // below the requirement floor
+      if (req[0] !== 0) return inst[0] === req[0]; // ^1.2.3 => >=1.2.3 <2.0.0
+      if (req[1] !== 0) return inst[0] === 0 && inst[1] === req[1]; // ^0.2.3 => >=0.2.3 <0.3.0
+      if (req[2] !== 0) return inst[0] === 0 && inst[1] === 0 && inst[2] === req[2]; // ^0.0.3 => 0.0.3
+      return inst[0] === 0; // ^0 / ^0.0.0 — anything in the 0.x major
+    }
     case "~":
-      return inst[0] === req[0] && (inst[1] ?? 0) >= (req[1] ?? 0);
+      // ~1.2.3 => >=1.2.3 <1.3.0; ~1 => >=1.0.0 <2.0.0. Lock the major, and the
+      // minor too when the requirement named one, then require >= the floor.
+      return inst[0] === req[0] && (!hasMinor || inst[1] === req[1]) && c >= 0;
     default:
       // Bare/exact: same major (and minor must be at least the requested one).
       return inst[0] === req[0] && (!hasMinor || (inst[1] ?? 0) >= (req[1] ?? 0));
@@ -293,19 +309,7 @@ export async function runPreflightCommand(
   repoUrl: string,
   opts: PreflightCommandOptions
 ): Promise<void> {
-  let repoSource: RepoSource;
-  try {
-    repoSource = await resolveRepo(repoUrl, process.cwd(), opts.branch || undefined);
-  } catch (error: unknown) {
-    console.error(
-      chalk.red(`Failed to resolve repository: ${error instanceof Error ? error.message : String(error)}`)
-    );
-    process.exit(1);
-    return;
-  }
-
-  let exitCode = 0;
-  try {
+  await withResolvedRepo(repoUrl, opts, "Preflight failed", async (repoSource) => {
     const reqs = await gatherRequirements(repoSource.path);
     const results: PreflightResult[] = [];
     for (const req of reqs) {
@@ -340,22 +344,9 @@ export async function runPreflightCommand(
           chalk.red(`❌ ${failing} toolchain requirement${failing === 1 ? "" : "s"} not satisfied.`)
         );
       }
-      exitCode = 1;
+      return 1;
     }
-  } catch (error: unknown) {
-    console.error(
-      chalk.red(`Preflight failed: ${error instanceof Error ? error.message : String(error)}`)
-    );
-    exitCode = 1;
-  } finally {
-    if (opts.keepTemp && !repoSource.isLocal) {
-      console.log(chalk.gray(`Temporary clone kept at: ${repoSource.path}`));
-    } else {
-      await repoSource.cleanup();
-    }
-  }
 
-  if (exitCode !== 0) {
-    process.exit(exitCode);
-  }
+    return 0;
+  });
 }

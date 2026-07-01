@@ -6,7 +6,7 @@
 import { resolve, basename } from "path";
 import { stat, rm, access } from "fs/promises";
 import { homedir } from "os";
-import { parseGitHubUrl, cloneRepo } from "./ingest.js";
+import { parseGitHubUrl, cloneRepo, getHeadCommitSha, isWorkingTreeDirty } from "./ingest.js";
 import type { RepoInfo } from "./types.js";
 
 /**
@@ -93,14 +93,18 @@ export async function isGitRepo(path: string): Promise<boolean> {
 /**
  * Create RepoInfo for a local path
  */
-function createLocalRepoInfo(localPath: string, repoName: string): RepoInfo {
-  return {
+function createLocalRepoInfo(localPath: string, repoName: string, commitSha?: string): RepoInfo {
+  const info: RepoInfo = {
     owner: "local",
     repo: repoName,
     url: `file://${localPath}`,
     branch: "local",
     fullName: `local/${repoName}`,
   };
+  // Best-effort commit SHA so the analysis cache can key on it for local repos
+  // (cloned repos get this from ingest; --no-clone local git repos did not).
+  if (commitSha) info.commitSha = commitSha;
+  return info;
 }
 
 /**
@@ -140,7 +144,14 @@ export async function resolveRepo(
     }
     
     const repoName = getRepoNameFromPath(absolutePath);
-    const repoInfo = createLocalRepoInfo(absolutePath, repoName);
+    // Only key the analysis cache on local HEAD when the tree is CLEAN. A dirty
+    // working tree (the common --no-clone dev case) holds content HEAD doesn't
+    // capture, so caching on the SHA alone would serve stale results; leaving
+    // commitSha empty disables the cache and forces a fresh run.
+    const commitSha = isGit && !(await isWorkingTreeDirty(absolutePath))
+      ? await getHeadCommitSha(absolutePath)
+      : "";
+    const repoInfo = createLocalRepoInfo(absolutePath, repoName, commitSha);
     
     return {
       path: absolutePath,

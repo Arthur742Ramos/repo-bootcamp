@@ -15,6 +15,9 @@ import {
   hasFlag,
   toPosixPath,
   isPathInsideDir,
+  finiteOr,
+  getErrorMessage,
+  isTestFile,
 } from "../src/utils.js";
 
 describe("SKIP_DIRS", () => {
@@ -209,5 +212,154 @@ describe("isPathInsideDir", () => {
 
   it("normalizes mixed/relative inputs before comparing", () => {
     expect(isPathInsideDir(parent, resolve(parent, "./nested/./file.ts"))).toBe(true);
+  });
+});
+
+describe("finiteOr", () => {
+  it("returns the value when it is a finite number", () => {
+    expect(finiteOr(42, 7)).toBe(42);
+    expect(finiteOr(0, 7)).toBe(0);
+    expect(finiteOr(-3, 7)).toBe(-3);
+    expect(finiteOr(3.14, 7)).toBe(3.14);
+  });
+
+  it("returns the fallback for NaN", () => {
+    expect(finiteOr(NaN, 50)).toBe(50);
+    expect(finiteOr(Number("not-a-number"), 50)).toBe(50);
+  });
+
+  it("returns the fallback for +/-Infinity", () => {
+    expect(finiteOr(Infinity, 50)).toBe(50);
+    expect(finiteOr(-Infinity, 50)).toBe(50);
+  });
+
+  it("returns the fallback for non-number inputs", () => {
+    expect(finiteOr(undefined, 50)).toBe(50);
+    expect(finiteOr(null, 50)).toBe(50);
+    expect(finiteOr("100", 50)).toBe(50);
+  });
+
+  it("enforces opts.min when provided", () => {
+    expect(finiteOr(5, 50, { min: 1 })).toBe(5);
+    expect(finiteOr(1, 50, { min: 1 })).toBe(1); // >= min is allowed
+    expect(finiteOr(0, 50, { min: 1 })).toBe(50); // below min -> fallback
+    expect(finiteOr(-4, 50, { min: 1 })).toBe(50);
+  });
+
+  it("ignores min when it is not given", () => {
+    expect(finiteOr(0, 50)).toBe(0);
+    expect(finiteOr(-100, 50)).toBe(-100);
+  });
+});
+
+describe("getErrorMessage", () => {
+  it("returns the message of an Error instance", () => {
+    expect(getErrorMessage(new Error("boom"), "fallback")).toBe("boom");
+  });
+
+  it("returns the message of an Error subclass", () => {
+    expect(getErrorMessage(new TypeError("bad type"), "fallback")).toBe("bad type");
+  });
+
+  it("stringifies non-Error values", () => {
+    expect(getErrorMessage("plain string", "fallback")).toBe("plain string");
+    expect(getErrorMessage(404, "fallback")).toBe("404");
+    expect(getErrorMessage({ toString: () => "obj" }, "fallback")).toBe("obj");
+  });
+
+  it("uses the fallback when the message is empty", () => {
+    expect(getErrorMessage(new Error(""), "fallback")).toBe("fallback");
+    expect(getErrorMessage("", "fallback")).toBe("fallback");
+  });
+
+  it("uses the fallback when the message is only whitespace", () => {
+    expect(getErrorMessage(new Error("   \n"), "fallback")).toBe("fallback");
+  });
+
+  it("has a default fallback for empty input", () => {
+    expect(getErrorMessage("")).toBe("Unknown error");
+  });
+});
+
+describe("isTestFile", () => {
+  it("matches the .test. infix", () => {
+    expect(isTestFile("src/foo.test.ts")).toBe(true);
+    expect(isTestFile("foo.test.js")).toBe(true);
+    expect(isTestFile("a/b/c.test.tsx")).toBe(true);
+  });
+
+  it("matches the .spec. infix", () => {
+    expect(isTestFile("src/foo.spec.ts")).toBe(true);
+    expect(isTestFile("foo.spec.jsx")).toBe(true);
+  });
+
+  it("matches __tests__ and __mocks__ directories", () => {
+    expect(isTestFile("src/__tests__/foo.ts")).toBe(true);
+    expect(isTestFile("src/__mocks__/foo.ts")).toBe(true);
+  });
+
+  it("matches /test/ and /tests/ path segments", () => {
+    expect(isTestFile("pkg/test/foo.ts")).toBe(true);
+    expect(isTestFile("pkg/tests/foo.ts")).toBe(true);
+    expect(isTestFile("test/foo.ts")).toBe(true);
+  });
+
+  it("matches spec and specs path segments", () => {
+    expect(isTestFile("pkg/spec/foo.rb")).toBe(true);
+    expect(isTestFile("pkg/specs/foo.rb")).toBe(true);
+  });
+
+  it("matches _test suffix for go, py and other languages", () => {
+    expect(isTestFile("foo_test.go")).toBe(true);
+    expect(isTestFile("foo_test.py")).toBe(true);
+    expect(isTestFile("foo_test.rb")).toBe(true);
+    // extension-agnostic: superset of the original cycles.ts predicate
+    expect(isTestFile("foo_test.ts")).toBe(true);
+    expect(isTestFile("foo_test.rs")).toBe(true);
+  });
+
+  it("matches _spec suffix for go, py and rb", () => {
+    expect(isTestFile("foo_spec.rb")).toBe(true);
+    expect(isTestFile("foo_spec.go")).toBe(true);
+    expect(isTestFile("foo_spec.py")).toBe(true);
+  });
+
+  it("matches Python test_*.py files", () => {
+    expect(isTestFile("test_foo.py")).toBe(true);
+    expect(isTestFile("pkg/test_utils.py")).toBe(true);
+  });
+
+  it("is case-insensitive", () => {
+    expect(isTestFile("src/Foo.Test.TS")).toBe(true);
+    expect(isTestFile("Tests/foo.ts")).toBe(true);
+    expect(isTestFile("FOO_TEST.GO")).toBe(true);
+    expect(isTestFile("TEST_foo.PY")).toBe(true);
+  });
+
+  it("normalizes Windows-style backslash separators", () => {
+    expect(isTestFile("src\\__tests__\\foo.ts")).toBe(true);
+    expect(isTestFile("src\\foo.test.ts")).toBe(true);
+  });
+
+  it("stays consistent with the cycles.ts variant", () => {
+    // Mirrors src/cycles.ts isTestFile cases so coupling/cycles keep working.
+    expect(isTestFile("a/b.test.ts")).toBe(true);
+    expect(isTestFile("pkg/foo_test.go")).toBe(true);
+    expect(isTestFile("pkg/test_thing.py")).toBe(true);
+    expect(isTestFile("src/__mocks__/mod.ts")).toBe(true);
+  });
+
+  it("does not match non-test files", () => {
+    expect(isTestFile("src/foo.ts")).toBe(false);
+    expect(isTestFile("src/index.ts")).toBe(false);
+    expect(isTestFile("README.md")).toBe(false);
+  });
+
+  it("does not treat substring matches as test segments or suffixes", () => {
+    expect(isTestFile("src/latest/foo.ts")).toBe(false); // 'latest' is not 'test'
+    expect(isTestFile("src/contest.ts")).toBe(false);
+    expect(isTestFile("src/attestation.ts")).toBe(false);
+    expect(isTestFile("src/testing/mod.ts")).toBe(false); // 'testing' is not a test segment
+    expect(isTestFile("src/my_contest.go")).toBe(false); // no '_test.' boundary
   });
 });

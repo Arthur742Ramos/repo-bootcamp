@@ -46,6 +46,31 @@ describe("security pattern detection", () => {
     expect(titles(a)).toContain("Potential SQL injection");
   });
 
+  it("SQL: ignores CRUD substrings in ordinary identifiers, still flags a real interpolated query", async () => {
+    // `\bUPDATE\b` / `\bSELECT\b` no longer match `updated` / `selected`, so a benign
+    // template-literal assignment next to an identifier is not a false SQL-injection hit.
+    const updated = await scan({
+      "src/labels.ts": "const updatedLabel = `${count} items`;\n",
+    });
+    expect(titles(updated)).not.toContain("Potential SQL injection");
+
+    const selected = await scan({
+      "src/rows.ts": "let selectedRows = items.map((r) => `${r.id}`);\n",
+    });
+    expect(titles(selected)).not.toContain("Potential SQL injection");
+
+    const logged = await scan({
+      "src/log.ts": "logger.info(`updated ${userId}`);\n",
+    });
+    expect(titles(logged)).not.toContain("Potential SQL injection");
+
+    // A genuine query with a keyword, FROM/WHERE clause, and an interpolation still fires.
+    const real = await scan({
+      "src/query.ts": "const rows = await db.query(`SELECT * FROM users WHERE id = ${userId}`);\n",
+    });
+    expect(titles(real)).toContain("Potential SQL injection");
+  });
+
   it("SSL: ignores benign `verifyEmail: false`, flags `rejectUnauthorized: false`", async () => {
     const benign = await scan({ "src/a.ts": "const opts = { verifyEmail: false };\n" });
     expect(titles(benign)).not.toContain("SSL verification disabled");

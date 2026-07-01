@@ -4,7 +4,7 @@ import rateLimit, { ipKeyGenerator } from "express-rate-limit";
 import { mkdir, readFile } from "fs/promises";
 import { join, resolve } from "path";
 
-import { applyOutputFormat } from "../formatter.js";
+import { applyOutputFormat, type OutputFormat } from "../formatter.js";
 import { parseGitHubUrl } from "../ingest.js";
 import { ProgressTracker } from "../progress.js";
 import { getSecurityGrade } from "../security.js";
@@ -87,16 +87,56 @@ function generateJobId(): string {
   return `job_${Date.now()}_${Math.random().toString(36).substring(7)}`;
 }
 
-function buildWebOptions(options: Partial<BootcampOptions>): BootcampOptions {
+// Client-supplied analysis options are validated/allowlisted here rather than
+// spread verbatim: only known fields are read, enums are checked against their
+// allowlists, maxFiles is clamped to a sane range, and resource-amplifying
+// levers (fullClone) are forced off. Unknown keys (e.g. model) are dropped.
+const WEB_DEFAULT_MAX_FILES = 200;
+const WEB_MIN_MAX_FILES = 1;
+const WEB_MAX_MAX_FILES = 1000;
+
+const VALID_WEB_FOCUS: readonly BootcampOptions["focus"][] = [
+  "onboarding",
+  "architecture",
+  "contributing",
+  "all",
+];
+const VALID_WEB_AUDIENCE: readonly BootcampOptions["audience"][] = [
+  "all",
+  "backend",
+  "frontend",
+  "sre",
+];
+const VALID_WEB_FORMAT: readonly OutputFormat[] = ["markdown", "html", "pdf"];
+
+function pickAllowedValue<T extends string>(value: unknown, allowed: readonly T[], fallback: T): T {
+  return typeof value === "string" && (allowed as readonly string[]).includes(value)
+    ? (value as T)
+    : fallback;
+}
+
+function clampMaxFiles(value: unknown): number {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return WEB_DEFAULT_MAX_FILES;
+  }
+  return Math.min(Math.max(Math.floor(parsed), WEB_MIN_MAX_FILES), WEB_MAX_MAX_FILES);
+}
+
+function buildWebOptions(options: Record<string, unknown>): BootcampOptions {
   return {
-    branch: "",
-    focus: "all",
-    audience: "all",
+    branch: typeof options.branch === "string" ? options.branch : "",
+    focus: pickAllowedValue(options.focus, VALID_WEB_FOCUS, "all"),
+    audience: pickAllowedValue(options.audience, VALID_WEB_AUDIENCE, "all"),
     output: "",
-    maxFiles: 200,
+    maxFiles: clampMaxFiles(options.maxFiles),
     noClone: false,
-    verbose: false,
-    ...options,
+    verbose: options.verbose === true,
+    jsonOnly: options.jsonOnly === true,
+    // Never let the web client trigger a full-history clone (disk/CPU/time
+    // amplification); the demo always does a shallow clone.
+    fullClone: false,
+    format: pickAllowedValue(options.format, VALID_WEB_FORMAT, "markdown"),
   };
 }
 
@@ -116,7 +156,7 @@ function buildRateLimitKey(prefix: string, scope: string, req: Request): string 
 /**
  * Run analysis in background
  */
-async function runAnalysis(job: AnalysisJob, options: Partial<BootcampOptions>): Promise<void> {
+async function runAnalysis(job: AnalysisJob, options: Record<string, unknown>): Promise<void> {
   const emit = (event: ProgressEvent) => {
     job.progress.push(event);
     job.emitter.emit("progress", event);
@@ -238,7 +278,7 @@ async function runAnalysis(job: AnalysisJob, options: Partial<BootcampOptions>):
         toolCalls: analysis.toolCalls,
         model: analysis.model,
         securityScore: security.score,
-        securityGrade: getSecurityGrade(security.score),
+        securityGrade: getSecurityGrade(security.score, security.sourceFilesScanned),
         riskScore: radar.onboardingRisk.score,
         riskGrade: radar.onboardingRisk.grade,
         dependencies: deps?.totalCount || 0,
@@ -253,7 +293,10 @@ async function runAnalysis(job: AnalysisJob, options: Partial<BootcampOptions>):
   } catch (error: unknown) {
     job.status = "error";
     job.completedAt = Date.now();
-    const message = getErrorMessage(error, "Analysis failed");
+    // Log the detailed cause server-side; never expose git stderr / FS paths
+    // (which clone/scan errors embed) to the anonymous web client.
+    console.error(`[web] Analysis job ${job.id} failed:`, error);
+    const message = "Analysis failed. Please check the repository URL and try again.";
     job.error = message;
     emit({ type: "error", message });
   } finally {
@@ -352,12 +395,15 @@ export function registerRoutes(app: Application): void {
         jobs.set(job.id, job);
 
         // Start analysis in background
-        const options = (requestOptions ?? {}) as Partial<BootcampOptions>;
+        const options: Record<string, unknown> = isObjectRecord(requestOptions)
+          ? requestOptions
+          : {};
         void runAnalysis(job, options);
 
         res.json({ jobId: job.id });
       } catch (error: unknown) {
-        res.status(500).json({ error: getErrorMessage(error, "Failed to start analysis") });
+        console.error("[web] Failed to start analysis:", error);
+        res.status(500).json({ error: "Failed to start analysis" });
       }
     }
   );
@@ -450,15 +496,19 @@ export function registerRoutes(app: Application): void {
           return;
         }
         const content = await readFile(filePath, "utf-8");
-        const contentType = filename.endsWith(".json")
-          ? "application/json"
-          : filename.endsWith(".html")
-            ? "text/html"
-            : "text/markdown";
-        res.setHeader("Content-Type", contentType);
+        // Serve every generated file as inert text so repo/LLM-derived content
+        // (e.g. a generated .html) can never execute in the dashboard origin.
+        // The dashboard only ever consumes these via fetch().text(); combined
+        // with the global X-Content-Type-Options: nosniff header this removes
+        // the stored-XSS sink without changing what the UI displays.
+        res.setHeader("Content-Type", "text/plain; charset=utf-8");
         res.send(content);
       } catch (error: unknown) {
-        res.status(500).json({ error: getErrorMessage(error, "Failed to read generated file") });
+        console.error(
+          `[web] Failed to read generated file "${filename}" for job ${jobId}:`,
+          error
+        );
+        res.status(500).json({ error: "Failed to read generated file" });
       }
     }
   );

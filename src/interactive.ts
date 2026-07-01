@@ -8,6 +8,8 @@ import chalk from "chalk";
 import type { LlmClient, LlmSession, LlmSessionEvent, RepoFacts, RepoInfo, ScanResult, Transcript } from "./types.js";
 import { getRepoTools } from "./tools.js";
 import {
+  createDefaultLlmClient,
+  createFixtureLlmClient,
   createSessionWithFallback,
   formatCustomPromptSection,
   readCustomPrompt,
@@ -340,46 +342,16 @@ export class InteractiveSession {
   }
 }
 
-async function createDefaultInteractiveClient(): Promise<LlmClient> {
-  const { CopilotClient } = await import("@github/copilot-sdk");
-  return new CopilotClient() as unknown as LlmClient;
-}
-
-function createFixtureInteractiveClient(response: string): LlmClient {
-  return {
-    async createSession() {
-      const listeners: Array<(event: LlmSessionEvent) => void> = [];
-
-      return {
-        on(handler) {
-          listeners.push(handler);
-          return undefined;
-        },
-        async sendAndWait() {
-          for (const listener of listeners) {
-            listener({
-              type: "assistant.message_delta",
-              data: {
-                deltaContent: response,
-              },
-            });
-          }
-        },
-      };
-    },
-    async stop() {
-      return undefined;
-    },
-  };
-}
-
 async function resolveInteractiveLlmClient(): Promise<LlmClient> {
+  // Shares the default + fixture client factories with agent.ts so both the
+  // analysis and REPL paths exercise the same SDK contract (a single
+  // `assistant.message_delta` fixture event).
   const fixtureResponse = readTestLlmFixtureResponse();
   if (fixtureResponse !== null) {
-    return createFixtureInteractiveClient(fixtureResponse);
+    return createFixtureLlmClient(fixtureResponse);
   }
 
-  return await createDefaultInteractiveClient();
+  return await createDefaultLlmClient();
 }
 
 /**

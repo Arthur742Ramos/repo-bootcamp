@@ -20,6 +20,17 @@ afterEach(async () => {
   server = undefined;
 });
 
+// Bind a single server once and drive the request loop through one keep-alive
+// agent. Rate-limit assertions need many sequential requests; without this each
+// request(app) would spin up (and leak) a fresh ephemeral server + socket,
+// exhausting sockets under full-suite parallelism ("socket hang up" flake).
+function listenWithAgent(app: ReturnType<typeof createApp>) {
+  const srv = app.listen(0);
+  const agent = request.agent(srv);
+  const close = () => new Promise<void>((resolve) => srv.close(() => resolve()));
+  return { agent, close };
+}
+
 describe("getIndexHtml", () => {
   it("returns the demo HTML", () => {
     const html = getIndexHtml();
@@ -193,32 +204,44 @@ describe("createApp", () => {
   });
 
   it("enforces API rate limiting", async () => {
-    const app = createApp();
-    let response = await request(app).get("/api/jobs/nonexistent");
-    for (let i = 1; i < 101; i++) {
-      response = await request(app).get("/api/jobs/nonexistent");
+    const { agent, close } = listenWithAgent(createApp());
+    try {
+      let response = await agent.get("/api/jobs/nonexistent");
+      for (let i = 1; i < 101; i++) {
+        response = await agent.get("/api/jobs/nonexistent");
+      }
+      expect(response.status).toBe(429);
+      expect(response.headers["ratelimit-limit"]).toBeDefined();
+    } finally {
+      await close();
     }
-    expect(response.status).toBe(429);
-    expect(response.headers["ratelimit-limit"]).toBeDefined();
   }, 15000);
 
   it("does not cap non-analysis endpoints at 5 requests", async () => {
-    const app = createApp();
-    let response = await request(app).get("/api/jobs/nonexistent");
-    for (let i = 1; i < 6; i++) {
-      response = await request(app).get("/api/jobs/nonexistent");
+    const { agent, close } = listenWithAgent(createApp());
+    try {
+      let response = await agent.get("/api/jobs/nonexistent");
+      for (let i = 1; i < 6; i++) {
+        response = await agent.get("/api/jobs/nonexistent");
+      }
+      expect(response.status).toBe(404);
+    } finally {
+      await close();
     }
-    expect(response.status).toBe(404);
   });
 
   it("enforces stricter rate limiting for /api/analyze", async () => {
-    const app = createApp();
-    let response = await request(app).post("/api/analyze").send({ repoUrl: "not-a-url" });
-    for (let i = 1; i < 6; i++) {
-      response = await request(app).post("/api/analyze").send({ repoUrl: "not-a-url" });
+    const { agent, close } = listenWithAgent(createApp());
+    try {
+      let response = await agent.post("/api/analyze").send({ repoUrl: "not-a-url" });
+      for (let i = 1; i < 6; i++) {
+        response = await agent.post("/api/analyze").send({ repoUrl: "not-a-url" });
+      }
+      expect(response.status).toBe(429);
+      expect(response.headers["ratelimit-limit"]).toBeDefined();
+    } finally {
+      await close();
     }
-    expect(response.status).toBe(429);
-    expect(response.headers["ratelimit-limit"]).toBeDefined();
   }, 15000);
 });
 
@@ -230,6 +253,8 @@ describe("startServer", () => {
 
     const address = server.address() as AddressInfo;
     expect(address.port).toBeGreaterThan(0);
+    // Defaults to loopback only, not 0.0.0.0 / all interfaces.
+    expect(address.address).toBe("127.0.0.1");
 
     logSpy.mockRestore();
   });

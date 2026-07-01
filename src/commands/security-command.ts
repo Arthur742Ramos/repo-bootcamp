@@ -2,7 +2,6 @@ import chalk from "chalk";
 import { readFile } from "fs/promises";
 import { join } from "path";
 
-import { resolveRepo, type RepoSource } from "../repo-resolver.js";
 import {
   analyzeSecurityPatterns,
   getSecurityGrade,
@@ -10,6 +9,8 @@ import {
   type Severity,
 } from "../security.js";
 import { scanRepositoryFiles } from "../services/clone-service.js";
+import { finiteOr } from "../utils.js";
+import { withResolvedRepo } from "./_shared.js";
 
 /** Options accepted by the `bootcamp security` command. */
 export interface SecurityCommandOptions {
@@ -48,7 +49,7 @@ function checkmark(value: boolean): string {
 }
 
 function printReport(analysis: SecurityAnalysis, repoName: string, filesScanned: number): void {
-  const grade = getSecurityGrade(analysis.score);
+  const grade = getSecurityGrade(analysis.score, analysis.sourceFilesScanned);
   const emoji = analysis.score >= 80 ? "🟢" : analysis.score >= 60 ? "🟡" : "🔴";
   const color = scoreColor(analysis.score);
 
@@ -120,22 +121,10 @@ function printReport(analysis: SecurityAnalysis, repoName: string, filesScanned:
  * `SECURITY.md` — mirroring `bootcamp health` and `bootcamp metrics`.
  */
 export async function runSecurityCommand(repoUrl: string, opts: SecurityCommandOptions): Promise<void> {
-  const minScore = typeof opts.minScore === "number" && Number.isFinite(opts.minScore) ? opts.minScore : 70;
+  const minScore = finiteOr(opts.minScore, 70);
 
-  let repoSource: RepoSource;
-  try {
-    repoSource = await resolveRepo(repoUrl, process.cwd(), opts.branch || undefined);
-  } catch (error: unknown) {
-    console.error(
-      chalk.red(`Failed to resolve repository: ${error instanceof Error ? error.message : String(error)}`)
-    );
-    process.exit(1);
-    return;
-  }
-
-  let exitCode = 0;
-  try {
-    const scan = await scanRepositoryFiles(repoSource.path, opts.maxFiles ?? 500);
+  await withResolvedRepo(repoUrl, opts, "Security analysis failed", async (repoSource) => {
+    const scan = await scanRepositoryFiles(repoSource.path, finiteOr(opts.maxFiles, 500, { min: 1 }));
     const packageJson = await readFile(join(repoSource.path, "package.json"), "utf-8")
       .then((content) => JSON.parse(content) as Record<string, unknown>)
       .catch(() => undefined);
@@ -148,7 +137,7 @@ export async function runSecurityCommand(repoUrl: string, opts: SecurityCommandO
           {
             repo: repoSource.repoInfo.fullName,
             filesScanned,
-            grade: getSecurityGrade(analysis.score),
+            grade: getSecurityGrade(analysis.score, analysis.sourceFilesScanned),
             ...analysis,
           },
           null,
@@ -165,22 +154,9 @@ export async function runSecurityCommand(repoUrl: string, opts: SecurityCommandO
           chalk.red(`❌ Security score ${analysis.score}/100 is below the required minimum of ${minScore}.`)
         );
       }
-      exitCode = 1;
+      return 1;
     }
-  } catch (error: unknown) {
-    console.error(
-      chalk.red(`Security analysis failed: ${error instanceof Error ? error.message : String(error)}`)
-    );
-    exitCode = 1;
-  } finally {
-    if (opts.keepTemp && !repoSource.isLocal) {
-      console.log(chalk.gray(`Temporary clone kept at: ${repoSource.path}`));
-    } else {
-      await repoSource.cleanup();
-    }
-  }
 
-  if (exitCode !== 0) {
-    process.exit(exitCode);
-  }
+    return 0;
+  });
 }

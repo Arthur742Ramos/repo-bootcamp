@@ -6,7 +6,6 @@ import { extractDependencies } from "../deps.js";
 import { computeRepoHealth, type RepoHealth } from "../health.js";
 import { computeCodebaseMetrics, type CodebaseMetrics } from "../metrics.js";
 import { generateTechRadar, getRiskEmoji } from "../radar.js";
-import { resolveRepo, type RepoSource } from "../repo-resolver.js";
 import {
   analyzeSecurityPatterns,
   getSecurityGrade,
@@ -14,6 +13,8 @@ import {
 } from "../security.js";
 import { scanRepositoryFiles } from "../services/clone-service.js";
 import type { TechRadar } from "../types.js";
+import { finiteOr } from "../utils.js";
+import { withResolvedRepo } from "./_shared.js";
 
 /** Options accepted by the `bootcamp scan` command. */
 export interface ScanCommandOptions {
@@ -110,7 +111,7 @@ function printReport(
     scoreLine(
       "Security",
       security.score,
-      getSecurityGrade(security.score),
+      getSecurityGrade(security.score, security.sourceFilesScanned),
       `${secFindings} finding${secFindings === 1 ? "" : "s"}`
     )
   );
@@ -167,22 +168,10 @@ function printReport(
  * part of the gate.
  */
 export async function runScanCommand(repoUrl: string, opts: ScanCommandOptions): Promise<void> {
-  const minScore = typeof opts.minScore === "number" && Number.isFinite(opts.minScore) ? opts.minScore : 70;
+  const minScore = finiteOr(opts.minScore, 70);
 
-  let repoSource: RepoSource;
-  try {
-    repoSource = await resolveRepo(repoUrl, process.cwd(), opts.branch || undefined);
-  } catch (error: unknown) {
-    console.error(
-      chalk.red(`Failed to resolve repository: ${error instanceof Error ? error.message : String(error)}`)
-    );
-    process.exit(1);
-    return;
-  }
-
-  let exitCode = 0;
-  try {
-    const scan = await scanRepositoryFiles(repoSource.path, opts.maxFiles ?? 500);
+  await withResolvedRepo(repoUrl, opts, "Scan failed", async (repoSource) => {
+    const scan = await scanRepositoryFiles(repoSource.path, finiteOr(opts.maxFiles, 500, { min: 1 }));
     const packageJson = await readFile(join(repoSource.path, "package.json"), "utf-8")
       .then((content) => JSON.parse(content) as Record<string, unknown>)
       .catch(() => undefined);
@@ -211,7 +200,7 @@ export async function runScanCommand(repoUrl: string, opts: ScanCommandOptions):
             scores: {
               health: { score: health.score, grade: health.grade },
               metrics: { score: metrics.approachability.score, grade: metrics.approachability.grade },
-              security: { score: security.score, grade: getSecurityGrade(security.score) },
+              security: { score: security.score, grade: getSecurityGrade(security.score, security.sourceFilesScanned) },
               onboardingRisk: { score: radar.onboardingRisk.score, grade: radar.onboardingRisk.grade },
               lowest: scores.lowest,
             },
@@ -236,22 +225,9 @@ export async function runScanCommand(repoUrl: string, opts: ScanCommandOptions):
           )
         );
       }
-      exitCode = 1;
+      return 1;
     }
-  } catch (error: unknown) {
-    console.error(
-      chalk.red(`Scan failed: ${error instanceof Error ? error.message : String(error)}`)
-    );
-    exitCode = 1;
-  } finally {
-    if (opts.keepTemp && !repoSource.isLocal) {
-      console.log(chalk.gray(`Temporary clone kept at: ${repoSource.path}`));
-    } else {
-      await repoSource.cleanup();
-    }
-  }
 
-  if (exitCode !== 0) {
-    process.exit(exitCode);
-  }
+    return 0;
+  });
 }

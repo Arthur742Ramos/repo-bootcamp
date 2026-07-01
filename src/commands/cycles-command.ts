@@ -1,9 +1,10 @@
 import chalk from "chalk";
 
 import { buildImportGraph } from "../impact.js";
-import { resolveRepo, type RepoSource } from "../repo-resolver.js";
 import { scanRepositoryFiles } from "../services/clone-service.js";
 import { detectCyclesInImportGraph, type Cycle } from "../cycles.js";
+import { finiteOr } from "../utils.js";
+import { withResolvedRepo } from "./_shared.js";
 
 /** Options accepted by the `bootcamp cycles` command. */
 export interface CyclesCommandOptions {
@@ -54,30 +55,12 @@ function printReport(repoName: string, moduleCount: number, cycles: Cycle[], rin
  * invokes the LLM.
  */
 export async function runCyclesCommand(repoUrl: string, opts: CyclesCommandOptions): Promise<void> {
-  const maxCycles =
-    typeof opts.maxCycles === "number" && Number.isFinite(opts.maxCycles) && opts.maxCycles >= 0
-      ? opts.maxCycles
-      : 0;
-  // Guard against a NaN/invalid --max-files (e.g. `--max-files nope`), which
-  // would otherwise disable the scan cap (`files.length >= NaN` is never true).
-  const maxFiles =
-    typeof opts.maxFiles === "number" && Number.isFinite(opts.maxFiles) && opts.maxFiles > 0
-      ? opts.maxFiles
-      : 500;
+  const maxCycles = finiteOr(opts.maxCycles, 0, { min: 0 });
 
-  let repoSource: RepoSource;
-  try {
-    repoSource = await resolveRepo(repoUrl, process.cwd(), opts.branch || undefined);
-  } catch (error: unknown) {
-    console.error(
-      chalk.red(`Failed to resolve repository: ${error instanceof Error ? error.message : String(error)}`)
-    );
-    process.exit(1);
-    return;
-  }
-
-  let exitCode = 0;
-  try {
+  await withResolvedRepo(repoUrl, opts, "Cycle analysis failed", async (repoSource) => {
+    // Guard against a NaN/invalid --max-files (e.g. `--max-files nope`), which
+    // would otherwise disable the scan cap (`files.length >= NaN` is never true).
+    const maxFiles = finiteOr(opts.maxFiles, 500, { min: 1 });
     const scan = await scanRepositoryFiles(repoSource.path, maxFiles);
     const fullGraph = await buildImportGraph(repoSource.path, scan.files);
     const { moduleCount, cycles, rings } = detectCyclesInImportGraph(fullGraph);
@@ -108,28 +91,9 @@ export async function runCyclesCommand(repoUrl: string, opts: CyclesCommandOptio
           )
         );
       }
-      exitCode = 1;
+      return 1;
     }
-  } catch (error: unknown) {
-    console.error(
-      chalk.red(`Cycle analysis failed: ${error instanceof Error ? error.message : String(error)}`)
-    );
-    exitCode = 1;
-  } finally {
-    if (opts.keepTemp && !repoSource.isLocal) {
-      // Route to stderr under --json so stdout stays valid JSON for consumers.
-      const note = chalk.gray(`Temporary clone kept at: ${repoSource.path}`);
-      if (opts.json) {
-        console.error(note);
-      } else {
-        console.log(note);
-      }
-    } else {
-      await repoSource.cleanup();
-    }
-  }
 
-  if (exitCode !== 0) {
-    process.exit(exitCode);
-  }
+    return 0;
+  });
 }

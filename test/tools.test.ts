@@ -10,6 +10,7 @@ vi.mock("fs/promises", () => ({
   readFile: vi.fn(),
   readdir: vi.fn(),
   stat: vi.fn(),
+  realpath: vi.fn(),
 }));
 
 // Mock child_process
@@ -17,13 +18,14 @@ vi.mock("child_process", () => ({
   execFile: vi.fn(),
 }));
 
-import { readFile, readdir, stat } from "fs/promises";
+import { readFile, readdir, realpath, stat } from "fs/promises";
 import { execFile } from "child_process";
 import { getRepoTools, safePath, type ToolContext } from "../src/tools.js";
 
 const mockReadFile = vi.mocked(readFile);
 const mockReaddir = vi.mocked(readdir);
 const mockStat = vi.mocked(stat);
+const mockRealpath = vi.mocked(realpath);
 const mockExecFile = vi.mocked(execFile);
 
 describe("safePath", () => {
@@ -101,6 +103,9 @@ describe("getRepoTools", () => {
 describe("read_file tool", () => {
   beforeEach(() => {
     vi.resetAllMocks();
+    // Default: realpath is identity (no symlink indirection). Tests that need
+    // symlink or canonicalization behavior override this.
+    mockRealpath.mockImplementation(async (p: any) => p);
   });
 
   it("reads a file successfully", async () => {
@@ -228,6 +233,42 @@ describe("read_file tool", () => {
     const result = await tool.handler({ path: "file.ts" }, {} as any);
 
     expect((result as any).resultType).toBe("success");
+  });
+
+  it("rejects a symlink that realpath resolves outside the repo root", async () => {
+    const ctx = makeContext(); // repoPath: /test/repo
+    const tool = getTool(ctx, "read_file");
+    // A symlink inside the repo dereferences to a target outside it. safePath's
+    // lexical check passes, so realpath containment must catch this.
+    mockRealpath.mockImplementation(async (p: any) =>
+      p === "/test/repo" ? "/test/repo" : "/etc/passwd",
+    );
+    mockReadFile.mockResolvedValue("root:x:0:0:root:/root:/bin/bash");
+
+    const result = await tool.handler({ path: "src/leak.ts" }, {} as any);
+
+    expect((result as any).resultType).toBe("failure");
+    expect((result as any).textResultForLlm).toContain("Path escapes repository root");
+    // The escaping target's contents are never read.
+    expect(mockReadFile).not.toHaveBeenCalled();
+  });
+
+  // POSIX-only: uses absolute /var paths and a /var -> /private/var realpath mock;
+  // on Windows those are not absolute and the substring never matches, so skip.
+  it.skipIf(process.platform === "win32")("allows reads when realpath canonicalizes the repo root (e.g. /var -> /private/var)", async () => {
+    const ctx = makeContext({ repoPath: "/var/folders/repo" });
+    const tool = getTool(ctx, "read_file");
+    // Both the root and the target canonicalize the same way; realpathing BOTH
+    // sides is what prevents a false rejection here.
+    mockRealpath.mockImplementation(async (p: any) =>
+      (p as string).replace("/var/", "/private/var/"),
+    );
+    mockReadFile.mockResolvedValue("ok");
+
+    const result = await tool.handler({ path: "src/index.ts" }, {} as any);
+
+    expect((result as any).resultType).toBe("success");
+    expect((result as any).textResultForLlm).toBe("ok");
   });
 });
 
@@ -594,6 +635,51 @@ describe("search tool", () => {
     const result = await tool.handler({ pattern: "x" }, {} as any);
 
     expect((result as any).resultType).toBe("success");
+  });
+
+  it("inserts a -- separator before the pattern and path (flag-injection guard)", async () => {
+    const ctx = makeContext();
+    const tool = getTool(ctx, "search");
+    mockExecFileSuccess("");
+
+    // A model-controlled pattern that looks like a ripgrep flag.
+    await tool.handler({ pattern: "--pre=touch /tmp/pwned", path: "src" }, {} as any);
+
+    const args = mockExecFile.mock.calls[0][1] as string[];
+    const sepIdx = args.indexOf("--");
+    expect(sepIdx).toBeGreaterThanOrEqual(0);
+    // Both the pattern and the search target come AFTER the separator, so rg
+    // treats them strictly as positionals rather than flags.
+    expect(args.indexOf("--pre=touch /tmp/pwned")).toBe(sepIdx + 1);
+    expect(args.indexOf("src")).toBe(sepIdx + 2);
+  });
+
+  it("allows patterns that begin with a dash (e.g. arrow tokens) via the -- guard", async () => {
+    const ctx = makeContext();
+    const tool = getTool(ctx, "search");
+    mockExecFileSuccess("src/a.ts:1:const f = () => 1\n");
+
+    const result = await tool.handler({ pattern: "->" }, {} as any);
+
+    expect((result as any).resultType).toBe("success");
+    const args = mockExecFile.mock.calls[0][1] as string[];
+    // The dash-prefixed pattern is passed through unchanged, right after `--`.
+    expect(args[args.indexOf("--") + 1]).toBe("->");
+  });
+
+  it("rejects a file pattern that begins with a dash without invoking ripgrep", async () => {
+    const ctx = makeContext();
+    const tool = getTool(ctx, "search");
+    mockExecFileSuccess("");
+
+    const result = await tool.handler(
+      { pattern: "x", filePattern: "--pre=evil" },
+      {} as any,
+    );
+
+    expect((result as any).resultType).toBe("failure");
+    expect((result as any).textResultForLlm).toContain("invalid file pattern");
+    expect(mockExecFile).not.toHaveBeenCalled();
   });
 });
 

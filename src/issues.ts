@@ -11,6 +11,42 @@ import type { FirstTask, RepoInfo } from "./types.js";
 const execFileAsync = promisify(execFile);
 
 /**
+ * Build a provider-aware remote blob URL for a repo-relative file path, or null
+ * when repoInfo has no usable remote (local/--no-clone runs). Mirrors the
+ * generator's helper so issue bodies link to GitHub (`/blob/`), GitLab
+ * (`/-/blob/`), or Bitbucket (`/src/`) rather than hardcoding github.com.
+ */
+function buildBlobUrl(repoInfo: RepoInfo, filePath: string): string | null {
+  if (
+    !repoInfo.host ||
+    !repoInfo.owner ||
+    repoInfo.owner === "local" ||
+    !repoInfo.branch ||
+    repoInfo.branch === "local"
+  ) {
+    return null;
+  }
+  const cleanPath = filePath.replace(/^\.?\/+/, "");
+  if (!cleanPath) return null;
+  const encoded = cleanPath.split("/").map(encodeURIComponent).join("/");
+  const base = `https://${repoInfo.host}/${repoInfo.owner}/${repoInfo.repo}`;
+  switch (repoInfo.provider) {
+    case "gitlab":
+      return `${base}/-/blob/${repoInfo.branch}/${encoded}`;
+    case "bitbucket":
+      return `${base}/src/${repoInfo.branch}/${encoded}`;
+    default:
+      return `${base}/blob/${repoInfo.branch}/${encoded}`;
+  }
+}
+
+/** Render a file path as a clickable remote link when possible, else bare code. */
+function fileLink(filePath: string, repoInfo: RepoInfo): string {
+  const url = buildBlobUrl(repoInfo, filePath);
+  return url ? `[\`${filePath}\`](${url})` : `\`${filePath}\``;
+}
+
+/**
  * Issue to be created
  */
 export interface IssuePayload {
@@ -26,6 +62,9 @@ export interface IssueResult {
   success: boolean;
   url?: string;
   error?: string;
+  /** True when an existing issue with the same title already existed and this
+   *  task was skipped rather than re-created (idempotent re-runs). */
+  skipped?: boolean;
   payload: IssuePayload;
 }
 
@@ -97,7 +136,7 @@ ${task.why}
 
 ## Files to Look At
 
-${task.files.map(f => `- \`${f}\``).join("\n")}
+${task.files.map(f => `- ${fileLink(f, repoInfo)}`).join("\n")}
 
 ---
 
@@ -153,6 +192,36 @@ async function createIssue(
 }
 
 /**
+ * Fetch the titles of existing issues (any state) so re-runs can skip
+ * duplicates instead of flooding the tracker. Best-effort: if `gh issue list`
+ * fails (network, permissions, or a repo with issues disabled) we return an
+ * empty set and fall back to creating everything rather than aborting.
+ */
+async function fetchExistingIssueTitles(repoFullName: string): Promise<Set<string>> {
+  try {
+    const { stdout } = await execFileAsync(
+      "gh",
+      ["issue", "list", "--repo", repoFullName, "--state", "all", "--limit", "200", "--json", "title"],
+      { timeout: 30000 }
+    );
+    const parsed = JSON.parse(stdout) as unknown;
+    if (!Array.isArray(parsed)) return new Set();
+    return new Set(
+      parsed
+        .map((item) => (item && typeof (item as { title?: unknown }).title === "string" ? (item as { title: string }).title : null))
+        .filter((title): title is string => title !== null)
+    );
+  } catch (error: unknown) {
+    console.log(
+      chalk.yellow(
+        `  Warning: could not list existing issues (${(error as Error).message}); skipping duplicate check.`
+      )
+    );
+    return new Set();
+  }
+}
+
+/**
  * Create issues for all first tasks
  */
 export async function createIssuesFromTasks(
@@ -175,6 +244,13 @@ export async function createIssuesFromTasks(
     }
   }
 
+  // Fetch existing titles once so a second `--create-issues` run (or a
+  // scheduled refresh) does not re-create the same tasks. Dry runs don't hit
+  // the network — they just preview every task.
+  const existingTitles = options.dryRun
+    ? new Set<string>()
+    : await fetchExistingIssueTitles(repoInfo.fullName);
+
   console.log(chalk.cyan(`\n${options.dryRun ? "[DRY RUN] " : ""}Creating ${tasks.length} issues...\n`));
 
   for (let i = 0; i < tasks.length; i++) {
@@ -183,6 +259,12 @@ export async function createIssuesFromTasks(
 
     console.log(chalk.white(`[${i + 1}/${tasks.length}] ${payload.title}`));
     console.log(chalk.gray(`  Labels: ${payload.labels.join(", ")}`));
+
+    if (existingTitles.has(payload.title)) {
+      results.push({ success: true, skipped: true, payload });
+      console.log(chalk.gray("  Skipped: an issue with this title already exists"));
+      continue;
+    }
 
     if (options.dryRun) {
       // Just show preview
@@ -210,7 +292,8 @@ export async function createIssuesFromTasks(
   }
 
   // Summary
-  const successful = results.filter(r => r.success).length;
+  const skipped = results.filter(r => r.skipped).length;
+  const successful = results.filter(r => r.success && !r.skipped).length;
   const failed = results.filter(r => !r.success).length;
 
   console.log();
@@ -219,6 +302,9 @@ export async function createIssuesFromTasks(
     console.log(chalk.gray("Run without --dry-run to actually create issues."));
   } else {
     console.log(chalk.green(`Created: ${successful} issues`));
+    if (skipped > 0) {
+      console.log(chalk.gray(`Skipped: ${skipped} existing issues`));
+    }
     if (failed > 0) {
       console.log(chalk.red(`Failed: ${failed} issues`));
     }

@@ -67,7 +67,10 @@ export function getIndexHtml(): string {
       margin-bottom: 0.25rem;
     }
     .subtitle { color: var(--ink-muted); margin-bottom: 2rem; max-width: 70ch; }
-    .input-group { display: flex; gap: 0.75rem; margin-bottom: 2rem; }
+    .analyze-form { margin-bottom: 2rem; }
+    .input-group { display: flex; gap: 0.75rem; }
+    .field-error { color: var(--danger); font-size: 0.8125rem; margin-top: 0.5rem; }
+    .field-error[hidden] { display: none; }
     input {
       flex: 1;
       min-width: 0;
@@ -119,6 +122,9 @@ export function getIndexHtml(): string {
     .progress-item.error { color: var(--danger); }
     .results { display: none; }
     .results.show { display: block; }
+    #filesHeading { border-radius: var(--r-sm); }
+    #filesHeading:focus { outline: none; }
+    #filesHeading:focus-visible { box-shadow: 0 0 0 2px var(--canvas), 0 0 0 4px var(--accent); }
     .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 1rem; margin-bottom: 2rem; }
     .stat { background: var(--surface); border: 1px solid var(--border); padding: 1.25rem 1rem; border-radius: var(--r-md); text-align: center; }
     .stat-value { font-family: var(--font-mono); font-size: 2rem; font-weight: 700; color: var(--ink); line-height: 1; }
@@ -144,6 +150,7 @@ export function getIndexHtml(): string {
     .file-desc { color: var(--ink-muted); font-size: 0.8125rem; }
     .modal { display: none; position: fixed; inset: 0; background: var(--scrim); z-index: var(--z-modal); padding: 2rem; overflow-y: auto; }
     .modal.show { display: block; }
+    #modalContent.load-error { color: var(--danger); }
     .modal-content { max-width: 900px; margin: 0 auto; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-md); padding: 1.5rem; }
     .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; gap: 1rem; }
     .modal-header h2 { font-family: var(--font-mono); font-size: 1rem; font-weight: 600; word-break: break-all; }
@@ -200,17 +207,30 @@ export function getIndexHtml(): string {
     <h1>Repo Bootcamp</h1>
     <p class="subtitle">Generate onboarding documentation for any GitHub repository</p>
 
-    <form class="input-group" id="analyzeForm">
+    <form class="analyze-form" id="analyzeForm">
       <label class="sr-only" for="repoUrl">Repository URL</label>
-      <input type="text" id="repoUrl" placeholder="https://github.com/owner/repo" />
-      <button type="submit" id="analyzeBtn">Analyze</button>
+      <div class="input-group">
+        <input
+          type="text"
+          id="repoUrl"
+          placeholder="https://github.com/owner/repo"
+          inputmode="url"
+          autocapitalize="none"
+          autocorrect="off"
+          spellcheck="false"
+          aria-describedby="repoUrlError"
+        />
+        <button type="submit" id="analyzeBtn">Analyze</button>
+      </div>
+      <p id="repoUrlError" class="field-error" role="alert" hidden></p>
     </form>
 
-    <div class="progress" id="progress" style="display: none;" aria-live="polite"></div>
+    <div class="progress" id="progress" style="display: none;" role="log" aria-live="polite"></div>
+    <div id="statusMsg" role="status" class="sr-only"></div>
 
-    <div class="results" id="results" aria-live="polite">
+    <div class="results" id="results">
       <div class="stats" id="stats"></div>
-      <h2 style="margin-bottom: 1rem;">Generated Files</h2>
+      <h2 id="filesHeading" tabindex="-1" style="margin-bottom: 1rem;">Generated Files</h2>
       <div class="files" id="files"></div>
     </div>
   </div>
@@ -271,9 +291,32 @@ export function getIndexHtml(): string {
       return '';
     }
 
+    function setUrlError(message) {
+      const input = document.getElementById('repoUrl');
+      const err = document.getElementById('repoUrlError');
+      if (message) {
+        err.textContent = message;
+        err.hidden = false;
+        input.setAttribute('aria-invalid', 'true');
+      } else {
+        err.textContent = '';
+        err.hidden = true;
+        input.removeAttribute('aria-invalid');
+      }
+    }
+
     async function analyze() {
       const repoUrl = document.getElementById('repoUrl').value.trim();
-      if (!repoUrl) return alert('Please enter a repository URL');
+      // Loose non-empty check only: parseGitHubUrl accepts owner/repo, SSH, and
+      // scheme-less forms server-side, so strict URL validation here would reject
+      // inputs the backend supports. Surface the empty case inline (not via a
+      // blocking alert) so it reads as normal form validation.
+      if (!repoUrl) {
+        setUrlError('Please enter a repository URL');
+        document.getElementById('repoUrl').focus();
+        return;
+      }
+      setUrlError('');
 
       const btn = document.getElementById('analyzeBtn');
       btn.disabled = true;
@@ -306,6 +349,7 @@ export function getIndexHtml(): string {
 
     function streamProgress(jobId) {
       const evtSource = new EventSource('/api/jobs/' + jobId + '/stream');
+      let settled = false;
 
       evtSource.onmessage = (event) => {
         const data = JSON.parse(event.data);
@@ -315,11 +359,13 @@ export function getIndexHtml(): string {
         } else if (data.type === 'progress') {
           addProgressItem(data.message);
         } else if (data.type === 'complete') {
+          settled = true;
           addProgressItem(data.message, 'success');
           showResults(data.data);
           evtSource.close();
           resetButton();
         } else if (data.type === 'error') {
+          settled = true;
           addProgressItem(data.message, 'error');
           evtSource.close();
           resetButton();
@@ -327,9 +373,53 @@ export function getIndexHtml(): string {
       };
 
       evtSource.onerror = () => {
+        // A clean end-of-stream after 'complete'/'error' also surfaces as onerror;
+        // once we've settled there is nothing to recover.
+        if (settled) return;
+        // The job keeps running server-side. Close this stream so the browser's
+        // built-in auto-reconnect doesn't replay the entire buffered log, show a
+        // visible retry notice, then poll the job status until it finishes.
+        settled = true;
         evtSource.close();
-        resetButton();
+        addProgressItem('Connection lost — retrying…', 'error');
+        pollJobStatus(jobId);
       };
+    }
+
+    function pollJobStatus(jobId) {
+      let attempts = 0;
+      const maxAttempts = 150; // ~5 minutes at a 2s interval
+
+      const poll = async () => {
+        attempts++;
+        try {
+          const res = await fetch('/api/jobs/' + jobId);
+          if (res.ok) {
+            const job = await res.json();
+            if (job.status === 'complete' && job.result) {
+              addProgressItem('Reconnected — analysis complete.', 'success');
+              showResults(job.result);
+              resetButton();
+              return;
+            }
+            if (job.status === 'error') {
+              addProgressItem(job.error || 'Analysis failed', 'error');
+              resetButton();
+              return;
+            }
+          }
+        } catch (err) {
+          // Transient failure — keep polling until the attempt ceiling.
+        }
+        if (attempts >= maxAttempts) {
+          addProgressItem('Gave up waiting for the server to respond.', 'error');
+          resetButton();
+          return;
+        }
+        setTimeout(poll, 2000);
+      };
+
+      setTimeout(poll, 2000);
     }
 
     function addProgressItem(message, type = '') {
@@ -387,7 +477,10 @@ export function getIndexHtml(): string {
       addStatCard(stats, data.stats.securityScore, 'Security Score (' + data.stats.securityGrade + ')', gradeTone(data.stats.securityGrade));
       addStatCard(stats, data.stats.riskScore, 'Onboarding Risk (' + data.stats.riskGrade + ')', gradeTone(data.stats.riskGrade));
       addStatCard(stats, data.stats.dependencies, 'Dependencies');
-      addStatCard(stats, data.stats.toolCalls, 'Tool Calls');
+      // Surface a metric the reader of a repo cares about (documents produced)
+      // rather than internal agent telemetry; the tool-call count stays in the
+      // progress log for anyone debugging the run.
+      addStatCard(stats, data.files.length, 'Files Generated');
 
       const files = document.getElementById('files');
       files.textContent = '';
@@ -396,19 +489,53 @@ export function getIndexHtml(): string {
       }
 
       document.getElementById('results').classList.add('show');
+
+      // Announce completion once, concisely, via a dedicated status region, then
+      // move focus to the results heading so keyboard and screen-reader users land
+      // on the fresh output instead of being stranded at the end of a long log.
+      const status = document.getElementById('statusMsg');
+      if (status) {
+        status.textContent = 'Analysis complete — ' + data.files.length + ' files generated';
+      }
+      const heading = document.getElementById('filesHeading');
+      if (heading) {
+        heading.focus();
+        heading.scrollIntoView({ block: 'start' });
+      }
     }
 
     async function viewFile(filename) {
-      const content = await fetch('/api/jobs/' + currentJobId + '/files/' + encodeURIComponent(filename)).then(r => r.text());
-      currentFile = { name: filename, content };
-      document.getElementById('modalTitle').textContent = filename;
-      document.getElementById('modalContent').textContent = content;
+      // Open the modal immediately with a loading placeholder so the click has an
+      // instant, visible response; contents stream in when the fetch resolves.
+      // currentFile stays null until a successful load so Copy/Download never act
+      // on the placeholder or on an error message.
+      currentFile = null;
+      const modalContent = document.getElementById('modalContent');
       const copyBtn = document.getElementById('copyBtn');
+      document.getElementById('modalTitle').textContent = filename;
+      modalContent.classList.remove('load-error');
+      modalContent.textContent = 'Loading…';
       copyBtn.textContent = 'Copy';
       copyBtn.classList.remove('copied');
-      lastFocused = document.activeElement;
-      document.getElementById('modal').classList.add('show');
-      document.getElementById('closeBtn').focus();
+      openModal();
+
+      try {
+        const res = await fetch('/api/jobs/' + currentJobId + '/files/' + encodeURIComponent(filename));
+        if (!res.ok) {
+          // Error responses carry a JSON body; render a distinct error state rather
+          // than dumping {"error":"..."} into the <pre> as if it were file content.
+          modalContent.classList.add('load-error');
+          modalContent.textContent = "Couldn't load " + filename + ' (' + res.status + ' ' + res.statusText + ')';
+          return;
+        }
+        const content = await res.text();
+        currentFile = { name: filename, content };
+        modalContent.textContent = content;
+      } catch (err) {
+        modalContent.classList.add('load-error');
+        modalContent.textContent =
+          "Couldn't load " + filename + ': ' + (err instanceof Error ? err.message : String(err));
+      }
     }
 
     function legacyCopy(text) {
@@ -465,8 +592,31 @@ export function getIndexHtml(): string {
       URL.revokeObjectURL(url);
     }
 
+    // Open the file-preview dialog and isolate the background: the underlying
+    // .container is made inert (with an aria-hidden fallback for engines lacking
+    // inert support) and body scrolling is locked while the modal is up. .modal is
+    // a sibling of .container, so inerting .container never traps the dialog.
+    function openModal() {
+      lastFocused = document.activeElement;
+      const container = document.querySelector('.container');
+      if (container) {
+        container.inert = true;
+        container.setAttribute('aria-hidden', 'true');
+      }
+      document.body.style.overflow = 'hidden';
+      document.getElementById('modal').classList.add('show');
+      document.getElementById('closeBtn').focus();
+    }
+
     function closeModal() {
       document.getElementById('modal').classList.remove('show');
+      const container = document.querySelector('.container');
+      if (container) {
+        // Un-inert before restoring focus, since lastFocused lives inside .container.
+        container.inert = false;
+        container.removeAttribute('aria-hidden');
+      }
+      document.body.style.overflow = '';
       if (lastFocused && typeof lastFocused.focus === 'function') {
         lastFocused.focus();
       }
@@ -484,6 +634,9 @@ export function getIndexHtml(): string {
       void analyze();
     });
 
+    // Clear the inline validation message as soon as the user edits the field.
+    document.getElementById('repoUrl').addEventListener('input', () => setUrlError(''));
+
     // Modal controls are wired here (not via inline onclick) to comply with the
     // server's Content-Security-Policy, which blocks inline event handlers.
     document.getElementById('copyBtn').addEventListener('click', () => { void copyFile(); });
@@ -493,14 +646,19 @@ export function getIndexHtml(): string {
       if (event.target === document.getElementById('modal')) closeModal();
     });
 
-    // Keep keyboard focus inside the dialog while it is open.
+    // Keep keyboard focus inside the dialog while it is open. The focusable set is
+    // queried from the live DOM at Tab time rather than hard-coded, so the trap
+    // stays correct if controls are added, removed, hidden, or reordered.
     document.getElementById('modal').addEventListener('keydown', (event) => {
       if (event.key !== 'Tab') return;
-      const focusables = [
-        document.getElementById('copyBtn'),
-        document.getElementById('downloadBtn'),
-        document.getElementById('closeBtn'),
-      ];
+      const content = document.querySelector('.modal-content');
+      if (!content) return;
+      const selector = 'a[href], button, input, select, textarea, [tabindex]:not([tabindex="-1"])';
+      const focusables = Array.prototype.filter.call(
+        content.querySelectorAll(selector),
+        (el) => !el.disabled && el.offsetParent !== null
+      );
+      if (focusables.length === 0) return;
       const first = focusables[0];
       const last = focusables[focusables.length - 1];
       if (event.shiftKey && document.activeElement === first) {

@@ -33,7 +33,7 @@
       "recommendation": "Ensure sensitive values are not logged or exposed"
     },
     {
-      "pattern": "(?:SELECT|INSERT|UPDATE|DELETE)[^\\n]*\\$\\{|\\$\\{[^\\n]*\\}[^\\n]*(?:SELECT|INSERT|UPDATE|DELETE)",
+      "pattern": "\\b(?:SELECT|INSERT|UPDATE|DELETE)\\b[^\\n]*\\$\\{|\\$\\{[^\\n]*\\}[^\\n]*\\b(?:SELECT|INSERT|UPDATE|DELETE)\\b",
       "flags": "i",
       "title": "Potential SQL injection",
       "severity": "critical",

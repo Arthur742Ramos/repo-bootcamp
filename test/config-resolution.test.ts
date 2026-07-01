@@ -10,6 +10,7 @@ import { loadConfig, getStyleConfig } from "../src/plugins.js";
 import {
   resolveOutputFormat,
   resolveRunConfiguration,
+  normalizeScanScope,
 } from "../src/services/config-resolution.js";
 
 const mockedLoadConfig = vi.mocked(loadConfig);
@@ -41,6 +42,8 @@ const defaultStyleConfig = {
     showDependencyGraph: true,
     showRadar: true,
     showImpact: false,
+    showMetrics: true,
+    showHealth: true,
   },
   badges: { style: "shields" as const },
   firstTasksCount: 8,
@@ -252,5 +255,59 @@ describe("resolveRunConfiguration", () => {
       const result = await resolveRunConfiguration(opts);
       expect(result.outputFormat).toBe("html");
     });
+  });
+});
+
+describe("normalizeScanScope", () => {
+  it("trims blank exclude globs and drops the field when all are blank", () => {
+    const withSome = makeOptions({ exclude: ["  dist ", "", "  ", "vendor"] });
+    normalizeScanScope(withSome);
+    expect(withSome.exclude).toEqual(["dist", "vendor"]);
+
+    const allBlank = makeOptions({ exclude: ["   ", ""] });
+    normalizeScanScope(allBlank);
+    expect(allBlank.exclude).toBeUndefined();
+  });
+
+  it("strips a leading ./ and trailing slashes from subdir", () => {
+    const opts = makeOptions({ subdir: "./packages/app/" });
+    normalizeScanScope(opts);
+    expect(opts.subdir).toBe("packages/app");
+  });
+
+  it("drops a subdir that trims to empty", () => {
+    const opts = makeOptions({ subdir: "   " });
+    normalizeScanScope(opts);
+    expect(opts.subdir).toBeUndefined();
+  });
+
+  it("rejects an absolute subdir", () => {
+    expect(() => normalizeScanScope(makeOptions({ subdir: "/etc" }))).toThrow("Invalid subdir");
+  });
+
+  it("rejects a subdir that escapes the repo with ..", () => {
+    expect(() => normalizeScanScope(makeOptions({ subdir: "../secrets" }))).toThrow("Invalid subdir");
+    expect(() => normalizeScanScope(makeOptions({ subdir: "packages/../.." }))).toThrow("Invalid subdir");
+  });
+
+  it("is a no-op when neither exclude nor subdir is set", () => {
+    const opts = makeOptions();
+    normalizeScanScope(opts);
+    expect(opts.exclude).toBeUndefined();
+    expect(opts.subdir).toBeUndefined();
+  });
+});
+
+describe("resolveRunConfiguration scan scope", () => {
+  it("normalizes exclude/subdir on the options in place", async () => {
+    const opts = makeOptions({ exclude: [" dist ", ""], subdir: "./packages/app/" });
+    await resolveRunConfiguration(opts);
+    expect(opts.exclude).toEqual(["dist"]);
+    expect(opts.subdir).toBe("packages/app");
+  });
+
+  it("throws before running when subdir escapes the repository", async () => {
+    const opts = makeOptions({ subdir: "../../etc" });
+    await expect(resolveRunConfiguration(opts)).rejects.toThrow("Invalid subdir");
   });
 });

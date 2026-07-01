@@ -53,6 +53,15 @@ vi.mock("../src/security.js", () => ({
   generateSecurityDocs: vi.fn(() => "security-doc"),
 }));
 
+// orchestrateAnalysis now consults the on-disk facts cache (E8). Stub it to a
+// deterministic miss so these tests exercise the live analyzeRepo path and do
+// not read/write the real ~/.cache directory (which would leak state between
+// tests — an earlier test's writeCache would satisfy a later test's readCache).
+vi.mock("../src/cache.js", () => ({
+  readCache: vi.fn().mockResolvedValue(null),
+  writeCache: vi.fn().mockResolvedValue(undefined),
+}));
+
 vi.mock("../src/plugins.js", () => ({
   loadPlugins: vi.fn().mockResolvedValue([]),
   runPlugins: vi.fn().mockResolvedValue({

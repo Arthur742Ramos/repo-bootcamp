@@ -5,8 +5,9 @@ import { promisify } from "util";
 
 import chalk from "chalk";
 
-import { resolveRepo, type RepoSource } from "../repo-resolver.js";
 import { scanRepositoryFiles } from "../services/clone-service.js";
+import { finiteOr } from "../utils.js";
+import { withResolvedRepo } from "./_shared.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -158,20 +159,8 @@ function printReport(
  * git history. Deterministic; never invokes the LLM.
  */
 export async function runOwnersCommand(repoUrl: string, opts: OwnersCommandOptions): Promise<void> {
-  let repoSource: RepoSource;
-  try {
-    repoSource = await resolveRepo(repoUrl, process.cwd(), opts.branch || undefined);
-  } catch (error: unknown) {
-    console.error(
-      chalk.red(`Failed to resolve repository: ${error instanceof Error ? error.message : String(error)}`)
-    );
-    process.exit(1);
-    return;
-  }
-
-  let exitCode = 0;
-  try {
-    const scan = await scanRepositoryFiles(repoSource.path, opts.maxFiles ?? 500);
+  await withResolvedRepo(repoUrl, opts, "Owners analysis failed", async (repoSource) => {
+    const scan = await scanRepositoryFiles(repoSource.path, finiteOr(opts.maxFiles, 500, { min: 1 }));
 
     let codeownersContent: string | null = null;
     let codeownersPath: string | null = null;
@@ -215,20 +204,5 @@ export async function runOwnersCommand(repoUrl: string, opts: OwnersCommandOptio
     } else {
       printReport(repoSource.repoInfo.fullName, rules, defaultOwners, areas, allOwners, committers);
     }
-  } catch (error: unknown) {
-    console.error(
-      chalk.red(`Owners analysis failed: ${error instanceof Error ? error.message : String(error)}`)
-    );
-    exitCode = 1;
-  } finally {
-    if (opts.keepTemp && !repoSource.isLocal) {
-      console.log(chalk.gray(`Temporary clone kept at: ${repoSource.path}`));
-    } else {
-      await repoSource.cleanup();
-    }
-  }
-
-  if (exitCode !== 0) {
-    process.exit(exitCode);
-  }
+  });
 }

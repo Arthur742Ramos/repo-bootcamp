@@ -108,6 +108,45 @@ describe("Auto-Issue Creator", () => {
       expect(payload.body).toContain("## Difficulty");
       expect(payload.body).toContain("**Beginner**");
     });
+
+    it("keeps files as bare code spans when repoInfo has no remote host", () => {
+      // mockRepoInfo has no host/provider (local-style), so paths stay bare.
+      const payload = taskToIssuePayload(mockTasks[0], mockRepoInfo);
+      expect(payload.body).toContain("- `src/utils.ts`");
+      expect(payload.body).not.toContain("[`src/utils.ts`](");
+    });
+
+    it("renders provider-aware GitHub blob links when host is known", () => {
+      const gh: RepoInfo = {
+        owner: "octocat",
+        repo: "hello",
+        url: "https://github.com/octocat/hello",
+        branch: "main",
+        fullName: "octocat/hello",
+        provider: "github",
+        host: "github.com",
+      };
+      const payload = taskToIssuePayload(mockTasks[0], gh);
+      expect(payload.body).toContain(
+        "[`src/utils.ts`](https://github.com/octocat/hello/blob/main/src/utils.ts)"
+      );
+    });
+
+    it("renders GitLab-style blob links for gitlab-hosted repos", () => {
+      const gl: RepoInfo = {
+        owner: "group",
+        repo: "proj",
+        url: "https://gitlab.com/group/proj",
+        branch: "trunk",
+        fullName: "group/proj",
+        provider: "gitlab",
+        host: "gitlab.com",
+      };
+      const payload = taskToIssuePayload(mockTasks[0], gl);
+      expect(payload.body).toContain(
+        "[`src/utils.ts`](https://gitlab.com/group/proj/-/blob/trunk/src/utils.ts)"
+      );
+    });
   });
 
   describe("generateIssuePreview", () => {

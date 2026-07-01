@@ -37,8 +37,10 @@ vi.mock("../src/repo-resolver.js", () => ({
 }));
 
 const mockInteractive = vi.fn().mockResolvedValue(undefined);
+const mockQuickAsk = vi.fn().mockResolvedValue("mock answer");
 vi.mock("../src/interactive.js", () => ({
   runInteractiveMode: (...args: any[]) => mockInteractive(...args),
+  quickAsk: (...args: any[]) => mockQuickAsk(...args),
 }));
 
 import { runAskCommand } from "../src/commands/ask-command.js";
@@ -95,5 +97,59 @@ describe("runAskCommand", () => {
   it("ignores cleanup errors", async () => {
     mockCleanup.mockRejectedValueOnce(new Error("cleanup fail"));
     await runAskCommand("https://github.com/test/repo", {});
+  });
+
+  describe("one-shot mode (question supplied)", () => {
+    it("answers a single question via quickAsk and skips the REPL", async () => {
+      await runAskCommand("/tmp/local-repo", { question: "Where is main?", verbose: true, model: "gpt-4" });
+
+      expect(mockQuickAsk).toHaveBeenCalledTimes(1);
+      const [repoPath, repoInfo, , question, verbose, model] = mockQuickAsk.mock.calls[0];
+      expect(repoPath).toBe("/tmp/local-repo");
+      expect(repoInfo).toEqual(expect.objectContaining({ fullName: "local/local-repo" }));
+      expect(question).toBe("Where is main?");
+      expect(verbose).toBe(true);
+      expect(model).toBe("gpt-4");
+      // One-shot never enters the interactive REPL and never writes a transcript.
+      expect(mockInteractive).not.toHaveBeenCalled();
+    });
+
+    it("clones, answers once, and cleans up for a remote repo", async () => {
+      await runAskCommand("https://github.com/test/repo", { question: "How do tests run?" });
+
+      expect(mockClone).toHaveBeenCalled();
+      expect(mockScan).toHaveBeenCalled();
+      expect(mockQuickAsk).toHaveBeenCalledTimes(1);
+      expect(mockInteractive).not.toHaveBeenCalled();
+      expect(mockCleanup).toHaveBeenCalled();
+    });
+
+    it("trims the question and falls back to the REPL when it is blank", async () => {
+      await runAskCommand("/tmp/local-repo", { question: "   " });
+
+      expect(mockQuickAsk).not.toHaveBeenCalled();
+      expect(mockInteractive).toHaveBeenCalled();
+    });
+
+    it("passes the trimmed question to quickAsk", async () => {
+      await runAskCommand("/tmp/local-repo", { question: "  spaced out  " });
+
+      expect(mockQuickAsk).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.anything(),
+        expect.anything(),
+        "spaced out",
+        undefined,
+        undefined,
+      );
+    });
+
+    it("exits 1 when quickAsk fails", async () => {
+      mockQuickAsk.mockRejectedValueOnce(new Error("session boom"));
+      await expect(
+        runAskCommand("https://github.com/test/repo", { question: "boom?" }),
+      ).rejects.toThrow("process.exit");
+      expect(mockExit).toHaveBeenCalledWith(1);
+    });
   });
 });

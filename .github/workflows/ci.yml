@@ -202,6 +202,9 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Verify packaging invariants
+        run: npm run verify:packaging
+
       - name: Build
         run: npm run build
 

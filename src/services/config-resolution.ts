@@ -1,3 +1,5 @@
+import { isAbsolute } from "path";
+
 import { getStyleConfig, loadConfig, type BootcampConfig, type StyleConfig } from "../plugins.js";
 import type { OutputFormat } from "../formatter.js";
 import type { BootcampOptions } from "../types.js";
@@ -43,6 +45,30 @@ function validateRunOptions(options: BootcampOptions): void {
   }
 }
 
+/**
+ * Normalize the `--exclude`/`--subdir` scan-scope options in place: trim blank
+ * globs, strip a leading `./` and trailing slashes from the subdir, and reject a
+ * subdir that would escape the repository root (absolute or containing `..`).
+ * Mutates `options` so the normalized values flow through to the scan call.
+ */
+export function normalizeScanScope(options: BootcampOptions): void {
+  if (options.exclude) {
+    const cleaned = options.exclude.map((glob) => glob.trim()).filter((glob) => glob.length > 0);
+    options.exclude = cleaned.length > 0 ? cleaned : undefined;
+  }
+
+  if (typeof options.subdir === "string") {
+    const trimmed = options.subdir.trim().replace(/^\.\/+/, "").replace(/[/\\]+$/, "");
+    options.subdir = trimmed.length > 0 ? trimmed : undefined;
+  }
+
+  if (options.subdir && (isAbsolute(options.subdir) || options.subdir.split(/[/\\]/).includes(".."))) {
+    throw new Error(
+      `Invalid subdir: ${options.subdir}. Use a relative path within the repository (no leading / and no "..").`
+    );
+  }
+}
+
 export interface ResolvedRunConfiguration {
   config: BootcampConfig | null;
   styleConfig: StyleConfig;
@@ -74,6 +100,7 @@ export async function resolveRunConfiguration(options: BootcampOptions): Promise
     options.systemPrompt = config.prompts.system;
   }
 
+  normalizeScanScope(options);
   validateRunOptions(options);
 
   const styleConfig = getStyleConfig(options.style, config?.customStyle);
