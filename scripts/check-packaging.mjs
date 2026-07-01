@@ -71,13 +71,14 @@ check(
   'the "lint" script must pass --max-warnings=0'
 );
 
-// --- @types/node must track the minimum supported engine, not float ahead. ---
+// --- @types/node must not be OLDER than the minimum supported engine. It may
+// float AHEAD (dependabot manages it), so this is a floor, not an exact match. ---
 const enginesFloor = majorOf(pkg.engines?.node);
 check(enginesFloor !== null && enginesFloor >= 20, "engines.node floor must be >= 20");
 const typesNodeMajor = majorOf(pkg.devDependencies?.["@types/node"]);
 check(
-  typesNodeMajor === enginesFloor,
-  `@types/node major (${typesNodeMajor}) must match engines.node floor (${enginesFloor})`
+  typesNodeMajor !== null && typesNodeMajor >= enginesFloor,
+  `@types/node major (${typesNodeMajor}) must be >= engines.node floor (${enginesFloor})`
 );
 
 // --- .nvmrc must name a supported line, matching engines/CI (not EOL Node 18). ---
