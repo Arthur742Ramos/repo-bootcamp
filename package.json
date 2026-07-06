@@ -143,7 +143,7 @@
     "src/**/*.{ts,tsx}": "eslint --fix"
   },
   "dependencies": {
-    "@github/copilot-sdk": "^1.0.3",
+    "@github/copilot-sdk": "^1.0.5",
     "chalk": "^5.3.0",
     "commander": "^15.0.0",
     "cosmiconfig": "^9.0.2",
