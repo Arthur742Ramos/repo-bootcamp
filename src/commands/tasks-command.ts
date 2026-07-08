@@ -86,21 +86,23 @@ function printReport(repoName: string, tasks: DiscoveredTask[], category?: TaskC
  * `--json`. Deterministic; never invokes the LLM.
  */
 export async function runTasksCommand(repoUrl: string, opts: TasksCommandOptions): Promise<void> {
-  await withResolvedRepo(repoUrl, opts, "Task discovery failed", async (repoSource) => {
-    let category: TaskCategory | undefined;
-    if (opts.category) {
-      const requested = opts.category.toLowerCase();
-      if (!(CATEGORY_ORDER as readonly string[]).includes(requested)) {
-        console.error(
-          chalk.red(
-            `Unknown category "${opts.category}". Valid categories: ${CATEGORY_ORDER.join(", ")}.`
-          )
-        );
-        return 1;
-      }
-      category = requested as TaskCategory;
+  // Validate --category up front: it is repo-independent, so a typo should fail
+  // fast instead of cloning a remote repo before we ever look at the flag.
+  let category: TaskCategory | undefined;
+  if (opts.category) {
+    const requested = opts.category.toLowerCase();
+    if (!(CATEGORY_ORDER as readonly string[]).includes(requested)) {
+      console.error(
+        chalk.red(
+          `Unknown category "${opts.category}". Valid categories: ${CATEGORY_ORDER.join(", ")}.`
+        )
+      );
+      process.exit(1);
     }
+    category = requested as TaskCategory;
+  }
 
+  await withResolvedRepo(repoUrl, opts, "Task discovery failed", async (repoSource) => {
     const all = await discoverTasks(repoSource.path);
     const tasks = category ? all.filter((t) => t.category === category) : all;
 

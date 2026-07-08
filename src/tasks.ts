@@ -403,7 +403,7 @@ function dedupeTasks(tasks: DiscoveredTask[]): DiscoveredTask[] {
   const seen = new Set<string>();
   const out: DiscoveredTask[] = [];
   for (const task of tasks) {
-    const key = `${task.source}\u0000${task.name}\u0000${task.command}`;
+    const key = `${task.source}\u0000${task.name}`;
     if (seen.has(key)) continue;
     seen.add(key);
     out.push(task);

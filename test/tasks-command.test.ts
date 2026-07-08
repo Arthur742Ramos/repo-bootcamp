@@ -119,14 +119,16 @@ describe("runTasksCommand", () => {
     expect(parsed.tasks.map((t: { name: string }) => t.name)).toEqual(["build"]);
   });
 
-  it("exits non-zero for an unknown category", async () => {
+  it("exits non-zero for an unknown category before resolving the repo", async () => {
     const dir = await repoWith({ "package.json": JSON.stringify({ scripts: { build: "tsc" } }) });
     resolveRepoMock.mockResolvedValue(localSource(dir));
 
     await expect(runTasksCommand(dir, { category: "bogus" })).rejects.toThrow("process.exit");
     expect(errorSpy).toHaveBeenCalled();
     expect(mockExit).toHaveBeenCalledWith(1);
-    expect(mockCleanup).toHaveBeenCalled();
+    // Category is repo-independent, so validation fails fast without cloning.
+    expect(resolveRepoMock).not.toHaveBeenCalled();
+    expect(mockCleanup).not.toHaveBeenCalled();
   });
 
   it("reports an empty state when no tasks are discovered", async () => {
