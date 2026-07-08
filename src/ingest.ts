@@ -5,7 +5,7 @@
 
 import { execFile } from "child_process";
 import { promisify } from "util";
-import { readFile, rm, realpath, stat } from "fs/promises";
+import { readFile, rm, realpath } from "fs/promises";
 import { join, basename, resolve, relative, isAbsolute, dirname } from "path";
 import fg from "fast-glob";
 import { Readable } from "stream";
@@ -13,7 +13,6 @@ import type {
   RepoInfo,
   FileInfo,
   StackInfo,
-  Command,
   CIWorkflow,
   ScanResult,
   MonorepoInfo,
@@ -21,6 +20,8 @@ import type {
   RepoProvider,
 } from "./types.js";
 import { SKIP_DIRS, isPathInsideDir } from "./utils.js";
+import { readContainedFile } from "./fs-safe.js";
+import { discoverTasks, toCommands } from "./tasks.js";
 import frameworkMaps from "./data/framework-maps.json" with { type: "json" };
 
 const execFileAsync = promisify(execFile);
@@ -498,86 +499,6 @@ export async function isWorkingTreeDirty(repoPath: string): Promise<boolean> {
   }
 }
 
-/** Cap for a fixed-name metadata/doc file read via readContainedFile — guards
- *  against a committed huge file (or a /dev/zero-style device symlink) buffering
- *  unbounded memory. */
-const MAX_CONTAINED_FILE_BYTES = 10 * 1024 * 1024;
-
-/**
- * Read a repo-relative file, refusing to follow a symlink that escapes the repo.
- * A malicious repo can commit a fixed-name file (README.md, package.json,
- * Makefile, …) as a symlink to an arbitrary host path (~/.ssh/id_rsa, .env).
- * scanDirectory already drops symlink entries, but these fixed-name readers
- * bypass the scan set, so we resolve the real path and verify containment before
- * reading. Both sides are realpath'd so macOS's /var -> /private/var alias (or a
- * symlinked parent of the clone dir) doesn't cause a false rejection.
- */
-export async function readContainedFile(repoPath: string, relPath: string): Promise<string> {
-  const fullPath = join(repoPath, relPath);
-  const [realRoot, realTarget] = await Promise.all([realpath(repoPath), realpath(fullPath)]);
-  if (!isPathInsideDir(realRoot, realTarget)) {
-    throw new Error(`Refusing to read '${relPath}': symlink escapes repository root`);
-  }
-  const { size } = await stat(realTarget);
-  if (size > MAX_CONTAINED_FILE_BYTES) {
-    throw new Error(`Refusing to read '${relPath}': ${size} bytes exceeds cap`);
-  }
-  return readFile(realTarget, "utf-8");
-}
-
-async function extractPackageJsonCommands(repoPath: string): Promise<Command[]> {
-  const commands: Command[] = [];
-
-  try {
-    const content = await readContainedFile(repoPath, "package.json");
-    const pkg = JSON.parse(content);
-
-    if (pkg.scripts) {
-      for (const [name, cmd] of Object.entries(pkg.scripts)) {
-        commands.push({
-          name,
-          command: `npm run ${name}`,
-          source: "package.json",
-          description: cmd as string,
-        });
-      }
-    }
-  } catch (err: unknown) {
-    // No package.json or parse error
-    if (process.env.DEBUG) console.error("[debug]", (err as Error).message);
-  }
-
-  return commands;
-}
-
-/**
- * Extract commands from Makefile
- */
-async function extractMakefileCommands(repoPath: string): Promise<Command[]> {
-  const commands: Command[] = [];
-
-  try {
-    const content = await readContainedFile(repoPath, "Makefile");
-    // `:(?!=)` matches a real target colon but rejects `:=`/assignment lines
-    // (e.g. `CC := gcc`, `PREFIX := /usr/local`).
-    const targetPattern = /^([a-zA-Z_][a-zA-Z0-9_-]*)\s*:(?!=)/gm;
-    let match;
-
-    while ((match = targetPattern.exec(content)) !== null) {
-      commands.push({
-        name: match[1],
-        command: `make ${match[1]}`,
-        source: "Makefile",
-      });
-    }
-  } catch (err: unknown) {
-    // No Makefile
-    if (process.env.DEBUG) console.error("[debug]", (err as Error).message);
-  }
-
-  return commands;
-}
-
 /**
  * Parse the `on:` triggers of a GitHub Actions workflow, handling both the
  * inline list form (`on: [push, pull_request]`) and the block form (`on:` on
@@ -990,9 +911,9 @@ export async function scanRepo(
   const monorepo = await detectMonorepo(repoPath, files);
 
   // Extract commands
-  const pkgCommands = await extractPackageJsonCommands(repoPath);
-  const makeCommands = await extractMakefileCommands(repoPath);
-  const commands = [...pkgCommands, ...makeCommands];
+  // Delegate command extraction to the shared task-discovery engine, forcing the
+  // npm package manager so generated `npm run <name>` strings stay byte-identical.
+  const commands = toCommands(await discoverTasks(repoPath, { packageManager: "npm" }));
 
   // Parse CI workflows
   const ciWorkflows = await parseWorkflows(repoPath, files);

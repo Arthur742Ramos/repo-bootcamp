@@ -86,6 +86,10 @@
       "types": "./dist/types.d.ts",
       "import": "./dist/types.js"
     },
+    "./tasks": {
+      "types": "./dist/tasks.d.ts",
+      "import": "./dist/tasks.js"
+    },
     "./package.json": "./package.json"
   },
   "bin": {

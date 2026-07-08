@@ -5,7 +5,7 @@
 
 import { readFile } from "fs/promises";
 import { join, dirname, basename } from "path";
-import { readContainedFile } from "./ingest.js";
+import { readContainedFile } from "./fs-safe.js";
 import type { FileInfo, ChangeImpact } from "./types.js";
 import type { CyclesSummary } from "./cycles.js";
 import { escapeRegex } from "./utils.js";

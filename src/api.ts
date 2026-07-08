@@ -50,6 +50,17 @@ export {
   generateDiagrams,
 } from "./generator.js";
 export { isLocalPath, resolveRepo } from "./repo-resolver.js";
+export {
+  discoverTasks,
+  categorizeTask,
+  suggestGettingStarted,
+  toCommands,
+  CATEGORY_ORDER,
+  type DiscoveredTask,
+  type TaskCategory,
+  type PackageManager,
+  type DiscoverTasksOptions,
+} from "./tasks.js";
 export type {
   AnalyzeRepoDependencies,
   BootcampOptions,
