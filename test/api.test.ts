@@ -70,6 +70,11 @@ describe("api.ts exports", () => {
       "computeRepoHealth",
       "generateHealthDocs",
       "getHealthGrade",
+      "discoverTasks",
+      "categorizeTask",
+      "suggestGettingStarted",
+      "toCommands",
+      "CATEGORY_ORDER",
     ];
     const runtimeExports = Object.keys(api);
     for (const key of runtimeExports) {

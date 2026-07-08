@@ -150,7 +150,7 @@ Onboarding Risk: 18/100 (A) 🟢
 2. **Truly Agentic** - Claude autonomously explores codebases, not just template filling
 3. **Schema Validated** - All output is validated with Zod schemas and auto-retried on failures
 4. **Production Ready** - 1,270+ tests, TypeScript, proper error handling
-5. **Full Feature Set** - A 20-command CLI: interactive Q&A, a combined scan dashboard, health/metrics/security scoring, coupling & impact graphs, machine preflight, ownership maps, docs-drift analysis, and a web UI
+5. **Full Feature Set** - A 21-command CLI: interactive Q&A, a combined scan dashboard, health/metrics/security scoring, coupling & impact graphs, machine preflight, ownership maps, cross-ecosystem task discovery, docs-drift analysis, and a web UI
 6. **Beautiful Output** - Mermaid diagrams, structured markdown, professional formatting
 
 ### By the Numbers
@@ -273,6 +273,7 @@ The Copilot SDK transforms what would be a simple template-filler into an intell
 - **Circular Dependency Detection** - `bootcamp cycles` finds circular import groups (Tarjan SCC) on the import graph, with a `--check` CI gate
 - **Machine Preflight** - `bootcamp preflight` checks your machine against the target repo's declared toolchain (Node, package manager, Python, Go) with a per-row remedy
 - **Ownership Map** - `bootcamp owners` parses `CODEOWNERS` to answer "who do I ask?" with default owners, per-area maintainers, and top committers
+- **Task Discovery** - `bootcamp tasks` answers "how do I build/test/run this?" deterministically across ecosystems (package.json scripts, Makefile, justfile, go-task Taskfile, docker-compose, pyproject/poetry, composer.json), grouped by category with a suggested getting-started sequence (`--json`, `--category`)
 - **Style Pack Explorer** - `bootcamp styles` lists the built-in style packs and the doc sections each one enables
 - **Version & PR Comparison** - Compare refs with `--compare` or analyze pull requests with `bootcamp diff`
 - **Auto-Issue Creator** - Generate GitHub issues from starter tasks
@@ -724,6 +725,31 @@ CODEOWNERS semantics), and lists all **maintainers** plus a best-effort
 **top committers** list from whatever git history is available. Answers the
 classic Day-1 question: *"who do I ask when I'm stuck?"*
 
+### What Can I Run? (Task Discovery)
+
+```bash
+# Discover build/test/run commands across every ecosystem in the repo
+bootcamp tasks https://github.com/owner/repo
+
+# Works on local paths too
+bootcamp tasks ./my-repo
+
+# Only show one category (install, build, test, lint, dev, run, release, other)
+bootcamp tasks ./my-repo --category test
+
+# Machine-readable output (grouped tasks + suggested getting-started sequence)
+bootcamp tasks ./my-repo --json
+```
+
+Deterministically parses the task-definition files a repo already ships —
+`package.json` scripts (package-manager aware), `Makefile`, `justfile`,
+go-task `Taskfile`, `docker-compose`, `pyproject.toml` (poetry / PEP 621), and
+`composer.json` — then groups the results by category and suggests a
+first-session sequence (install → build → test → dev/run). Never invokes the
+LLM, so non-npm repos (Rust, Go, Python, PHP) finally surface runnable
+commands. Answers the most common Day-1 question: _"how do I build, test, and
+run this?"_
+
 ### Auto-Create GitHub Issues
 
 ```bash
@@ -881,6 +907,7 @@ cache ls` is an alias for `list`.
 | `bootcamp cycles <url>` | Detect circular import dependencies (`--json`, `--check`, `--max-cycles`) |
 | `bootcamp preflight <url>` | Check your machine against the repo's declared toolchain (`--json`, `--check`) |
 | `bootcamp owners <url>` | "Who do I ask?" — CODEOWNERS map + maintainers + top committers (`--json`) |
+| `bootcamp tasks <url>` | "How do I build/test/run this?" — cross-ecosystem task discovery grouped by category (`--json`, `--category`) |
 
 ### Configure & maintain
 

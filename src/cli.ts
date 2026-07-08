@@ -42,6 +42,7 @@ import { runRadarCommand } from "./commands/radar-command.js";
 import { runScanCommand } from "./commands/scan-command.js";
 import { runSecurityCommand } from "./commands/security-command.js";
 import { runStylesCommand } from "./commands/styles-command.js";
+import { runTasksCommand } from "./commands/tasks-command.js";
 import { STYLE_PACK_NAMES } from "./plugins.js";
 import { resolveOutputFormat } from "./services/config-resolution.js";
 import type { OutputFormat } from "./formatter.js";
@@ -173,6 +174,15 @@ interface OwnersActionOptions {
   branch?: string;
   json?: boolean;
   maxFiles?: string;
+  keepTemp?: boolean;
+  verbose?: boolean;
+}
+
+interface TasksActionOptions {
+  [key: string]: unknown;
+  branch?: string;
+  json?: boolean;
+  category?: string;
   keepTemp?: boolean;
   verbose?: boolean;
 }
@@ -696,6 +706,31 @@ program
       branch,
       json: opts.json || false,
       maxFiles: parseInt(maxFiles, 10),
+      keepTemp: opts.keepTemp || false,
+      verbose: opts.verbose || false,
+    });
+  });
+
+program
+  .command("tasks <repo-url>")
+  .description(
+    'Answer "what can I run?": discover build/test/run commands from package.json, Makefile, justfile, Taskfile, docker-compose, pyproject & composer (supports local paths)'
+  )
+  .option("-b, --branch <branch>", "Branch to analyze", "")
+  .option("--json", "Output the discovered tasks as JSON for machine consumption")
+  .option(
+    "-c, --category <category>",
+    "Only show tasks in this category (install, build, test, lint, dev, run, release, other)"
+  )
+  .option("--keep-temp", "Keep temporary clone directory")
+  .option("-v, --verbose", "Show detailed output")
+  .action(async (repoUrl: string, rawOpts) => {
+    const opts = getActionOptions<TasksActionOptions>(rawOpts as Command | TasksActionOptions);
+    const branch = opts.branch || getCliFlagValue(["--branch", "-b"]) || "";
+    await runTasksCommand(repoUrl, {
+      branch,
+      json: opts.json || false,
+      category: opts.category || getCliFlagValue(["--category", "-c"]) || undefined,
       keepTemp: opts.keepTemp || false,
       verbose: opts.verbose || false,
     });
