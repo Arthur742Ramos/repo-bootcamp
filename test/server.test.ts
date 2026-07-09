@@ -41,38 +41,51 @@ describe("createApp", () => {
   it("sets Content-Security-Policy header with expected directives", async () => {
     const res = await request(createApp()).get("/");
     const csp = res.headers["content-security-policy"];
+    const scriptNonce = res.text.match(/<script nonce="([^"]+)">/)?.[1];
+    const styleNonce = res.text.match(/<style nonce="([^"]+)">/)?.[1];
+
+    expect(scriptNonce).toBeTruthy();
+    expect(styleNonce).toBe(scriptNonce);
     expect(csp).toContain("default-src 'self'");
-    expect(csp).toContain("script-src 'self' 'unsafe-inline'");
-    expect(csp).toContain("style-src 'self' 'unsafe-inline'");
+    expect(csp).toContain(`script-src 'self' 'nonce-${scriptNonce}'`);
+    expect(csp).toContain(`style-src 'self' 'nonce-${styleNonce}'`);
+    expect(csp).toContain("script-src-attr 'none'");
+    expect(csp).toContain("style-src-attr 'none'");
+    expect(csp).not.toContain("'unsafe-inline'");
+  });
+
+  it("uses a fresh CSP nonce and prevents index caching", async () => {
+    const app = createApp();
+    const first = await request(app).get("/");
+    const second = await request(app).get("/");
+    const firstNonce = first.text.match(/<script nonce="([^"]+)">/)?.[1];
+    const secondNonce = second.text.match(/<script nonce="([^"]+)">/)?.[1];
+
+    expect(firstNonce).toBeTruthy();
+    expect(secondNonce).toBeTruthy();
+    expect(secondNonce).not.toBe(firstNonce);
+    expect(first.headers["cache-control"]).toBe("no-store");
   });
 
   it("allows CORS for http://localhost origins", async () => {
-    const res = await request(createApp())
-      .get("/")
-      .set("Origin", "http://localhost:8080");
+    const res = await request(createApp()).get("/").set("Origin", "http://localhost:8080");
     expect(res.headers["access-control-allow-origin"]).toBe("http://localhost:8080");
     expect(res.headers["access-control-allow-headers"]).toBe("Content-Type");
     expect(res.headers["access-control-allow-methods"]).toBe("GET, POST, OPTIONS");
   });
 
   it("allows CORS for http://127.0.0.1 origins", async () => {
-    const res = await request(createApp())
-      .get("/")
-      .set("Origin", "http://127.0.0.1:3000");
+    const res = await request(createApp()).get("/").set("Origin", "http://127.0.0.1:3000");
     expect(res.headers["access-control-allow-origin"]).toBe("http://127.0.0.1:3000");
   });
 
   it("blocks CORS for non-localhost origins", async () => {
-    const res = await request(createApp())
-      .get("/")
-      .set("Origin", "https://attacker.com");
+    const res = await request(createApp()).get("/").set("Origin", "https://attacker.com");
     expect(res.headers["access-control-allow-origin"]).toBeUndefined();
   });
 
   it("blocks CORS for origins that merely contain localhost", async () => {
-    const res = await request(createApp())
-      .get("/")
-      .set("Origin", "https://notlocalhost.evil.com");
+    const res = await request(createApp()).get("/").set("Origin", "https://notlocalhost.evil.com");
     expect(res.headers["access-control-allow-origin"]).toBeUndefined();
   });
 

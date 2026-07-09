@@ -33,7 +33,9 @@ describe("getIndexHtml", () => {
 
   it("contains the subtitle description", () => {
     const html = getIndexHtml();
-    expect(html).toContain("Generate onboarding documentation for any GitHub repository");
+    expect(html).toContain(
+      "Turn a public GitHub, GitLab, or Bitbucket repository into a Day-1 onboarding kit."
+    );
   });
 
   describe("UI elements", () => {
@@ -41,6 +43,8 @@ describe("getIndexHtml", () => {
       const html = getIndexHtml();
       expect(html).toContain('id="repoUrl"');
       expect(html).toContain('placeholder="https://github.com/owner/repo"');
+      expect(html).toContain('<label class="field-label" for="repoUrl">Repository URL</label>');
+      expect(html).toContain('id="repoUrlHint"');
     });
 
     it("has an analyze button", () => {
@@ -54,6 +58,15 @@ describe("getIndexHtml", () => {
     it("has a progress container", () => {
       const html = getIndexHtml();
       expect(html).toContain('id="progress"');
+    });
+
+    it("has a useful initial state that explains the run", () => {
+      const html = getIndexHtml();
+      expect(html).toContain('id="emptyState"');
+      expect(html).toContain("From repository to first task");
+      expect(html).toContain("the web demo always uses a shallow clone");
+      expect(html).toContain("Under 60 seconds");
+      expect(html).toContain("getElementById('emptyState').hidden = true");
     });
 
     it("has a results container", () => {
@@ -107,6 +120,12 @@ describe("getIndexHtml", () => {
       expect(html).toContain("margin: 0 auto");
     });
 
+    it("does not rely on inline style attributes", () => {
+      const html = getIndexHtml();
+      expect(html).not.toMatch(/\sstyle="/);
+      expect(html).not.toContain(".style.");
+    });
+
     it("defines modal overlay styles", () => {
       const html = getIndexHtml();
       expect(html).toContain("position: fixed");
@@ -157,6 +176,7 @@ describe("getIndexHtml", () => {
       expect(html).toContain("navigator.clipboard");
       expect(html).toContain("function legacyCopy(");
       expect(html).toContain("document.execCommand('copy')");
+      expect(html).toContain("ta.className = 'clipboard-fallback'");
     });
 
     it("races the async clipboard write against a timeout", () => {
@@ -223,6 +243,11 @@ describe("getIndexHtml", () => {
         "DEPENDENCIES",
         "SECURITY",
         "RADAR",
+        "IMPACT",
+        "METRICS",
+        "HEALTH",
+        "DIFF",
+        "ISSUES_PREVIEW",
         "diagrams",
         "repo_facts.json",
       ];
@@ -284,14 +309,14 @@ describe("getIndexHtml", () => {
       const html = getIndexHtml();
       expect(html).toContain("container.inert = true");
       expect(html).toContain("setAttribute('aria-hidden', 'true')");
-      expect(html).toContain("document.body.style.overflow = 'hidden'");
+      expect(html).toContain("document.body.classList.add('modal-open')");
     });
 
     it("reverses the isolation when the modal closes", () => {
       const html = getIndexHtml();
       expect(html).toContain("container.inert = false");
       expect(html).toContain("removeAttribute('aria-hidden')");
-      expect(html).toContain("document.body.style.overflow = ''");
+      expect(html).toContain("document.body.classList.remove('modal-open')");
     });
 
     it("builds the focus trap from a runtime query, not a hard-coded list", () => {
@@ -313,7 +338,7 @@ describe("getIndexHtml", () => {
 
     it("links an inline error region via aria-describedby instead of a blocking alert()", () => {
       const html = getIndexHtml();
-      expect(html).toContain('aria-describedby="repoUrlError"');
+      expect(html).toContain('aria-describedby="repoUrlHint repoUrlError"');
       expect(html).toContain('id="repoUrlError"');
       expect(html).toContain("function setUrlError(");
       expect(html).toContain("setUrlError('Please enter a repository URL')");
@@ -365,6 +390,37 @@ describe("getIndexHtml", () => {
       expect(html).toContain("Security Score (");
       expect(html).toContain("Onboarding Risk (");
       expect(html).toContain("'Dependencies'");
+    });
+
+    describe("request and loading resilience", () => {
+      it("handles non-JSON failures and common capacity statuses explicitly", () => {
+        const html = getIndexHtml();
+        expect(html).toContain("async function readJsonResponse(response)");
+        expect(html).toContain("status === 429");
+        expect(html).toContain("status === 503");
+        expect(html).toContain("The server returned an invalid response.");
+      });
+
+      it("marks the form busy and shows progress immediately", () => {
+        const html = getIndexHtml();
+        expect(html).toContain("form.setAttribute('aria-busy', 'true')");
+        expect(html).toContain("progress.hidden = false");
+        expect(html).toContain("addProgressItem('Starting analysis...')");
+        expect(html).toContain("removeAttribute('aria-busy')");
+      });
+
+      it("keeps file actions disabled until content loads", () => {
+        const html = getIndexHtml();
+        expect(html).toContain('id="copyBtn" disabled');
+        expect(html).toContain('id="downloadBtn" disabled');
+        expect(html).toContain("copyBtn.disabled = false");
+        expect(html).toContain("downloadBtn.disabled = false");
+      });
+
+      it("falls back to a useful description for plugin documents", () => {
+        const html = getIndexHtml();
+        expect(html).toContain("|| 'Generated document'");
+      });
     });
   });
 });

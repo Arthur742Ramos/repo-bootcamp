@@ -38,6 +38,12 @@ describe("getIndexHtml", () => {
     expect(html).toContain("function analyze()");
   });
 
+  it("escapes a supplied CSP nonce before placing it in attributes", () => {
+    const html = getIndexHtml('nonce" onload="alert(1)');
+    expect(html).toContain('nonce="nonce&quot; onload=&quot;alert(1)"');
+    expect(html).not.toContain('nonce="nonce" onload="alert(1)"');
+  });
+
   it("contains required UI elements", () => {
     const html = getIndexHtml();
     expect(html).toContain('id="repoUrl"');
@@ -119,6 +125,7 @@ describe("createApp", () => {
     expect(response.headers["x-content-type-options"]).toBe("nosniff");
     expect(response.headers["x-frame-options"]).toBe("DENY");
     expect(response.headers["content-security-policy"]).toContain("default-src 'self'");
+    expect(response.headers["content-security-policy"]).not.toContain("'unsafe-inline'");
   });
 
   it("rejects analyze requests without repoUrl", async () => {
@@ -138,7 +145,7 @@ describe("createApp", () => {
       .send({ repoUrl: "not-a-url" });
 
     expect(response.status).toBe(400);
-    expect(response.body.error).toBeTruthy();
+    expect(response.body.error).toBe("Enter a public GitHub, GitLab, or Bitbucket repository.");
   });
 
   it("rejects non-object analyze request bodies", async () => {

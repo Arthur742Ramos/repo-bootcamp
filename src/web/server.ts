@@ -6,6 +6,8 @@
 import express, { Request, Response } from "express";
 import chalk from "chalk";
 import helmet from "helmet";
+import { randomBytes } from "node:crypto";
+import type { ServerResponse } from "node:http";
 
 import { getIndexHtml } from "./templates.js";
 import { registerRoutes, startJobPruner, stopJobPruner } from "./routes.js";
@@ -17,18 +19,40 @@ const DEFAULT_PORT = 3000;
 // `--host` override can be wired through this parameter for opt-in exposure.
 const DEFAULT_HOST = "127.0.0.1";
 
+function getNonceDirective(res: ServerResponse): string {
+  if (!("locals" in res)) {
+    throw new Error("CSP nonce is unavailable");
+  }
+  const locals = res.locals;
+  if (
+    typeof locals !== "object" ||
+    locals === null ||
+    !("cspNonce" in locals) ||
+    typeof locals.cspNonce !== "string"
+  ) {
+    throw new Error("CSP nonce is unavailable");
+  }
+  return `'nonce-${locals.cspNonce}'`;
+}
+
 /**
  * Create Express app
  */
 export function createApp(): express.Application {
   const app = express();
+  app.use((_req, res, next) => {
+    res.locals.cspNonce = randomBytes(32).toString("base64");
+    next();
+  });
   app.use(
     helmet({
       contentSecurityPolicy: {
         directives: {
           defaultSrc: ["'self'"],
-          scriptSrc: ["'self'", "'unsafe-inline'"],
-          styleSrc: ["'self'", "'unsafe-inline'"],
+          scriptSrc: ["'self'", (_req, res) => getNonceDirective(res)],
+          scriptSrcAttr: ["'none'"],
+          styleSrc: ["'self'", (_req, res) => getNonceDirective(res)],
+          styleSrcAttr: ["'none'"],
           imgSrc: ["'self'", "data:"],
           connectSrc: ["'self'"],
         },
@@ -58,8 +82,9 @@ export function createApp(): express.Application {
   });
 
   // Serve static HTML
-  app.get("/", (req: Request, res: Response) => {
-    res.send(getIndexHtml());
+  app.get("/", (_req: Request, res: Response) => {
+    res.setHeader("Cache-Control", "no-store");
+    res.send(getIndexHtml(res.locals.cspNonce));
   });
 
   registerRoutes(app);

@@ -27,21 +27,21 @@ async function setupRoutes(overrides: SetupOverrides = {}) {
   const scanRepositoryFiles = overrides.scanRepositoryFilesError
     ? vi.fn().mockRejectedValue(overrides.scanRepositoryFilesError)
     : vi.fn().mockResolvedValue({
-      files: [{ path: "src/index.ts", size: 10, isDirectory: false }],
-      stack: {
-        languages: ["TypeScript"],
-        frameworks: [],
-        buildSystem: "npm",
-        packageManager: "npm",
-        hasDocker: false,
-        hasCi: true,
-      },
-      commands: [],
-      ciWorkflows: [],
-      readme: "# repo",
-      contributing: null,
-      keySourceFiles: new Map([["src/index.ts", "export const x = 1;"]]),
-    });
+        files: [{ path: "src/index.ts", size: 10, isDirectory: false }],
+        stack: {
+          languages: ["TypeScript"],
+          frameworks: [],
+          buildSystem: "npm",
+          packageManager: "npm",
+          hasDocker: false,
+          hasCi: true,
+        },
+        commands: [],
+        ciWorkflows: [],
+        readme: "# repo",
+        contributing: null,
+        keySourceFiles: new Map([["src/index.ts", "export const x = 1;"]]),
+      });
   const cleanupRepository = overrides.cleanupRepositoryError
     ? vi.fn().mockRejectedValue(overrides.cleanupRepositoryError)
     : vi.fn().mockResolvedValue(undefined);
@@ -61,7 +61,7 @@ async function setupRoutes(overrides: SetupOverrides = {}) {
   const prepareOutputDocuments = vi.fn().mockResolvedValue({
     documents: [
       { name: "BOOTCAMP.md", content: "# Bootcamp" },
-      { name: "repo_facts.json", content: "{\"ok\":true}" },
+      { name: "repo_facts.json", content: '{"ok":true}' },
     ],
     facts,
     security: { score: 82 },
@@ -73,6 +73,7 @@ async function setupRoutes(overrides: SetupOverrides = {}) {
   const applyOutputFormat = vi.fn().mockImplementation((docs) => docs);
   const readFile = vi.fn().mockResolvedValue("# Bootcamp");
   const mkdir = vi.fn().mockResolvedValue(undefined);
+  const rm = vi.fn().mockResolvedValue(undefined);
 
   vi.doMock("../src/ingest.js", () => ({
     parseGitHubUrl,
@@ -93,7 +94,8 @@ async function setupRoutes(overrides: SetupOverrides = {}) {
     writeGeneratedOutputs,
   }));
   vi.doMock("../src/formatter.js", async () => {
-    const actual = await vi.importActual<typeof import("../src/formatter.js")>("../src/formatter.js");
+    const actual =
+      await vi.importActual<typeof import("../src/formatter.js")>("../src/formatter.js");
     return {
       ...actual,
       applyOutputFormat,
@@ -105,11 +107,13 @@ async function setupRoutes(overrides: SetupOverrides = {}) {
       ...actual,
       readFile,
       mkdir,
+      rm,
     };
   });
 
   const { default: express } = await import("express");
-  const { registerRoutes, startJobPruner, stopJobPruner } = await import("../src/web/routes.js");
+  const { registerRoutes, pruneExpiredJobs, startJobPruner, stopJobPruner } =
+    await import("../src/web/routes.js");
   const app = express();
   app.use(express.json());
   registerRoutes(app);
@@ -126,7 +130,9 @@ async function setupRoutes(overrides: SetupOverrides = {}) {
       writeGeneratedOutputs,
       applyOutputFormat,
       readFile,
+      rm,
     },
+    pruneExpiredJobs,
     startJobPruner,
     stopJobPruner,
   };
@@ -158,7 +164,9 @@ describe("web routes analysis lifecycle", () => {
       .send({ repoUrl: "https://github.com/owner/repo" });
 
     expect(startResponse.status).toBe(200);
-    expect(startResponse.body.jobId).toBeTruthy();
+    expect(startResponse.body.jobId).toMatch(
+      /^job_[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/
+    );
 
     const jobId = startResponse.body.jobId as string;
     const statusResponse = await waitForTerminalStatus(http, jobId);
@@ -167,7 +175,7 @@ describe("web routes analysis lifecycle", () => {
 
     const streamResponse = await http.get(`/api/jobs/${jobId}/stream`);
     expect(streamResponse.status).toBe(200);
-    expect(streamResponse.text).toContain("\"type\":\"complete\"");
+    expect(streamResponse.text).toContain('"type":"complete"');
 
     const fileResponse = await http.get(`/api/jobs/${jobId}/files/BOOTCAMP.md`);
     expect(fileResponse.status).toBe(200);
@@ -212,7 +220,7 @@ describe("web routes analysis lifecycle", () => {
 
     const streamResponse = await http.get(`/api/jobs/${jobId}/stream`);
     expect(streamResponse.status).toBe(200);
-    expect(streamResponse.text).toContain("\"type\":\"error\"");
+    expect(streamResponse.text).toContain('"type":"error"');
 
     expect(errorSpy).toHaveBeenCalledWith(
       expect.stringContaining("[web] Failed to clean up temporary repository:")
@@ -276,5 +284,23 @@ describe("web routes analysis lifecycle", () => {
       stopJobPruner();
       stopJobPruner();
     }).not.toThrow();
+  });
+
+  it("removes expired jobs and their generated artifacts", async () => {
+    const { app, mocks, pruneExpiredJobs } = await setupRoutes();
+    const http = request(app);
+    const startResponse = await http
+      .post("/api/analyze")
+      .send({ repoUrl: "https://github.com/owner/repo" });
+    const jobId = startResponse.body.jobId as string;
+    await waitForTerminalStatus(http, jobId);
+
+    await pruneExpiredJobs(Date.now() + 31 * 60 * 1000);
+
+    expect(mocks.rm).toHaveBeenCalledWith(expect.stringContaining(jobId), {
+      recursive: true,
+      force: true,
+    });
+    expect((await http.get(`/api/jobs/${jobId}`)).status).toBe(404);
   });
 });
