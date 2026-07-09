@@ -62,7 +62,10 @@ async function createFixtureRepo(baseDir: string): Promise<string> {
   );
 
   execFileSync("git", ["init", "-b", "main"], { cwd: repoDir, stdio: "ignore" });
-  execFileSync("git", ["config", "user.email", "test@example.com"], { cwd: repoDir, stdio: "ignore" });
+  execFileSync("git", ["config", "user.email", "test@example.com"], {
+    cwd: repoDir,
+    stdio: "ignore",
+  });
   execFileSync("git", ["config", "user.name", "Test User"], { cwd: repoDir, stdio: "ignore" });
   execFileSync("git", ["add", "-A"], { cwd: repoDir, stdio: "ignore" });
   execFileSync("git", ["commit", "-m", "init", "--no-gpg-sign"], { cwd: repoDir, stdio: "ignore" });
@@ -182,7 +185,10 @@ test.describe("web UI", () => {
     tempDirs.length = 0;
   });
 
-  test("submits analysis, streams progress, and opens generated files in the browser", async ({ page, context }) => {
+  test("submits analysis, streams progress, and opens generated files in the browser", async ({
+    page,
+    context,
+  }) => {
     // The modal Copy button uses navigator.clipboard.writeText; grant the
     // permission up front so the primary path is exercised (a fallback exists).
     await context.grantPermissions(["clipboard-read", "clipboard-write"]);
@@ -226,10 +232,15 @@ test.describe("web UI", () => {
     await page.goto(baseUrl);
 
     await expect(page.getByRole("heading", { name: "Repo Bootcamp" })).toBeVisible();
+    await expect(
+      page.getByRole("heading", { name: "From repository to first task" })
+    ).toBeVisible();
+    await expect(page.getByLabel("Repository URL")).toBeVisible();
     await page.locator("#repoUrl").fill(repoUrl);
     await page.locator("#analyzeBtn").click();
 
     await expect(page.locator("#progress")).toBeVisible();
+    await expect(page.locator("#emptyState")).toBeHidden();
     await expect(page.locator("#progress")).toContainText("Parsing repository URL...");
     await expect(page.locator("#progress")).toContainText("Bootcamp generated successfully!", {
       timeout: 90_000,

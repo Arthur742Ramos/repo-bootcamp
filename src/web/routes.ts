@@ -1,8 +1,9 @@
 import type { Application, Request, Response } from "express";
 import { EventEmitter } from "events";
 import rateLimit, { ipKeyGenerator } from "express-rate-limit";
-import { mkdir, readFile } from "fs/promises";
-import { join, resolve } from "path";
+import { randomUUID } from "node:crypto";
+import { mkdir, readFile, rm } from "fs/promises";
+import { basename, dirname, join, resolve } from "path";
 
 import { applyOutputFormat, type OutputFormat } from "../formatter.js";
 import { parseGitHubUrl } from "../ingest.js";
@@ -55,20 +56,54 @@ const MAX_JOBS = 100; // Prevent unbounded memory growth
 
 let pruneTimer: NodeJS.Timeout | null = null;
 
-function pruneExpiredJobs(): void {
-  const now = Date.now();
+async function removeJob(id: string, job: AnalysisJob): Promise<void> {
+  jobs.delete(id);
+
+  if (!job.result?.outputDir) {
+    return;
+  }
+
+  const outputRoot = resolve(process.cwd(), ".bootcamp-output");
+  const jobRoot = resolve(dirname(job.result.outputDir));
+  if (
+    jobRoot === outputRoot ||
+    !isPathInsideDir(outputRoot, jobRoot) ||
+    basename(jobRoot) !== job.id
+  ) {
+    console.error(`[web] Refusing to remove unexpected job output path for ${job.id}`);
+    return;
+  }
+
+  try {
+    await rm(jobRoot, { recursive: true, force: true });
+  } catch (error: unknown) {
+    console.error(
+      `[web] Failed to remove output for expired job ${job.id}: ${getErrorMessage(error, "Unknown cleanup error")}`
+    );
+  }
+}
+
+export async function pruneExpiredJobs(now: number = Date.now()): Promise<void> {
+  const removals: Promise<void>[] = [];
   for (const [id, job] of jobs) {
     if (job.completedAt && now - job.completedAt > JOB_TTL_MS) {
-      jobs.delete(id);
+      removals.push(removeJob(id, job));
     }
   }
+  await Promise.all(removals);
 }
 
 export function startJobPruner(): void {
   if (pruneTimer) {
     return;
   }
-  pruneTimer = setInterval(pruneExpiredJobs, JOB_TTL_MS);
+  pruneTimer = setInterval(() => {
+    void pruneExpiredJobs().catch((error: unknown) => {
+      console.error(
+        `[web] Failed to prune expired jobs: ${getErrorMessage(error, "Unknown cleanup error")}`
+      );
+    });
+  }, JOB_TTL_MS);
   pruneTimer.unref();
 }
 
@@ -84,7 +119,7 @@ export function stopJobPruner(): void {
  * Generate unique job ID
  */
 function generateJobId(): string {
-  return `job_${Date.now()}_${Math.random().toString(36).substring(7)}`;
+  return `job_${randomUUID()}`;
 }
 
 // Client-supplied analysis options are validated/allowlisted here rather than
@@ -313,7 +348,7 @@ async function runAnalysis(job: AnalysisJob, options: Record<string, unknown>): 
 }
 
 export function registerRoutes(app: Application): void {
-  const limiterKeyPrefix = `web-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+  const limiterKeyPrefix = `web-${randomUUID()}`;
   const analysisEndpointRateLimit = rateLimit({
     windowMs: 15 * 60 * 1000,
     limit: 5,
@@ -360,8 +395,10 @@ export function registerRoutes(app: Application): void {
 
         try {
           parseGitHubUrl(repoUrl); // Validate URL
-        } catch (error: unknown) {
-          res.status(400).json({ error: getErrorMessage(error, "Invalid repository URL") });
+        } catch {
+          res.status(400).json({
+            error: "Enter a public GitHub, GitLab, or Bitbucket repository.",
+          });
           return;
         }
 
@@ -384,7 +421,10 @@ export function registerRoutes(app: Application): void {
             }
           }
           if (oldestCompletedId) {
-            jobs.delete(oldestCompletedId);
+            const oldestCompletedJob = jobs.get(oldestCompletedId);
+            if (oldestCompletedJob) {
+              await removeJob(oldestCompletedId, oldestCompletedJob);
+            }
           } else {
             // All jobs are still running — reject to prevent OOM
             res.status(503).json({ error: "Server at capacity, try again later" });
@@ -504,10 +544,7 @@ export function registerRoutes(app: Application): void {
         res.setHeader("Content-Type", "text/plain; charset=utf-8");
         res.send(content);
       } catch (error: unknown) {
-        console.error(
-          `[web] Failed to read generated file "${filename}" for job ${jobId}:`,
-          error
-        );
+        console.error(`[web] Failed to read generated file "${filename}" for job ${jobId}:`, error);
         res.status(500).json({ error: "Failed to read generated file" });
       }
     }

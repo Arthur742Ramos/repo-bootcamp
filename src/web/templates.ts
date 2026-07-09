@@ -1,14 +1,24 @@
 /**
  * Inline HTML for the demo page
  */
-export function getIndexHtml(): string {
+function escapeHtmlAttribute(value: string): string {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;");
+}
+
+export function getIndexHtml(nonce?: string): string {
+  const nonceAttribute = nonce ? ` nonce="${escapeHtmlAttribute(nonce)}"` : "";
+
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Repo Bootcamp</title>
-  <style>
+  <style${nonceAttribute}>
     :root {
       --canvas: #0d1117;
       --surface: #161b22;
@@ -45,6 +55,7 @@ export function getIndexHtml(): string {
       padding: 2rem;
       -webkit-font-smoothing: antialiased;
     }
+    body.modal-open { overflow: hidden; }
     .container { max-width: 900px; margin: 0 auto; }
     .sr-only {
       position: absolute;
@@ -66,11 +77,29 @@ export function getIndexHtml(): string {
       text-wrap: balance;
       margin-bottom: 0.25rem;
     }
-    .subtitle { color: var(--ink-muted); margin-bottom: 2rem; max-width: 70ch; }
-    .analyze-form { margin-bottom: 2rem; }
+    .subtitle { color: var(--ink-muted); max-width: 70ch; text-wrap: pretty; }
+    .analyze-form { margin: 2rem 0; }
+    .field-label { display: block; margin-bottom: 0.5rem; color: var(--ink); font-size: 0.8125rem; font-weight: 600; }
     .input-group { display: flex; gap: 0.75rem; }
+    .field-hint { color: var(--ink-muted); font-size: 0.8125rem; margin-top: 0.5rem; }
     .field-error { color: var(--danger); font-size: 0.8125rem; margin-top: 0.5rem; }
     .field-error[hidden] { display: none; }
+    .empty-state {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--r-md);
+      padding: 1.5rem;
+    }
+    .empty-state h2 { margin-bottom: 0.5rem; }
+    .empty-state > p { color: var(--ink-muted); max-width: 70ch; text-wrap: pretty; }
+    .empty-details {
+      display: grid;
+      grid-template-columns: max-content minmax(0, 1fr);
+      gap: 0.6rem 1rem;
+      margin-top: 1.25rem;
+    }
+    .empty-details dt { color: var(--ink); font-family: var(--font-mono); font-size: 0.8125rem; font-weight: 600; }
+    .empty-details dd { color: var(--ink-muted); font-size: 0.8125rem; }
     input {
       flex: 1;
       min-width: 0;
@@ -116,13 +145,15 @@ export function getIndexHtml(): string {
       font-family: var(--font-mono);
       font-size: 0.875rem;
     }
+    .progress[hidden] { display: none; }
     .progress-item { padding: 0.35rem 0; display: flex; align-items: center; gap: 0.5rem; color: var(--ink-muted); }
     .progress-item.phase { color: var(--accent); font-weight: 600; }
     .progress-item.success { color: var(--success); }
+    .progress-item.warning { color: var(--warning); }
     .progress-item.error { color: var(--danger); }
     .results { display: none; }
     .results.show { display: block; }
-    #filesHeading { border-radius: var(--r-sm); }
+    #filesHeading { border-radius: var(--r-sm); margin-bottom: 1rem; }
     #filesHeading:focus { outline: none; }
     #filesHeading:focus-visible { box-shadow: 0 0 0 2px var(--canvas), 0 0 0 4px var(--accent); }
     .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 1rem; margin-bottom: 2rem; }
@@ -165,8 +196,9 @@ export function getIndexHtml(): string {
       font-weight: 600;
       transition: border-color var(--dur-fast) var(--ease);
     }
-    .icon-btn:hover { border-color: var(--accent); }
+    .icon-btn:not(:disabled):hover { border-color: var(--accent); }
     .icon-btn:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--accent); }
+    .icon-btn:disabled { border-color: var(--border); color: var(--ink-subtle); cursor: not-allowed; }
     .icon-btn.copied { border-color: var(--success); color: var(--success); }
     .close {
       background: none;
@@ -192,10 +224,19 @@ export function getIndexHtml(): string {
       line-height: 1.5;
       color: var(--ink);
     }
+    .clipboard-fallback { position: fixed; opacity: 0; pointer-events: none; }
     @media (max-width: 640px) {
       body { padding: 1.25rem; }
       .input-group { flex-direction: column; }
       #analyzeBtn { width: 100%; }
+      .modal { padding: 0.75rem; }
+      .modal-content { padding: 1rem; }
+      .modal-header { align-items: flex-start; flex-direction: column; }
+      .modal-actions { width: 100%; }
+      .icon-btn { flex: 1; }
+      .close { margin-left: auto; }
+      .empty-details { grid-template-columns: 1fr; gap: 0.25rem; }
+      .empty-details dd { margin-bottom: 0.5rem; }
     }
     @media (prefers-reduced-motion: reduce) {
       * { transition: none !important; animation: none !important; scroll-behavior: auto !important; }
@@ -205,10 +246,10 @@ export function getIndexHtml(): string {
 <body>
   <div class="container">
     <h1>Repo Bootcamp</h1>
-    <p class="subtitle">Generate onboarding documentation for any GitHub repository</p>
+    <p class="subtitle">Turn a public GitHub, GitLab, or Bitbucket repository into a Day-1 onboarding kit.</p>
 
     <form class="analyze-form" id="analyzeForm">
-      <label class="sr-only" for="repoUrl">Repository URL</label>
+      <label class="field-label" for="repoUrl">Repository URL</label>
       <div class="input-group">
         <input
           type="text"
@@ -218,19 +259,33 @@ export function getIndexHtml(): string {
           autocapitalize="none"
           autocorrect="off"
           spellcheck="false"
-          aria-describedby="repoUrlError"
+          aria-describedby="repoUrlHint repoUrlError"
         />
         <button type="submit" id="analyzeBtn">Analyze</button>
       </div>
+      <p id="repoUrlHint" class="field-hint">HTTPS, SSH, scheme-less URLs, and owner/repo shorthand are supported.</p>
       <p id="repoUrlError" class="field-error" role="alert" hidden></p>
     </form>
 
-    <div class="progress" id="progress" style="display: none;" role="log" aria-live="polite"></div>
+    <div class="progress" id="progress" hidden role="log" aria-live="polite"></div>
     <div id="statusMsg" role="status" class="sr-only"></div>
+
+    <section class="empty-state" id="emptyState" aria-labelledby="emptyStateTitle">
+      <h2 id="emptyStateTitle">From repository to first task</h2>
+      <p>Repo Bootcamp investigates the codebase, streams each phase, and returns an interconnected onboarding kit you can inspect before downloading.</p>
+      <dl class="empty-details">
+        <dt>Input</dt>
+        <dd>A public repository; the web demo always uses a shallow clone.</dd>
+        <dt>Output</dt>
+        <dd>Setup, architecture, codemap, starter tasks, security, health, metrics, and diagrams.</dd>
+        <dt>Typical run</dt>
+        <dd>Under 60 seconds, with progress visible throughout.</dd>
+      </dl>
+    </section>
 
     <div class="results" id="results">
       <div class="stats" id="stats"></div>
-      <h2 id="filesHeading" tabindex="-1" style="margin-bottom: 1rem;">Generated Files</h2>
+      <h2 id="filesHeading" tabindex="-1">Generated Files</h2>
       <div class="files" id="files"></div>
     </div>
   </div>
@@ -241,21 +296,22 @@ export function getIndexHtml(): string {
     role="dialog"
     aria-modal="true"
     aria-labelledby="modalTitle"
+    aria-hidden="true"
   >
     <div class="modal-content">
       <div class="modal-header">
         <h2 id="modalTitle"></h2>
         <div class="modal-actions">
-          <button class="icon-btn" type="button" id="copyBtn">Copy</button>
-          <button class="icon-btn" type="button" id="downloadBtn">Download</button>
+          <button class="icon-btn" type="button" id="copyBtn" disabled>Copy</button>
+          <button class="icon-btn" type="button" id="downloadBtn" disabled>Download</button>
           <button class="close" type="button" id="closeBtn" aria-label="Close file preview">&times;</button>
         </div>
       </div>
-      <pre id="modalContent"></pre>
+      <pre id="modalContent" tabindex="0"></pre>
     </div>
   </div>
 
-  <script>
+  <script${nonceAttribute}>
     let currentJobId = null;
     let currentFile = null;
     let lastFocused = null;
@@ -270,6 +326,11 @@ export function getIndexHtml(): string {
       'DEPENDENCIES': 'Dependency graph',
       'SECURITY': 'Security analysis',
       'RADAR': 'Tech radar',
+      'IMPACT': 'Change impact map',
+      'METRICS': 'Codebase metrics',
+      'HEALTH': 'Onboarding readiness',
+      'DIFF': 'Branch comparison',
+      'ISSUES_PREVIEW': 'Issue creation preview',
       'diagrams': 'Mermaid diagrams',
       'repo_facts.json': 'Structured data',
     };
@@ -279,6 +340,7 @@ export function getIndexHtml(): string {
       if (filename.endsWith('.html')) return filename.slice(0, -'.html'.length);
       if (filename.endsWith('.md')) return filename.slice(0, -'.md'.length);
       if (filename.endsWith('.mmd')) return filename.slice(0, -'.mmd'.length);
+      if (filename.endsWith('.pdf')) return filename.slice(0, -'.pdf'.length);
       return filename;
     }
 
@@ -305,6 +367,32 @@ export function getIndexHtml(): string {
       }
     }
 
+    function requestErrorMessage(status) {
+      if (status === 429) return 'Too many requests. Wait a moment and try again.';
+      if (status === 503) return 'The server is at capacity. Try again shortly.';
+      return 'Request failed (' + status + '). Please try again.';
+    }
+
+    async function readJsonResponse(response) {
+      let payload;
+      try {
+        payload = await response.json();
+      } catch (error) {
+        throw new Error(
+          response.ok ? 'The server returned an invalid response.' : requestErrorMessage(response.status)
+        );
+      }
+      if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+        throw new Error('The server returned an invalid response.');
+      }
+      if (!response.ok) {
+        throw new Error(
+          typeof payload.error === 'string' ? payload.error : requestErrorMessage(response.status)
+        );
+      }
+      return payload;
+    }
+
     async function analyze() {
       const repoUrl = document.getElementById('repoUrl').value.trim();
       // Loose non-empty check only: parseGitHubUrl accepts owner/repo, SSH, and
@@ -319,13 +407,19 @@ export function getIndexHtml(): string {
       setUrlError('');
 
       const btn = document.getElementById('analyzeBtn');
+      const form = document.getElementById('analyzeForm');
+      const status = document.getElementById('statusMsg');
+      form.setAttribute('aria-busy', 'true');
       btn.disabled = true;
       btn.textContent = 'Analyzing...';
 
       const progress = document.getElementById('progress');
-      progress.style.display = 'block';
+      progress.hidden = false;
       progress.textContent = '';
+      addProgressItem('Starting analysis...');
+      status.textContent = 'Starting repository analysis';
 
+      document.getElementById('emptyState').hidden = true;
       document.getElementById('results').classList.remove('show');
 
       try {
@@ -335,15 +429,18 @@ export function getIndexHtml(): string {
           body: JSON.stringify({ repoUrl }),
         });
 
-        const { jobId, error } = await res.json();
-        if (error) throw new Error(error);
+        const payload = await readJsonResponse(res);
+        if (typeof payload.jobId !== 'string' || !payload.jobId) {
+          throw new Error('The server did not return a job ID.');
+        }
 
-        currentJobId = jobId;
-        streamProgress(jobId);
+        currentJobId = payload.jobId;
+        streamProgress(payload.jobId);
       } catch (err) {
-        addProgressItem(err instanceof Error ? err.message : String(err), 'error');
-        btn.disabled = false;
-        btn.textContent = 'Analyze';
+        const message = err instanceof Error ? err.message : String(err);
+        addProgressItem(message, 'error');
+        status.textContent = 'Analysis could not start: ' + message;
+        resetButton();
       }
     }
 
@@ -352,7 +449,25 @@ export function getIndexHtml(): string {
       let settled = false;
 
       evtSource.onmessage = (event) => {
-        const data = JSON.parse(event.data);
+        let data;
+        try {
+          data = JSON.parse(event.data);
+        } catch (error) {
+          settled = true;
+          evtSource.close();
+          addProgressItem('The server sent invalid progress data.', 'error');
+          document.getElementById('statusMsg').textContent = 'Analysis stopped because progress data was invalid';
+          resetButton();
+          return;
+        }
+        if (!data || typeof data.type !== 'string' || typeof data.message !== 'string') {
+          settled = true;
+          evtSource.close();
+          addProgressItem('The server sent an invalid progress event.', 'error');
+          document.getElementById('statusMsg').textContent = 'Analysis stopped because a progress event was invalid';
+          resetButton();
+          return;
+        }
 
         if (data.type === 'phase') {
           addProgressItem(data.message, 'phase');
@@ -367,6 +482,7 @@ export function getIndexHtml(): string {
         } else if (data.type === 'error') {
           settled = true;
           addProgressItem(data.message, 'error');
+          document.getElementById('statusMsg').textContent = 'Analysis failed: ' + data.message;
           evtSource.close();
           resetButton();
         }
@@ -381,7 +497,8 @@ export function getIndexHtml(): string {
         // visible retry notice, then poll the job status until it finishes.
         settled = true;
         evtSource.close();
-        addProgressItem('Connection lost — retrying…', 'error');
+        addProgressItem('Connection lost — retrying…', 'warning');
+        document.getElementById('statusMsg').textContent = 'Connection lost. Retrying analysis status.';
         pollJobStatus(jobId);
       };
     }
@@ -394,25 +511,26 @@ export function getIndexHtml(): string {
         attempts++;
         try {
           const res = await fetch('/api/jobs/' + jobId);
-          if (res.ok) {
-            const job = await res.json();
-            if (job.status === 'complete' && job.result) {
-              addProgressItem('Reconnected — analysis complete.', 'success');
-              showResults(job.result);
-              resetButton();
-              return;
-            }
-            if (job.status === 'error') {
-              addProgressItem(job.error || 'Analysis failed', 'error');
-              resetButton();
-              return;
-            }
+          const job = await readJsonResponse(res);
+          if (job.status === 'complete' && job.result) {
+            addProgressItem('Reconnected — analysis complete.', 'success');
+            showResults(job.result);
+            resetButton();
+            return;
+          }
+          if (job.status === 'error') {
+            const message = typeof job.error === 'string' ? job.error : 'Analysis failed';
+            addProgressItem(message, 'error');
+            document.getElementById('statusMsg').textContent = 'Analysis failed: ' + message;
+            resetButton();
+            return;
           }
         } catch (err) {
           // Transient failure — keep polling until the attempt ceiling.
         }
         if (attempts >= maxAttempts) {
           addProgressItem('Gave up waiting for the server to respond.', 'error');
+          document.getElementById('statusMsg').textContent = 'Analysis status could not be recovered';
           resetButton();
           return;
         }
@@ -426,7 +544,17 @@ export function getIndexHtml(): string {
       const progress = document.getElementById('progress');
       const item = document.createElement('div');
       item.className = 'progress-item ' + type;
-      item.textContent = (type === 'phase' ? '▶ ' : type === 'success' ? '✓ ' : type === 'error' ? '✗ ' : '  ') + message;
+      item.textContent = (
+        type === 'phase'
+          ? '▶ '
+          : type === 'success'
+            ? '✓ '
+            : type === 'warning'
+              ? '! '
+              : type === 'error'
+                ? '✗ '
+                : '  '
+      ) + message;
       progress.appendChild(item);
       progress.scrollTop = progress.scrollHeight;
     }
@@ -464,7 +592,7 @@ export function getIndexHtml(): string {
 
       const desc = document.createElement('div');
       desc.className = 'file-desc';
-      desc.textContent = fileDescriptions[getFileKey(filename)] || '';
+      desc.textContent = fileDescriptions[getFileKey(filename)] || 'Generated document';
 
       file.appendChild(name);
       file.appendChild(desc);
@@ -472,6 +600,11 @@ export function getIndexHtml(): string {
     }
 
     function showResults(data) {
+      if (!data || typeof data !== 'object' || !data.stats || !Array.isArray(data.files)) {
+        addProgressItem('Analysis finished, but the result payload was invalid.', 'error');
+        document.getElementById('statusMsg').textContent = 'Analysis returned invalid results';
+        return;
+      }
       const stats = document.getElementById('stats');
       stats.textContent = '';
       addStatCard(stats, data.stats.securityScore, 'Security Score (' + data.stats.securityGrade + ')', gradeTone(data.stats.securityGrade));
@@ -512,11 +645,14 @@ export function getIndexHtml(): string {
       currentFile = null;
       const modalContent = document.getElementById('modalContent');
       const copyBtn = document.getElementById('copyBtn');
+      const downloadBtn = document.getElementById('downloadBtn');
       document.getElementById('modalTitle').textContent = filename;
       modalContent.classList.remove('load-error');
       modalContent.textContent = 'Loading…';
       copyBtn.textContent = 'Copy';
       copyBtn.classList.remove('copied');
+      copyBtn.disabled = true;
+      downloadBtn.disabled = true;
       openModal();
 
       try {
@@ -531,6 +667,8 @@ export function getIndexHtml(): string {
         const content = await res.text();
         currentFile = { name: filename, content };
         modalContent.textContent = content;
+        copyBtn.disabled = false;
+        downloadBtn.disabled = false;
       } catch (err) {
         modalContent.classList.add('load-error');
         modalContent.textContent =
@@ -541,8 +679,7 @@ export function getIndexHtml(): string {
     function legacyCopy(text) {
       const ta = document.createElement('textarea');
       ta.value = text;
-      ta.style.position = 'fixed';
-      ta.style.opacity = '0';
+      ta.className = 'clipboard-fallback';
       document.body.appendChild(ta);
       ta.select();
       let ok = false;
@@ -554,6 +691,8 @@ export function getIndexHtml(): string {
     async function copyFile() {
       if (!currentFile) return;
       const btn = document.getElementById('copyBtn');
+      btn.disabled = true;
+      btn.textContent = 'Copying…';
       let copied = false;
       try {
         if (navigator.clipboard && navigator.clipboard.writeText) {
@@ -576,6 +715,7 @@ export function getIndexHtml(): string {
       setTimeout(() => {
         btn.textContent = 'Copy';
         btn.classList.remove('copied');
+        btn.disabled = currentFile === null;
       }, 1500);
     }
 
@@ -603,20 +743,25 @@ export function getIndexHtml(): string {
         container.inert = true;
         container.setAttribute('aria-hidden', 'true');
       }
-      document.body.style.overflow = 'hidden';
-      document.getElementById('modal').classList.add('show');
+      document.body.classList.add('modal-open');
+      const modal = document.getElementById('modal');
+      modal.classList.add('show');
+      modal.setAttribute('aria-hidden', 'false');
       document.getElementById('closeBtn').focus();
     }
 
     function closeModal() {
-      document.getElementById('modal').classList.remove('show');
+      const modal = document.getElementById('modal');
+      if (!modal.classList.contains('show')) return;
+      modal.classList.remove('show');
+      modal.setAttribute('aria-hidden', 'true');
       const container = document.querySelector('.container');
       if (container) {
         // Un-inert before restoring focus, since lastFocused lives inside .container.
         container.inert = false;
         container.removeAttribute('aria-hidden');
       }
-      document.body.style.overflow = '';
+      document.body.classList.remove('modal-open');
       if (lastFocused && typeof lastFocused.focus === 'function') {
         lastFocused.focus();
       }
@@ -627,6 +772,7 @@ export function getIndexHtml(): string {
       const btn = document.getElementById('analyzeBtn');
       btn.disabled = false;
       btn.textContent = 'Analyze';
+      document.getElementById('analyzeForm').removeAttribute('aria-busy');
     }
 
     document.getElementById('analyzeForm').addEventListener('submit', (event) => {
@@ -671,7 +817,9 @@ export function getIndexHtml(): string {
     });
 
     document.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape') closeModal();
+      if (e.key === 'Escape' && document.getElementById('modal').classList.contains('show')) {
+        closeModal();
+      }
     });
   </script>
 </body>
