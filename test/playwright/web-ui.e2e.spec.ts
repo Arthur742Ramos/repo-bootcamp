@@ -248,6 +248,11 @@ test.describe("web UI", () => {
 
     await expect(page.locator("#analyzeBtn")).toHaveText("Analyze");
     await expect(page.locator("#results")).toHaveClass(/show/);
+    await expect(page.locator("#resultsHeading")).toBeFocused();
+    await expect(page.locator("#scoreGuide")).toContainText("Higher security scores are better");
+    await expect(page.locator("#scoreGuide")).toContainText(
+      "lower onboarding risk scores are better"
+    );
     await expect(page.locator("#stats")).toContainText("Security Score");
     await expect(page.locator("#stats")).toContainText("Onboarding Risk");
     await expect(page.locator("#files")).toContainText("BOOTCAMP.md");
