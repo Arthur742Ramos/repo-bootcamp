@@ -153,9 +153,11 @@ export function getIndexHtml(nonce?: string): string {
     .progress-item.error { color: var(--danger); }
     .results { display: none; }
     .results.show { display: block; }
-    #filesHeading { border-radius: var(--r-sm); margin-bottom: 1rem; }
-    #filesHeading:focus { outline: none; }
-    #filesHeading:focus-visible { box-shadow: 0 0 0 2px var(--canvas), 0 0 0 4px var(--accent); }
+    #resultsHeading { border-radius: var(--r-sm); margin-bottom: 0.5rem; }
+    #resultsHeading:focus { outline: none; }
+    #resultsHeading:focus-visible { box-shadow: 0 0 0 2px var(--canvas), 0 0 0 4px var(--accent); }
+    .score-guide { color: var(--ink-muted); font-size: 0.8125rem; margin-bottom: 1rem; max-width: 70ch; text-wrap: pretty; }
+    #filesHeading { margin-bottom: 1rem; }
     .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 1rem; margin-bottom: 2rem; }
     .stat { background: var(--surface); border: 1px solid var(--border); padding: 1.25rem 1rem; border-radius: var(--r-md); text-align: center; }
     .stat-value { font-family: var(--font-mono); font-size: 2rem; font-weight: 700; color: var(--ink); line-height: 1; }
@@ -283,11 +285,13 @@ export function getIndexHtml(nonce?: string): string {
       </dl>
     </section>
 
-    <div class="results" id="results">
-      <div class="stats" id="stats"></div>
-      <h2 id="filesHeading" tabindex="-1">Generated Files</h2>
+    <section class="results" id="results" aria-labelledby="resultsHeading">
+      <h2 id="resultsHeading" tabindex="-1">Analysis Readout</h2>
+      <p class="score-guide" id="scoreGuide">Higher security scores are better; lower onboarding risk scores are better. Grades run from A (strongest) to F (weakest).</p>
+      <div class="stats" id="stats" aria-describedby="scoreGuide"></div>
+      <h2 id="filesHeading">Generated Files</h2>
       <div class="files" id="files"></div>
-    </div>
+    </section>
   </div>
 
   <div
@@ -630,7 +634,7 @@ export function getIndexHtml(nonce?: string): string {
       if (status) {
         status.textContent = 'Analysis complete — ' + data.files.length + ' files generated';
       }
-      const heading = document.getElementById('filesHeading');
+      const heading = document.getElementById('resultsHeading');
       if (heading) {
         heading.focus();
         heading.scrollIntoView({ block: 'start' });
