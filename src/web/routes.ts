@@ -2,11 +2,13 @@ import type { Application, Request, Response } from "express";
 import { EventEmitter } from "events";
 import rateLimit, { ipKeyGenerator } from "express-rate-limit";
 import { randomUUID } from "node:crypto";
-import { mkdir, readFile, rm } from "fs/promises";
+import { mkdir, readFile, rm, writeFile } from "fs/promises";
 import { basename, dirname, join, resolve } from "path";
 
 import { applyOutputFormat, type OutputFormat } from "../formatter.js";
 import { parseGitHubUrl } from "../ingest.js";
+import { quickAsk } from "../interactive.js";
+import { generateIssuePreview } from "../issues.js";
 import { ProgressTracker } from "../progress.js";
 import { getSecurityGrade } from "../security.js";
 import { orchestrateAnalysis, prepareOutputDocuments } from "../services/analysis-orchestration.js";
@@ -18,13 +20,15 @@ import {
 import { resolveRunConfiguration } from "../services/config-resolution.js";
 import { writeGeneratedOutputs } from "../services/output-writer.js";
 import type { BootcampOptions, RepoFacts } from "../types.js";
+import { createAnalysisManifest } from "../manifest.js";
 import { isPathInsideDir } from "../utils.js";
+import { createZipArchive } from "./zip.js";
 
 /**
  * Progress event for SSE
  */
 interface ProgressEvent {
-  type: "phase" | "progress" | "complete" | "error";
+  type: "phase" | "progress" | "complete" | "error" | "cancelled";
   phase?: string;
   message: string;
   data?: unknown;
@@ -36,15 +40,22 @@ interface ProgressEvent {
 interface AnalysisJob {
   id: string;
   repoUrl: string;
-  status: "pending" | "running" | "complete" | "error";
+  status: "pending" | "running" | "complete" | "error" | "cancelled";
   progress: ProgressEvent[];
   result?: {
     outputDir: string;
     files: string[];
     stats: unknown;
+    manifest?: unknown;
+    recommendations?: unknown[];
+    quickstartCommands?: unknown[];
+    issuePreview?: string;
   };
   error?: string;
+  cancelRequested?: boolean;
+  startedAt?: number;
   completedAt?: number;
+  abortController: AbortController;
   emitter: EventEmitter;
 }
 
@@ -183,6 +194,19 @@ function getErrorMessage(error: unknown, fallback: string): string {
   return error instanceof Error && error.message ? error.message : fallback;
 }
 
+class JobCancelledError extends Error {
+  constructor() {
+    super("Analysis cancelled");
+    this.name = "JobCancelledError";
+  }
+}
+
+function assertJobActive(job: AnalysisJob): void {
+  if (job.cancelRequested || job.abortController.signal.aborted) {
+    throw new JobCancelledError();
+  }
+}
+
 function buildRateLimitKey(prefix: string, scope: string, req: Request): string {
   const ip = req.ip || req.socket.remoteAddress || "127.0.0.1";
   return `${prefix}:${scope}:${ipKeyGenerator(ip)}`;
@@ -198,15 +222,19 @@ async function runAnalysis(job: AnalysisJob, options: Record<string, unknown>): 
   };
   const progress = new ProgressTracker(false);
   let repoPath: string | null = null;
+  let outputDir: string | null = null;
 
   try {
     job.status = "running";
+    job.startedAt = Date.now();
     const fullOptions = buildWebOptions(options);
     const { config, styleConfig, outputFormat } = await resolveRunConfiguration(fullOptions);
+    assertJobActive(job);
 
     // Parse URL
     emit({ type: "phase", phase: "parse", message: "Parsing repository URL..." });
     const repoInfo = parseGitHubUrl(job.repoUrl);
+    assertJobActive(job);
     emit({ type: "progress", message: `Repository: ${repoInfo.fullName}` });
 
     // Clone
@@ -216,11 +244,13 @@ async function runAnalysis(job: AnalysisJob, options: Record<string, unknown>): 
       fullOptions.branch || undefined,
       fullOptions.fullClone
     );
+    assertJobActive(job);
     emit({ type: "progress", message: `Cloned (branch: ${repoInfo.branch})` });
 
     // Scan
     emit({ type: "phase", phase: "scan", message: "Scanning files..." });
     const scanResult = await scanRepositoryFiles(repoPath, fullOptions.maxFiles);
+    assertJobActive(job);
     emit({ type: "progress", message: `Scanned ${scanResult.files.length} files` });
     emit({ type: "progress", message: `Stack: ${scanResult.stack.languages.join(", ")}` });
 
@@ -237,6 +267,7 @@ async function runAnalysis(job: AnalysisJob, options: Record<string, unknown>): 
       progress,
       analysisStart,
     });
+    assertJobActive(job);
     progress.stop();
 
     const facts: RepoFacts = {
@@ -254,7 +285,7 @@ async function runAnalysis(job: AnalysisJob, options: Record<string, unknown>): 
     // Generate docs
     emit({ type: "phase", phase: "generate", message: "Generating documentation..." });
     progress.startPhase("generate");
-    const outputDir = join(process.cwd(), `.bootcamp-output`, job.id, repoInfo.repo);
+    outputDir = join(process.cwd(), `.bootcamp-output`, job.id, repoInfo.repo);
     await mkdir(outputDir, { recursive: true });
 
     const {
@@ -274,6 +305,7 @@ async function runAnalysis(job: AnalysisJob, options: Record<string, unknown>): 
       styleConfig,
       progress,
     });
+    assertJobActive(job);
 
     const outputOptions: BootcampOptions = {
       ...fullOptions,
@@ -291,17 +323,39 @@ async function runAnalysis(job: AnalysisJob, options: Record<string, unknown>): 
       allowIssueCreation: false,
       outputTargets,
     });
+    assertJobActive(job);
     progress.stop();
 
-    const files = outputOptions.jsonOnly
+    const generatedFiles = outputOptions.jsonOnly
       ? ["repo_facts.json"]
       : applyOutputFormat(documents, outputFormat).map((doc) => doc.name);
-    emit({ type: "progress", message: `Generated ${documentCount} files` });
+    const runDurationMs = Date.now() - (job.startedAt ?? Date.now());
+    const manifest = createAnalysisManifest({
+      repoInfo,
+      scanResult,
+      facts: preparedFacts,
+      options: fullOptions,
+      format: outputFormat,
+      durationMs: runDurationMs,
+      model: analysis.model,
+      toolCalls: analysis.toolCalls,
+    });
+    await writeFile(
+      join(outputDir, "ANALYSIS_MANIFEST.json"),
+      JSON.stringify(manifest, null, 2),
+      "utf8"
+    );
+    const files = [...generatedFiles, "ANALYSIS_MANIFEST.json"];
+    emit({
+      type: "progress",
+      message: `Generated ${documentCount + 1} files (including manifest)`,
+    });
 
     // Cleanup
     emit({ type: "phase", phase: "cleanup", message: "Cleaning up..." });
     await cleanupRepository(repoPath);
     repoPath = null;
+    assertJobActive(job);
 
     // Complete
     job.status = "complete";
@@ -317,7 +371,19 @@ async function runAnalysis(job: AnalysisJob, options: Record<string, unknown>): 
         riskScore: radar.onboardingRisk.score,
         riskGrade: radar.onboardingRisk.grade,
         dependencies: deps?.totalCount || 0,
+        durationMs: runDurationMs,
+        commitSha: repoInfo.commitSha ?? null,
+        branch: repoInfo.branch,
+        repository: repoInfo.fullName,
+        filesScanned: scanResult.files.length,
+        evidenceSources: manifest.analysis.evidenceSources.length,
       },
+      manifest,
+      recommendations: (preparedFacts.firstTasks ?? []).slice(0, 3),
+      quickstartCommands: (preparedFacts.quickstart?.commands ?? []).slice(0, 6),
+      issuePreview: preparedFacts.firstTasks?.length
+        ? generateIssuePreview(preparedFacts.firstTasks, repoInfo)
+        : undefined,
     };
 
     emit({
@@ -326,6 +392,13 @@ async function runAnalysis(job: AnalysisJob, options: Record<string, unknown>): 
       data: job.result,
     });
   } catch (error: unknown) {
+    if (error instanceof JobCancelledError || job.cancelRequested) {
+      job.status = "cancelled";
+      job.completedAt = Date.now();
+      job.error = "Analysis cancelled.";
+      emit({ type: "cancelled", message: "Analysis cancelled." });
+      return;
+    }
     job.status = "error";
     job.completedAt = Date.now();
     // Log the detailed cause server-side; never expose git stderr / FS paths
@@ -342,6 +415,23 @@ async function runAnalysis(job: AnalysisJob, options: Record<string, unknown>): 
       } catch (cleanupError: unknown) {
         const message = getErrorMessage(cleanupError, "Unknown cleanup error");
         console.error(`[web] Failed to clean up temporary repository: ${message}`);
+      }
+    }
+    if (job.status !== "complete" && outputDir) {
+      const outputRoot = resolve(process.cwd(), ".bootcamp-output");
+      const jobRoot = resolve(dirname(outputDir));
+      if (
+        jobRoot !== outputRoot &&
+        isPathInsideDir(outputRoot, jobRoot) &&
+        basename(jobRoot) === job.id
+      ) {
+        try {
+          await rm(jobRoot, { recursive: true, force: true });
+        } catch (cleanupError: unknown) {
+          console.error(
+            `[web] Failed to remove incomplete output for ${job.id}: ${getErrorMessage(cleanupError, "Unknown cleanup error")}`
+          );
+        }
       }
     }
   }
@@ -407,6 +497,7 @@ export function registerRoutes(app: Application): void {
           repoUrl,
           status: "pending",
           progress: [],
+          abortController: new AbortController(),
           emitter: new EventEmitter(),
         };
 
@@ -466,7 +557,7 @@ export function registerRoutes(app: Application): void {
       res.write(`data: ${JSON.stringify(event)}\n\n`);
     }
 
-    if (job.status === "complete" || job.status === "error") {
+    if (job.status === "complete" || job.status === "error" || job.status === "cancelled") {
       res.end();
       return;
     }
@@ -474,7 +565,7 @@ export function registerRoutes(app: Application): void {
     // Stream new events
     const onProgress = (event: ProgressEvent) => {
       res.write(`data: ${JSON.stringify(event)}\n\n`);
-      if (event.type === "complete" || event.type === "error") {
+      if (event.type === "complete" || event.type === "error" || event.type === "cancelled") {
         res.end();
       }
     };
@@ -497,11 +588,118 @@ export function registerRoutes(app: Application): void {
 
     res.json({
       id: job.id,
+      repoUrl: job.repoUrl,
       status: job.status,
       result: job.result,
       error: job.error,
+      progress: job.progress,
+      startedAt: job.startedAt,
+      completedAt: job.completedAt,
     });
   });
+
+  // Answer one grounded follow-up question against a fresh shallow checkout.
+  // The completed job keeps generated outputs, not a live repository checkout,
+  // so the source is re-cloned only when the user explicitly asks a question.
+  app.post(
+    "/api/jobs/:jobId/ask",
+    defaultApiRateLimit,
+    async (req: Request, res: Response): Promise<void> => {
+      const jobId = req.params.jobId as string;
+      const job = jobs.get(jobId);
+      if (!job || !job.result) {
+        res.status(404).json({ error: "Job or analysis not found" });
+        return;
+      }
+      if (!isObjectRecord(req.body) || typeof req.body.question !== "string") {
+        res.status(400).json({ error: "question is required and must be a string" });
+        return;
+      }
+      const question = req.body.question.trim();
+      if (!question) {
+        res.status(400).json({ error: "Question cannot be empty" });
+        return;
+      }
+      if (question.length > 1000) {
+        res.status(400).json({ error: "Question is too long" });
+        return;
+      }
+
+      let repoPath: string | null = null;
+      try {
+        const manifest = job.result.manifest as
+          | { repository?: { branch?: string }; options?: { maxFiles?: number } }
+          | undefined;
+        const repoInfo = parseGitHubUrl(job.repoUrl);
+        const branch = manifest?.repository?.branch;
+        repoPath = await cloneRepository(repoInfo, branch, false);
+        const maxFiles = clampMaxFiles(manifest?.options?.maxFiles);
+        const scanResult = await scanRepositoryFiles(repoPath, maxFiles);
+        const stats = job.result.stats as { model?: unknown };
+        const answer = await quickAsk(
+          repoPath,
+          repoInfo,
+          scanResult,
+          question,
+          false,
+          typeof stats.model === "string" && stats.model !== "cache" ? stats.model : undefined
+        );
+        res.json({ answer });
+      } catch (error: unknown) {
+        console.error(`[web] Follow-up question failed for job ${jobId}:`, error);
+        res.status(500).json({ error: "Could not answer that question. Try again shortly." });
+      } finally {
+        if (repoPath) {
+          await cleanupRepository(repoPath).catch((error: unknown) => {
+            console.error(`[web] Failed to clean up question checkout for job ${jobId}:`, error);
+          });
+        }
+      }
+    }
+  );
+
+  // Request cancellation. The current analysis stack checks this boundary
+  // between expensive phases and always cleans up the temporary checkout.
+  app.post("/api/jobs/:jobId/cancel", defaultApiRateLimit, (req: Request, res: Response): void => {
+    const jobId = req.params.jobId as string;
+    const job = jobs.get(jobId);
+    if (!job) {
+      res.status(404).json({ error: "Job not found" });
+      return;
+    }
+    if (job.status === "complete" || job.status === "error" || job.status === "cancelled") {
+      res.status(409).json({ error: `Job is already ${job.status}`, status: job.status });
+      return;
+    }
+
+    job.cancelRequested = true;
+    job.abortController.abort();
+    const cancellationEvent = {
+      type: "progress",
+      message: "Cancellation requested…",
+    } satisfies ProgressEvent;
+    job.progress.push(cancellationEvent);
+    job.emitter.emit("progress", cancellationEvent);
+    res.status(202).json({ id: job.id, status: "cancelling" });
+  });
+
+  // Export the starter-task issue payload without granting an anonymous web
+  // session permission to create issues in a repository.
+  app.get(
+    "/api/jobs/:jobId/issues-preview",
+    defaultApiRateLimit,
+    (req: Request, res: Response): void => {
+      const jobId = req.params.jobId as string;
+      const job = jobs.get(jobId);
+      if (!job || !job.result || !job.result.issuePreview) {
+        res.status(404).json({ error: "Issue preview not found" });
+        return;
+      }
+      res.setHeader("Content-Type", "text/markdown; charset=utf-8");
+      res.setHeader("Content-Disposition", 'attachment; filename="ISSUES_PREVIEW.md"');
+      res.send(job.result.issuePreview);
+    }
+  );
 
   // Get generated file content
   app.get(
@@ -546,6 +744,59 @@ export function registerRoutes(app: Application): void {
       } catch (error: unknown) {
         console.error(`[web] Failed to read generated file "${filename}" for job ${jobId}:`, error);
         res.status(500).json({ error: "Failed to read generated file" });
+      }
+    }
+  );
+
+  // Download every generated output as one portable archive.
+  app.get(
+    "/api/jobs/:jobId/download",
+    defaultApiRateLimit,
+    async (req: Request, res: Response): Promise<void> => {
+      const jobId = req.params.jobId as string;
+      const job = jobs.get(jobId);
+      if (!job || !job.result) {
+        res.status(404).json({ error: "Job or files not found" });
+        return;
+      }
+
+      try {
+        if (
+          job.result.files.some(
+            (filename) =>
+              filename.includes("..") || filename.includes("/") || filename.includes("\\")
+          )
+        ) {
+          res.status(500).json({ error: "Generated file list is invalid" });
+          return;
+        }
+        const entries = await Promise.all(
+          job.result.files.map(async (filename) => {
+            const fileContent: unknown = await readFile(
+              resolve(join(job.result!.outputDir, filename))
+            );
+            return {
+              name: filename,
+              content: Buffer.isBuffer(fileContent)
+                ? fileContent
+                : Buffer.from(
+                    typeof fileContent === "string" ? fileContent : String(fileContent),
+                    "utf8"
+                  ),
+            };
+          })
+        );
+        const archive = createZipArchive(entries);
+        const repoName =
+          String((job.result.stats as { repository?: unknown })?.repository ?? "bootcamp")
+            .replace(/[^A-Za-z0-9._-]+/g, "-")
+            .replace(/^-+|-+$/g, "") || "bootcamp";
+        res.setHeader("Content-Type", "application/zip");
+        res.setHeader("Content-Disposition", `attachment; filename="${repoName}-bootcamp.zip"`);
+        res.send(archive);
+      } catch (error: unknown) {
+        console.error(`[web] Failed to archive generated files for job ${jobId}:`, error);
+        res.status(500).json({ error: "Failed to create download archive" });
       }
     }
   );

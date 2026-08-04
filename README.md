@@ -126,7 +126,8 @@ Onboarding Risk: 18/100 (A) 🟢
   ├── METRICS.md       → Codebase metrics & hotspots
   ├── HEALTH.md        → Onboarding-readiness health check
   ├── diagrams.mmd     → Mermaid diagrams
-  └── repo_facts.json  → Structured data
+  ├── repo_facts.json  → Structured data
+  └── ANALYSIS_MANIFEST.json → Run metadata and evidence map
 
   🚀 Next step: open ./bootcamp-ky/BOOTCAMP.md
 ```
@@ -150,7 +151,7 @@ Onboarding Risk: 18/100 (A) 🟢
 2. **Truly Agentic** - Claude autonomously explores codebases, not just template filling
 3. **Schema Validated** - All output is validated with Zod schemas and auto-retried on failures
 4. **Production Ready** - 1,270+ tests, TypeScript, proper error handling
-5. **Full Feature Set** - A 21-command CLI: interactive Q&A, a combined scan dashboard, health/metrics/security scoring, coupling & impact graphs, machine preflight, ownership maps, cross-ecosystem task discovery, docs-drift analysis, and a web UI
+5. **Full Feature Set** - A 22-command CLI: interactive Q&A, a combined scan dashboard, health/metrics/security scoring, coupling & impact graphs, machine preflight, ownership maps, cross-ecosystem task discovery, docs-drift analysis, guarded kit publishing, and a web UI
 6. **Beautiful Output** - Mermaid diagrams, structured markdown, professional formatting
 
 ### By the Numbers
@@ -379,6 +380,7 @@ Request → Options Merge → Hooks (before) → Fetch → Retry? → Hooks (aft
 | `DIFF.md` | Version comparison (with `--compare`) |
 | `diagrams.mmd` | Mermaid diagram sources |
 | `repo_facts.json` | Structured data for automation |
+| `ANALYSIS_MANIFEST.json` | Reproducibility metadata, scan coverage, and evidence sources |
 
 ## Quick Start
 
@@ -539,6 +541,32 @@ The dashboard also includes the tech-radar **onboarding-risk** score (0-100,
 lower is better) alongside health/metrics/security. The `--check` gate stays on
 the lowest of the three higher-is-better scores (onboarding risk is reported but
 not gated, since for it lower is better).
+
+### Continuous Onboarding Quality
+
+This repository includes a ready-to-copy GitHub Actions workflow at
+`.github/workflows/onboarding-quality.yml`. It builds Repo Bootcamp, runs the
+deterministic `scan` dashboard on every push and pull request, fails when the
+minimum score is missed, and uploads the machine-readable report as an artifact.
+It does not require a Copilot token or make an AI call.
+
+### Publishing a Generated Kit
+
+Use the publish command to inspect or apply generated files to a clean checkout.
+It previews the exact branch, files, and commit by default:
+
+```bash
+bootcamp publish ./my-repo ./.bootcamp-output/job/repo
+
+# Explicitly create a branch, copy the kit, and commit it
+bootcamp publish ./my-repo ./.bootcamp-output/job/repo --apply --branch bootcamp/onboarding-refresh
+
+# Push the branch and open a GitHub pull request (requires gh auth)
+bootcamp publish ./my-repo ./.bootcamp-output/job/repo --create-pr --base main
+```
+
+Publishing refuses to mutate a dirty checkout and only accepts known generated
+artifact types. Review `ANALYSIS_MANIFEST.json` before opening the pull request.
 
 ### Repo Health Check
 
@@ -889,6 +917,7 @@ cache ls` is an alias for `list`.
 | `bootcamp <url>` | Generate full bootcamp documentation |
 | `bootcamp ask <url>` | Interactive Q&A without full generation |
 | `bootcamp diff <owner/repo#pr>` | Generate onboarding diff for a PR |
+| `bootcamp publish <repo> <kit>` | Preview or publish a generated kit into a clean checkout (`--apply`, `--create-pr`) |
 | `bootcamp web` | Start local web demo server (alias: `serve`) |
 
 ### Analyze & score

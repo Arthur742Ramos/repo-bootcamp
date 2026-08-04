@@ -1,0 +1,47 @@
+name: Onboarding quality
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+permissions:
+  contents: read
+
+jobs:
+  scan:
+    name: Score onboarding readiness
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build Repo Bootcamp
+        run: npm run build
+
+      # This uses only deterministic analyzers; no Copilot token or model call
+      # is required. The gate fails when any headline score falls below 70.
+      - name: Run onboarding scan
+        run: |
+          set -o pipefail
+          node dist/cli.js scan . --json --check --min-score 70 | tee onboarding-scan.json
+
+      - name: Upload onboarding report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: onboarding-scan-${{ github.run_id }}
+          path: onboarding-scan.json
+          if-no-files-found: ignore
+          retention-days: 14
