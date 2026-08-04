@@ -11,9 +11,18 @@ import { ProgressTracker } from "../progress.js";
 import { getRiskEmoji } from "../radar.js";
 import { isLocalPath, resolveRepo, type RepoSource } from "../repo-resolver.js";
 import { getSecurityGrade } from "../security.js";
-import { cloneRepository, cleanupRepository, scanRepositoryFiles } from "../services/clone-service.js";
+import { createAnalysisManifest } from "../manifest.js";
+import {
+  cloneRepository,
+  cleanupRepository,
+  scanRepositoryFiles,
+} from "../services/clone-service.js";
 import { resolveRunConfiguration } from "../services/config-resolution.js";
-import { orchestrateAnalysis, prepareOutputDocuments, type GeneratedDoc } from "../services/analysis-orchestration.js";
+import {
+  orchestrateAnalysis,
+  prepareOutputDocuments,
+  type GeneratedDoc,
+} from "../services/analysis-orchestration.js";
 import { writeGeneratedOutputs } from "../services/output-writer.js";
 import type { BootcampOptions, RepoFacts, RepoInfo, ScanResult } from "../types.js";
 import type { StyleConfig } from "../plugins.js";
@@ -88,11 +97,19 @@ async function writeRunSummary({
     repo: repoInfo.fullName,
     commitSha: repoInfo.commitSha ?? null,
     generatedAt: new Date().toISOString(),
-    files: options.jsonOnly
-      ? ["repo_facts.json"]
-      : documents.map((doc) => formatDocName(doc.name, outputFormat)),
+    files: [
+      ...(options.jsonOnly
+        ? ["repo_facts.json"]
+        : documents.map((doc) => formatDocName(doc.name, outputFormat))),
+      "ANALYSIS_MANIFEST.json",
+    ],
     scores: {
-      security: security ? { score: security.score, grade: getSecurityGrade(security.score, security.sourceFilesScanned) } : null,
+      security: security
+        ? {
+            score: security.score,
+            grade: getSecurityGrade(security.score, security.sourceFilesScanned),
+          }
+        : null,
       onboardingRisk: radar?.onboardingRisk
         ? { score: radar.onboardingRisk.score, grade: radar.onboardingRisk.grade }
         : null,
@@ -130,7 +147,16 @@ async function generateOutputs({
   progress,
   allowIssueCreation = true,
 }: GenerateOutputsParams): Promise<GenerationResult> {
-  const { documents, facts: preparedFacts, security, radar, deps, metrics, health, outputTargets } = await prepareOutputDocuments({
+  const {
+    documents,
+    facts: preparedFacts,
+    security,
+    radar,
+    deps,
+    metrics,
+    health,
+    outputTargets,
+  } = await prepareOutputDocuments({
     repoPath,
     repoInfo,
     scanResult,
@@ -188,11 +214,13 @@ export async function runMainCommand(repoUrl: string, options: BootcampOptions):
   const { config, styleConfig, outputFormat } = await resolveRunConfiguration(options);
 
   if (!quiet) {
-    console.log(chalk.cyan(`
+    console.log(
+      chalk.cyan(`
   ╦═╗╔═╗╔═╗╔═╗  ╔╗ ╔═╗╔═╗╔╦╗╔═╗╔═╗╔╦╗╔═╗
   ╠╦╝║╣ ╠═╝║ ║  ╠╩╗║ ║║ ║ ║ ║  ╠═╣║║║╠═╝
   ╩╚═╚═╝╩  ╚═╝  ╚═╝╚═╝╚═╝ ╩ ╚═╝╩ ╩╩ ╩╩
-  `));
+  `)
+    );
     console.log(chalk.white.bold("  Turn any repo into a Day 1 onboarding kit\n"));
 
     console.log(chalk.dim("─".repeat(50)));
@@ -251,7 +279,9 @@ export async function runMainCommand(repoUrl: string, options: BootcampOptions):
     }
     runStats.cloneTime = Date.now() - cloneStart;
   } catch (error: unknown) {
-    progress.fail(`${repoSource?.isLocal ? "Local repo setup" : "Clone"} failed: ${(error as Error).message}`);
+    progress.fail(
+      `${repoSource?.isLocal ? "Local repo setup" : "Clone"} failed: ${(error as Error).message}`
+    );
     process.exit(1);
   }
 
@@ -270,7 +300,9 @@ export async function runMainCommand(repoUrl: string, options: BootcampOptions):
       : await scanRepositoryFiles(repoPath, options.maxFiles);
     runStats.scanTime = Date.now() - scanStart;
     runStats.filesScanned = scanResult.files.length;
-    progress.succeed(`Scanned ${scanResult.files.length} files (${scanResult.keySourceFiles.size} key files read)`);
+    progress.succeed(
+      `Scanned ${scanResult.files.length} files (${scanResult.keySourceFiles.size} key files read)`
+    );
   } catch (error: unknown) {
     progress.fail(`Scan failed: ${(error as Error).message}`);
     process.exit(1);
@@ -343,26 +375,60 @@ export async function runMainCommand(repoUrl: string, options: BootcampOptions):
       progress,
     });
 
+    const manifest = createAnalysisManifest({
+      repoInfo,
+      scanResult,
+      facts,
+      options,
+      format: outputFormat,
+      durationMs: Date.now() - startTime,
+      model: analysisStats.model,
+      toolCalls: analysisStats.toolCalls.length,
+    });
+    await writeFile(
+      join(outputDir, "ANALYSIS_MANIFEST.json"),
+      JSON.stringify(manifest, null, 2),
+      "utf8"
+    );
+
     runStats.generateTime = Date.now() - generateStart;
-    progress.succeed(`Generated ${documentCount} files`);
+    progress.succeed(`Generated ${documentCount + 1} files (including manifest)`);
 
     if (!quiet && !options.jsonOnly) {
       const grade = getSecurityGrade(security.score, security.sourceFilesScanned);
-      const scoreColor = security.score >= 80 ? chalk.green : security.score >= 60 ? chalk.yellow : chalk.red;
-      console.log(chalk.cyan("\nSecurity Score: ") + scoreColor(`${security.score}/100 (${grade})`));
+      const scoreColor =
+        security.score >= 80 ? chalk.green : security.score >= 60 ? chalk.yellow : chalk.red;
+      console.log(
+        chalk.cyan("\nSecurity Score: ") + scoreColor(`${security.score}/100 (${grade})`)
+      );
 
       const riskEmoji = getRiskEmoji(radar.onboardingRisk.grade);
-      const riskColor = radar.onboardingRisk.score <= 25 ? chalk.green :
-        radar.onboardingRisk.score <= 50 ? chalk.yellow : chalk.red;
-      console.log(chalk.cyan("Onboarding Risk: ") + riskColor(`${radar.onboardingRisk.score}/100 (${radar.onboardingRisk.grade}) ${riskEmoji}`));
+      const riskColor =
+        radar.onboardingRisk.score <= 25
+          ? chalk.green
+          : radar.onboardingRisk.score <= 50
+            ? chalk.yellow
+            : chalk.red;
+      console.log(
+        chalk.cyan("Onboarding Risk: ") +
+          riskColor(
+            `${radar.onboardingRisk.score}/100 (${radar.onboardingRisk.grade}) ${riskEmoji}`
+          )
+      );
 
       if (deps) {
-        console.log(chalk.cyan("Dependencies: ") + chalk.white(`${deps.totalCount} total (${deps.runtime.length} runtime, ${deps.dev.length} dev)`));
+        console.log(
+          chalk.cyan("Dependencies: ") +
+            chalk.white(
+              `${deps.totalCount} total (${deps.runtime.length} runtime, ${deps.dev.length} dev)`
+            )
+        );
       }
 
       if (styleConfig.sections.showMetrics) {
         const appr = metrics.approachability;
-        const apprColor = appr.score >= 80 ? chalk.green : appr.score >= 60 ? chalk.yellow : chalk.red;
+        const apprColor =
+          appr.score >= 80 ? chalk.green : appr.score >= 60 ? chalk.yellow : chalk.red;
         console.log(
           chalk.cyan("Codebase: ") +
             chalk.white(`${metrics.totalFiles} files, ${metrics.sourceFiles} source`) +
@@ -373,11 +439,14 @@ export async function runMainCommand(repoUrl: string, options: BootcampOptions):
       }
 
       if (styleConfig.sections.showHealth) {
-        const healthColor = health.score >= 80 ? chalk.green : health.score >= 60 ? chalk.yellow : chalk.red;
+        const healthColor =
+          health.score >= 80 ? chalk.green : health.score >= 60 ? chalk.yellow : chalk.red;
         console.log(
           chalk.cyan("Repo Health: ") +
             healthColor(`${health.score}/100 (${health.grade})`) +
-            chalk.dim(` · ${health.passCount} passed, ${health.warnCount} warnings, ${health.failCount} missing`)
+            chalk.dim(
+              ` · ${health.passCount} passed, ${health.warnCount} warnings, ${health.failCount} missing`
+            )
         );
       }
     }
@@ -418,7 +487,11 @@ export async function runMainCommand(repoUrl: string, options: BootcampOptions):
   } else {
     console.log();
     console.log(chalk.green("  ╔══════════════════════════════════════════════════════╗"));
-    console.log(chalk.green("  ║") + chalk.white.bold("        ✓ Bootcamp Generated Successfully!           ") + chalk.green("║"));
+    console.log(
+      chalk.green("  ║") +
+        chalk.white.bold("        ✓ Bootcamp Generated Successfully!           ") +
+        chalk.green("║")
+    );
     console.log(chalk.green("  ╚══════════════════════════════════════════════════════╝"));
     console.log();
   }
@@ -430,37 +503,98 @@ export async function runMainCommand(repoUrl: string, options: BootcampOptions):
   if (!quiet && !options.jsonOnly) {
     const formatName = (name: string) => formatDocName(name, outputFormat);
     console.log(chalk.dim("  Generated files:"));
-    console.log(chalk.white("  ├── ") + chalk.cyan(formatName("BOOTCAMP.md")) + chalk.dim("      → 1-page overview (start here!)"));
-    console.log(chalk.white("  ├── ") + chalk.cyan(formatName("ONBOARDING.md")) + chalk.dim("    → Full setup guide"));
-    console.log(chalk.white("  ├── ") + chalk.cyan(formatName("ARCHITECTURE.md")) + chalk.dim("  → System design & diagrams"));
-    console.log(chalk.white("  ├── ") + chalk.cyan(formatName("CODEMAP.md")) + chalk.dim("       → Directory tour"));
-    console.log(chalk.white("  ├── ") + chalk.cyan(formatName("FIRST_TASKS.md")) + chalk.dim("   → Starter issues"));
+    console.log(
+      chalk.white("  ├── ") +
+        chalk.cyan(formatName("BOOTCAMP.md")) +
+        chalk.dim("      → 1-page overview (start here!)")
+    );
+    console.log(
+      chalk.white("  ├── ") +
+        chalk.cyan(formatName("ONBOARDING.md")) +
+        chalk.dim("    → Full setup guide")
+    );
+    console.log(
+      chalk.white("  ├── ") +
+        chalk.cyan(formatName("ARCHITECTURE.md")) +
+        chalk.dim("  → System design & diagrams")
+    );
+    console.log(
+      chalk.white("  ├── ") +
+        chalk.cyan(formatName("CODEMAP.md")) +
+        chalk.dim("       → Directory tour")
+    );
+    console.log(
+      chalk.white("  ├── ") +
+        chalk.cyan(formatName("FIRST_TASKS.md")) +
+        chalk.dim("   → Starter issues")
+    );
     if (styleConfig.sections.showRunbook) {
-      console.log(chalk.white("  ├── ") + chalk.cyan(formatName("RUNBOOK.md")) + chalk.dim("       → Operations guide"));
+      console.log(
+        chalk.white("  ├── ") +
+          chalk.cyan(formatName("RUNBOOK.md")) +
+          chalk.dim("       → Operations guide")
+      );
     }
     if (styleConfig.sections.showDependencyGraph) {
-      console.log(chalk.white("  ├── ") + chalk.cyan(formatName("DEPENDENCIES.md")) + chalk.dim("  → Dependency graph"));
+      console.log(
+        chalk.white("  ├── ") +
+          chalk.cyan(formatName("DEPENDENCIES.md")) +
+          chalk.dim("  → Dependency graph")
+      );
     }
     if (styleConfig.sections.showSecurityDetails) {
-      console.log(chalk.white("  ├── ") + chalk.cyan(formatName("SECURITY.md")) + chalk.dim("      → Security findings"));
+      console.log(
+        chalk.white("  ├── ") +
+          chalk.cyan(formatName("SECURITY.md")) +
+          chalk.dim("      → Security findings")
+      );
     }
     if (styleConfig.sections.showRadar) {
-      console.log(chalk.white("  ├── ") + chalk.cyan(formatName("RADAR.md")) + chalk.dim("         → Tech radar & risk score"));
+      console.log(
+        chalk.white("  ├── ") +
+          chalk.cyan(formatName("RADAR.md")) +
+          chalk.dim("         → Tech radar & risk score")
+      );
     }
     if (styleConfig.sections.showImpact) {
-      console.log(chalk.white("  ├── ") + chalk.cyan(formatName("IMPACT.md")) + chalk.dim("        → Change impact analysis"));
+      console.log(
+        chalk.white("  ├── ") +
+          chalk.cyan(formatName("IMPACT.md")) +
+          chalk.dim("        → Change impact analysis")
+      );
     }
     if (styleConfig.sections.showMetrics) {
-      console.log(chalk.white("  ├── ") + chalk.cyan(formatName("METRICS.md")) + chalk.dim("       → Codebase metrics & hotspots"));
+      console.log(
+        chalk.white("  ├── ") +
+          chalk.cyan(formatName("METRICS.md")) +
+          chalk.dim("       → Codebase metrics & hotspots")
+      );
     }
     if (styleConfig.sections.showHealth) {
-      console.log(chalk.white("  ├── ") + chalk.cyan(formatName("HEALTH.md")) + chalk.dim("        → Onboarding-readiness health check"));
+      console.log(
+        chalk.white("  ├── ") +
+          chalk.cyan(formatName("HEALTH.md")) +
+          chalk.dim("        → Onboarding-readiness health check")
+      );
     }
     if (options.compare) {
-      console.log(chalk.white("  ├── ") + chalk.cyan(formatName("DIFF.md")) + chalk.dim("          → Version comparison"));
+      console.log(
+        chalk.white("  ├── ") +
+          chalk.cyan(formatName("DIFF.md")) +
+          chalk.dim("          → Version comparison")
+      );
     }
-    console.log(chalk.white("  ├── ") + chalk.cyan("diagrams.mmd") + chalk.dim("     → Mermaid diagrams"));
-    console.log(chalk.white("  └── ") + chalk.cyan("repo_facts.json") + chalk.dim("  → Structured data"));
+    console.log(
+      chalk.white("  ├── ") + chalk.cyan("diagrams.mmd") + chalk.dim("     → Mermaid diagrams")
+    );
+    console.log(
+      chalk.white("  ├── ") + chalk.cyan("repo_facts.json") + chalk.dim("  → Structured data")
+    );
+    console.log(
+      chalk.white("  └── ") +
+        chalk.cyan("ANALYSIS_MANIFEST.json") +
+        chalk.dim("  → Run metadata & evidence")
+    );
     console.log();
   }
 
@@ -470,7 +604,11 @@ export async function runMainCommand(repoUrl: string, options: BootcampOptions):
     console.log(chalk.white(`     Model:         ${chalk.cyan(runStats.model)}`));
     console.log(chalk.white(`     Files scanned: ${chalk.cyan(runStats.filesScanned)}`));
     console.log(chalk.white(`     Tool calls:    ${chalk.cyan(runStats.toolCalls)}`));
-    console.log(chalk.white(`     Total time:    ${chalk.cyan((runStats.totalTime! / 1000).toFixed(1) + "s")}`));
+    console.log(
+      chalk.white(
+        `     Total time:    ${chalk.cyan((runStats.totalTime! / 1000).toFixed(1) + "s")}`
+      )
+    );
     console.log(chalk.dim(`       ├── Clone:    ${(runStats.cloneTime! / 1000).toFixed(1)}s`));
     console.log(chalk.dim(`       ├── Scan:     ${(runStats.scanTime! / 1000).toFixed(1)}s`));
     console.log(chalk.dim(`       ├── Analyze:  ${(runStats.analysisTime! / 1000).toFixed(1)}s`));
@@ -487,7 +625,11 @@ export async function runMainCommand(repoUrl: string, options: BootcampOptions):
   }
 
   if (!quiet) {
-    console.log(chalk.white("  🚀 ") + chalk.white.bold("Next step: ") + chalk.cyan(`open ${outputDir}/${formatDocName("BOOTCAMP.md", outputFormat)}`));
+    console.log(
+      chalk.white("  🚀 ") +
+        chalk.white.bold("Next step: ") +
+        chalk.cyan(`open ${outputDir}/${formatDocName("BOOTCAMP.md", outputFormat)}`)
+    );
     console.log();
   }
 
@@ -506,9 +648,16 @@ export async function runMainCommand(repoUrl: string, options: BootcampOptions):
         wp.succeed(`Scanned ${newScan.files.length} files`);
 
         wp.startPhase("analyze");
-        const result = await analyzeRepo(repoPath, repoInfo, newScan, options, (msg) => {
-          wp.update(msg);
-        }, styleConfig);
+        const result = await analyzeRepo(
+          repoPath,
+          repoInfo,
+          newScan,
+          options,
+          (msg) => {
+            wp.update(msg);
+          },
+          styleConfig
+        );
         const styledFacts = {
           ...result.facts,
           firstTasks: result.facts.firstTasks.slice(0, styleConfig.firstTasksCount),
@@ -529,7 +678,24 @@ export async function runMainCommand(repoUrl: string, options: BootcampOptions):
           progress: wp,
           allowIssueCreation: false,
         });
-        wp.succeed(`Regenerated ${documentCount} files`);
+        const manifest = createAnalysisManifest({
+          repoInfo,
+          scanResult: newScan,
+          facts: styledFacts,
+          options,
+          format: outputFormat,
+          durationMs: result.stats.endTime
+            ? result.stats.endTime - result.stats.startTime
+            : 0,
+          model: result.stats.model,
+          toolCalls: result.stats.toolCalls.length,
+        });
+        await writeFile(
+          join(outputDir, "ANALYSIS_MANIFEST.json"),
+          JSON.stringify(manifest, null, 2),
+          "utf8"
+        );
+        wp.succeed(`Regenerated ${documentCount + 1} files (including manifest)`);
         wp.stop();
       },
     });

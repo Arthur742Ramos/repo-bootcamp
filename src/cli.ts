@@ -38,6 +38,7 @@ import { runMainCommand } from "./commands/main-command.js";
 import { runMetricsCommand } from "./commands/metrics-command.js";
 import { runOwnersCommand } from "./commands/owners-command.js";
 import { runPreflightCommand } from "./commands/preflight-command.js";
+import { runPublishCommand } from "./commands/publish-command.js";
 import { runRadarCommand } from "./commands/radar-command.js";
 import { runScanCommand } from "./commands/scan-command.js";
 import { runSecurityCommand } from "./commands/security-command.js";
@@ -106,6 +107,17 @@ interface DiffActionOptions {
   format?: string;
   fullClone?: boolean;
   keepTemp?: boolean;
+  verbose?: boolean;
+}
+
+interface PublishActionOptions {
+  [key: string]: unknown;
+  apply?: boolean;
+  createPr?: boolean;
+  branch?: string;
+  base?: string;
+  title?: string;
+  body?: string;
   verbose?: boolean;
 }
 
@@ -249,9 +261,9 @@ function getOptionSource(command: Command, name: string): "cli" | "default" {
 }
 
 function getActionOptions<T extends Record<string, unknown>>(opts: Command | T): T {
-  return (typeof (opts as Command).opts === "function"
-    ? (opts as Command).opts() as T
-    : opts) as T;
+  return (
+    typeof (opts as Command).opts === "function" ? ((opts as Command).opts() as T) : opts
+  ) as T;
 }
 
 function getCliFlagValue(flags: string[]): string | undefined {
@@ -329,22 +341,16 @@ function registerScanCommand(config: {
 
 program
   .name("bootcamp")
-  .description("Turn any public GitHub/GitLab/Bitbucket repository into a Day 1 onboarding kit using GitHub Copilot SDK")
+  .description(
+    "Turn any public GitHub/GitLab/Bitbucket repository into a Day 1 onboarding kit using GitHub Copilot SDK"
+  )
   .version(VERSION);
 
 program
   .argument("<repo-url>", "Repository URL (GitHub/GitLab/Bitbucket) or local path with --no-clone")
   .option("-b, --branch <branch>", "Branch to analyze", "")
-  .option(
-    "-f, --focus <focus>",
-    "Focus area: onboarding, architecture, contributing, all",
-    "all"
-  )
-  .option(
-    "-a, --audience <audience>",
-    "Target audience: all, backend, frontend, sre",
-    "all"
-  )
+  .option("-f, --focus <focus>", "Focus area: onboarding, architecture, contributing, all", "all")
+  .option("-a, --audience <audience>", "Target audience: all, backend, frontend, sre", "all")
   .option("-o, --output <dir>", "Output directory")
   .option("--format <format>", "Output format: markdown, html, pdf", "markdown")
   .option("-m, --max-files <number>", "Maximum files to scan", "200")
@@ -354,20 +360,36 @@ program
   .option("--json-only", "Only generate repo_facts.json, skip markdown docs")
   .option("--stats", "Show detailed statistics after generation")
   .option("-v, --verbose", "Show detailed progress including tool calls")
-  .option("-q, --quiet", "Suppress banner, progress, and file tree; print only the output path (for scripting/CI)")
+  .option(
+    "-q, --quiet",
+    "Suppress banner, progress, and file tree; print only the output path (for scripting/CI)"
+  )
   .option("-i, --interactive", "Start interactive Q&A mode after generation")
   .option("--transcript", "Save interactive session transcript to TRANSCRIPT.md")
   .option("-c, --compare <ref>", "Compare with another git ref (tag, branch, commit)")
   .option("--create-issues", "Create GitHub issues from FIRST_TASKS.md")
   .option("--dry-run", "Preview issues without creating (use with --create-issues)")
   .option("-s, --style <style>", "Output style: corporate, startup, oss, academic, minimal")
-  .option("--render-diagrams [format]", "Render diagrams.mmd to SVG/PNG (requires mermaid-cli)", "svg")
+  .option(
+    "--render-diagrams [format]",
+    "Render diagrams.mmd to SVG/PNG (requires mermaid-cli)",
+    "svg"
+  )
   .option("--fast", "Fast mode: inline key files, skip tools, much faster (~15-30s)")
-  .option("--repo-prompts <path>", "Path to custom prompts file (default: .bootcamp-prompts.md in target repo)")
-  .option("--full-clone", "Perform a full clone instead of shallow clone (slower but includes full history)")
+  .option(
+    "--repo-prompts <path>",
+    "Path to custom prompts file (default: .bootcamp-prompts.md in target repo)"
+  )
+  .option(
+    "--full-clone",
+    "Perform a full clone instead of shallow clone (slower but includes full history)"
+  )
   .option("--no-cache", "Skip reading/writing analysis cache")
   .option("--exclude <globs...>", "Extra glob patterns to skip during the file scan (repeatable)")
-  .option("--subdir <path>", "Restrict analysis to a sub-path of the repository (e.g. a monorepo package)")
+  .option(
+    "--subdir <path>",
+    "Restrict analysis to a sub-path of the repository (e.g. a monorepo package)"
+  )
   .option("-w, --watch", "Watch mode: re-run analysis when target repo gets new commits")
   .option("--watch-interval <seconds>", "Polling interval for watch mode in seconds", "30")
   .option("--watch-force", "Allow destructive git reset --hard fallback in watch mode")
@@ -395,7 +417,9 @@ program
       dryRun: opts.dryRun || false,
       style: opts.style as StylePack | undefined,
       renderDiagrams: getOptionSource(command, "renderDiagrams") === "cli",
-      diagramFormat: (opts.renderDiagrams === true ? "svg" : opts.renderDiagrams) as BootcampOptions["diagramFormat"],
+      diagramFormat: (opts.renderDiagrams === true
+        ? "svg"
+        : opts.renderDiagrams) as BootcampOptions["diagramFormat"],
       fullClone: opts.fullClone || false,
       noCache: isNegativeOptionEnabled(opts, "noCache", "cache"),
       watch: opts.watch || false,
@@ -429,7 +453,9 @@ program
     }
 
     if (options.style && !STYLE_PACK_NAMES.includes(options.style)) {
-      console.error(chalk.red(`Invalid style: ${options.style}. Use: ${STYLE_PACK_NAMES.join(", ")}`));
+      console.error(
+        chalk.red(`Invalid style: ${options.style}. Use: ${STYLE_PACK_NAMES.join(", ")}`)
+      );
       process.exit(1);
     }
 
@@ -445,11 +471,16 @@ program
 
 program
   .command("ask <repo-url> [question]")
-  .description("Ask one question and print the answer, or start interactive Q&A mode (supports local paths with --no-clone)")
+  .description(
+    "Ask one question and print the answer, or start interactive Q&A mode (supports local paths with --no-clone)"
+  )
   .option("-b, --branch <branch>", "Branch to analyze")
   .option("--no-clone", "Use a local directory path instead of cloning")
   .option("--model <model>", "Override model selection (e.g., claude-opus-4-5)")
-  .option("-q, --question <text>", "Ask a single question non-interactively and print the answer to stdout")
+  .option(
+    "-q, --question <text>",
+    "Ask a single question non-interactively and print the answer to stdout"
+  )
   .option("-v, --verbose", "Show detailed output")
   .action(async (repoUrl: string, question: string | undefined, rawOpts) => {
     const opts = getActionOptions<AskActionOptions>(rawOpts as Command | AskActionOptions);
@@ -468,7 +499,10 @@ program
   .description("Generate onboarding diff for a GitHub PR")
   .option("-o, --output <dir>", "Output directory")
   .option("--format <format>", "Output format: markdown, html, pdf")
-  .option("--full-clone", "Perform a full clone instead of shallow clone (slower but includes full history)")
+  .option(
+    "--full-clone",
+    "Perform a full clone instead of shallow clone (slower but includes full history)"
+  )
   .option("--keep-temp", "Keep temporary clone directory")
   .option("-v, --verbose", "Show detailed output")
   .action(async (repoPr: string, rawOpts) => {
@@ -483,11 +517,37 @@ program
   });
 
 program
+  .command("publish <repo-path> <kit-dir>")
+  .description("Preview or publish a generated onboarding kit into a local checkout")
+  .option("--apply", "Copy generated files and commit them on a new branch")
+  .option("--create-pr", "Push the branch and open a GitHub pull request (implies --apply)")
+  .option("--branch <branch>", "Branch name to create")
+  .option("--base <branch>", "Base branch for the pull request")
+  .option("--title <title>", "Commit and pull-request title")
+  .option("--body <body>", "Pull-request body")
+  .option("-v, --verbose", "Show detailed output")
+  .action(async (repoPath: string, kitDir: string, rawOpts) => {
+    const opts = getActionOptions<PublishActionOptions>(rawOpts as Command | PublishActionOptions);
+    await runPublishCommand(repoPath, kitDir, {
+      apply: opts.apply || false,
+      createPr: opts.createPr || false,
+      branch: opts.branch || getCliFlagValue(["--branch"]),
+      base: opts.base,
+      title: opts.title,
+      body: opts.body,
+      verbose: opts.verbose || false,
+    });
+  });
+
+program
   .command("web")
   .alias("serve")
   .description("Start local web demo server")
   .option("-p, --port <port>", "Port to listen on", "3000")
-  .option("--host <addr>", "Address to bind (default: 127.0.0.1; use 0.0.0.0 to expose on your network)")
+  .option(
+    "--host <addr>",
+    "Address to bind (default: 127.0.0.1; use 0.0.0.0 to expose on your network)"
+  )
   .action((rawOpts) => {
     const opts = getActionOptions<WebActionOptions>(rawOpts as Command | WebActionOptions);
     startServer(parseInt(opts.port || "3000", 10), opts.host);
@@ -515,7 +575,8 @@ registerScanCommand({
   description:
     "Scan a repository once and report a combined health + metrics + security dashboard, gated on the lowest of the three scores (supports local paths)",
   checkHelp: "Exit with code 1 if the lowest of the three scores is below --min-score (for CI)",
-  minScoreHelp: "Minimum passing score for --check, applied to the lowest of the three scores (0-100)",
+  minScoreHelp:
+    "Minimum passing score for --check, applied to the lowest of the three scores (0-100)",
   jsonHelp: "Output the combined report (all three analyses plus a score summary) as JSON",
   run: runScanCommand,
 });
@@ -581,7 +642,11 @@ program
   )
   .option("-b, --branch <branch>", "Branch to analyze", "")
   .option("--check", "Exit with code 1 if the onboarding-risk score exceeds --max-risk (for CI)")
-  .option("--max-risk <score>", "Maximum acceptable onboarding-risk score for --check (0-100)", "50")
+  .option(
+    "--max-risk <score>",
+    "Maximum acceptable onboarding-risk score for --check (0-100)",
+    "50"
+  )
   .option("--json", "Output the radar report as JSON for machine consumption")
   .option("-m, --max-files <number>", "Maximum files to scan")
   .option("--keep-temp", "Keep temporary clone directory")
@@ -607,7 +672,7 @@ program
 program
   .command("impact <repo-url> [file]")
   .description(
-    "Map change impact (\"blast radius\") from the import graph: the files, tests, and docs a change would affect (supports local paths)"
+    'Map change impact ("blast radius") from the import graph: the files, tests, and docs a change would affect (supports local paths)'
   )
   .option("-b, --branch <branch>", "Branch to analyze", "")
   .option("--json", "Output the impact analysis as JSON for machine consumption")
@@ -644,7 +709,9 @@ program
   .option("--keep-temp", "Keep temporary clone directory")
   .option("-v, --verbose", "Show detailed output")
   .action(async (repoUrl: string, rawOpts) => {
-    const opts = getActionOptions<CouplingActionOptions>(rawOpts as Command | CouplingActionOptions);
+    const opts = getActionOptions<CouplingActionOptions>(
+      rawOpts as Command | CouplingActionOptions
+    );
     // `-b/--branch` and `-m/--max-files` collide with the root command's
     // options — fall back to the raw argv (same approach as the other commands).
     const branch = opts.branch || getCliFlagValue(["--branch", "-b"]) || "";
@@ -691,7 +758,7 @@ program
 program
   .command("owners <repo-url>")
   .description(
-    "Answer \"who do I ask?\": parse CODEOWNERS, map owners to each top-level area, and list maintainers + top committers (supports local paths)"
+    'Answer "who do I ask?": parse CODEOWNERS, map owners to each top-level area, and list maintainers + top committers (supports local paths)'
   )
   .option("-b, --branch <branch>", "Branch to analyze", "")
   .option("--json", "Output the ownership map as JSON for machine consumption")
@@ -764,7 +831,9 @@ program
   .option("--keep-temp", "Keep temporary clone directory")
   .option("-v, --verbose", "Show detailed output")
   .action(async (repoUrl: string, rawOpts) => {
-    const opts = getActionOptions<PreflightActionOptions>(rawOpts as Command | PreflightActionOptions);
+    const opts = getActionOptions<PreflightActionOptions>(
+      rawOpts as Command | PreflightActionOptions
+    );
     await runPreflightCommand(repoUrl, {
       branch: opts.branch || getCliFlagValue(["--branch", "-b"]) || "",
       check: opts.check || false,
@@ -800,16 +869,16 @@ program
     runCompletionCommand(program, { shell });
   });
 
-const cacheCommand = program
-  .command("cache")
-  .description("Manage the analysis cache");
+const cacheCommand = program.command("cache").description("Manage the analysis cache");
 
 cacheCommand
   .command("prune")
   .description("Remove cache entries older than a given age")
   .option("--max-age <days>", "Maximum age in days", "7")
   .action(async (rawOpts) => {
-    const opts = getActionOptions<CachePruneActionOptions>(rawOpts as Command | CachePruneActionOptions);
+    const opts = getActionOptions<CachePruneActionOptions>(
+      rawOpts as Command | CachePruneActionOptions
+    );
     const days = parseFloat(opts.maxAge || "7");
     const maxAgeMs = days * 24 * 60 * 60 * 1000;
     console.log(chalk.dim(`Pruning cache entries older than ${days} day(s)...`));
@@ -831,12 +900,14 @@ cacheCommand
   .description("List cache entries with repo, phase, age, and size")
   .option("--json", "Output as JSON for machine consumption")
   .action(async (rawOpts) => {
-    const opts = getActionOptions<CacheListActionOptions>(rawOpts as Command | CacheListActionOptions);
+    const opts = getActionOptions<CacheListActionOptions>(
+      rawOpts as Command | CacheListActionOptions
+    );
     await runCacheList({ json: opts.json });
   });
 
-const isCliEntry = Boolean(process.argv[1]) &&
-  import.meta.url === pathToFileURL(resolve(process.argv[1])).href;
+const isCliEntry =
+  Boolean(process.argv[1]) && import.meta.url === pathToFileURL(resolve(process.argv[1])).href;
 
 if (isCliEntry) {
   program.parse();
