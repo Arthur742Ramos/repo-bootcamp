@@ -41,7 +41,9 @@ function makeAnalysis(score: number): SecurityAnalysis {
   return {
     score,
     authPatterns: [],
-    securityDeps: [{ name: "helmet", purpose: "Security headers middleware", type: "security-header" }],
+    securityDeps: [
+      { name: "helmet", purpose: "Security headers middleware", type: "security-header" },
+    ],
     findings: [
       {
         category: "secrets",
@@ -61,7 +63,12 @@ function makeAnalysis(score: number): SecurityAnalysis {
         recommendation: "Use parameterized queries",
       },
     ],
-    secretsHandling: { envFiles: [], configFiles: [], gitignoreSecrets: true, hasEnvExample: false },
+    secretsHandling: {
+      envFiles: [],
+      configFiles: [],
+      gitignoreSecrets: true,
+      hasEnvExample: false,
+    },
     headers: { hasHelmet: true, hasCors: false, hasCSP: true },
     hasRateLimiting: true,
     hasInputValidation: false,
@@ -90,11 +97,9 @@ function remoteSource() {
 }
 
 describe("runSecurityCommand", () => {
-  const mockExit = vi
-    .spyOn(process, "exit")
-    .mockImplementation((() => {
-      throw new Error("process.exit");
-    }) as any);
+  const mockExit = vi.spyOn(process, "exit").mockImplementation((() => {
+    throw new Error("process.exit");
+  }) as any);
   let logSpy: ReturnType<typeof vi.spyOn>;
   let errorSpy: ReturnType<typeof vi.spyOn>;
 
@@ -162,14 +167,18 @@ describe("runSecurityCommand", () => {
 
   it("exits non-zero and cleans up when scanning fails", async () => {
     scanMock.mockRejectedValueOnce(new Error("scan boom"));
-    await expect(runSecurityCommand("https://github.com/test/repo", {})).rejects.toThrow("process.exit");
+    await expect(runSecurityCommand("https://github.com/test/repo", {})).rejects.toThrow(
+      "process.exit"
+    );
     expect(errorSpy).toHaveBeenCalled();
     expect(mockCleanup).toHaveBeenCalled();
   });
 
   it("exits 1 when the repository cannot be resolved", async () => {
     resolveRepoMock.mockRejectedValueOnce(new Error("nope"));
-    await expect(runSecurityCommand("https://github.com/test/repo", {})).rejects.toThrow("process.exit");
+    await expect(runSecurityCommand("https://github.com/test/repo", {})).rejects.toThrow(
+      "process.exit"
+    );
     expect(mockExit).toHaveBeenCalledWith(1);
   });
 });

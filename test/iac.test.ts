@@ -67,18 +67,18 @@ describe("Mixed IaC + application code", () => {
       { path: "variables.tf", size: 400, content: "" },
       { path: "main.bicep", size: 800, content: "" },
     ];
-    
+
     const keyFiles = getKeyFilesForImpact(files);
-    
+
     // Should include Terraform key files
     expect(keyFiles).toContain("main.tf");
     expect(keyFiles).toContain("variables.tf");
-    
+
     // Should include Bicep key files
     expect(keyFiles).toContain("main.bicep");
-    
+
     // Should include TypeScript entry points
-    expect(keyFiles.some(f => f.endsWith("index.ts"))).toBe(true);
+    expect(keyFiles.some((f) => f.endsWith("index.ts"))).toBe(true);
   });
 
   it("should include src-level TypeScript files as key files", () => {
@@ -86,7 +86,7 @@ describe("Mixed IaC + application code", () => {
       { path: "src/app.ts", size: 500, content: "" },
       { path: "src/deep/nested.ts", size: 200, content: "" },
     ];
-    
+
     const keyFiles = getKeyFilesForImpact(files);
     // Top-level src files should match
     expect(keyFiles).toContain("src/app.ts");

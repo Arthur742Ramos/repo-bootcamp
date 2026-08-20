@@ -22,13 +22,19 @@ export interface CyclesCommandOptions {
   verbose?: boolean;
 }
 
-function printReport(repoName: string, moduleCount: number, cycles: Cycle[], rings: string[]): void {
+function printReport(
+  repoName: string,
+  moduleCount: number,
+  cycles: Cycle[],
+  rings: string[]
+): void {
   console.log(chalk.bold("\n🔄  Circular Dependencies"));
   console.log(chalk.dim(`Repository: ${repoName}`));
 
   if (cycles.length === 0) {
     console.log(
-      chalk.green("✓ No circular dependencies found.") + chalk.dim(`  (${moduleCount} modules scanned)`)
+      chalk.green("✓ No circular dependencies found.") +
+        chalk.dim(`  (${moduleCount} modules scanned)`)
     );
     console.log();
     return;
@@ -39,11 +45,15 @@ function printReport(repoName: string, moduleCount: number, cycles: Cycle[], rin
   );
   cycles.forEach((cycle, i) => {
     const suffix = cycle.size === 1 ? "self-import" : `${cycle.size} files`;
-    console.log(`${chalk.red("⛔")} ${chalk.red(String(i + 1).padStart(2))}  ${rings[i]}  ${chalk.dim(`(${suffix})`)}`);
+    console.log(
+      `${chalk.red("⛔")} ${chalk.red(String(i + 1).padStart(2))}  ${rings[i]}  ${chalk.dim(`(${suffix})`)}`
+    );
   });
   console.log();
   console.log(
-    chalk.dim("Break a cycle by extracting the shared code into a third module, or by\ninverting one import (depend on an interface/callback instead of the concrete module).")
+    chalk.dim(
+      "Break a cycle by extracting the shared code into a third module, or by\ninverting one import (depend on an interface/callback instead of the concrete module)."
+    )
   );
   console.log();
 }

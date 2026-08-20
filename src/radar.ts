@@ -116,9 +116,7 @@ function calculateOnboardingRisk(
       factors.push(`Large dependency count (${deps.totalCount})`);
     }
     // Check for legacy deps
-    const legacyCount = [...deps.runtime, ...deps.dev].filter(d => 
-      LEGACY_SIGNALS[d.name]
-    ).length;
+    const legacyCount = [...deps.runtime, ...deps.dev].filter((d) => LEGACY_SIGNALS[d.name]).length;
     if (legacyCount > 5) {
       risk += 10;
       factors.push(`Multiple legacy dependencies (${legacyCount})`);
@@ -135,7 +133,7 @@ function calculateOnboardingRisk(
       factors.push(`Moderate security score (${security.score})`);
     }
 
-    const criticalFindings = security.findings.filter(f => f.severity === "critical");
+    const criticalFindings = security.findings.filter((f) => f.severity === "critical");
     if (criticalFindings.length > 0) {
       risk += 10;
       factors.push(`Critical security findings (${criticalFindings.length})`);
@@ -143,8 +141,8 @@ function calculateOnboardingRisk(
   }
 
   // Complexity signals
-  const sourceFiles = files.filter(f => 
-    /\.(ts|js|tsx|jsx|py|go|rs)$/.test(f.path) && !f.path.includes("node_modules")
+  const sourceFiles = files.filter(
+    (f) => /\.(ts|js|tsx|jsx|py|go|rs)$/.test(f.path) && !f.path.includes("node_modules")
   );
   if (sourceFiles.length > 500) {
     risk += 10;
@@ -184,7 +182,12 @@ export function generateTechRadar(
 ): TechRadar {
   const depSignals = analyzeDepSignals(deps);
   const onboardingRisk = calculateOnboardingRisk(
-    stack, files, deps, security, hasReadme, hasContributing
+    stack,
+    files,
+    deps,
+    security,
+    hasReadme,
+    hasContributing
   );
 
   // Add stack-based signals
@@ -197,7 +200,7 @@ export function generateTechRadar(
       ...depSignals.stable,
       ...depSignals.legacy,
       ...depSignals.risky,
-    ].some(s => s.name.toLowerCase() === "typescript");
+    ].some((s) => s.name.toLowerCase() === "typescript");
     if (!alreadyHasTs) {
       depSignals.modern.push({
         name: "TypeScript",
@@ -237,12 +240,18 @@ export function generateTechRadar(
  */
 export function getRiskEmoji(grade: string): string {
   switch (grade) {
-    case "A": return "🟢";
-    case "B": return "🟢";
-    case "C": return "🟡";
-    case "D": return "🟠";
-    case "F": return "🔴";
-    default: return "⚪";
+    case "A":
+      return "🟢";
+    case "B":
+      return "🟢";
+    case "C":
+      return "🟡";
+    case "D":
+      return "🟠";
+    case "F":
+      return "🔴";
+    default:
+      return "⚪";
   }
 }
 
@@ -261,7 +270,9 @@ export function generateRadarDocs(radar: TechRadar, projectName: string): string
   lines.push("## Onboarding Risk");
   lines.push("");
   const emoji = getRiskEmoji(radar.onboardingRisk.grade);
-  lines.push(`${emoji} **Risk Score: ${radar.onboardingRisk.score}/100** (Grade: ${radar.onboardingRisk.grade})`);
+  lines.push(
+    `${emoji} **Risk Score: ${radar.onboardingRisk.score}/100** (Grade: ${radar.onboardingRisk.grade})`
+  );
   lines.push("");
   if (radar.onboardingRisk.factors.length > 0) {
     lines.push("**Factors:**");

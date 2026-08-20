@@ -36,7 +36,11 @@ describe("diff getChangedFiles", () => {
     git(["config", "user.name", "T"], dir);
 
     // Substantial, unchanged content so git detects the rename (R100).
-    await writeFile(join(dir, "old.ts"), "export const greeting = 'hello world';\n".repeat(8), "utf-8");
+    await writeFile(
+      join(dir, "old.ts"),
+      "export const greeting = 'hello world';\n".repeat(8),
+      "utf-8"
+    );
     git(["add", "-A"], dir);
     git(["commit", "-m", "init", "--no-gpg-sign"], dir);
     const base = git(["rev-parse", "HEAD"], dir);

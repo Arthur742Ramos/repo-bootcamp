@@ -4,30 +4,94 @@
   "title": "Design System: Repo Bootcamp",
   "extensions": {
     "colorMeta": {
-      "canvas": { "role": "neutral", "displayName": "GitHub Canvas", "canonical": "oklch(17.6% 0.014 264)", "tonalRamp": ["#0d1117", "#161b22", "#21262d"] },
-      "surface": { "role": "neutral", "displayName": "Surface", "canonical": "oklch(21.3% 0.013 264)", "tonalRamp": ["#161b22", "#21262d", "#30363d"] },
-      "border": { "role": "neutral", "displayName": "Hairline Border", "canonical": "oklch(33% 0.013 264)" },
+      "canvas": {
+        "role": "neutral",
+        "displayName": "GitHub Canvas",
+        "canonical": "oklch(17.6% 0.014 264)",
+        "tonalRamp": ["#0d1117", "#161b22", "#21262d"]
+      },
+      "surface": {
+        "role": "neutral",
+        "displayName": "Surface",
+        "canonical": "oklch(21.3% 0.013 264)",
+        "tonalRamp": ["#161b22", "#21262d", "#30363d"]
+      },
+      "border": {
+        "role": "neutral",
+        "displayName": "Hairline Border",
+        "canonical": "oklch(33% 0.013 264)"
+      },
       "ink": { "role": "neutral", "displayName": "Ink", "canonical": "oklch(93% 0.012 248)" },
-      "ink-muted": { "role": "neutral", "displayName": "Ink Muted", "canonical": "oklch(67% 0.025 254)" },
-      "accent": { "role": "primary", "displayName": "Signal Cyan", "canonical": "oklch(80% 0.13 215)", "tonalRamp": ["#1f9fbf", "#2bb8d9", "#00d9ff"] },
-      "success": { "role": "tertiary", "displayName": "Grade Green", "canonical": "oklch(68% 0.17 148)" },
-      "danger": { "role": "tertiary", "displayName": "Error Red", "canonical": "oklch(63% 0.21 25)" },
-      "warning": { "role": "tertiary", "displayName": "Attention Amber", "canonical": "oklch(72% 0.14 75)" }
+      "ink-muted": {
+        "role": "neutral",
+        "displayName": "Ink Muted",
+        "canonical": "oklch(67% 0.025 254)"
+      },
+      "accent": {
+        "role": "primary",
+        "displayName": "Signal Cyan",
+        "canonical": "oklch(80% 0.13 215)",
+        "tonalRamp": ["#1f9fbf", "#2bb8d9", "#00d9ff"]
+      },
+      "success": {
+        "role": "tertiary",
+        "displayName": "Grade Green",
+        "canonical": "oklch(68% 0.17 148)"
+      },
+      "danger": {
+        "role": "tertiary",
+        "displayName": "Error Red",
+        "canonical": "oklch(63% 0.21 25)"
+      },
+      "warning": {
+        "role": "tertiary",
+        "displayName": "Attention Amber",
+        "canonical": "oklch(72% 0.14 75)"
+      }
     },
     "typographyMeta": {
-      "display": { "displayName": "Display / Wordmark", "purpose": "Page title and brand wordmark. Solid ink, never gradient." },
-      "data": { "displayName": "Data Readout", "purpose": "Monospace score and count values in stat cards." },
-      "mono": { "displayName": "Mono", "purpose": "URLs, file names, code previews, progress-log lines." }
+      "display": {
+        "displayName": "Display / Wordmark",
+        "purpose": "Page title and brand wordmark. Solid ink, never gradient."
+      },
+      "data": {
+        "displayName": "Data Readout",
+        "purpose": "Monospace score and count values in stat cards."
+      },
+      "mono": {
+        "displayName": "Mono",
+        "purpose": "URLs, file names, code previews, progress-log lines."
+      }
     },
     "shadows": [
-      { "name": "none-at-rest", "value": "none", "purpose": "Surfaces are flat at rest; depth comes from the tonal ramp + 1px borders." },
-      { "name": "focus-ring", "value": "0 0 0 2px #0d1117, 0 0 0 4px #00d9ff", "purpose": "2px cyan :focus-visible ring with a canvas-colored offset gap." }
+      {
+        "name": "none-at-rest",
+        "value": "none",
+        "purpose": "Surfaces are flat at rest; depth comes from the tonal ramp + 1px borders."
+      },
+      {
+        "name": "focus-ring",
+        "value": "0 0 0 2px #0d1117, 0 0 0 4px #00d9ff",
+        "purpose": "2px cyan :focus-visible ring with a canvas-colored offset gap."
+      }
     ],
     "motion": [
-      { "name": "ease-out-quart", "value": "cubic-bezier(0.165, 0.84, 0.44, 1)", "purpose": "Default easing for state transitions (hover, focus, color shifts)." },
+      {
+        "name": "ease-out-quart",
+        "value": "cubic-bezier(0.165, 0.84, 0.44, 1)",
+        "purpose": "Default easing for state transitions (hover, focus, color shifts)."
+      },
       { "name": "duration-fast", "value": "150ms", "purpose": "Color and border state changes." },
-      { "name": "duration-base", "value": "200ms", "purpose": "Hover/active feedback on buttons and cards." },
-      { "name": "reduced-motion", "value": "0ms", "purpose": "Under prefers-reduced-motion: reduce, transitions collapse to instant / crossfade." }
+      {
+        "name": "duration-base",
+        "value": "200ms",
+        "purpose": "Hover/active feedback on buttons and cards."
+      },
+      {
+        "name": "reduced-motion",
+        "value": "0ms",
+        "purpose": "Under prefers-reduced-motion: reduce, transitions collapse to instant / crossfade."
+      }
     ],
     "breakpoints": [
       { "name": "sm", "value": "640px" },
@@ -71,10 +135,26 @@
       "Honest streamed status as the signature interaction"
     ],
     "rules": [
-      { "name": "The One Signal Rule", "body": "Cyan appears on \u226410% of any screen. If two things are cyan at once, one is wrong. Scores use the semantic set, not the accent.", "section": "colors" },
-      { "name": "The Earned-Dark Rule", "body": "The dark ground is GitHub's flat #0d1117, never the #1a1a2e \u2192 #16213e navy gradient or any tinted-navy body.", "section": "colors" },
-      { "name": "The Mono-For-Machines Rule", "body": "Paths, URLs, scores, grades, and generated content are monospace; sentences written for humans are sans.", "section": "typography" },
-      { "name": "The Flat-By-Default Rule", "body": "Surfaces are flat and bordered at rest; the only depth that moves is focus (a ring) and hover (a one-step tonal shift).", "section": "elevation" }
+      {
+        "name": "The One Signal Rule",
+        "body": "Cyan appears on \u226410% of any screen. If two things are cyan at once, one is wrong. Scores use the semantic set, not the accent.",
+        "section": "colors"
+      },
+      {
+        "name": "The Earned-Dark Rule",
+        "body": "The dark ground is GitHub's flat #0d1117, never the #1a1a2e \u2192 #16213e navy gradient or any tinted-navy body.",
+        "section": "colors"
+      },
+      {
+        "name": "The Mono-For-Machines Rule",
+        "body": "Paths, URLs, scores, grades, and generated content are monospace; sentences written for humans are sans.",
+        "section": "typography"
+      },
+      {
+        "name": "The Flat-By-Default Rule",
+        "body": "Surfaces are flat and bordered at rest; the only depth that moves is focus (a ring) and hover (a one-step tonal shift).",
+        "section": "elevation"
+      }
     ],
     "dos": [
       "Do anchor on the GitHub Primer-dark ramp and convey depth with tonal layers + 1px borders",

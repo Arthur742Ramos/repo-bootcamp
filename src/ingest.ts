@@ -43,12 +43,16 @@ function isSafeBranchName(branch: string): boolean {
   );
 }
 
-function parseSegmentsForOwnerRepo(host: string, allSegments: string[]): { owner: string; repo: string } {
+function parseSegmentsForOwnerRepo(
+  host: string,
+  allSegments: string[]
+): { owner: string; repo: string } {
   let segments = allSegments;
 
   if (host === "gitlab.com") {
-    const markerIndex = segments.findIndex((segment, index) =>
-      index >= 2 && (segment === "-" || segment === "tree" || segment === "blob")
+    const markerIndex = segments.findIndex(
+      (segment, index) =>
+        index >= 2 && (segment === "-" || segment === "tree" || segment === "blob")
     );
     if (markerIndex > 0) {
       segments = segments.slice(0, markerIndex);
@@ -62,7 +66,10 @@ function parseSegmentsForOwnerRepo(host: string, allSegments: string[]): { owner
   }
 
   const ownerSegments = segments.slice(0, -1).map((segment) => decodeURIComponent(segment.trim()));
-  const repoSegment = decodeURIComponent(segments[segments.length - 1].trim()).replace(/\.git$/, "");
+  const repoSegment = decodeURIComponent(segments[segments.length - 1].trim()).replace(
+    /\.git$/,
+    ""
+  );
 
   if (!repoSegment) {
     throw new Error("Repository name is missing");
@@ -261,9 +268,8 @@ export async function cloneRepo(
     if (isTimeout) {
       return `Failed to clone repository: git clone timed out after ${CLONE_TIMEOUT_MS / 1000}s`;
     }
-    const stderr = typeof execError.stderr === "string"
-      ? execError.stderr.trim().split(/\r?\n/, 1)[0]
-      : "";
+    const stderr =
+      typeof execError.stderr === "string" ? execError.stderr.trim().split(/\r?\n/, 1)[0] : "";
     if (execError.code !== undefined) {
       const signalSuffix = execError.signal ? ` (signal: ${execError.signal})` : "";
       const stderrSuffix = stderr ? `: ${stderr}` : "";
@@ -308,7 +314,9 @@ export async function cloneRepo(
 
     return clonePath;
   } catch (error: unknown) {
-    throw new Error(`Failed to read cloned repository metadata: ${getErrorMessage(error)}`, { cause: error });
+    throw new Error(`Failed to read cloned repository metadata: ${getErrorMessage(error)}`, {
+      cause: error,
+    });
   }
 }
 
@@ -354,7 +362,7 @@ async function scanDirectory(
     const isDirectory = entry.dirent?.isDirectory() ?? false;
     files.push({
       path: entry.path,
-      size: isDirectory ? 0 : entry.stats?.size ?? 0,
+      size: isDirectory ? 0 : (entry.stats?.size ?? 0),
       isDirectory,
     });
     if (files.length >= maxFiles) {
@@ -380,19 +388,21 @@ const LANG_PATTERNS: Record<string, RegExp> = Object.fromEntries(
  * Only entries flagged `isRegex` become RegExps; the rest stay literal filename
  * strings matched against the file-name set.
  */
-const CONFIG_PATTERNS: Record<string, { file: RegExp | string; type: "framework" | "build" | "pm" }> =
-  Object.fromEntries(
-    Object.entries(frameworkMaps.configPatterns).map(([name, entry]) => {
-      const e = entry as { file: string; type: string; isRegex?: boolean };
-      return [
-        name,
-        {
-          file: e.isRegex ? new RegExp(e.file) : e.file,
-          type: e.type as "framework" | "build" | "pm",
-        },
-      ];
-    })
-  );
+const CONFIG_PATTERNS: Record<
+  string,
+  { file: RegExp | string; type: "framework" | "build" | "pm" }
+> = Object.fromEntries(
+  Object.entries(frameworkMaps.configPatterns).map(([name, entry]) => {
+    const e = entry as { file: string; type: string; isRegex?: boolean };
+    return [
+      name,
+      {
+        file: e.isRegex ? new RegExp(e.file) : e.file,
+        type: e.type as "framework" | "build" | "pm",
+      },
+    ];
+  })
+);
 
 /**
  * Detect stack from file patterns
@@ -424,9 +434,7 @@ function detectStack(files: FileInfo[]): StackInfo {
   // Only config files that definitively indicate framework usage are listed here.
   for (const [name, { file, type }] of Object.entries(CONFIG_PATTERNS)) {
     const matches =
-      typeof file === "string"
-        ? fileNameSet.has(file)
-        : filePaths.some((p) => file.test(p));
+      typeof file === "string" ? fileNameSet.has(file) : filePaths.some((p) => file.test(p));
 
     if (matches) {
       // Normalize framework names by removing variant suffixes like (mjs), (ts), etc.
@@ -442,11 +450,15 @@ function detectStack(files: FileInfo[]): StackInfo {
   }
 
   // Docker detection
-  stack.hasDocker = fileNameSet.has("Dockerfile") || fileNameSet.has("docker-compose.yml") || fileNameSet.has("docker-compose.yaml");
+  stack.hasDocker =
+    fileNameSet.has("Dockerfile") ||
+    fileNameSet.has("docker-compose.yml") ||
+    fileNameSet.has("docker-compose.yaml");
 
   // CI detection
   stack.hasCi = filePaths.some(
-    (p) => p.startsWith(".github/workflows/") || p === ".gitlab-ci.yml" || p.startsWith(".circleci/")
+    (p) =>
+      p.startsWith(".github/workflows/") || p === ".gitlab-ci.yml" || p.startsWith(".circleci/")
   );
 
   // Set build system based on package.json if not set
@@ -540,8 +552,10 @@ function parseWorkflowTriggers(content: string): string[] {
  */
 async function parseWorkflows(repoPath: string, files: FileInfo[]): Promise<CIWorkflow[]> {
   const workflows: CIWorkflow[] = [];
-  const workflowFiles = files.filter((f) =>
-    f.path.startsWith(".github/workflows/") && (f.path.endsWith(".yml") || f.path.endsWith(".yaml"))
+  const workflowFiles = files.filter(
+    (f) =>
+      f.path.startsWith(".github/workflows/") &&
+      (f.path.endsWith(".yml") || f.path.endsWith(".yaml"))
   );
 
   for (const wf of workflowFiles) {
@@ -606,12 +620,16 @@ function extractWorkspaceGlobsFromPackageJson(pkg: unknown): string[] {
     return [];
   }
   if (Array.isArray(candidate)) {
-    return candidate.filter((entry): entry is string => typeof entry === "string" && entry.trim().length > 0);
+    return candidate.filter(
+      (entry): entry is string => typeof entry === "string" && entry.trim().length > 0
+    );
   }
   if (typeof candidate === "object" && candidate !== null) {
     const packages = (candidate as { packages?: unknown }).packages;
     if (Array.isArray(packages)) {
-      return packages.filter((entry): entry is string => typeof entry === "string" && entry.trim().length > 0);
+      return packages.filter(
+        (entry): entry is string => typeof entry === "string" && entry.trim().length > 0
+      );
     }
   }
   return [];
@@ -661,7 +679,8 @@ async function detectMonorepo(repoPath: string, files: FileInfo[]): Promise<Mono
   if (filePaths.has("lerna.json")) managers.add("lerna");
   if (filePaths.has("nx.json")) managers.add("nx");
   if (filePaths.has("turbo.json")) managers.add("turborepo");
-  if (filePaths.has("pnpm-workspace.yaml") || filePaths.has("pnpm-workspace.yml")) managers.add("pnpm");
+  if (filePaths.has("pnpm-workspace.yaml") || filePaths.has("pnpm-workspace.yml"))
+    managers.add("pnpm");
 
   if (filePaths.has("package.json")) {
     try {
@@ -696,9 +715,8 @@ async function detectMonorepo(repoPath: string, files: FileInfo[]): Promise<Mono
   }
 
   const workspaceGlobs = Array.from(workspaceGlobSet);
-  const effectiveWorkspaceGlobs = workspaceGlobs.length > 0
-    ? workspaceGlobs
-    : ["packages/*", "apps/*"];
+  const effectiveWorkspaceGlobs =
+    workspaceGlobs.length > 0 ? workspaceGlobs : ["packages/*", "apps/*"];
 
   const workspacePackagePaths = new Set<string>();
   for (const workspaceGlob of effectiveWorkspaceGlobs) {
@@ -711,9 +729,14 @@ async function detectMonorepo(repoPath: string, files: FileInfo[]): Promise<Mono
   const workspacePackages: MonorepoInfo["workspacePackages"] = [];
   for (const packagePath of Array.from(workspacePackagePaths).sort()) {
     try {
-      const pkg = JSON.parse(await readFile(join(repoPath, packagePath), "utf-8")) as { name?: string };
+      const pkg = JSON.parse(await readFile(join(repoPath, packagePath), "utf-8")) as {
+        name?: string;
+      };
       workspacePackages.push({
-        name: typeof pkg.name === "string" && pkg.name.trim() ? pkg.name : basename(dirname(packagePath)),
+        name:
+          typeof pkg.name === "string" && pkg.name.trim()
+            ? pkg.name
+            : basename(dirname(packagePath)),
         path: dirname(packagePath),
       });
     } catch {
@@ -752,11 +775,21 @@ function scoreFile(filePath: string, size: number): FilePriority {
 
   // Config files (highest priority - small and information-dense)
   const configFiles = [
-    "package.json", "tsconfig.json", "pyproject.toml", "Cargo.toml",
-    "go.mod", "build.gradle", "pom.xml", "Gemfile", "composer.json",
-    ".eslintrc", ".prettierrc", "jest.config.js", "vitest.config.ts",
+    "package.json",
+    "tsconfig.json",
+    "pyproject.toml",
+    "Cargo.toml",
+    "go.mod",
+    "build.gradle",
+    "pom.xml",
+    "Gemfile",
+    "composer.json",
+    ".eslintrc",
+    ".prettierrc",
+    "jest.config.js",
+    "vitest.config.ts",
   ];
-  if (configFiles.some(c => fileName === c || fileName.startsWith(c))) {
+  if (configFiles.some((c) => fileName === c || fileName.startsWith(c))) {
     score = 100;
     category = "config";
   }
@@ -771,7 +804,7 @@ function scoreFile(filePath: string, size: number): FilePriority {
     /^(lib\/)?[^/]+\.(ts|js|mjs|cjs|mts|cts|py|go|rs)$/, // top-level lib files
     /^(source\/)?index\.(ts|js|mjs|cjs|mts|cts)$/,
   ];
-  if (entryPatterns.some(p => p.test(filePath))) {
+  if (entryPatterns.some((p) => p.test(filePath))) {
     score = Math.max(score, 90);
     category = "entry";
   }
@@ -782,7 +815,7 @@ function scoreFile(filePath: string, size: number): FilePriority {
     /^(src|lib|source)\/core\/[^/]+\.(ts|js|mjs|cjs|mts|cts|py|go|rs)$/, // Core modules
     /^(src|lib|source)\/utils?\/[^/]+\.(ts|js|mjs|cjs|mts|cts|py|go|rs)$/, // Utils
   ];
-  if (corePatterns.some(p => p.test(filePath)) && score < 80) {
+  if (corePatterns.some((p) => p.test(filePath)) && score < 80) {
     score = 80;
     category = "source";
   }
@@ -988,7 +1021,7 @@ const DEPENDENCY_FRAMEWORKS: Record<string, string> = frameworkMaps.dependencyFr
  */
 export function detectFrameworksFromDeps(depNames: string[]): string[] {
   const frameworks = new Set<string>();
-  
+
   for (const dep of depNames) {
     const normalized = dep.toLowerCase();
     if (DEPENDENCY_FRAMEWORKS[normalized]) {
@@ -999,7 +1032,7 @@ export function detectFrameworksFromDeps(depNames: string[]): string[] {
       frameworks.add(DEPENDENCY_FRAMEWORKS[dep]);
     }
   }
-  
+
   return Array.from(frameworks);
 }
 
@@ -1007,20 +1040,15 @@ export function detectFrameworksFromDeps(depNames: string[]): string[] {
  * Merge frameworks detected from dependencies into stack info
  * Should be called after extractDependencies() in the main flow
  */
-export function mergeFrameworksFromDeps(
-  stack: StackInfo,
-  depNames: string[]
-): StackInfo {
+export function mergeFrameworksFromDeps(stack: StackInfo, depNames: string[]): StackInfo {
   const depFrameworks = detectFrameworksFromDeps(depNames);
-  const existingNormalized = new Set(
-    stack.frameworks.map(f => f.toLowerCase())
-  );
-  
+  const existingNormalized = new Set(stack.frameworks.map((f) => f.toLowerCase()));
+
   for (const framework of depFrameworks) {
     if (!existingNormalized.has(framework.toLowerCase())) {
       stack.frameworks.push(framework);
     }
   }
-  
+
   return stack;
 }

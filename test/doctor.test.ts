@@ -6,11 +6,7 @@ import {
   MIN_NODE_MAJOR,
   type EnvironmentSnapshot,
 } from "../src/doctor.js";
-import {
-  runDoctor,
-  colorizeReport,
-  buildDoctorJson,
-} from "../src/commands/doctor-command.js";
+import { runDoctor, colorizeReport, buildDoctorJson } from "../src/commands/doctor-command.js";
 
 function env(overrides: Partial<EnvironmentSnapshot> = {}): EnvironmentSnapshot {
   return {
@@ -87,18 +83,14 @@ describe("evaluateDoctor", () => {
   });
 
   it("treats a token env var as valid authentication", () => {
-    const report = evaluateDoctor(
-      env({ ghAuthenticated: false, tokenEnvVars: ["GITHUB_TOKEN"] })
-    );
+    const report = evaluateDoctor(env({ ghAuthenticated: false, tokenEnvVars: ["GITHUB_TOKEN"] }));
     const auth = report.checks.find((c) => c.id === "auth");
     expect(auth?.status).toBe("ok");
     expect(auth?.detail).toContain("GITHUB_TOKEN");
   });
 
   it("warns when there is no authentication at all", () => {
-    const report = evaluateDoctor(
-      env({ ghAuthenticated: false, tokenEnvVars: [] })
-    );
+    const report = evaluateDoctor(env({ ghAuthenticated: false, tokenEnvVars: [] }));
     const auth = report.checks.find((c) => c.id === "auth");
     expect(auth?.status).toBe("warn");
   });
@@ -119,8 +111,7 @@ describe("evaluateDoctor", () => {
 
   it("computes status counts", () => {
     const report = evaluateDoctor(env());
-    const total =
-      report.counts.ok + report.counts.warn + report.counts.fail + report.counts.info;
+    const total = report.counts.ok + report.counts.warn + report.counts.fail + report.counts.info;
     expect(total).toBe(report.checks.length);
   });
 });
@@ -145,10 +136,7 @@ describe("runDoctor", () => {
   it("prints colorized output and does not exit when healthy", async () => {
     const log = vi.fn();
     const exit = vi.fn();
-    const report = await runDoctor(
-      {},
-      { gather: async () => env(), log, exit }
-    );
+    const report = await runDoctor({}, { gather: async () => env(), log, exit });
     expect(report.ok).toBe(true);
     expect(exit).not.toHaveBeenCalled();
     expect(log).toHaveBeenCalledTimes(1);
@@ -158,20 +146,14 @@ describe("runDoctor", () => {
   it("exits with code 1 when a required check fails", async () => {
     const log = vi.fn();
     const exit = vi.fn();
-    await runDoctor(
-      {},
-      { gather: async () => env({ gitVersion: null }), log, exit }
-    );
+    await runDoctor({}, { gather: async () => env({ gitVersion: null }), log, exit });
     expect(exit).toHaveBeenCalledWith(1);
   });
 
   it("emits valid JSON with --json", async () => {
     const log = vi.fn();
     const exit = vi.fn();
-    await runDoctor(
-      { json: true },
-      { gather: async () => env(), log, exit }
-    );
+    await runDoctor({ json: true }, { gather: async () => env(), log, exit });
     const payload = JSON.parse(log.mock.calls[0][0] as string);
     expect(payload.ok).toBe(true);
     expect(Array.isArray(payload.checks)).toBe(true);

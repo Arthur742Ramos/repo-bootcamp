@@ -117,9 +117,8 @@ export async function waitForOutput(
   while (Date.now() - startedAt < timeoutMs) {
     const { stdout, stderr } = getOutput();
     const combinedOutput = `${stdout}\n${stderr}`;
-    const matched = typeof pattern === "string"
-      ? combinedOutput.includes(pattern)
-      : pattern.test(combinedOutput);
+    const matched =
+      typeof pattern === "string" ? combinedOutput.includes(pattern) : pattern.test(combinedOutput);
 
     if (matched) {
       return combinedOutput;
@@ -131,7 +130,9 @@ export async function waitForOutput(
   const { stdout, stderr } = getOutput();
   const combinedOutput = `${stdout}\n${stderr}`.trim();
   const outputPreview = combinedOutput || "(no output)";
-  throw new Error(`Timed out waiting for output: ${String(pattern)}\n\nLast output:\n${outputPreview}`);
+  throw new Error(
+    `Timed out waiting for output: ${String(pattern)}\n\nLast output:\n${outputPreview}`
+  );
 }
 
 export async function getAvailablePort(): Promise<number> {

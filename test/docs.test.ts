@@ -213,7 +213,7 @@ describe("analyzePrerequisites", () => {
     const repo = await createTestRepo({
       "README.md": "# My Project\n\nJust a simple app with no tools mentioned.",
       "package.json": JSON.stringify({ name: "test" }),
-      "Dockerfile": "FROM node:20\nCOPY . .\nRUN npm install",
+      Dockerfile: "FROM node:20\nCOPY . .\nRUN npm install",
     });
 
     try {

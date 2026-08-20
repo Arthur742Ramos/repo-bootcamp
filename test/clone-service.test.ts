@@ -12,13 +12,25 @@ vi.mock("fs/promises", async () => {
   return { ...actual, rm: vi.fn().mockResolvedValue(undefined) };
 });
 
-import { cloneRepository, scanRepositoryFiles, cleanupRepository } from "../src/services/clone-service.js";
+import {
+  cloneRepository,
+  scanRepositoryFiles,
+  cleanupRepository,
+} from "../src/services/clone-service.js";
 
 describe("clone-service", () => {
-  beforeEach(() => { vi.clearAllMocks(); });
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
 
   describe("cloneRepository", () => {
-    const validInfo = { owner: "test", repo: "repo", url: "https://github.com/test/repo", fullName: "test/repo", branch: "main" };
+    const validInfo = {
+      owner: "test",
+      repo: "repo",
+      url: "https://github.com/test/repo",
+      fullName: "test/repo",
+      branch: "main",
+    };
 
     it("clones with valid info", async () => {
       const result = await cloneRepository(validInfo as any);
@@ -32,23 +44,33 @@ describe("clone-service", () => {
     });
 
     it("rejects missing URL", async () => {
-      await expect(cloneRepository({ owner: "a", repo: "b", url: "" } as any)).rejects.toThrow("URL is required");
+      await expect(cloneRepository({ owner: "a", repo: "b", url: "" } as any)).rejects.toThrow(
+        "URL is required"
+      );
     });
 
     it("rejects URL starting with dash", async () => {
-      await expect(cloneRepository({ owner: "a", repo: "b", url: "-evil" } as any)).rejects.toThrow("unsafe");
+      await expect(cloneRepository({ owner: "a", repo: "b", url: "-evil" } as any)).rejects.toThrow(
+        "unsafe"
+      );
     });
 
     it("rejects URL with newlines", async () => {
-      await expect(cloneRepository({ owner: "a", repo: "b", url: "https://foo\nbar" } as any)).rejects.toThrow("unsafe");
+      await expect(
+        cloneRepository({ owner: "a", repo: "b", url: "https://foo\nbar" } as any)
+      ).rejects.toThrow("unsafe");
     });
 
     it("rejects unsupported protocol", async () => {
-      await expect(cloneRepository({ owner: "a", repo: "b", url: "ftp://foo" } as any)).rejects.toThrow("Unsupported");
+      await expect(
+        cloneRepository({ owner: "a", repo: "b", url: "ftp://foo" } as any)
+      ).rejects.toThrow("Unsupported");
     });
 
     it("rejects missing owner", async () => {
-      await expect(cloneRepository({ owner: "", repo: "b", url: "https://github.com/a/b" } as any)).rejects.toThrow("owner and name");
+      await expect(
+        cloneRepository({ owner: "", repo: "b", url: "https://github.com/a/b" } as any)
+      ).rejects.toThrow("owner and name");
     });
 
     it("rejects branch with ..", async () => {

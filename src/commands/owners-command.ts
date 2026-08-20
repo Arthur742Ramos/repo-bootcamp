@@ -58,7 +58,10 @@ function patternMatches(pattern: string, filePath: string): boolean {
     .map((seg) =>
       seg === "**"
         ? ".*"
-        : seg.replace(/[.+^${}()|[\]\\]/g, "\\$&").replace(/\*/g, "[^/]*").replace(/\?/g, "[^/]")
+        : seg
+            .replace(/[.+^${}()|[\]\\]/g, "\\$&")
+            .replace(/\*/g, "[^/]*")
+            .replace(/\?/g, "[^/]")
     )
     .join("/");
   const head = anchored ? "^" : "(?:^|.*/)";
@@ -88,7 +91,10 @@ function topLevelDirs(files: Array<{ path: string; isDirectory: boolean }>): str
 }
 
 /** Best-effort top committers from whatever git history is available. */
-async function topCommitters(repoPath: string, limit: number): Promise<Array<{ name: string; commits: number }>> {
+async function topCommitters(
+  repoPath: string,
+  limit: number
+): Promise<Array<{ name: string; commits: number }>> {
   try {
     const { stdout } = await execFileAsync("git", ["shortlog", "-sn", "--no-merges", "HEAD"], {
       cwd: repoPath,
@@ -160,7 +166,10 @@ function printReport(
  */
 export async function runOwnersCommand(repoUrl: string, opts: OwnersCommandOptions): Promise<void> {
   await withResolvedRepo(repoUrl, opts, "Owners analysis failed", async (repoSource) => {
-    const scan = await scanRepositoryFiles(repoSource.path, finiteOr(opts.maxFiles, 500, { min: 1 }));
+    const scan = await scanRepositoryFiles(
+      repoSource.path,
+      finiteOr(opts.maxFiles, 500, { min: 1 })
+    );
 
     let codeownersContent: string | null = null;
     let codeownersPath: string | null = null;
@@ -181,8 +190,13 @@ export async function runOwnersCommand(repoUrl: string, opts: OwnersCommandOptio
     // `/packages/** @team` CODEOWNERS idiom matches — patternMatches anchors a
     // `**` rule with a `/` separator, which a bare dir name lacks. A `/dir` or
     // `/dir/` rule still matches the trailing-slash form too.
-    const areas = topLevelDirs(scan.files).map((dir) => ({ dir, owners: ownersForPath(`${dir}/`, rules) }));
-    const allOwners = [...new Set(rules.flatMap((r) => r.owners))].sort((a, b) => a.localeCompare(b));
+    const areas = topLevelDirs(scan.files).map((dir) => ({
+      dir,
+      owners: ownersForPath(`${dir}/`, rules),
+    }));
+    const allOwners = [...new Set(rules.flatMap((r) => r.owners))].sort((a, b) =>
+      a.localeCompare(b)
+    );
     const committers = await topCommitters(repoSource.path, 8);
 
     if (opts.json) {

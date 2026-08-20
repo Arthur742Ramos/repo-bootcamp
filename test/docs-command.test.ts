@@ -1,10 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
 vi.mock("chalk", () => {
-  const makeChalk = (): any => new Proxy((...args: any[]) => args.join(""), {
-    get: () => makeChalk(),
-    apply: (_t: any, _a: any, args: any[]) => args.join(""),
-  });
+  const makeChalk = (): any =>
+    new Proxy((...args: any[]) => args.join(""), {
+      get: () => makeChalk(),
+      apply: (_t: any, _a: any, args: any[]) => args.join(""),
+    });
   return { default: makeChalk() };
 });
 
@@ -40,8 +41,12 @@ vi.mock("../src/docs-fixer.js", () => ({
 import { runDocsCommand } from "../src/commands/docs-command.js";
 
 describe("runDocsCommand", () => {
-  const mockExit = vi.spyOn(process, "exit").mockImplementation((() => { throw new Error("process.exit"); }) as any);
-  beforeEach(() => { vi.clearAllMocks(); });
+  const mockExit = vi.spyOn(process, "exit").mockImplementation((() => {
+    throw new Error("process.exit");
+  }) as any);
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
 
   it("runs analysis on a repo URL and cleans up", async () => {
     await runDocsCommand("https://github.com/test/repo", {});
@@ -59,7 +64,9 @@ describe("runDocsCommand", () => {
       isStale: true,
       summary: { errors: 1, warnings: 0 },
     });
-    await expect(runDocsCommand("https://github.com/test/repo", { check: true })).rejects.toThrow("process.exit");
+    await expect(runDocsCommand("https://github.com/test/repo", { check: true })).rejects.toThrow(
+      "process.exit"
+    );
   });
 
   it("applies fixes when --fix and stale", async () => {
@@ -72,7 +79,11 @@ describe("runDocsCommand", () => {
       isStale: true,
       summary: { errors: 0, warnings: 1 },
     });
-    mockFix.mockResolvedValueOnce({ changesApplied: 1, filesModified: 1, results: [{ file: "README.md", changes: ["added React"] }] });
+    mockFix.mockResolvedValueOnce({
+      changesApplied: 1,
+      filesModified: 1,
+      results: [{ file: "README.md", changes: ["added React"] }],
+    });
     await runDocsCommand("https://github.com/test/repo", { fix: true });
     expect(mockFix).toHaveBeenCalled();
   });
@@ -81,8 +92,14 @@ describe("runDocsCommand", () => {
     mockAnalyze.mockResolvedValueOnce({
       versionMismatches: [{ type: "node", documented: "16", actual: "18", location: "README" }],
       frameworkIssues: [{ framework: "Express" }],
-      cliDrift: [{ type: "missing", actual: "build" }, { type: "extra", documented: "deploy" }],
-      prerequisiteIssues: [{ type: "env", name: "API_KEY" }, { type: "tool", name: "docker" }],
+      cliDrift: [
+        { type: "missing", actual: "build" },
+        { type: "extra", documented: "deploy" },
+      ],
+      prerequisiteIssues: [
+        { type: "env", name: "API_KEY" },
+        { type: "tool", name: "docker" },
+      ],
       badgeIssues: [{ line: 5, status: "broken", url: "https://example.com/badge.svg" }],
       isStale: true,
       summary: { errors: 2, warnings: 3 },

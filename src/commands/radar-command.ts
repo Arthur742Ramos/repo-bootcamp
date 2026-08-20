@@ -66,7 +66,9 @@ function printReport(radar: TechRadar, repoName: string, filesScanned: number): 
       console.log(chalk.dim("  —"));
     } else {
       for (const signal of signals) {
-        console.log(`  ${color("•")} ${chalk.bold(signal.name)}${chalk.dim(` — ${signal.reason}`)}`);
+        console.log(
+          `  ${color("•")} ${chalk.bold(signal.name)}${chalk.dim(` — ${signal.reason}`)}`
+        );
       }
     }
     console.log();
@@ -86,7 +88,10 @@ export async function runRadarCommand(repoUrl: string, opts: RadarCommandOptions
   const maxRisk = finiteOr(opts.maxRisk, 50);
 
   await withResolvedRepo(repoUrl, opts, "Radar analysis failed", async (repoSource) => {
-    const scan = await scanRepositoryFiles(repoSource.path, finiteOr(opts.maxFiles, 500, { min: 1 }));
+    const scan = await scanRepositoryFiles(
+      repoSource.path,
+      finiteOr(opts.maxFiles, 500, { min: 1 })
+    );
     const packageJson = await readFile(join(repoSource.path, "package.json"), "utf-8")
       .then((content) => JSON.parse(content) as Record<string, unknown>)
       .catch(() => undefined);

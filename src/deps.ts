@@ -43,7 +43,7 @@ export interface DependencyAnalysis {
 const CATEGORY_PATTERNS: Record<string, RegExp[]> = Object.fromEntries(
   Object.entries(categoryPatternsJson).map(([cat, patterns]) => [
     cat,
-    (patterns as string[]).map(p => new RegExp(p)),
+    (patterns as string[]).map((p) => new RegExp(p)),
   ])
 );
 
@@ -52,7 +52,7 @@ const CATEGORY_PATTERNS: Record<string, RegExp[]> = Object.fromEntries(
  */
 function categorizeDependency(name: string): string | null {
   for (const [category, patterns] of Object.entries(CATEGORY_PATTERNS)) {
-    if (patterns.some(p => p.test(name))) {
+    if (patterns.some((p) => p.test(name))) {
       return category;
     }
   }
@@ -355,7 +355,11 @@ async function extractPythonDependencies(repoPath: string): Promise<DependencyAn
       // literals directly rather than splitting on commas — a comma can appear
       // inside an environment marker (e.g. `sys_platform in ("win32", "cygwin")`).
       // Strips extras and environment markers, mirroring requirements.txt.
-      const parseRequirementArray = (body: string, type: "runtime" | "dev", target: Dependency[]): void => {
+      const parseRequirementArray = (
+        body: string,
+        type: "runtime" | "dev",
+        target: Dependency[]
+      ): void => {
         for (const quoted of body.matchAll(/"([^"]*)"|'([^']*)'/g)) {
           const item = (quoted[1] ?? quoted[2] ?? "").trim();
           if (!item || item.startsWith("#")) continue;
@@ -550,10 +554,11 @@ export function generateDependencyDiagram(deps: DependencyAnalysis, projectName:
 
   // Group by categories
   if (deps.categories.length > 0) {
-    for (const cat of deps.categories.slice(0, 8)) { // Top 8 categories
+    for (const cat of deps.categories.slice(0, 8)) {
+      // Top 8 categories
       const safeName = cat.name.replace(/[^a-zA-Z0-9]/g, "");
       lines.push(`  subgraph ${safeName}["${cat.name}"]`);
-      
+
       // Show up to 5 deps per category
       for (const dep of cat.deps.slice(0, 5)) {
         const safeDepName = dep.replace(/[^a-zA-Z0-9]/g, "_");
@@ -568,7 +573,7 @@ export function generateDependencyDiagram(deps: DependencyAnalysis, projectName:
     }
   } else {
     // Fallback: show top runtime dependencies
-    lines.push("  subgraph Runtime[\"Runtime Dependencies\"]");
+    lines.push('  subgraph Runtime["Runtime Dependencies"]');
     for (const dep of deps.runtime.slice(0, 10)) {
       const safeDepName = dep.name.replace(/[^a-zA-Z0-9]/g, "_");
       lines.push(`    ${safeDepName}["${dep.name}"]`);
@@ -581,7 +586,7 @@ export function generateDependencyDiagram(deps: DependencyAnalysis, projectName:
     lines.push("");
 
     if (deps.dev.length > 0) {
-      lines.push("  subgraph Dev[\"Dev Dependencies\"]");
+      lines.push('  subgraph Dev["Dev Dependencies"]');
       for (const dep of deps.dev.slice(0, 8)) {
         const safeDepName = dep.name.replace(/[^a-zA-Z0-9]/g, "_");
         lines.push(`    ${safeDepName}["${dep.name}"]`);
@@ -605,7 +610,9 @@ export function generateDependencyDocs(deps: DependencyAnalysis, projectName: st
 
   lines.push("# Dependency Overview");
   lines.push("");
-  lines.push(`This document provides an overview of the ${deps.totalCount} dependencies used in ${projectName}.`);
+  lines.push(
+    `This document provides an overview of the ${deps.totalCount} dependencies used in ${projectName}.`
+  );
   lines.push("");
 
   // Summary table
@@ -636,7 +643,7 @@ export function generateDependencyDocs(deps: DependencyAnalysis, projectName: st
     for (const cat of deps.categories) {
       lines.push(`### ${cat.name}`);
       lines.push("");
-      lines.push(cat.deps.map(d => `- \`${d}\``).join("\n"));
+      lines.push(cat.deps.map((d) => `- \`${d}\``).join("\n"));
       lines.push("");
     }
   }

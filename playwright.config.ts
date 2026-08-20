@@ -9,10 +9,7 @@ export default defineConfig({
   },
   outputDir: "test-results/playwright",
   reporter: process.env.CI
-    ? [
-        ["line"],
-        ["html", { open: "never", outputFolder: "playwright-report" }],
-      ]
+    ? [["line"], ["html", { open: "never", outputFolder: "playwright-report" }]]
     : [["list"]],
   retries: process.env.CI ? 1 : 0,
   use: {

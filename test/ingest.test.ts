@@ -8,7 +8,15 @@ import { execFile } from "child_process";
 import { promisify } from "util";
 import { join } from "path";
 import { tmpdir } from "os";
-import { parseGitHubUrl, detectFrameworksFromDeps, mergeFrameworksFromDeps, scanRepo, readRepoFile, getHeadCommitSha, isWorkingTreeDirty } from "../src/ingest.js";
+import {
+  parseGitHubUrl,
+  detectFrameworksFromDeps,
+  mergeFrameworksFromDeps,
+  scanRepo,
+  readRepoFile,
+  getHeadCommitSha,
+  isWorkingTreeDirty,
+} from "../src/ingest.js";
 import type { StackInfo } from "../src/types.js";
 
 describe("parseGitHubUrl", () => {
@@ -145,7 +153,9 @@ describe("parseGitHubUrl", () => {
   });
 
   it("rejects URL values containing control characters", () => {
-    expect(() => parseGitHubUrl("https://github.com/owner/repo\nbad")).toThrow("Invalid GitHub URL");
+    expect(() => parseGitHubUrl("https://github.com/owner/repo\nbad")).toThrow(
+      "Invalid GitHub URL"
+    );
   });
 
   it("rejects traversal-style URL segments", () => {
@@ -256,7 +266,7 @@ describe("mergeFrameworksFromDeps", () => {
       hasDocker: false,
       hasCi: true,
     };
-    
+
     const result = mergeFrameworksFromDeps(stack, ["react", "express"]);
     expect(result.frameworks).toContain("Next.js"); // existing
     expect(result.frameworks).toContain("React");
@@ -272,9 +282,9 @@ describe("mergeFrameworksFromDeps", () => {
       hasDocker: false,
       hasCi: true,
     };
-    
+
     const result = mergeFrameworksFromDeps(stack, ["react", "react-dom"]);
-    const reactCount = result.frameworks.filter(f => f === "React").length;
+    const reactCount = result.frameworks.filter((f) => f === "React").length;
     expect(reactCount).toBe(1);
   });
 
@@ -287,7 +297,7 @@ describe("mergeFrameworksFromDeps", () => {
       hasDocker: false,
       hasCi: true,
     };
-    
+
     const result = mergeFrameworksFromDeps(stack, ["react"]);
     // Should not add React again since REACT already exists
     expect(result.frameworks).toHaveLength(1);
@@ -301,7 +311,11 @@ describe("scanRepo", () => {
       await mkdir(join(repoPath, "src"), { recursive: true });
       await mkdir(join(repoPath, "node_modules", "pkg"), { recursive: true });
       await writeFile(join(repoPath, "src", "index.ts"), "export const x = 1;\n", "utf-8");
-      await writeFile(join(repoPath, "node_modules", "pkg", "index.js"), "module.exports = 1;\n", "utf-8");
+      await writeFile(
+        join(repoPath, "node_modules", "pkg", "index.js"),
+        "module.exports = 1;\n",
+        "utf-8"
+      );
 
       const scan = await scanRepo(repoPath, 200);
       expect(scan.files.some((f) => f.path.startsWith("node_modules/"))).toBe(false);
@@ -316,7 +330,11 @@ describe("scanRepo", () => {
     try {
       await mkdir(join(repoPath, "src"), { recursive: true });
       for (let i = 0; i < 6; i++) {
-        await writeFile(join(repoPath, "src", `file-${i}.ts`), `export const value${i} = ${i};\n`, "utf-8");
+        await writeFile(
+          join(repoPath, "src", `file-${i}.ts`),
+          `export const value${i} = ${i};\n`,
+          "utf-8"
+        );
       }
 
       const scan = await scanRepo(repoPath, 2);
@@ -340,8 +358,16 @@ describe("scanRepo", () => {
         }),
         "utf-8"
       );
-      await writeFile(join(repoPath, "packages", "core", "package.json"), JSON.stringify({ name: "@acme/core" }), "utf-8");
-      await writeFile(join(repoPath, "apps", "web", "package.json"), JSON.stringify({ name: "@acme/web" }), "utf-8");
+      await writeFile(
+        join(repoPath, "packages", "core", "package.json"),
+        JSON.stringify({ name: "@acme/core" }),
+        "utf-8"
+      );
+      await writeFile(
+        join(repoPath, "apps", "web", "package.json"),
+        JSON.stringify({ name: "@acme/web" }),
+        "utf-8"
+      );
 
       const scan = await scanRepo(repoPath, 500);
       expect(scan.monorepo?.isMonorepo).toBe(true);
@@ -358,15 +384,27 @@ describe("scanRepo", () => {
     const repoPath = await mkdtemp(join(tmpdir(), "bootcamp-ingest-monorepo-signals-"));
     try {
       await mkdir(join(repoPath, "packages", "shared"), { recursive: true });
-      await writeFile(join(repoPath, "pnpm-workspace.yaml"), "packages:\n  - 'packages/*'\n", "utf-8");
-      await writeFile(join(repoPath, "lerna.json"), "{ \"version\": \"0.0.0\" }\n", "utf-8");
-      await writeFile(join(repoPath, "nx.json"), "{ \"extends\": \"nx/presets/npm.json\" }\n", "utf-8");
-      await writeFile(join(repoPath, "turbo.json"), "{ \"pipeline\": {} }\n", "utf-8");
-      await writeFile(join(repoPath, "packages", "shared", "package.json"), JSON.stringify({ name: "@acme/shared" }), "utf-8");
+      await writeFile(
+        join(repoPath, "pnpm-workspace.yaml"),
+        "packages:\n  - 'packages/*'\n",
+        "utf-8"
+      );
+      await writeFile(join(repoPath, "lerna.json"), '{ "version": "0.0.0" }\n', "utf-8");
+      await writeFile(join(repoPath, "nx.json"), '{ "extends": "nx/presets/npm.json" }\n', "utf-8");
+      await writeFile(join(repoPath, "turbo.json"), '{ "pipeline": {} }\n', "utf-8");
+      await writeFile(
+        join(repoPath, "packages", "shared", "package.json"),
+        JSON.stringify({ name: "@acme/shared" }),
+        "utf-8"
+      );
 
       const scan = await scanRepo(repoPath, 500);
-      expect(scan.monorepo?.managers).toEqual(expect.arrayContaining(["pnpm", "lerna", "nx", "turborepo"]));
-      expect(scan.monorepo?.workspacePackages.some((pkg) => pkg.path === "packages/shared")).toBe(true);
+      expect(scan.monorepo?.managers).toEqual(
+        expect.arrayContaining(["pnpm", "lerna", "nx", "turborepo"])
+      );
+      expect(scan.monorepo?.workspacePackages.some((pkg) => pkg.path === "packages/shared")).toBe(
+        true
+      );
     } finally {
       await rm(repoPath, { recursive: true, force: true });
     }
@@ -415,8 +453,16 @@ describe("scanRepo", () => {
     try {
       await mkdir(join(repoPath, "packages", "app"), { recursive: true });
       await mkdir(join(repoPath, "packages", "lib"), { recursive: true });
-      await writeFile(join(repoPath, "packages", "app", "index.ts"), "export const app = 1;\n", "utf-8");
-      await writeFile(join(repoPath, "packages", "lib", "index.ts"), "export const lib = 1;\n", "utf-8");
+      await writeFile(
+        join(repoPath, "packages", "app", "index.ts"),
+        "export const app = 1;\n",
+        "utf-8"
+      );
+      await writeFile(
+        join(repoPath, "packages", "lib", "index.ts"),
+        "export const lib = 1;\n",
+        "utf-8"
+      );
       await writeFile(join(repoPath, "README.md"), "# root\n", "utf-8");
 
       const scan = await scanRepo(repoPath, 500, { subdir: "packages/app" });
@@ -438,9 +484,17 @@ describe("scanRepo", () => {
       // past one 8-file read batch). Total (~245 KB) exceeds the 2x read budget,
       // so the early-stop path also triggers.
       const chunk = "const filler = 1;\n".repeat(340); // ~6.1 KB
-      await writeFile(join(repoPath, "src", "index.ts"), `export const entry = 0;\n${chunk}`, "utf-8");
+      await writeFile(
+        join(repoPath, "src", "index.ts"),
+        `export const entry = 0;\n${chunk}`,
+        "utf-8"
+      );
       for (let i = 0; i < 40; i++) {
-        await writeFile(join(repoPath, "src", `mod-${i}.ts`), `export const m${i} = ${i};\n${chunk}`, "utf-8");
+        await writeFile(
+          join(repoPath, "src", `mod-${i}.ts`),
+          `export const m${i} = ${i};\n${chunk}`,
+          "utf-8"
+        );
       }
 
       const scan = await scanRepo(repoPath, 500);

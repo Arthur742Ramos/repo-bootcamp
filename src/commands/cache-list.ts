@@ -181,10 +181,7 @@ export function buildJsonOutput(
  * Render `summaries` as a human-readable report. Returns a single string
  * suitable for `console.log`.
  */
-export function buildHumanOutput(
-  summaries: CacheEntrySummary[],
-  now: number = Date.now()
-): string {
+export function buildHumanOutput(summaries: CacheEntrySummary[], now: number = Date.now()): string {
   const dir = getCacheDir();
   if (summaries.length === 0) {
     return `Cache is empty (no entries in ${dir}).`;
@@ -199,9 +196,7 @@ export function buildHumanOutput(
   lines.push("");
   lines.push(renderTable(rows));
   lines.push("");
-  lines.push(
-    chalk.dim(`Total: ${summaries.length} entries, ${formatBytes(totalBytes)}`)
-  );
+  lines.push(chalk.dim(`Total: ${summaries.length} entries, ${formatBytes(totalBytes)}`));
   return lines.join("\n");
 }
 

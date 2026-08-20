@@ -52,9 +52,11 @@ const AUDIENCE_PROFILES: Record<
   backend: {
     label: "backend engineers",
     onboardingTitle: "Backend Start Here",
-    onboardingDescription: "Focus first on request handling, service logic, and persistence boundaries.",
+    onboardingDescription:
+      "Focus first on request handling, service logic, and persistence boundaries.",
     architectureTitle: "Backend Architecture Focus",
-    architectureDescription: "Use this view to understand server-side execution paths and data movement.",
+    architectureDescription:
+      "Use this view to understand server-side execution paths and data movement.",
     firstTaskTitle: "Backend-first task picks",
     firstTaskDescription: "Prioritized tasks with server-side impact and API/data ownership.",
     architectureChecklist: [
@@ -71,9 +73,11 @@ const AUDIENCE_PROFILES: Record<
   frontend: {
     label: "frontend engineers",
     onboardingTitle: "Frontend Start Here",
-    onboardingDescription: "Focus first on UI flows, state updates, and client-side rendering boundaries.",
+    onboardingDescription:
+      "Focus first on UI flows, state updates, and client-side rendering boundaries.",
     architectureTitle: "Frontend Architecture Focus",
-    architectureDescription: "Use this view to understand component composition and client data flow.",
+    architectureDescription:
+      "Use this view to understand component composition and client data flow.",
     firstTaskTitle: "Frontend-first task picks",
     firstTaskDescription: "Prioritized tasks that improve UI behavior, quality, and UX confidence.",
     architectureChecklist: [
@@ -90,11 +94,14 @@ const AUDIENCE_PROFILES: Record<
   sre: {
     label: "sre engineers",
     onboardingTitle: "SRE Start Here",
-    onboardingDescription: "Focus first on deploy paths, observability, and operational safety controls.",
+    onboardingDescription:
+      "Focus first on deploy paths, observability, and operational safety controls.",
     architectureTitle: "Operations & Reliability Focus",
-    architectureDescription: "Use this view to understand runtime behavior, release flow, and failure handling.",
+    architectureDescription:
+      "Use this view to understand runtime behavior, release flow, and failure handling.",
     firstTaskTitle: "SRE-first task picks",
-    firstTaskDescription: "Prioritized tasks that improve reliability, visibility, and incident readiness.",
+    firstTaskDescription:
+      "Prioritized tasks that improve reliability, visibility, and incident readiness.",
     architectureChecklist: [
       "Follow the release path from CI checks to deployment targets.",
       "Confirm metrics/logging/alerting coverage for critical flows.",
@@ -119,7 +126,11 @@ function scorePathForAudience(path: string, audience?: Audience): number {
   return profile.filePatterns.reduce((score, pattern) => score + (pattern.test(target) ? 2 : 0), 0);
 }
 
-function getAudienceFiles(facts: RepoFacts, audience?: Audience, limit = MAX_AUDIENCE_FILES): string[] {
+function getAudienceFiles(
+  facts: RepoFacts,
+  audience?: Audience,
+  limit = MAX_AUDIENCE_FILES
+): string[] {
   const candidates = new Set<string>();
 
   for (const entrypoint of facts.structure.entrypoints) {
@@ -161,7 +172,9 @@ function scoreTaskForAudience(task: RepoTask, audience?: Audience): number {
 }
 
 function getAudienceTasks(facts: RepoFacts, audience?: Audience): RepoTask[] {
-  return [...facts.firstTasks].sort((a, b) => scoreTaskForAudience(b, audience) - scoreTaskForAudience(a, audience));
+  return [...facts.firstTasks].sort(
+    (a, b) => scoreTaskForAudience(b, audience) - scoreTaskForAudience(a, audience)
+  );
 }
 
 function resolveStyleConfig(
@@ -175,11 +188,12 @@ function getSectionDepthLimits(sectionDepth: StyleConfig["sectionDepth"]): {
   summaryItems: number;
   quickTasks: number;
 } {
-  const limits: Record<StyleConfig["sectionDepth"], { summaryItems: number; quickTasks: number }> = {
-    minimal: { summaryItems: 3, quickTasks: 2 },
-    standard: { summaryItems: MAX_BOOTCAMP_SUMMARY_ITEMS, quickTasks: MAX_QUICK_TASKS },
-    deep: { summaryItems: 8, quickTasks: 5 },
-  };
+  const limits: Record<StyleConfig["sectionDepth"], { summaryItems: number; quickTasks: number }> =
+    {
+      minimal: { summaryItems: 3, quickTasks: 2 },
+      standard: { summaryItems: MAX_BOOTCAMP_SUMMARY_ITEMS, quickTasks: MAX_QUICK_TASKS },
+      deep: { summaryItems: 8, quickTasks: 5 },
+    };
   return limits[sectionDepth];
 }
 
@@ -215,7 +229,7 @@ function sourcesSection(sources?: string[], label = "Sources"): string {
 <details>
 <summary>${label}</summary>
 
-${sources.map(s => `- \`${s}\``).join("\n")}
+${sources.map((s) => `- \`${s}\``).join("\n")}
 
 </details>
 `;
@@ -229,11 +243,11 @@ ${sources.map(s => `- \`${s}\``).join("\n")}
 function hasRemoteBlobTarget(repoInfo?: RepoInfo): repoInfo is RepoInfo & { host: string } {
   return Boolean(
     repoInfo &&
-      repoInfo.host &&
-      repoInfo.owner &&
-      repoInfo.owner !== "local" &&
-      repoInfo.branch &&
-      repoInfo.branch !== "local"
+    repoInfo.host &&
+    repoInfo.owner &&
+    repoInfo.owner !== "local" &&
+    repoInfo.branch &&
+    repoInfo.branch !== "local"
   );
 }
 
@@ -313,11 +327,19 @@ export function generateBootcamp(
     "- 🏗️ [ARCHITECTURE.md](./ARCHITECTURE.md) - System design",
     "- 🗺️ [CODEMAP.md](./CODEMAP.md) - Directory tour",
     "- ✅ [FIRST_TASKS.md](./FIRST_TASKS.md) - Starter issues",
-    resolvedStyle.sections.showRunbook ? "- 📘 [RUNBOOK.md](./RUNBOOK.md) - Operational reference" : "",
-    resolvedStyle.sections.showDependencyGraph ? "- 🧩 [DEPENDENCIES.md](./DEPENDENCIES.md) - Dependency graph" : "",
-    resolvedStyle.sections.showSecurityDetails ? "- 🔐 [SECURITY.md](./SECURITY.md) - Security findings" : "",
+    resolvedStyle.sections.showRunbook
+      ? "- 📘 [RUNBOOK.md](./RUNBOOK.md) - Operational reference"
+      : "",
+    resolvedStyle.sections.showDependencyGraph
+      ? "- 🧩 [DEPENDENCIES.md](./DEPENDENCIES.md) - Dependency graph"
+      : "",
+    resolvedStyle.sections.showSecurityDetails
+      ? "- 🔐 [SECURITY.md](./SECURITY.md) - Security findings"
+      : "",
     resolvedStyle.sections.showRadar ? "- 📡 [RADAR.md](./RADAR.md) - Technology risk radar" : "",
-    resolvedStyle.sections.showImpact ? "- 🎯 [IMPACT.md](./IMPACT.md) - Change impact analysis" : "",
+    resolvedStyle.sections.showImpact
+      ? "- 🎯 [IMPACT.md](./IMPACT.md) - Change impact analysis"
+      : "",
   ]
     .filter(Boolean)
     .join("\n");
@@ -382,12 +404,15 @@ export function generateOnboarding(
   const profile = getAudienceProfile(options?.audience);
   const prereqs = facts.quickstart.prerequisites.map((p) => `- [ ] ${p}`).join("\n");
   const commands = facts.quickstart.commands
-    .map((c) => `### ${c.name}\n\`\`\`bash\n${c.command}\n\`\`\`\n${c.description ? `> ${c.description}` : ""}`)
+    .map(
+      (c) =>
+        `### ${c.name}\n\`\`\`bash\n${c.command}\n\`\`\`\n${c.description ? `> ${c.description}` : ""}`
+    )
     .join("\n\n");
 
-  const errors = facts.quickstart.commonErrors
-    ?.map((e) => `### ${e.error}\n**Fix:** ${e.fix}`)
-    .join("\n\n") || "_No common errors documented_";
+  const errors =
+    facts.quickstart.commonErrors?.map((e) => `### ${e.error}\n**Fix:** ${e.fix}`).join("\n\n") ||
+    "_No common errors documented_";
 
   const testDirs = facts.structure.testDirs.map((d) => `- \`${d}\``).join("\n");
   const testCmd = facts.quickstart.commands.find(
@@ -398,7 +423,10 @@ export function generateOnboarding(
     .join("\n");
   const audienceTasks = getAudienceTasks(facts, options?.audience)
     .slice(0, MAX_AUDIENCE_TASKS)
-    .map((task) => `- **${task.title}** (${task.category}) - ${task.files[0] ? `start in \`${task.files[0]}\`` : "pick the implementation file from FIRST_TASKS.md"}`)
+    .map(
+      (task) =>
+        `- **${task.title}** (${task.category}) - ${task.files[0] ? `start in \`${task.files[0]}\`` : "pick the implementation file from FIRST_TASKS.md"}`
+    )
     .join("\n");
 
   // Mirror the BOOTCAMP fix: only tell newcomers to start a dev server when one
@@ -491,9 +519,10 @@ export function generateArchitecture(
     .map((c) => `### ${c.name}\n\n**Directory:** \`${c.directory}\`\n\n${c.description}`)
     .join("\n\n");
 
-  const abstractions = facts.architecture.keyAbstractions
-    ?.map((a) => `- **${a.name}**: ${a.description}`)
-    .join("\n") || "_None documented_";
+  const abstractions =
+    facts.architecture.keyAbstractions
+      ?.map((a) => `- **${a.name}**: ${a.description}`)
+      .join("\n") || "_None documented_";
 
   // Generate code examples section
   let codeExamplesSection = "";
@@ -501,7 +530,7 @@ export function generateArchitecture(
     const examples = facts.architecture.codeExamples
       .map((ex) => {
         // Detect language from file extension
-        const ext = ex.file.split('.').pop() || '';
+        const ext = ex.file.split(".").pop() || "";
         const langMap: Record<string, string> = {
           ts: "typescript",
           tsx: "typescript",
@@ -518,7 +547,7 @@ export function generateArchitecture(
           c: "c",
         };
         const lang = langMap[ext] || ext;
-        
+
         return `### ${ex.title}
 
 **File:** \`${ex.file}\`
@@ -530,7 +559,7 @@ ${ex.code}
 ${ex.explanation}`;
       })
       .join("\n\n");
-    
+
     codeExamplesSection = `## Code Examples
 
 ${examples}
@@ -541,7 +570,13 @@ ${examples}
   // Generate Mermaid diagram
   const mermaidDiagram = generateMermaidDiagram(facts);
   const audienceComponents = facts.architecture.components
-    .filter((component) => scorePathForAudience(`${component.name} ${component.directory} ${component.description}`, options?.audience) > 0)
+    .filter(
+      (component) =>
+        scorePathForAudience(
+          `${component.name} ${component.directory} ${component.description}`,
+          options?.audience
+        ) > 0
+    )
     .slice(0, MAX_AUDIENCE_TASKS)
     .map((component) => `- **${component.name}** (\`${component.directory}\`)`)
     .join("\n");
@@ -568,7 +603,9 @@ ${mermaidDiagram}
 
 ${components}
 
-${options?.audience && options.audience !== "all" ? `## ${profile.architectureTitle}
+${
+  options?.audience && options.audience !== "all"
+    ? `## ${profile.architectureTitle}
 
 ${profile.architectureDescription}
 
@@ -580,7 +617,9 @@ ${audienceComponents || "- _No role-specific components detected_"}
 ### Files to inspect first
 ${audienceFiles || "- _No role-specific files detected_"}
 
-` : ""}${codeExamplesSection}## Data Flow
+`
+    : ""
+}${codeExamplesSection}## Data Flow
 
 ${facts.architecture.dataFlow || "_Data flow not documented_"}
 
@@ -592,9 +631,13 @@ ${abstractions}
 
 | Path | Type | Description |
 |------|------|-------------|
-${facts.structure.entrypoints.length > 0
-  ? facts.structure.entrypoints.map((e) => `| ${fileLink(e.path, repoInfo)} | ${e.type} | ${e.description || "-"} |`).join("\n")
-  : "| _None detected_ | - | - |"}
+${
+  facts.structure.entrypoints.length > 0
+    ? facts.structure.entrypoints
+        .map((e) => `| ${fileLink(e.path, repoInfo)} | ${e.type} | ${e.description || "-"} |`)
+        .join("\n")
+    : "| _None detected_ | - | - |"
+}
 
 ## Where to Change What
 
@@ -651,7 +694,10 @@ ${files ? `Key files:\n${files}` : ""}`;
     .join("\n\n");
 
   const entrypoints = facts.structure.entrypoints
-    .map((e) => `- [\`${e.path}\`](${buildBlobUrl(repoInfo, e.path) ?? `./${e.path}`}) - ${e.description || e.type}`)
+    .map(
+      (e) =>
+        `- [\`${e.path}\`](${buildBlobUrl(repoInfo, e.path) ?? `./${e.path}`}) - ${e.description || e.type}`
+    )
     .join("\n");
 
   return `# Code Map: ${facts.repoName}
@@ -672,17 +718,23 @@ ${dirs}
 
 | Directory | Purpose |
 |-----------|---------|
-${facts.structure.testDirs.length > 0 
-  ? facts.structure.testDirs.map((d) => `| \`${d}\` | Test files |`).join("\n")
-  : "| _None detected_ | - |"}
+${
+  facts.structure.testDirs.length > 0
+    ? facts.structure.testDirs.map((d) => `| \`${d}\` | Test files |`).join("\n")
+    : "| _None detected_ | - |"
+}
 
 ## CI/CD
 
 | Workflow | Triggers |
 |----------|----------|
-${facts.ci.workflows.length > 0
-  ? facts.ci.workflows.map((w) => `| \`${w.file}\` | ${w.triggers.join(", ") || "-"} |`).join("\n")
-  : "| _None detected_ | - |"}
+${
+  facts.ci.workflows.length > 0
+    ? facts.ci.workflows
+        .map((w) => `| \`${w.file}\` | ${w.triggers.join(", ") || "-"} |`)
+        .join("\n")
+    : "| _None detected_ | - |"
+}
 
 ## Reading Order for New Contributors
 
@@ -708,7 +760,10 @@ export function generateFirstTasks(
 ): string {
   const resolvedStyle = resolveStyleConfig(options, styleConfig);
   const profile = getAudienceProfile(options?.audience);
-  const prioritizedTasks = getAudienceTasks(facts, options?.audience).slice(0, resolvedStyle.firstTasksCount);
+  const prioritizedTasks = getAudienceTasks(facts, options?.audience).slice(
+    0,
+    resolvedStyle.firstTasksCount
+  );
   const tasksByCategory = {
     beginner: prioritizedTasks.filter((t) => t.difficulty === "beginner"),
     intermediate: prioritizedTasks.filter((t) => t.difficulty === "intermediate"),
@@ -719,9 +774,10 @@ export function generateFirstTasks(
     .map((task) => `- **${task.title}** (${task.difficulty}, ${task.category})`)
     .join("\n");
   const hiddenTasks = Math.max(0, facts.firstTasks.length - prioritizedTasks.length);
-  const styleLimitNote = hiddenTasks > 0
-    ? `_Showing top ${prioritizedTasks.length} tasks for the ${resolvedStyle.name} style pack (${hiddenTasks} hidden)._`
-    : "";
+  const styleLimitNote =
+    hiddenTasks > 0
+      ? `_Showing top ${prioritizedTasks.length} tasks for the ${resolvedStyle.name} style pack (${hiddenTasks} hidden)._`
+      : "";
   const includeFullTaskDetails = resolvedStyle.sectionDepth !== "minimal";
 
   const formatTask = (t: (typeof facts.firstTasks)[0]) => `### ${t.title}
@@ -732,9 +788,11 @@ ${t.description}
 
 ${includeFullTaskDetails ? `**Why this matters:** ${t.why}` : ""}
 
-${includeFullTaskDetails
+${
+  includeFullTaskDetails
     ? `**Files to look at:**\n${t.files.map((f) => `- ${fileLink(f, repoInfo)}`).join("\n")}`
-    : `**Start in:** ${t.files[0] ? fileLink(t.files[0], repoInfo) : "_No file provided_"}`}
+    : `**Start in:** ${t.files[0] ? fileLink(t.files[0], repoInfo) : "_No file provided_"}`
+}
 `;
 
   return `# First Tasks: ${facts.repoName}
@@ -785,10 +843,11 @@ ${tasksByCategory.advanced.map(formatTask).join("\n") || "_No advanced tasks sug
  */
 export function generateRunbook(facts: RepoFacts): string {
   // Check if runbook is applicable
-  const notApplicable = facts.runbook?.applicable === false || 
-    (!facts.runbook?.deploySteps?.length && 
-     !facts.runbook?.observability?.length &&
-     !facts.runbook?.incidents?.length);
+  const notApplicable =
+    facts.runbook?.applicable === false ||
+    (!facts.runbook?.deploySteps?.length &&
+      !facts.runbook?.observability?.length &&
+      !facts.runbook?.incidents?.length);
 
   if (notApplicable) {
     return `# Runbook: ${facts.repoName}
@@ -799,9 +858,11 @@ For usage instructions, see [ONBOARDING.md](./ONBOARDING.md).
 
 ## Build & Release
 
-${facts.quickstart.commands.find(c => c.name === "build")?.command 
-  ? `\`\`\`bash\n${facts.quickstart.commands.find(c => c.name === "build")?.command}\n\`\`\`` 
-  : "_No build command detected_"}
+${
+  facts.quickstart.commands.find((c) => c.name === "build")?.command
+    ? `\`\`\`bash\n${facts.quickstart.commands.find((c) => c.name === "build")?.command}\n\`\`\``
+    : "_No build command detected_"
+}
 
 ## Publishing (if applicable)
 
@@ -816,10 +877,13 @@ ${facts.quickstart.commands.find(c => c.name === "build")?.command
   }
 
   const runbook = facts.runbook!;
-  const deploySteps = runbook.deploySteps?.map((s, i) => `${i + 1}. ${s}`).join("\n") || "_Not documented_";
-  const observability = runbook.observability?.map((o) => `- ${o}`).join("\n") || "_Not documented_";
+  const deploySteps =
+    runbook.deploySteps?.map((s, i) => `${i + 1}. ${s}`).join("\n") || "_Not documented_";
+  const observability =
+    runbook.observability?.map((o) => `- ${o}`).join("\n") || "_Not documented_";
   const incidents =
-    runbook.incidents?.map((i) => `### ${i.name}\n\n**Check:** ${i.check}`).join("\n\n") || "_No incidents documented_";
+    runbook.incidents?.map((i) => `### ${i.name}\n\n**Check:** ${i.check}`).join("\n\n") ||
+    "_No incidents documented_";
 
   return `# Runbook: ${facts.repoName}
 
