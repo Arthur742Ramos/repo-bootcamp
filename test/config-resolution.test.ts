@@ -25,7 +25,13 @@ function makeOptions(overrides: Partial<BootcampOptions> = {}): BootcampOptions 
     maxFiles: 50,
     noClone: false,
     verbose: false,
-    optionSource: { focus: "default", audience: "default", maxFiles: "default", model: "default", style: "default" },
+    optionSource: {
+      focus: "default",
+      audience: "default",
+      maxFiles: "default",
+      model: "default",
+      style: "default",
+    },
     ...overrides,
   };
 }
@@ -111,7 +117,13 @@ describe("resolveRunConfiguration", () => {
       const opts = makeOptions({
         focus: "architecture",
         audience: "frontend",
-        optionSource: { focus: "cli", audience: "cli", maxFiles: "default", model: "default", style: "default" },
+        optionSource: {
+          focus: "cli",
+          audience: "cli",
+          maxFiles: "default",
+          model: "default",
+          style: "default",
+        },
       });
       await resolveRunConfiguration(opts);
       expect(opts.focus).toBe("architecture");
@@ -219,7 +231,10 @@ describe("resolveRunConfiguration", () => {
     });
 
     it("throws on invalid audience", async () => {
-      const opts = makeOptions({ audience: "unknown" as any, optionSource: { audience: "cli" } as any });
+      const opts = makeOptions({
+        audience: "unknown" as any,
+        optionSource: { audience: "cli" } as any,
+      });
       await expect(resolveRunConfiguration(opts)).rejects.toThrow("Invalid audience: unknown");
     });
 
@@ -286,8 +301,12 @@ describe("normalizeScanScope", () => {
   });
 
   it("rejects a subdir that escapes the repo with ..", () => {
-    expect(() => normalizeScanScope(makeOptions({ subdir: "../secrets" }))).toThrow("Invalid subdir");
-    expect(() => normalizeScanScope(makeOptions({ subdir: "packages/../.." }))).toThrow("Invalid subdir");
+    expect(() => normalizeScanScope(makeOptions({ subdir: "../secrets" }))).toThrow(
+      "Invalid subdir"
+    );
+    expect(() => normalizeScanScope(makeOptions({ subdir: "packages/../.." }))).toThrow(
+      "Invalid subdir"
+    );
   });
 
   it("is a no-op when neither exclude nor subdir is set", () => {

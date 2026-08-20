@@ -194,15 +194,7 @@ export async function renderDiagram(
     await writeFile(tempInput, code, "utf-8");
 
     const { cmd, args } = await getMmdcCommand();
-    const fullArgs = [
-      ...args,
-      "-i",
-      tempInput,
-      "-o",
-      outputPath,
-      "-b",
-      "transparent",
-    ];
+    const fullArgs = [...args, "-i", tempInput, "-o", outputPath, "-b", "transparent"];
 
     // Add format-specific options
     if (format === "png") {
@@ -315,8 +307,7 @@ export async function renderOutputDiagrams(
     return {
       rendered: false,
       files: [],
-      error:
-        "mermaid-cli not found. Install with: npm install -g @mermaid-js/mermaid-cli",
+      error: "mermaid-cli not found. Install with: npm install -g @mermaid-js/mermaid-cli",
     };
   }
 

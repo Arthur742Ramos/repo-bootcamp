@@ -138,7 +138,8 @@ describe("buildImportGraph import resolution", () => {
 
   it("refuses a go.mod symlinked outside the repo (does not read it)", async () => {
     const { repoPath, fileInfos } = await makeRepo({
-      "main.go": 'package main\n\nimport "github.com/leaked/secret/internal/x"\n\nfunc main() { x.Run() }\n',
+      "main.go":
+        'package main\n\nimport "github.com/leaked/secret/internal/x"\n\nfunc main() { x.Run() }\n',
       "internal/x/x.go": "package x\n\nfunc Run() {}\n",
     });
     const outside = await mkdtemp(join(tmpdir(), "bootcamp-graph-outside-"));

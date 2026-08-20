@@ -1,6 +1,11 @@
 import chalk from "chalk";
 
-import { computeRepoHealth, type HealthCategory, type HealthStatus, type RepoHealth } from "../health.js";
+import {
+  computeRepoHealth,
+  type HealthCategory,
+  type HealthStatus,
+  type RepoHealth,
+} from "../health.js";
 import { scanRepositoryFiles } from "../services/clone-service.js";
 import { finiteOr } from "../utils.js";
 import { withResolvedRepo } from "./_shared.js";
@@ -55,7 +60,11 @@ function printReport(health: RepoHealth, repoName: string, filesScanned: number)
     if (checks.length === 0) continue;
     console.log(chalk.bold(category));
     for (const check of checks) {
-      console.log(`  ${STATUS_ICON[check.status]} ` + chalk.cyan(check.label) + chalk.dim(` — ${check.detail}`));
+      console.log(
+        `  ${STATUS_ICON[check.status]} ` +
+          chalk.cyan(check.label) +
+          chalk.dim(` — ${check.detail}`)
+      );
     }
     console.log();
   }
@@ -67,7 +76,11 @@ function printReport(health: RepoHealth, repoName: string, filesScanned: number)
     });
     console.log();
   } else {
-    console.log(chalk.green("🎉 No gaps detected — this repository covers the onboarding-readiness checklist.\n"));
+    console.log(
+      chalk.green(
+        "🎉 No gaps detected — this repository covers the onboarding-readiness checklist.\n"
+      )
+    );
   }
 }
 
@@ -80,7 +93,10 @@ export async function runHealthCommand(repoUrl: string, opts: HealthCommandOptio
   const minScore = finiteOr(opts.minScore, 70);
 
   await withResolvedRepo(repoUrl, opts, "Health analysis failed", async (repoSource) => {
-    const scan = await scanRepositoryFiles(repoSource.path, finiteOr(opts.maxFiles, 500, { min: 1 }));
+    const scan = await scanRepositoryFiles(
+      repoSource.path,
+      finiteOr(opts.maxFiles, 500, { min: 1 })
+    );
     const health = computeRepoHealth(scan);
     const filesScanned = scan.files.length;
 
@@ -111,7 +127,9 @@ export async function runHealthCommand(repoUrl: string, opts: HealthCommandOptio
     if (opts.check && health.score < minScore) {
       if (!opts.json) {
         console.error(
-          chalk.red(`❌ Repo health ${health.score}/100 is below the required minimum of ${minScore}.`)
+          chalk.red(
+            `❌ Repo health ${health.score}/100 is below the required minimum of ${minScore}.`
+          )
         );
       }
       return 1;

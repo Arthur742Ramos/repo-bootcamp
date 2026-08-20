@@ -27,7 +27,13 @@ vi.mock("../src/services/clone-service.js", () => ({
 vi.mock("../src/ingest.js", () => ({
   parseGitHubUrl: vi.fn((url: string) => {
     if (url === "bad-url") throw new Error("Invalid URL");
-    return { owner: "test", repo: "repo", fullName: "test/repo", url: "https://github.com/test/repo", branch: "main" };
+    return {
+      owner: "test",
+      repo: "repo",
+      fullName: "test/repo",
+      url: "https://github.com/test/repo",
+      branch: "main",
+    };
   }),
 }));
 
@@ -46,9 +52,13 @@ vi.mock("../src/interactive.js", () => ({
 import { runAskCommand } from "../src/commands/ask-command.js";
 
 describe("runAskCommand", () => {
-  const mockExit = vi.spyOn(process, "exit").mockImplementation((() => { throw new Error("process.exit"); }) as any);
+  const mockExit = vi.spyOn(process, "exit").mockImplementation((() => {
+    throw new Error("process.exit");
+  }) as any);
 
-  beforeEach(() => { vi.clearAllMocks(); });
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
 
   it("clones, scans, runs interactive mode, and cleans up", async () => {
     await runAskCommand("https://github.com/test/repo", {});
@@ -101,7 +111,11 @@ describe("runAskCommand", () => {
 
   describe("one-shot mode (question supplied)", () => {
     it("answers a single question via quickAsk and skips the REPL", async () => {
-      await runAskCommand("/tmp/local-repo", { question: "Where is main?", verbose: true, model: "gpt-4" });
+      await runAskCommand("/tmp/local-repo", {
+        question: "Where is main?",
+        verbose: true,
+        model: "gpt-4",
+      });
 
       expect(mockQuickAsk).toHaveBeenCalledTimes(1);
       const [repoPath, repoInfo, , question, verbose, model] = mockQuickAsk.mock.calls[0];
@@ -140,14 +154,14 @@ describe("runAskCommand", () => {
         expect.anything(),
         "spaced out",
         undefined,
-        undefined,
+        undefined
       );
     });
 
     it("exits 1 when quickAsk fails", async () => {
       mockQuickAsk.mockRejectedValueOnce(new Error("session boom"));
       await expect(
-        runAskCommand("https://github.com/test/repo", { question: "boom?" }),
+        runAskCommand("https://github.com/test/repo", { question: "boom?" })
       ).rejects.toThrow("process.exit");
       expect(mockExit).toHaveBeenCalledWith(1);
     });

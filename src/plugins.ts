@@ -13,11 +13,7 @@ import type {
   FormatterPlugin,
   OutputTargetPlugin,
 } from "./plugin-api.js";
-import {
-  isAnalyzerPlugin,
-  isFormatterPlugin,
-  isOutputTargetPlugin,
-} from "./plugin-api.js";
+import { isAnalyzerPlugin, isFormatterPlugin, isOutputTargetPlugin } from "./plugin-api.js";
 export type {
   BootcampPlugin,
   PluginOutput,
@@ -75,7 +71,8 @@ export const STYLE_PACKS: Record<StylePack, StyleConfig> = {
     },
     badges: { style: "simple" },
     firstTasksCount: 10,
-    introText: "This onboarding guide is organized for clarity, governance, and reliable execution.",
+    introText:
+      "This onboarding guide is organized for clarity, governance, and reliable execution.",
   },
   startup: {
     name: "startup",
@@ -113,7 +110,8 @@ export const STYLE_PACKS: Record<StylePack, StyleConfig> = {
     },
     badges: { style: "shields" },
     firstTasksCount: 8,
-    introText: "Welcome to the project! We're excited to have you contribute. Here's how to get started.",
+    introText:
+      "Welcome to the project! We're excited to have you contribute. Here's how to get started.",
   },
   academic: {
     name: "academic",
@@ -132,7 +130,8 @@ export const STYLE_PACKS: Record<StylePack, StyleConfig> = {
     },
     badges: { style: "simple" },
     firstTasksCount: 7,
-    introText: "This guide emphasizes system understanding, traceability, and precise technical explanations.",
+    introText:
+      "This guide emphasizes system understanding, traceability, and precise technical explanations.",
   },
   minimal: {
     name: "minimal",
@@ -217,12 +216,9 @@ export async function loadConfig(configPath?: string): Promise<BootcampConfig | 
 /**
  * Get style config, merging defaults with custom overrides
  */
-export function getStyleConfig(
-  style?: StylePack,
-  customStyle?: Partial<StyleConfig>
-): StyleConfig {
+export function getStyleConfig(style?: StylePack, customStyle?: Partial<StyleConfig>): StyleConfig {
   const base = STYLE_PACKS[style || "oss"];
-  
+
   if (!customStyle) return base;
 
   return {
@@ -248,14 +244,15 @@ export async function loadPlugins(pluginPaths: string[]): Promise<BootcampPlugin
   for (const path of pluginPaths) {
     try {
       // Try to load as a module
-      const modulePath = path.startsWith(".")
-        ? join(process.cwd(), path)
-        : path;
+      const modulePath = path.startsWith(".") ? join(process.cwd(), path) : path;
 
       const module = await import(modulePath);
       const plugin = module.default || module;
 
-      if (plugin.name && (isAnalyzerPlugin(plugin) || isFormatterPlugin(plugin) || isOutputTargetPlugin(plugin))) {
+      if (
+        plugin.name &&
+        (isAnalyzerPlugin(plugin) || isFormatterPlugin(plugin) || isOutputTargetPlugin(plugin))
+      ) {
         plugins.push(plugin);
         console.log(`Loaded plugin: ${plugin.name} v${plugin.version || "1.0.0"}`);
       }
@@ -326,20 +323,24 @@ export async function runPlugins(
  * Generate example config file content
  */
 export function generateExampleConfig(): string {
-  return JSON.stringify({
-    style: "oss",
-    customStyle: {
-      emoji: true,
-      firstTasksCount: 10,
+  return JSON.stringify(
+    {
+      style: "oss",
+      customStyle: {
+        emoji: true,
+        firstTasksCount: 10,
+      },
+      plugins: [],
+      prompts: {
+        system: "You are a helpful assistant for onboarding developers.",
+      },
+      output: {
+        excludeDocs: [],
+      },
     },
-    plugins: [],
-    prompts: {
-      system: "You are a helpful assistant for onboarding developers.",
-    },
-    output: {
-      excludeDocs: [],
-    },
-  }, null, 2);
+    null,
+    2
+  );
 }
 
 /**
@@ -357,7 +358,7 @@ This is an example plugin output for ${facts.repoName}.
 
 ## File Count by Type
 
-${scanResult.stack.languages.map(lang => `- ${lang}`).join("\n")}
+${scanResult.stack.languages.map((lang) => `- ${lang}`).join("\n")}
 `;
 
     return {

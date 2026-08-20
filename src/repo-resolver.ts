@@ -27,9 +27,9 @@ export function isLocalPath(input: string): boolean {
   if (!input || typeof input !== "string") {
     return false;
   }
-  
+
   const trimmed = input.trim();
-  
+
   // Explicit local path patterns
   if (trimmed === ".") return true;
   if (trimmed === "..") return true;
@@ -38,15 +38,15 @@ export function isLocalPath(input: string): boolean {
   if (trimmed.startsWith("../")) return true;
   if (trimmed.startsWith("~/")) return true;
   if (trimmed === "~") return true;
-  
+
   // Windows-style paths (C:\, D:\, etc.)
   if (/^[A-Za-z]:[\\/]/.test(trimmed)) return true;
-  
+
   // Not a URL pattern (no protocol)
   if (trimmed.includes("://")) return false;
   if (trimmed.includes("github.com")) return false;
   if (trimmed.includes("@")) return false; // git@github.com style
-  
+
   return false;
 }
 
@@ -56,7 +56,7 @@ export function isLocalPath(input: string): boolean {
  */
 export function resolveLocalPath(input: string): string {
   let resolved = input.trim();
-  
+
   // Expand home directory
   if (resolved === "~") {
     resolved = homedir();
@@ -65,7 +65,7 @@ export function resolveLocalPath(input: string): string {
   } else {
     resolved = resolve(process.cwd(), resolved);
   }
-  
+
   return resolved;
 }
 
@@ -109,7 +109,7 @@ function createLocalRepoInfo(localPath: string, repoName: string, commitSha?: st
 
 /**
  * Resolve a repository source from either a local path or GitHub URL
- * 
+ *
  * @param input - Either a local filesystem path or a GitHub URL
  * @param outputDir - Output directory (used for cloning GitHub repos)
  * @param branch - Optional branch to clone for GitHub URLs
@@ -123,7 +123,7 @@ export async function resolveRepo(
   if (isLocalPath(input)) {
     // Handle local path
     const absolutePath = resolveLocalPath(input);
-    
+
     // Verify the path exists
     try {
       const stats = await stat(absolutePath);
@@ -136,23 +136,24 @@ export async function resolveRepo(
       }
       throw error;
     }
-    
+
     // Check if it's a git repo and warn if not
     const isGit = await isGitRepo(absolutePath);
     if (!isGit) {
       console.warn(`⚠️  Warning: ${absolutePath} is not a git repository`);
     }
-    
+
     const repoName = getRepoNameFromPath(absolutePath);
     // Only key the analysis cache on local HEAD when the tree is CLEAN. A dirty
     // working tree (the common --no-clone dev case) holds content HEAD doesn't
     // capture, so caching on the SHA alone would serve stale results; leaving
     // commitSha empty disables the cache and forces a fresh run.
-    const commitSha = isGit && !(await isWorkingTreeDirty(absolutePath))
-      ? await getHeadCommitSha(absolutePath)
-      : "";
+    const commitSha =
+      isGit && !(await isWorkingTreeDirty(absolutePath))
+        ? await getHeadCommitSha(absolutePath)
+        : "";
     const repoInfo = createLocalRepoInfo(absolutePath, repoName, commitSha);
-    
+
     return {
       path: absolutePath,
       isLocal: true,
@@ -166,7 +167,7 @@ export async function resolveRepo(
     // Handle GitHub URL
     const repoInfo = parseGitHubUrl(input);
     const clonePath = await cloneRepo(repoInfo, outputDir, branch);
-    
+
     return {
       path: clonePath,
       isLocal: false,

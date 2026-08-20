@@ -32,11 +32,9 @@ describe("buildInitConfig", () => {
 });
 
 describe("runInitCommand", () => {
-  const mockExit = vi
-    .spyOn(process, "exit")
-    .mockImplementation((() => {
-      throw new Error("process.exit");
-    }) as any);
+  const mockExit = vi.spyOn(process, "exit").mockImplementation((() => {
+    throw new Error("process.exit");
+  }) as any);
   let logSpy: ReturnType<typeof vi.spyOn>;
   let errorSpy: ReturnType<typeof vi.spyOn>;
 

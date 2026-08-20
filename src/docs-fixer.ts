@@ -92,7 +92,9 @@ export async function updateVersionNumbers(
       const newContent: string = content.replace(pattern, `$1${replacement}`);
       if (newContent !== content) {
         content = newContent;
-        result.changes.push(`Updated ${mismatch.type} version: ${mismatch.documented} → ${replacement}`);
+        result.changes.push(
+          `Updated ${mismatch.type} version: ${mismatch.documented} → ${replacement}`
+        );
       }
     }
   }
@@ -104,7 +106,6 @@ export async function updateVersionNumbers(
 
   return result;
 }
-
 
 /**
  * Add missing framework mentions to README
@@ -160,12 +161,17 @@ export async function addMissingFrameworks(
     const installMatch = content.match(/^##\s+Installation/im);
     if (installMatch && installMatch.index !== undefined) {
       const newSection = `\n## Tech Stack\n\n${frameworkList}\n\n`;
-      content = content.slice(0, installMatch.index) + newSection + content.slice(installMatch.index);
-      result.changes.push(`Added Tech Stack section with: ${missingFrameworks.map((f) => f.framework).join(", ")}`);
+      content =
+        content.slice(0, installMatch.index) + newSection + content.slice(installMatch.index);
+      result.changes.push(
+        `Added Tech Stack section with: ${missingFrameworks.map((f) => f.framework).join(", ")}`
+      );
     } else {
       // Append to end
       content += `\n\n## Tech Stack\n\n${frameworkList}\n`;
-      result.changes.push(`Added Tech Stack section with: ${missingFrameworks.map((f) => f.framework).join(", ")}`);
+      result.changes.push(
+        `Added Tech Stack section with: ${missingFrameworks.map((f) => f.framework).join(", ")}`
+      );
     }
   } else {
     // Find the end of the section (next ##) or end of file
@@ -181,16 +187,14 @@ export async function addMissingFrameworks(
       if (nextSection && nextSection.index !== undefined) {
         const sectionEnd = insertionPoint + nextSection.index;
         content =
-          content.slice(0, sectionEnd) +
-          "\n" +
-          frameworkList +
-          "\n" +
-          content.slice(sectionEnd);
+          content.slice(0, sectionEnd) + "\n" + frameworkList + "\n" + content.slice(sectionEnd);
       } else {
         content += "\n" + frameworkList + "\n";
       }
     }
-    result.changes.push(`Added frameworks to docs: ${missingFrameworks.map((f) => f.framework).join(", ")}`);
+    result.changes.push(
+      `Added frameworks to docs: ${missingFrameworks.map((f) => f.framework).join(", ")}`
+    );
   }
 
   if (result.changes.length > 0) {
@@ -208,10 +212,7 @@ function capitalize(str: string): string {
 /**
  * Update CLI usage sections in documentation
  */
-export async function updateCLIUsage(
-  repoPath: string,
-  drift: CLIDrift[]
-): Promise<FixResult> {
+export async function updateCLIUsage(repoPath: string, drift: CLIDrift[]): Promise<FixResult> {
   const result: FixResult = {
     file: "README.md",
     changes: [],
@@ -239,9 +240,7 @@ export async function updateCLIUsage(
     // Find the end of the Usage section
     const afterUsage = content.slice(usageMatch.index);
     const nextSection = afterUsage.match(/\n##\s+[^#]/);
-    const sectionEnd = nextSection?.index
-      ? usageMatch.index + nextSection.index
-      : content.length;
+    const sectionEnd = nextSection?.index ? usageMatch.index + nextSection.index : content.length;
 
     // Add a note about additional options
     const optsList = missingOpts.map((o) => `\`${o.actual}\``).join(", ");

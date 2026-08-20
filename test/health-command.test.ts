@@ -37,8 +37,23 @@ function makeHealth(score: number) {
     warnCount: 1,
     failCount: 3,
     checks: [
-      { id: "readme-present", label: "README", category: "Documentation", status: "pass", weight: 3, detail: "README present" },
-      { id: "tests", label: "Automated tests", category: "Quality", status: "fail", weight: 3, detail: "Automated tests not found", recommendation: "Add a test suite" },
+      {
+        id: "readme-present",
+        label: "README",
+        category: "Documentation",
+        status: "pass",
+        weight: 3,
+        detail: "README present",
+      },
+      {
+        id: "tests",
+        label: "Automated tests",
+        category: "Quality",
+        status: "fail",
+        weight: 3,
+        detail: "Automated tests not found",
+        recommendation: "Add a test suite",
+      },
     ],
     recommendations: score >= 100 ? [] : ["Add a test suite"],
   };
@@ -65,11 +80,9 @@ function remoteSource() {
 }
 
 describe("runHealthCommand", () => {
-  const mockExit = vi
-    .spyOn(process, "exit")
-    .mockImplementation((() => {
-      throw new Error("process.exit");
-    }) as any);
+  const mockExit = vi.spyOn(process, "exit").mockImplementation((() => {
+    throw new Error("process.exit");
+  }) as any);
   let logSpy: ReturnType<typeof vi.spyOn>;
   let errorSpy: ReturnType<typeof vi.spyOn>;
 
@@ -131,14 +144,18 @@ describe("runHealthCommand", () => {
 
   it("exits non-zero and cleans up when scanning fails", async () => {
     scanMock.mockRejectedValueOnce(new Error("scan boom"));
-    await expect(runHealthCommand("https://github.com/test/repo", {})).rejects.toThrow("process.exit");
+    await expect(runHealthCommand("https://github.com/test/repo", {})).rejects.toThrow(
+      "process.exit"
+    );
     expect(errorSpy).toHaveBeenCalled();
     expect(mockCleanup).toHaveBeenCalled();
   });
 
   it("exits 1 when the repository cannot be resolved", async () => {
     resolveRepoMock.mockRejectedValueOnce(new Error("nope"));
-    await expect(runHealthCommand("https://github.com/test/repo", {})).rejects.toThrow("process.exit");
+    await expect(runHealthCommand("https://github.com/test/repo", {})).rejects.toThrow(
+      "process.exit"
+    );
     expect(mockExit).toHaveBeenCalledWith(1);
   });
 });

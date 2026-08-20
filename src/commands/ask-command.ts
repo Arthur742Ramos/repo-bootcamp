@@ -3,7 +3,11 @@ import chalk from "chalk";
 import { parseGitHubUrl } from "../ingest.js";
 import { quickAsk, runInteractiveMode } from "../interactive.js";
 import { isLocalPath, resolveRepo, type RepoSource } from "../repo-resolver.js";
-import { cloneRepository, cleanupRepository, scanRepositoryFiles } from "../services/clone-service.js";
+import {
+  cloneRepository,
+  cleanupRepository,
+  scanRepositoryFiles,
+} from "../services/clone-service.js";
 import type { RepoInfo, ScanResult } from "../types.js";
 
 /**
@@ -16,7 +20,13 @@ import type { RepoInfo, ScanResult } from "../types.js";
  */
 export async function runAskCommand(
   repoUrl: string,
-  options: { branch?: string; verbose?: boolean; model?: string; noClone?: boolean; question?: string }
+  options: {
+    branch?: string;
+    verbose?: boolean;
+    model?: string;
+    noClone?: boolean;
+    question?: string;
+  }
 ): Promise<void> {
   const question = options.question?.trim();
   const oneShot = Boolean(question);
@@ -96,14 +106,11 @@ export async function runAskCommand(
       process.exit(1);
     }
   } else {
-    await runInteractiveMode(
-      repoPath,
-      repoInfo,
-      scanResult,
-      process.cwd(),
-      undefined,
-      { verbose: options.verbose, saveTranscript: true, model: options.model }
-    );
+    await runInteractiveMode(repoPath, repoInfo, scanResult, process.cwd(), undefined, {
+      verbose: options.verbose,
+      saveTranscript: true,
+      model: options.model,
+    });
   }
 
   await cleanupIfCloned();

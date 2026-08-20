@@ -38,6 +38,15 @@ jobs:
       - name: Verify packaging invariants
         run: npm run verify:packaging
 
+      - name: Check formatting
+        run: npm run format:check
+
+      - name: Audit production dependencies
+        run: npm run security:audit
+
+      - name: Audit all dependencies
+        run: npm run security:audit:all
+
       - name: Run lint
         run: npm run lint
 

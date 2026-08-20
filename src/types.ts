@@ -44,7 +44,9 @@ export interface BootcampOptions {
   exclude?: string[];
   /** Restrict the scan to a sub-path of the repository (e.g. a single monorepo package). */
   subdir?: string;
-  optionSource?: Partial<Record<"audience" | "focus" | "maxFiles" | "model" | "style", "cli" | "default">>;
+  optionSource?: Partial<
+    Record<"audience" | "focus" | "maxFiles" | "model" | "style", "cli" | "default">
+  >;
 }
 
 /** Generic prompt payload used by LLM sessions. */

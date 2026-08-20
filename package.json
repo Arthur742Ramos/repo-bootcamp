@@ -127,6 +127,8 @@
     "build": "tsc -p tsconfig.build.json && npm run copy:data",
     "copy:data": "node --input-type=module -e \"import { cpSync } from 'node:fs'; cpSync('src/data','dist/data',{ recursive: true, force: true });\"",
     "verify:packaging": "node ./scripts/check-packaging.mjs",
+    "security:audit": "npm audit --omit=dev --audit-level=high",
+    "security:audit:all": "npm audit --audit-level=high",
     "start": "tsx src/cli.ts",
     "dev": "tsx watch src/cli.ts",
     "dev:web": "tsx watch src/cli.ts web",
@@ -163,7 +165,6 @@
     "@eslint/js": "^10.0.1",
     "@playwright/test": "^1.61.0",
     "@types/express": "^5.0.6",
-    "@types/helmet": "^4.0.0",
     "@types/node": "^26.0.0",
     "@types/supertest": "^7.2.0",
     "@typescript-eslint/eslint-plugin": "^8.62.0",
@@ -177,6 +178,13 @@
     "tsx": "^4.22.4",
     "typescript": "^6.0.3",
     "vitest": "^4.0.18"
+  },
+  "overrides": {
+    "brace-expansion": "5.0.9",
+    "ip-address": "10.5.0",
+    "js-yaml": "4.3.1",
+    "nanoid": "3.3.18",
+    "postcss": "8.5.26"
   },
   "engines": {
     "node": ">=20.0.0"

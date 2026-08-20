@@ -18,7 +18,12 @@ import { scanRepo, mergeFrameworksFromDeps } from "../src/ingest.js";
 import { extractDependencies, generateDependencyDocs } from "../src/deps.js";
 import { analyzeSecurityPatterns, generateSecurityDocs } from "../src/security.js";
 import { generateTechRadar, generateRadarDocs } from "../src/radar.js";
-import { buildImportGraph, analyzeChangeImpact, generateImpactDocs, getKeyFilesForImpact } from "../src/impact.js";
+import {
+  buildImportGraph,
+  analyzeChangeImpact,
+  generateImpactDocs,
+  getKeyFilesForImpact,
+} from "../src/impact.js";
 import { runParallelAnalysis } from "../src/index.js";
 import {
   generateBootcamp,
@@ -48,8 +53,8 @@ async function createFixtureRepo(baseDir: string): Promise<string> {
         devDependencies: { vitest: "^1.0.0" },
       },
       null,
-      2,
-    ),
+      2
+    )
   );
 
   // README
@@ -59,25 +64,25 @@ async function createFixtureRepo(baseDir: string): Promise<string> {
   await mkdir(join(repoDir, "src"), { recursive: true });
   await writeFile(
     join(repoDir, "src", "index.ts"),
-    'import express from "express";\nconst app = express();\napp.listen(3000);\n',
+    'import express from "express";\nconst app = express();\napp.listen(3000);\n'
   );
   await writeFile(
     join(repoDir, "src", "utils.ts"),
-    'export function add(a: number, b: number) { return a + b; }\n',
+    "export function add(a: number, b: number) { return a + b; }\n"
   );
 
   // Test file
   await mkdir(join(repoDir, "test"), { recursive: true });
   await writeFile(
     join(repoDir, "test", "utils.test.ts"),
-    'import { add } from "../src/utils";\nconsole.log(add(1, 2));\n',
+    'import { add } from "../src/utils";\nconsole.log(add(1, 2));\n'
   );
 
   // CI workflow
   await mkdir(join(repoDir, ".github", "workflows"), { recursive: true });
   await writeFile(
     join(repoDir, ".github", "workflows", "ci.yml"),
-    "name: CI\non: [push]\njobs:\n  test:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n      - run: npm test\n",
+    "name: CI\non: [push]\njobs:\n  test:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n      - run: npm test\n"
   );
 
   // Init a git repo so scanRepo works in a realistic context
@@ -87,7 +92,7 @@ async function createFixtureRepo(baseDir: string): Promise<string> {
     {
       cwd: repoDir,
       stdio: "ignore",
-    },
+    }
   );
 
   return repoDir;
@@ -136,7 +141,14 @@ function buildMockFacts(): RepoFacts {
       sources: ["package.json"],
     },
     ci: {
-      workflows: [{ name: "CI", file: ".github/workflows/ci.yml", triggers: ["push"], mainSteps: ["npm test"] }],
+      workflows: [
+        {
+          name: "CI",
+          file: ".github/workflows/ci.yml",
+          triggers: ["push"],
+          mainSteps: ["npm test"],
+        },
+      ],
       mainChecks: ["Tests pass"],
       sources: [".github/workflows/ci.yml"],
     },
@@ -155,7 +167,7 @@ function buildMockFacts(): RepoFacts {
         {
           title: "Server startup",
           file: "src/index.ts",
-          code: 'app.listen(3000)',
+          code: "app.listen(3000)",
           explanation: "Starts the HTTP server",
         },
       ],
@@ -256,7 +268,10 @@ describe("E2E smoke test", () => {
     ];
 
     if (deps) {
-      documents.push({ name: "DEPENDENCIES.md", content: generateDependencyDocs(deps, repoInfo.repo) });
+      documents.push({
+        name: "DEPENDENCIES.md",
+        content: generateDependencyDocs(deps, repoInfo.repo),
+      });
     }
 
     if (impacts.length > 0) {

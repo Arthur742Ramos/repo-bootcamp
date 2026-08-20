@@ -1,10 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
 vi.mock("chalk", () => {
-  const makeChalk = (): any => new Proxy((...args: any[]) => args.join(""), {
-    get: () => makeChalk(),
-    apply: (_t: any, _a: any, args: any[]) => args.join(""),
-  });
+  const makeChalk = (): any =>
+    new Proxy((...args: any[]) => args.join(""), {
+      get: () => makeChalk(),
+      apply: (_t: any, _a: any, args: any[]) => args.join(""),
+    });
   return { default: makeChalk() };
 });
 
@@ -28,7 +29,12 @@ vi.mock("../src/diagrams.js", () => ({
 
 vi.mock("../src/progress.js", () => ({
   ProgressTracker: vi.fn().mockImplementation(() => ({
-    startPhase: vi.fn(), succeed: vi.fn(), fail: vi.fn(), warn: vi.fn(), update: vi.fn(), stop: vi.fn(),
+    startPhase: vi.fn(),
+    succeed: vi.fn(),
+    fail: vi.fn(),
+    warn: vi.fn(),
+    update: vi.fn(),
+    stop: vi.fn(),
   })),
 }));
 
@@ -37,7 +43,10 @@ import { writeFile } from "fs/promises";
 
 function makeParams(overrides: any = {}) {
   return {
-    documents: [{ name: "BOOTCAMP.md", content: "# Boot" }, { name: "repo_facts.json", content: '{"a":1}' }],
+    documents: [
+      { name: "BOOTCAMP.md", content: "# Boot" },
+      { name: "repo_facts.json", content: '{"a":1}' },
+    ],
     repoInfo: { owner: "t", repo: "r", fullName: "t/r" },
     facts: { firstTasks: [] } as any,
     options: {} as any,
@@ -49,7 +58,9 @@ function makeParams(overrides: any = {}) {
 }
 
 describe("writeGeneratedOutputs", () => {
-  beforeEach(() => { vi.clearAllMocks(); });
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
 
   it("writes all documents", async () => {
     const result = await writeGeneratedOutputs(makeParams());
@@ -64,19 +75,23 @@ describe("writeGeneratedOutputs", () => {
 
   it("creates issue preview in dryRun mode", async () => {
     const { generateIssuePreview } = await import("../src/issues.js");
-    await writeGeneratedOutputs(makeParams({
-      options: { createIssues: true, dryRun: true },
-      facts: { firstTasks: [{ title: "task1" }] },
-    }));
+    await writeGeneratedOutputs(
+      makeParams({
+        options: { createIssues: true, dryRun: true },
+        facts: { firstTasks: [{ title: "task1" }] },
+      })
+    );
     expect(generateIssuePreview).toHaveBeenCalled();
   });
 
   it("creates real issues when not dryRun", async () => {
     const { createIssuesFromTasks } = await import("../src/issues.js");
-    await writeGeneratedOutputs(makeParams({
-      options: { createIssues: true },
-      facts: { firstTasks: [{ title: "task1" }] },
-    }));
+    await writeGeneratedOutputs(
+      makeParams({
+        options: { createIssues: true },
+        facts: { firstTasks: [{ title: "task1" }] },
+      })
+    );
     expect(createIssuesFromTasks).toHaveBeenCalled();
   });
 
@@ -88,7 +103,11 @@ describe("writeGeneratedOutputs", () => {
 
   it("handles diagram rendering error", async () => {
     const { renderOutputDiagrams } = await import("../src/diagrams.js");
-    (renderOutputDiagrams as any).mockResolvedValueOnce({ rendered: false, error: "no mermaid", files: [] });
+    (renderOutputDiagrams as any).mockResolvedValueOnce({
+      rendered: false,
+      error: "no mermaid",
+      files: [],
+    });
     await writeGeneratedOutputs(makeParams({ options: { renderDiagrams: true } }));
   });
 
@@ -99,18 +118,23 @@ describe("writeGeneratedOutputs", () => {
   });
 
   it("handles output target plugin failure gracefully", async () => {
-    const mockPlugin = { name: "fail-plugin", writeOutput: vi.fn().mockRejectedValue(new Error("fail")) };
+    const mockPlugin = {
+      name: "fail-plugin",
+      writeOutput: vi.fn().mockRejectedValue(new Error("fail")),
+    };
     await writeGeneratedOutputs(makeParams({ outputTargets: [mockPlugin] }));
     // Should not throw
   });
 
   it("skips issue creation when allowIssueCreation is false", async () => {
     const { createIssuesFromTasks } = await import("../src/issues.js");
-    await writeGeneratedOutputs(makeParams({
-      options: { createIssues: true },
-      facts: { firstTasks: [{ title: "task1" }] },
-      allowIssueCreation: false,
-    }));
+    await writeGeneratedOutputs(
+      makeParams({
+        options: { createIssues: true },
+        facts: { firstTasks: [{ title: "task1" }] },
+        allowIssueCreation: false,
+      })
+    );
     expect(createIssuesFromTasks).not.toHaveBeenCalled();
   });
 });

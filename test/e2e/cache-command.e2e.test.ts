@@ -30,7 +30,12 @@ describe("cache commands", () => {
     const tenDaysAgo = new Date(Date.now() - 10 * 24 * 60 * 60 * 1000);
     await utimes(staleFile, tenDaysAgo, tenDaysAgo);
 
-    const pruneResult = await runCli(["cache", "prune", "--max-age", "7"], { HOME: homeDir }, 60_000, tempDir);
+    const pruneResult = await runCli(
+      ["cache", "prune", "--max-age", "7"],
+      { HOME: homeDir },
+      60_000,
+      tempDir
+    );
     expect(pruneResult.exitCode).toBe(0);
     expect(pruneResult.stdout).toContain("Pruned 1 cache file(s)");
 
@@ -78,12 +83,7 @@ describe("cache commands", () => {
     await writeFile(strayFile, '{"foo":"bar"}\n', "utf-8");
 
     // Human-readable listing.
-    const listResult = await runCli(
-      ["cache", "list"],
-      { HOME: homeDir },
-      60_000,
-      tempDir
-    );
+    const listResult = await runCli(["cache", "list"], { HOME: homeDir }, 60_000, tempDir);
     expect(listResult.exitCode).toBe(0);
     expect(listResult.stdout).toContain("Cache directory:");
     expect(listResult.stdout).toContain("owner/example");
@@ -108,17 +108,14 @@ describe("cache commands", () => {
     expect(Array.isArray(parsed.entries)).toBe(true);
 
     const validInJson = parsed.entries.find(
-      (e: { entry: { repoFullName?: string } | null }) =>
-        e.entry?.repoFullName === "owner/example"
+      (e: { entry: { repoFullName?: string } | null }) => e.entry?.repoFullName === "owner/example"
     );
     expect(validInJson).toBeDefined();
     expect(validInJson.entry.commitSha).toBe("facebead123456789012"); // full SHA in JSON
     expect(validInJson.entry.generationOptions.model).toBe("claude-opus-4-5");
     expect(validInJson.problem).toBeNull();
 
-    const strayInJson = parsed.entries.find(
-      (e: { file: string }) => e.file === "stray-blob.json"
-    );
+    const strayInJson = parsed.entries.find((e: { file: string }) => e.file === "stray-blob.json");
     expect(strayInJson).toBeDefined();
     expect(strayInJson.problem).toBe("malformed");
     expect(strayInJson.entry).toBeNull();
@@ -132,12 +129,7 @@ describe("cache commands", () => {
     // Note: deliberately do not create the cache dir — the command should
     // tolerate its absence the same way prune/clear do.
 
-    const listResult = await runCli(
-      ["cache", "list"],
-      { HOME: homeDir },
-      60_000,
-      tempDir
-    );
+    const listResult = await runCli(["cache", "list"], { HOME: homeDir }, 60_000, tempDir);
     expect(listResult.exitCode).toBe(0);
     expect(listResult.stdout).toContain("Cache is empty");
 

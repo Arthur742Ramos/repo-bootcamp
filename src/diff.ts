@@ -37,14 +37,14 @@ async function getPackageJsonAtRef(
   ref: string
 ): Promise<Record<string, unknown>> {
   try {
-    const { stdout } = await execFileAsync(
-      "git",
-      ["show", `${ref}:package.json`],
-      { cwd: repoPath }
-    );
+    const { stdout } = await execFileAsync("git", ["show", `${ref}:package.json`], {
+      cwd: repoPath,
+    });
     return JSON.parse(stdout);
   } catch (err: unknown) {
-    console.debug?.(`package.json not available at ref ${ref}: ${err instanceof Error ? err.message : err}`);
+    console.debug?.(
+      `package.json not available at ref ${ref}: ${err instanceof Error ? err.message : err}`
+    );
     return {};
   }
 }
@@ -168,9 +168,7 @@ async function extractEnvVarChanges(
   const newEnvVars: Set<string> = new Set();
 
   // Check for .env.example changes
-  const envFiles = changedFiles.filter(f =>
-    f.includes(".env") || f.endsWith(".env.example")
-  );
+  const envFiles = changedFiles.filter((f) => f.includes(".env") || f.endsWith(".env.example"));
 
   // Fetch all env file diffs in parallel
   const envDiffResults = await Promise.all(
@@ -178,7 +176,9 @@ async function extractEnvVarChanges(
       try {
         return await getFileDiff(repoPath, baseRef, headRef, file);
       } catch (err: unknown) {
-        console.debug?.(`Env scan diff failed for ${file}: ${err instanceof Error ? err.message : err}`);
+        console.debug?.(
+          `Env scan diff failed for ${file}: ${err instanceof Error ? err.message : err}`
+        );
         return null;
       }
     })
@@ -188,7 +188,7 @@ async function extractEnvVarChanges(
     if (!diff) continue;
     const addedLines = diff
       .split("\n")
-      .filter(line => line.startsWith("+") && !line.startsWith("+++"));
+      .filter((line) => line.startsWith("+") && !line.startsWith("+++"));
 
     for (const line of addedLines) {
       const match = line.match(/^\+([A-Z][A-Z0-9_]+)\s*=/);
@@ -199,9 +199,7 @@ async function extractEnvVarChanges(
   }
 
   // Also scan code for new process.env references
-  const codeFiles = changedFiles.filter(f =>
-    /\.(ts|js|tsx|jsx)$/.test(f)
-  );
+  const codeFiles = changedFiles.filter((f) => /\.(ts|js|tsx|jsx)$/.test(f));
 
   // Fetch all code file diffs in parallel
   const codeDiffResults = await Promise.all(
@@ -209,7 +207,9 @@ async function extractEnvVarChanges(
       try {
         return await getFileDiff(repoPath, baseRef, headRef, file);
       } catch (err: unknown) {
-        console.debug?.(`Code env scan failed for ${file}: ${err instanceof Error ? err.message : err}`);
+        console.debug?.(
+          `Code env scan failed for ${file}: ${err instanceof Error ? err.message : err}`
+        );
         return null;
       }
     })
@@ -219,7 +219,7 @@ async function extractEnvVarChanges(
     if (!diff) continue;
     const addedLines = diff
       .split("\n")
-      .filter(line => line.startsWith("+") && !line.startsWith("+++"));
+      .filter((line) => line.startsWith("+") && !line.startsWith("+++"));
 
     for (const line of addedLines) {
       const matches = line.matchAll(/process\.env\.([A-Z][A-Z0-9_]+)/g);
@@ -299,8 +299,8 @@ async function detectBreakingChanges(
   }
 
   // Check for removed exports in index files
-  const indexFiles = changedFiles.filter(f =>
-    /index\.(ts|js)$/.test(f) || /^src\/[^/]+\.(ts|js)$/.test(f)
+  const indexFiles = changedFiles.filter(
+    (f) => /index\.(ts|js)$/.test(f) || /^src\/[^/]+\.(ts|js)$/.test(f)
   );
 
   for (const file of indexFiles.slice(0, MAX_INDEX_FILES_FOR_BREAKING_SCAN)) {
@@ -309,8 +309,8 @@ async function detectBreakingChanges(
 
       const removedExports = diff
         .split("\n")
-        .filter(line => line.startsWith("-") && !line.startsWith("---"))
-        .filter(line => /export\s+(const|function|class|type|interface)/.test(line));
+        .filter((line) => line.startsWith("-") && !line.startsWith("---"))
+        .filter((line) => /export\s+(const|function|class|type|interface)/.test(line));
 
       for (const line of removedExports.slice(0, MAX_REMOVED_EXPORTS_PER_FILE)) {
         const match = line.match(/export\s+(?:const|function|class|type|interface)\s+(\w+)/);
@@ -319,7 +319,9 @@ async function detectBreakingChanges(
         }
       }
     } catch (err: unknown) {
-      console.debug?.(`Export removal check failed for ${file}: ${err instanceof Error ? err.message : err}`);
+      console.debug?.(
+        `Export removal check failed for ${file}: ${err instanceof Error ? err.message : err}`
+      );
     }
   }
 
@@ -355,7 +357,9 @@ export function parsePullRequestTarget(target: string): { repoUrl: string; prNum
     };
   }
 
-  throw new Error("Invalid PR reference. Use owner/repo#123 or https://github.com/owner/repo/pull/123");
+  throw new Error(
+    "Invalid PR reference. Use owner/repo#123 or https://github.com/owner/repo/pull/123"
+  );
 }
 
 interface PullRequestApiResponse {
@@ -391,9 +395,12 @@ export interface PullRequestRefs {
   url?: string;
 }
 
-async function fetchPullRequestInfo(repoInfo: RepoInfo, prNumber: number): Promise<PullRequestApiResponse> {
+async function fetchPullRequestInfo(
+  repoInfo: RepoInfo,
+  prNumber: number
+): Promise<PullRequestApiResponse> {
   const headers: Record<string, string> = {
-    "Accept": "application/vnd.github+json",
+    Accept: "application/vnd.github+json",
     "User-Agent": "repo-bootcamp",
   };
 
@@ -403,16 +410,15 @@ async function fetchPullRequestInfo(repoInfo: RepoInfo, prNumber: number): Promi
   }
 
   const apiBaseUrl = getGitHubApiBaseUrl();
-  const response = await fetch(
-    `${apiBaseUrl}/repos/${repoInfo.fullName}/pulls/${prNumber}`,
-    { headers }
-  );
+  const response = await fetch(`${apiBaseUrl}/repos/${repoInfo.fullName}/pulls/${prNumber}`, {
+    headers,
+  });
 
   if (!response.ok) {
     throw new Error(`GitHub API error (${response.status}): ${response.statusText}`);
   }
 
-  return await response.json() as PullRequestApiResponse;
+  return (await response.json()) as PullRequestApiResponse;
 }
 
 async function fetchGitRef(
@@ -454,10 +460,14 @@ export async function fetchPullRequestRefs(
 
   const token = process.env.GITHUB_TOKEN;
   const fetchEnv = token
-    ? { ...process.env, GIT_ASKPASS: "echo", GIT_TERMINAL_PROMPT: "0",
+    ? {
+        ...process.env,
+        GIT_ASKPASS: "echo",
+        GIT_TERMINAL_PROMPT: "0",
         GIT_CONFIG_COUNT: "1",
         GIT_CONFIG_KEY_0: "http.https://github.com/.extraheader",
-        GIT_CONFIG_VALUE_0: `Authorization: basic ${Buffer.from(`x-access-token:${token}`).toString("base64")}` }
+        GIT_CONFIG_VALUE_0: `Authorization: basic ${Buffer.from(`x-access-token:${token}`).toString("base64")}`,
+      }
     : undefined;
 
   try {
@@ -466,7 +476,9 @@ export async function fetchPullRequestRefs(
     try {
       await fetchGitRef(repoPath, baseRefName, baseRef, fetchEnv);
     } catch (fallbackError: unknown) {
-      throw new Error(`Failed to fetch PR base ref: ${(fallbackError as Error).message}`, { cause: fallbackError });
+      throw new Error(`Failed to fetch PR base ref: ${(fallbackError as Error).message}`, {
+        cause: fallbackError,
+      });
     }
   }
 
@@ -476,7 +488,9 @@ export async function fetchPullRequestRefs(
     try {
       await fetchGitRef(repoPath, `refs/pull/${prNumber}/head`, headRef, fetchEnv);
     } catch (fallbackError: unknown) {
-      throw new Error(`Failed to fetch PR head ref: ${(fallbackError as Error).message}`, { cause: fallbackError });
+      throw new Error(`Failed to fetch PR head ref: ${(fallbackError as Error).message}`, {
+        cause: fallbackError,
+      });
     }
   }
 
@@ -549,9 +563,7 @@ export function generateDiffDocs(diff: DiffSummary, projectName: string): string
 
   if (diff.prNumber) {
     const titlePart = diff.prTitle ? ` — ${diff.prTitle}` : "";
-    const linkPart = diff.prUrl
-      ? `[PR #${diff.prNumber}](${diff.prUrl})`
-      : `PR #${diff.prNumber}`;
+    const linkPart = diff.prUrl ? `[PR #${diff.prNumber}](${diff.prUrl})` : `PR #${diff.prNumber}`;
     lines.push(`${linkPart}${titlePart}`);
     lines.push("");
   }

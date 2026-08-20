@@ -103,6 +103,7 @@ Write clear, concise commit messages:
 - Reference issues and PRs when relevant
 
 Examples:
+
 - `Add support for custom output templates`
 - `Fix parsing error for repos with spaces in names`
 - `Update documentation for --fast flag`

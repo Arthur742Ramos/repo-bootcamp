@@ -237,6 +237,11 @@ test.describe("web UI", () => {
     ).toBeVisible();
     await expect(page.getByLabel("Repository URL")).toBeVisible();
     await page.locator("#repoUrl").fill(repoUrl);
+    await page.locator("#advancedOptions").locator("summary").click();
+    await page.locator("#branch").fill("main");
+    await page.locator("#focus").selectOption("onboarding");
+    await page.locator("#audience").selectOption("frontend");
+    await page.locator("#maxFiles").fill("120");
     await page.locator("#analyzeBtn").click();
 
     await expect(page.locator("#progress")).toBeVisible();
@@ -248,10 +253,32 @@ test.describe("web UI", () => {
 
     await expect(page.locator("#analyzeBtn")).toHaveText("Analyze");
     await expect(page.locator("#results")).toHaveClass(/show/);
+    await expect(page.locator("#resultsHeading")).toBeFocused();
+    await expect(page.locator("#scoreGuide")).toContainText("Higher security scores are better");
+    await expect(page.locator("#scoreGuide")).toContainText(
+      "lower onboarding risk scores are better"
+    );
     await expect(page.locator("#stats")).toContainText("Security Score");
     await expect(page.locator("#stats")).toContainText("Onboarding Risk");
     await expect(page.locator("#files")).toContainText("BOOTCAMP.md");
     await expect(page.locator("#files")).toContainText("repo_facts.json");
+    await expect(page.locator("#nextSteps")).toContainText("Add a health check route");
+    await expect(page.locator("#resultMeta")).toContainText("test/fixture-web-ui-repo");
+
+    await page.locator("#fileSearch").fill("security");
+    await expect(page.locator('[data-file="SECURITY.md"]')).toBeVisible();
+    await expect(page.locator('[data-file="BOOTCAMP.md"]')).toBeHidden();
+    await page.locator("#fileSearch").fill("");
+
+    const kitDownloadPromise = page.waitForEvent("download");
+    await page.locator("#downloadAllBtn").click();
+    const kitDownload = await kitDownloadPromise;
+    expect(kitDownload.suggestedFilename()).toBe("repo-bootcamp-kit.zip");
+
+    const issueDownloadPromise = page.waitForEvent("download");
+    await page.locator("#issuesPreviewBtn").click();
+    const issueDownload = await issueDownloadPromise;
+    expect(issueDownload.suggestedFilename()).toBe("ISSUES_PREVIEW.md");
 
     await page.locator('[data-file="BOOTCAMP.md"]').click();
     await expect(page.locator("#modal")).toHaveClass(/show/);
@@ -275,6 +302,7 @@ test.describe("web UI", () => {
 
     await page.keyboard.press("Escape");
     await expect(page.locator("#modal")).toBeHidden();
+    await expect(page.locator('[data-file="BOOTCAMP.md"]')).toBeFocused();
 
     const { stderr } = serverProcess.getOutput();
     expect(stderr).not.toContain("Analysis failed");

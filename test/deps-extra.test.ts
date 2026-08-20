@@ -3,7 +3,10 @@ import { generateDependencyDiagram, generateDependencyDocs } from "../src/deps.j
 
 function makeDeps(overrides: any = {}) {
   return {
-    runtime: [{ name: "express", version: "4.18.0" }, { name: "lodash", version: "4.17.21" }],
+    runtime: [
+      { name: "express", version: "4.18.0" },
+      { name: "lodash", version: "4.17.21" },
+    ],
     dev: [{ name: "vitest", version: "1.0.0" }],
     peer: [],
     totalCount: 3,
@@ -14,9 +17,12 @@ function makeDeps(overrides: any = {}) {
 
 describe("deps extra branches", () => {
   it("diagram with categories >5 deps shows more", () => {
-    const result = generateDependencyDiagram(makeDeps({
-      categories: [{ name: "Testing", deps: ["a","b","c","d","e","f","g"] }],
-    }), "test");
+    const result = generateDependencyDiagram(
+      makeDeps({
+        categories: [{ name: "Testing", deps: ["a", "b", "c", "d", "e", "f", "g"] }],
+      }),
+      "test"
+    );
     expect(result).toContain("+2 more");
   });
 
@@ -38,7 +44,10 @@ describe("deps extra branches", () => {
   });
 
   it("docs with peer deps", () => {
-    const result = generateDependencyDocs(makeDeps({ peer: [{ name: "react", version: "18" }], totalCount: 4 }), "p");
+    const result = generateDependencyDocs(
+      makeDeps({ peer: [{ name: "react", version: "18" }], totalCount: 4 }),
+      "p"
+    );
     expect(result).toContain("Peer | 1");
   });
 
@@ -65,9 +74,12 @@ describe("deps extra branches", () => {
   });
 
   it("docs with categories", () => {
-    const result = generateDependencyDocs(makeDeps({
-      categories: [{ name: "Web", deps: ["express", "koa"] }],
-    }), "p");
+    const result = generateDependencyDocs(
+      makeDeps({
+        categories: [{ name: "Web", deps: ["express", "koa"] }],
+      }),
+      "p"
+    );
     expect(result).toContain("### Web");
   });
 });

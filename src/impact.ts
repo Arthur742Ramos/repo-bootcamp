@@ -17,7 +17,7 @@ import importPatternsJson from "./data/import-patterns.json" with { type: "json"
 const IMPORT_PATTERNS: Record<string, RegExp[]> = Object.fromEntries(
   Object.entries(importPatternsJson.importPatterns).map(([lang, patterns]) => [
     lang,
-    (patterns as string[]).map(p => {
+    (patterns as string[]).map((p) => {
       const isMultiline = lang === "python";
       return new RegExp(p, isMultiline ? "gm" : "g");
     }),
@@ -135,7 +135,10 @@ function parseJsonc(text: string): unknown {
 
 /** Normalize a repo-relative directory: leading "./" and "." → "" (repo root). */
 function normalizeRepoDir(dir: string): string {
-  return dir.replace(/\\/g, "/").replace(/^\.\/?/, "").replace(/\/+$/, "");
+  return dir
+    .replace(/\\/g, "/")
+    .replace(/^\.\/?/, "")
+    .replace(/\/+$/, "");
 }
 
 /** Join a repo-relative base dir with a repo-relative path (base "" = root). */
@@ -299,7 +302,11 @@ function resolveRelativeImport(
  * src-layout projects resolve. Both forms probe `<module>.py` and
  * `<module>/__init__.py`.
  */
-function resolvePythonImport(importPath: string, fromFile: string, ctx: GraphContext): string | null {
+function resolvePythonImport(
+  importPath: string,
+  fromFile: string,
+  ctx: GraphContext
+): string | null {
   const { filePathSet } = ctx;
   if (importPath.startsWith(".")) {
     const dots = (/^\.+/.exec(importPath) ?? [""])[0].length;
@@ -360,7 +367,10 @@ function resolveTsAliasImport(spec: string, ctx: GraphContext): string | null {
       if (!spec.startsWith(prefix)) continue;
       const tail = spec.slice(prefix.length);
       for (const target of targets) {
-        const hit = probeResolved(joinRepo(baseDir ?? "", target.replace("*", tail)), ctx.filePathSet);
+        const hit = probeResolved(
+          joinRepo(baseDir ?? "", target.replace("*", tail)),
+          ctx.filePathSet
+        );
         if (hit) return hit;
       }
     } else {
@@ -410,7 +420,7 @@ export async function buildImportGraph(
 ): Promise<Map<string, { imports: string[]; importedBy: string[] }>> {
   const graph = new Map<string, { imports: string[]; importedBy: string[] }>();
   // Pre-build a Set of all file paths for O(1) lookups during resolution
-  const filePathSet = new Set(files.filter(f => !f.isDirectory).map(f => f.path));
+  const filePathSet = new Set(files.filter((f) => !f.isDirectory).map((f) => f.path));
   // Project-level resolution context (Go module prefix + package-dir index, TS
   // baseUrl/paths aliases, Python source roots) — built once for all files.
   const ctx = await buildGraphContext(repoPath, files, filePathSet);
@@ -428,11 +438,12 @@ export async function buildImportGraph(
   const MAX_FILE_SIZE_FOR_GRAPH = 100_000;
 
   // Parse source files
-  const sourceFiles = files.filter(f => 
-    !f.isDirectory &&
-    /\.(ts|tsx|js|jsx|mjs|cjs|py|go)$/.test(f.path) &&
-    !f.path.includes("node_modules") &&
-    f.size < MAX_FILE_SIZE_FOR_GRAPH
+  const sourceFiles = files.filter(
+    (f) =>
+      !f.isDirectory &&
+      /\.(ts|tsx|js|jsx|mjs|cjs|py|go)$/.test(f.path) &&
+      !f.path.includes("node_modules") &&
+      f.size < MAX_FILE_SIZE_FOR_GRAPH
   );
 
   // Parse source files in parallel batches for performance
@@ -485,7 +496,6 @@ export async function buildImportGraph(
   return graph;
 }
 
-
 /**
  * Broad test-path predicate — a superset of the six per-target patterns in
  * findRelatedTests. Used to pre-filter the file list to the (usually small)
@@ -527,9 +537,7 @@ function findRelatedTests(filePath: string, testFiles: FileInfo[]): string[] {
     new RegExp(`^tests/.*${fileName}.*\\.[^.]+$`),
   ];
 
-  return testFiles
-    .filter(f => testPatterns.some(p => p.test(f.path)))
-    .map(f => f.path);
+  return testFiles.filter((f) => testPatterns.some((p) => p.test(f.path))).map((f) => f.path);
 }
 
 /**
@@ -540,10 +548,8 @@ function findRelatedDocs(filePath: string, files: FileInfo[]): string[] {
   const fileDir = dirname(filePath);
 
   // Look for markdown files that might reference this file
-  const docFiles = files.filter(f => 
-    !f.isDirectory && 
-    /\.(md|mdx|rst|txt)$/.test(f.path) &&
-    !f.path.includes("node_modules")
+  const docFiles = files.filter(
+    (f) => !f.isDirectory && /\.(md|mdx|rst|txt)$/.test(f.path) && !f.path.includes("node_modules")
   );
 
   // Heuristic: docs in the same directory, or whose name references this file.
@@ -551,15 +557,12 @@ function findRelatedDocs(filePath: string, files: FileInfo[]): string[] {
   // target, so it is intentionally excluded.)
   const fileNameLower = fileName.toLowerCase();
   return docFiles
-    .filter(f => {
+    .filter((f) => {
       const docDir = dirname(f.path);
       const docName = basename(f.path).toLowerCase();
-      return (
-        docDir === fileDir ||
-        (fileNameLower.length > 0 && docName.includes(fileNameLower))
-      );
+      return docDir === fileDir || (fileNameLower.length > 0 && docName.includes(fileNameLower));
     })
-    .map(f => f.path)
+    .map((f) => f.path)
     .slice(0, 5); // Max related docs per file
 }
 
@@ -574,7 +577,7 @@ export async function analyzeChangeImpact(
   relatedTestsCache?: Map<string, string[]>
 ): Promise<ChangeImpact> {
   // Build graph if not provided
-  const importGraph = graph || await buildImportGraph(repoPath, files);
+  const importGraph = graph || (await buildImportGraph(repoPath, files));
 
   const node = importGraph.get(targetFile);
   const imports = node?.imports || [];
@@ -597,7 +600,7 @@ export async function analyzeChangeImpact(
   // whole tree per call. Results are memoized per target; a caller may thread a
   // shared `relatedTestsCache` across key files (where the same affected file
   // recurs across fan-outs) to avoid recomputing it.
-  const testFiles = files.filter(f => !f.isDirectory && isTestPath(f.path));
+  const testFiles = files.filter((f) => !f.isDirectory && isTestPath(f.path));
   const testCache = relatedTestsCache ?? new Map<string, string[]>();
   const relatedTestsFor = (target: string): string[] => {
     let cached = testCache.get(target);
@@ -652,7 +655,9 @@ export function generateImpactDocs(
   lines.push("");
   lines.push(`Impact analysis for **${projectName}**.`);
   lines.push("");
-  lines.push("This document shows how changes to key files would affect other parts of the codebase.");
+  lines.push(
+    "This document shows how changes to key files would affect other parts of the codebase."
+  );
   lines.push("");
 
   for (const impact of impacts) {

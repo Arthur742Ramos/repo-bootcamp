@@ -41,16 +41,10 @@ sequenceDiagram
       const content = generateDiagrams({
         repoName: "test/repo",
         architecture: {
-          components: [
-            { name: "API" },
-            { name: "Worker" },
-          ],
+          components: [{ name: "API" }, { name: "Worker" }],
         },
         structure: {
-          keyDirs: [
-            { path: "src" },
-            { path: "test" },
-          ],
+          keyDirs: [{ path: "src" }, { path: "test" }],
         },
       } as never);
 

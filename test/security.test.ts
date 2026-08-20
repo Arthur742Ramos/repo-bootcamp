@@ -3,7 +3,12 @@
  */
 
 import { describe, it, expect, afterEach } from "vitest";
-import { generateSecurityDocs, getSecurityGrade, analyzeSecurityPatterns, type SecurityAnalysis } from "../src/security.js";
+import {
+  generateSecurityDocs,
+  getSecurityGrade,
+  analyzeSecurityPatterns,
+  type SecurityAnalysis,
+} from "../src/security.js";
 import { mkdir, rm, writeFile } from "fs/promises";
 import { join } from "path";
 import type { FileInfo } from "../src/types.js";
@@ -82,14 +87,14 @@ describe("generateSecurityDocs", () => {
 
   it("should generate markdown documentation", () => {
     const docs = generateSecurityDocs(mockAnalysis, "my-app");
-    
+
     expect(docs).toContain("# Security Overview");
     expect(docs).toContain("my-app");
   });
 
   it("should show security score", () => {
     const docs = generateSecurityDocs(mockAnalysis, "my-app");
-    
+
     expect(docs).toContain("## Security Score");
     expect(docs).toContain("85/100");
     expect(docs).toContain("Grade: B");
@@ -97,7 +102,7 @@ describe("generateSecurityDocs", () => {
 
   it("should list security measures", () => {
     const docs = generateSecurityDocs(mockAnalysis, "my-app");
-    
+
     expect(docs).toContain("## Security Measures");
     expect(docs).toContain("Security headers (Helmet)");
     expect(docs).toContain("CORS configured");
@@ -106,7 +111,7 @@ describe("generateSecurityDocs", () => {
 
   it("should show authentication patterns", () => {
     const docs = generateSecurityDocs(mockAnalysis, "my-app");
-    
+
     expect(docs).toContain("## Authentication");
     expect(docs).toContain("### JWT");
     expect(docs).toContain("jsonwebtoken");
@@ -114,7 +119,7 @@ describe("generateSecurityDocs", () => {
 
   it("should list security dependencies", () => {
     const docs = generateSecurityDocs(mockAnalysis, "my-app");
-    
+
     expect(docs).toContain("## Security Dependencies");
     expect(docs).toContain("helmet");
     expect(docs).toContain("bcrypt");
@@ -123,7 +128,7 @@ describe("generateSecurityDocs", () => {
 
   it("should show findings by severity", () => {
     const docs = generateSecurityDocs(mockAnalysis, "my-app");
-    
+
     expect(docs).toContain("## Findings");
     expect(docs).toContain("Medium");
     expect(docs).toContain("dangerouslySetInnerHTML usage");
@@ -131,14 +136,14 @@ describe("generateSecurityDocs", () => {
 
   it("should show secrets handling info", () => {
     const docs = generateSecurityDocs(mockAnalysis, "my-app");
-    
+
     expect(docs).toContain("## Secrets Handling");
     expect(docs).toContain(".env");
   });
 
   it("should include recommendations", () => {
     const docs = generateSecurityDocs(mockAnalysis, "my-app");
-    
+
     expect(docs).toContain("## Recommendations");
     // Should recommend rate limiting since it's missing
     expect(docs).toContain("rate limiting");
@@ -188,7 +193,7 @@ describe("SecurityAnalysis with critical findings", () => {
 
   it("should show critical findings prominently", () => {
     const docs = generateSecurityDocs(criticalAnalysis, "insecure-app");
-    
+
     expect(docs).toContain("Critical");
     expect(docs).toContain("Hardcoded password");
     expect(docs).toContain("SQL injection");
@@ -196,14 +201,14 @@ describe("SecurityAnalysis with critical findings", () => {
 
   it("should show low score for insecure app", () => {
     const docs = generateSecurityDocs(criticalAnalysis, "insecure-app");
-    
+
     expect(docs).toContain("45/100");
     expect(getSecurityGrade(45)).toBe("F");
   });
 
   it("should prioritize addressing critical findings", () => {
     const docs = generateSecurityDocs(criticalAnalysis, "insecure-app");
-    
+
     expect(docs).toContain("Priority");
     expect(docs).toContain("critical security findings");
   });
@@ -213,9 +218,7 @@ describe("SecurityAnalysis with no findings", () => {
   const cleanAnalysis: SecurityAnalysis = {
     score: 100,
     authPatterns: [],
-    securityDeps: [
-      { name: "helmet", purpose: "Security headers", type: "security-header" },
-    ],
+    securityDeps: [{ name: "helmet", purpose: "Security headers", type: "security-header" }],
     findings: [],
     secretsHandling: {
       envFiles: [],
@@ -235,13 +238,13 @@ describe("SecurityAnalysis with no findings", () => {
 
   it("should show clean message when no findings", () => {
     const docs = generateSecurityDocs(cleanAnalysis, "secure-app");
-    
+
     expect(docs).toContain("No security concerns detected");
   });
 
   it("should show good recommendations message", () => {
     const docs = generateSecurityDocs(cleanAnalysis, "secure-app");
-    
+
     expect(docs).toContain("security posture looks good");
   });
 });
@@ -384,7 +387,7 @@ describe("edge cases", () => {
       hasSqlInjectionPrevention: true,
     };
     const docs = generateSecurityDocs(lowSeverityAnalysis, "app");
-    // Low severity is grouped as "Informational" 
+    // Low severity is grouped as "Informational"
     expect(docs).toContain("Informational");
     expect(docs).toContain("1 informational findings");
   });
@@ -418,11 +421,13 @@ describe("analyzeSecurityPatterns", () => {
     });
 
     expect(result.headers.hasHelmet).toBe(true);
-    expect(result.securityDeps.some(d => d.name === "helmet")).toBe(true);
+    expect(result.securityDeps.some((d) => d.name === "helmet")).toBe(true);
   });
 
   it("detects ORM as SQL injection prevention", async () => {
-    const files = await setupTestRepo({ "src/db.ts": "import { PrismaClient } from '@prisma/client';" });
+    const files = await setupTestRepo({
+      "src/db.ts": "import { PrismaClient } from '@prisma/client';",
+    });
     const result = await analyzeSecurityPatterns(testDir, files, {
       dependencies: { "@prisma/client": "^5.0.0" },
     });
@@ -546,7 +551,9 @@ describe("analyzeSecurityPatterns", () => {
 
     const result = await analyzeSecurityPatterns(testDir, files);
 
-    const passwordFindings = result.findings.filter(f => f.title.toLowerCase().includes("password"));
+    const passwordFindings = result.findings.filter((f) =>
+      f.title.toLowerCase().includes("password")
+    );
     expect(passwordFindings.length).toBe(0);
   });
 

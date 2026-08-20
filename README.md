@@ -5,7 +5,7 @@
 ```
 ╦═╗╔═╗╔═╗╔═╗  ╔╗ ╔═╗╔═╗╔╦╗╔═╗╔═╗╔╦╗╔═╗
 ╠╦╝║╣ ╠═╝║ ║  ╠╩╗║ ║║ ║ ║ ║  ╠═╣║║║╠═╝
-╩╚═╚═╝╩  ╚═╝  ╚═╝╚═╝╚═╝ ╩ ╚═╝╩ ╩╩ ╩╩  
+╩╚═╚═╝╩  ╚═╝  ╚═╝╚═╝╚═╝ ╩ ╚═╝╩ ╩╩ ╩╩
 ```
 
 **Turn any GitHub, GitLab, or Bitbucket repository into a Day 1 onboarding kit**
@@ -48,6 +48,7 @@
 ## The Problem
 
 New developers joining a project waste **days or weeks** trying to understand:
+
 - How do I set up my environment?
 - What's the architecture? Where do I start reading?
 - What are safe first contributions?
@@ -69,7 +70,7 @@ That's it. You get 14+ interconnected markdown files covering everything a new c
 
 https://github.com/Arthur742Ramos/repo-bootcamp/raw/main/media/demo-sonnet.mp4
 
-*Generate comprehensive onboarding docs in under 60 seconds*
+_Generate comprehensive onboarding docs in under 60 seconds_
 
 </div>
 
@@ -79,8 +80,8 @@ https://github.com/Arthur742Ramos/repo-bootcamp/raw/main/media/demo-sonnet.mp4
 ```
   ╦═╗╔═╗╔═╗╔═╗  ╔╗ ╔═╗╔═╗╔╦╗╔═╗╔═╗╔╦╗╔═╗
   ╠╦╝║╣ ╠═╝║ ║  ╠╩╗║ ║║ ║ ║ ║  ╠═╣║║║╠═╝
-  ╩╚═╚═╝╩  ╚═╝  ╚═╝╚═╝╚═╝ ╩ ╚═╝╩ ╩╩ ╩╩  
-  
+  ╩╚═╚═╝╩  ╚═╝  ╚═╝╚═╝╚═╝ ╩ ╚═╝╩ ╩╩ ╩╩
+
   Turn any repo into a Day 1 onboarding kit
 
 ──────────────────────────────────────────────────
@@ -126,7 +127,8 @@ Onboarding Risk: 18/100 (A) 🟢
   ├── METRICS.md       → Codebase metrics & hotspots
   ├── HEALTH.md        → Onboarding-readiness health check
   ├── diagrams.mmd     → Mermaid diagrams
-  └── repo_facts.json  → Structured data
+  ├── repo_facts.json  → Structured data
+  └── ANALYSIS_MANIFEST.json → Run metadata and evidence map
 
   🚀 Next step: open ./bootcamp-ky/BOOTCAMP.md
 ```
@@ -135,14 +137,14 @@ Onboarding Risk: 18/100 (A) 🟢
 
 ## Why This Tool Wins
 
-| Traditional Approach | Repo Bootcamp |
-|---------------------|---------------|
-| Manual documentation takes days | Generated in < 60 seconds |
-| Gets outdated immediately | Regenerate anytime |
-| Inconsistent quality | Structured, validated output |
-| Requires deep knowledge | Works on any public repo |
-| Static documents | Interactive Q&A mode |
-| No security insights | Built-in security analysis |
+| Traditional Approach            | Repo Bootcamp                |
+| ------------------------------- | ---------------------------- |
+| Manual documentation takes days | Generated in < 60 seconds    |
+| Gets outdated immediately       | Regenerate anytime           |
+| Inconsistent quality            | Structured, validated output |
+| Requires deep knowledge         | Works on any public repo     |
+| Static documents                | Interactive Q&A mode         |
+| No security insights            | Built-in security analysis   |
 
 ### What Makes It Different
 
@@ -150,20 +152,20 @@ Onboarding Risk: 18/100 (A) 🟢
 2. **Truly Agentic** - Claude autonomously explores codebases, not just template filling
 3. **Schema Validated** - All output is validated with Zod schemas and auto-retried on failures
 4. **Production Ready** - 1,270+ tests, TypeScript, proper error handling
-5. **Full Feature Set** - A 21-command CLI: interactive Q&A, a combined scan dashboard, health/metrics/security scoring, coupling & impact graphs, machine preflight, ownership maps, cross-ecosystem task discovery, docs-drift analysis, and a web UI
+5. **Full Feature Set** - A 22-command CLI: interactive Q&A, a combined scan dashboard, health/metrics/security scoring, coupling & impact graphs, machine preflight, ownership maps, cross-ecosystem task discovery, docs-drift analysis, guarded kit publishing, and a web UI
 6. **Beautiful Output** - Mermaid diagrams, structured markdown, professional formatting
 
 ### By the Numbers
 
-| Metric | Value |
-|--------|-------|
-| Generated files | 14+ |
-| Test suite | 1,270+ tests |
-| Source files | 59 TypeScript modules |
-| Test files | 102 Vitest files |
-| Lines of code | 18,326 TypeScript LOC (src/) |
-| Languages supported | 10+ |
-| Generation time | < 60 seconds |
+| Metric              | Value                        |
+| ------------------- | ---------------------------- |
+| Generated files     | 14+                          |
+| Test suite          | 1,270+ tests                 |
+| Source files        | 59 TypeScript modules        |
+| Test files          | 102 Vitest files             |
+| Lines of code       | 18,326 TypeScript LOC (src/) |
+| Languages supported | 10+                          |
+| Generation time     | < 60 seconds                 |
 
 ## How It Uses the GitHub Copilot SDK
 
@@ -183,18 +185,18 @@ const tools = [
   {
     name: "read_file",
     description: "Read contents of a file in the repository",
-    parameters: { path: { type: "string" } }
+    parameters: { path: { type: "string" } },
   },
   {
-    name: "list_files", 
+    name: "list_files",
     description: "List files matching a glob pattern",
-    parameters: { pattern: { type: "string" } }
+    parameters: { pattern: { type: "string" } },
   },
   {
     name: "search",
     description: "Search for text across the codebase",
-    parameters: { query: { type: "string" } }
-  }
+    parameters: { query: { type: "string" } },
+  },
 ];
 
 // Agent autonomously decides which files to read
@@ -210,11 +212,11 @@ await session.sendAndWait({ prompt: analysisPrompt });
 
 ### Why This Matters
 
-| Traditional LLM Approach | Copilot SDK Agentic Approach |
-|--------------------------|------------------------------|
-| Dump entire codebase into context | Agent selectively reads relevant files |
-| Context window limits scalability | Works on repos of any size |
-| Static, one-shot analysis | Dynamic, multi-turn exploration |
+| Traditional LLM Approach           | Copilot SDK Agentic Approach                  |
+| ---------------------------------- | --------------------------------------------- |
+| Dump entire codebase into context  | Agent selectively reads relevant files        |
+| Context window limits scalability  | Works on repos of any size                    |
+| Static, one-shot analysis          | Dynamic, multi-turn exploration               |
 | No ability to search or drill down | Agent searches, reads, and follows references |
 
 ### Key SDK Features Used
@@ -293,18 +295,21 @@ The Copilot SDK transforms what would be a simple template-filler into an intell
 > Tiny Fetch-based HTTP client with ergonomic helpers, retries, and hooks.
 
 ## Quick Facts
-| | |
-|---|---|
-| **Languages** | TypeScript |
-| **Frameworks** | None |
-| **Build System** | npm |
+
+|                  |            |
+| ---------------- | ---------- |
+| **Languages**    | TypeScript |
+| **Frameworks**   | None       |
+| **Build System** | npm        |
 
 ## Quick Start
+
 1. Install dependencies: npm install
 2. Run tests: npm test
 3. Build: npm run build
 
 ## If You Only Have 30 Minutes
+
 1. Read this document
 2. Run `npm install && npm test`
 3. Pick a starter task from FIRST_TASKS.md
@@ -320,16 +325,17 @@ The Copilot SDK transforms what would be a simple template-filler into an intell
 
 ## Component Diagram
 
-​```mermaid
+​`mermaid
 graph TD
     A[ky.ts] --> B[Ky Class]
     B --> C[request]
     B --> D[retry logic]
     B --> E[hooks]
     C --> F[Response helpers]
-​```
+​`
 
 ## Data Flow
+
 Request → Options Merge → Hooks (before) → Fetch → Retry? → Hooks (after) → Response
 ```
 
@@ -344,16 +350,19 @@ Request → Options Merge → Hooks (before) → Fetch → Retry? → Hooks (aft
 ## Beginner Tasks
 
 ### 1. Add README badge for Node.js version
+
 - **Files:** README.md
 - **Why:** Easy first contribution, improves documentation
 
 ### 2. Add test for edge case
+
 - **Files:** test/main.ts
 - **Why:** Improves test coverage, low risk
 
 ## Intermediate Tasks
 
 ### 3. Improve TypeScript types for hooks
+
 - **Files:** source/types/hooks.ts
 - **Why:** Better DX, teaches you the hook system
 ```
@@ -362,23 +371,24 @@ Request → Options Merge → Hooks (before) → Fetch → Retry? → Hooks (aft
 
 ## Generated Documentation
 
-| File | Description |
-|------|-------------|
-| `BOOTCAMP.md` | 1-page overview - start here! |
-| `ONBOARDING.md` | Complete setup guide with commands |
-| `ARCHITECTURE.md` | System design with Mermaid diagrams |
-| `CODEMAP.md` | Directory tour for navigation |
-| `FIRST_TASKS.md` | 8-10 starter issues by difficulty |
-| `RUNBOOK.md` | Operations guide (for services) |
-| `DEPENDENCIES.md` | Dependency graph and analysis |
-| `SECURITY.md` | Security patterns and findings |
-| `RADAR.md` | Tech radar and onboarding risk score |
-| `IMPACT.md` | Change impact analysis for key files, plus any circular dependencies |
-| `METRICS.md` | Codebase metrics, hotspots & approachability score |
-| `HEALTH.md` | Onboarding-readiness health score & recommendations |
-| `DIFF.md` | Version comparison (with `--compare`) |
-| `diagrams.mmd` | Mermaid diagram sources |
-| `repo_facts.json` | Structured data for automation |
+| File                     | Description                                                          |
+| ------------------------ | -------------------------------------------------------------------- |
+| `BOOTCAMP.md`            | 1-page overview - start here!                                        |
+| `ONBOARDING.md`          | Complete setup guide with commands                                   |
+| `ARCHITECTURE.md`        | System design with Mermaid diagrams                                  |
+| `CODEMAP.md`             | Directory tour for navigation                                        |
+| `FIRST_TASKS.md`         | 8-10 starter issues by difficulty                                    |
+| `RUNBOOK.md`             | Operations guide (for services)                                      |
+| `DEPENDENCIES.md`        | Dependency graph and analysis                                        |
+| `SECURITY.md`            | Security patterns and findings                                       |
+| `RADAR.md`               | Tech radar and onboarding risk score                                 |
+| `IMPACT.md`              | Change impact analysis for key files, plus any circular dependencies |
+| `METRICS.md`             | Codebase metrics, hotspots & approachability score                   |
+| `HEALTH.md`              | Onboarding-readiness health score & recommendations                  |
+| `DIFF.md`                | Version comparison (with `--compare`)                                |
+| `diagrams.mmd`           | Mermaid diagram sources                                              |
+| `repo_facts.json`        | Structured data for automation                                       |
+| `ANALYSIS_MANIFEST.json` | Reproducibility metadata, scan coverage, and evidence sources        |
 
 ## Quick Start
 
@@ -539,6 +549,32 @@ The dashboard also includes the tech-radar **onboarding-risk** score (0-100,
 lower is better) alongside health/metrics/security. The `--check` gate stays on
 the lowest of the three higher-is-better scores (onboarding risk is reported but
 not gated, since for it lower is better).
+
+### Continuous Onboarding Quality
+
+This repository includes a ready-to-copy GitHub Actions workflow at
+`.github/workflows/onboarding-quality.yml`. It builds Repo Bootcamp, runs the
+deterministic `scan` dashboard on every push and pull request, fails when the
+minimum score is missed, and uploads the machine-readable report as an artifact.
+It does not require a Copilot token or make an AI call.
+
+### Publishing a Generated Kit
+
+Use the publish command to inspect or apply generated files to a clean checkout.
+It previews the exact branch, files, and commit by default:
+
+```bash
+bootcamp publish ./my-repo ./.bootcamp-output/job/repo
+
+# Explicitly create a branch, copy the kit, and commit it
+bootcamp publish ./my-repo ./.bootcamp-output/job/repo --apply --branch bootcamp/onboarding-refresh
+
+# Push the branch and open a GitHub pull request (requires gh auth)
+bootcamp publish ./my-repo ./.bootcamp-output/job/repo --create-pr --base main
+```
+
+Publishing refuses to mutate a dirty checkout and only accepts known generated
+artifact types. Review `ANALYSIS_MANIFEST.json` before opening the pull request.
 
 ### Repo Health Check
 
@@ -703,8 +739,8 @@ Reads the repo's declared toolchain — Node (`engines.node`, `.nvmrc`,
 `.node-version`), package manager (`packageManager` / Corepack), Python
 (`requires-python`, `.python-version`), and Go (`go.mod`) — and checks each
 against your local machine with a per-row remedy. Unlike `bootcamp doctor`
-(which checks whether *your* machine can run bootcamp itself), `preflight`
-checks your machine against the *target* repo's requirements.
+(which checks whether _your_ machine can run bootcamp itself), `preflight`
+checks your machine against the _target_ repo's requirements.
 
 ### Who Do I Ask? (Ownership Map)
 
@@ -723,7 +759,7 @@ Parses the repo's `CODEOWNERS` file, lists the **default owners** (the `*`
 rule), maps owners to each **top-level area** (last-match-wins, the canonical
 CODEOWNERS semantics), and lists all **maintainers** plus a best-effort
 **top committers** list from whatever git history is available. Answers the
-classic Day-1 question: *"who do I ask when I'm stuck?"*
+classic Day-1 question: _"who do I ask when I'm stuck?"_
 
 ### What Can I Run? (Task Discovery)
 
@@ -850,74 +886,75 @@ cache ls` is an alias for `list`.
 
 ## CLI Options
 
-| Option | Description | Default |
-|--------|-------------|---------|
-| `-b, --branch <branch>` | Branch to analyze | default branch |
-| `-f, --focus <focus>` | Focus: onboarding, architecture, contributing, all | `all` |
-| `-a, --audience <type>` | Target: all, backend, frontend, sre | `all` |
-| `-o, --output <dir>` | Output directory | `./bootcamp-{repo}` |
-| `--format <format>` | Output format: markdown, html, pdf | `markdown` |
-| `-m, --max-files <n>` | Maximum files to scan | `200` |
-| `--model <model>` | Override model selection | auto |
-| `-s, --style <style>` | Output style: corporate, startup, oss, academic, minimal | `oss` |
-| `-i, --interactive` | Start Q&A mode after generation | false |
-| `--transcript` | Save Q&A session to TRANSCRIPT.md | false |
-| `-c, --compare <ref>` | Compare with git ref, generate DIFF.md | - |
-| `--create-issues` | Create GitHub issues from FIRST_TASKS | false |
-| `--dry-run` | Preview issues without creating | false |
-| `--render-diagrams [format]` | Render Mermaid to SVG/PNG (requires mermaid-cli) | `svg` |
-| `--json-only` | Only generate repo_facts.json | false |
-| `--no-clone` | Use a local directory path instead of cloning | false |
-| `--full-clone` | Full clone instead of shallow (slower, full history) | false |
-| `--repo-prompts <path>` | Path to custom prompts file (default: `.bootcamp-prompts.md` in target repo) | - |
-| `--no-cache` | Skip reading/writing the analysis cache | false |
-| `--fast` | Fast mode: inline key files, skip tools, much faster (~15-30s) | false |
-| `--keep-temp` | Keep temporary clone | false |
-| `-w, --watch` | Watch mode: re-run analysis on new commits | false |
-| `--watch-interval <seconds>` | Polling interval for watch mode in seconds | `30` |
-| `--watch-force` | Allow destructive `git reset --hard` fallback in watch mode | false |
-| `--stats` | Show detailed statistics | false |
-| `-v, --verbose` | Show tool calls and reasoning | false |
-| `-q, --quiet` | Suppress banner/progress; print only the output path (scripting/CI) | false |
+| Option                       | Description                                                                  | Default             |
+| ---------------------------- | ---------------------------------------------------------------------------- | ------------------- |
+| `-b, --branch <branch>`      | Branch to analyze                                                            | default branch      |
+| `-f, --focus <focus>`        | Focus: onboarding, architecture, contributing, all                           | `all`               |
+| `-a, --audience <type>`      | Target: all, backend, frontend, sre                                          | `all`               |
+| `-o, --output <dir>`         | Output directory                                                             | `./bootcamp-{repo}` |
+| `--format <format>`          | Output format: markdown, html, pdf                                           | `markdown`          |
+| `-m, --max-files <n>`        | Maximum files to scan                                                        | `200`               |
+| `--model <model>`            | Override model selection                                                     | auto                |
+| `-s, --style <style>`        | Output style: corporate, startup, oss, academic, minimal                     | `oss`               |
+| `-i, --interactive`          | Start Q&A mode after generation                                              | false               |
+| `--transcript`               | Save Q&A session to TRANSCRIPT.md                                            | false               |
+| `-c, --compare <ref>`        | Compare with git ref, generate DIFF.md                                       | -                   |
+| `--create-issues`            | Create GitHub issues from FIRST_TASKS                                        | false               |
+| `--dry-run`                  | Preview issues without creating                                              | false               |
+| `--render-diagrams [format]` | Render Mermaid to SVG/PNG (requires mermaid-cli)                             | `svg`               |
+| `--json-only`                | Only generate repo_facts.json                                                | false               |
+| `--no-clone`                 | Use a local directory path instead of cloning                                | false               |
+| `--full-clone`               | Full clone instead of shallow (slower, full history)                         | false               |
+| `--repo-prompts <path>`      | Path to custom prompts file (default: `.bootcamp-prompts.md` in target repo) | -                   |
+| `--no-cache`                 | Skip reading/writing the analysis cache                                      | false               |
+| `--fast`                     | Fast mode: inline key files, skip tools, much faster (~15-30s)               | false               |
+| `--keep-temp`                | Keep temporary clone                                                         | false               |
+| `-w, --watch`                | Watch mode: re-run analysis on new commits                                   | false               |
+| `--watch-interval <seconds>` | Polling interval for watch mode in seconds                                   | `30`                |
+| `--watch-force`              | Allow destructive `git reset --hard` fallback in watch mode                  | false               |
+| `--stats`                    | Show detailed statistics                                                     | false               |
+| `-v, --verbose`              | Show tool calls and reasoning                                                | false               |
+| `-q, --quiet`                | Suppress banner/progress; print only the output path (scripting/CI)          | false               |
 
 ## Commands
 
 ### Generate & explore
 
-| Command | Description |
-|---------|-------------|
-| `bootcamp <url>` | Generate full bootcamp documentation |
-| `bootcamp ask <url>` | Interactive Q&A without full generation |
-| `bootcamp diff <owner/repo#pr>` | Generate onboarding diff for a PR |
-| `bootcamp web` | Start local web demo server (alias: `serve`) |
+| Command                         | Description                                                                         |
+| ------------------------------- | ----------------------------------------------------------------------------------- |
+| `bootcamp <url>`                | Generate full bootcamp documentation                                                |
+| `bootcamp ask <url>`            | Interactive Q&A without full generation                                             |
+| `bootcamp diff <owner/repo#pr>` | Generate onboarding diff for a PR                                                   |
+| `bootcamp publish <repo> <kit>` | Preview or publish a generated kit into a clean checkout (`--apply`, `--create-pr`) |
+| `bootcamp web`                  | Start local web demo server (alias: `serve`)                                        |
 
 ### Analyze & score
 
-| Command | Description |
-|---------|-------------|
-| `bootcamp docs <url>` | Analyze documentation drift (`--check`, `--fix`) |
-| `bootcamp scan <url>` | Combined health + metrics + security dashboard from one scan (`--json`, `--check`, `--min-score`) |
-| `bootcamp health <url>` | Score onboarding-readiness (`--json`, `--check`, `--min-score`) |
-| `bootcamp metrics <url>` | Report codebase metrics & approachability (`--json`, `--check`, `--min-score`) |
-| `bootcamp security <url>` | Analyze security patterns & score (`--json`, `--check`, `--min-score`) |
-| `bootcamp deps <url>` | Report dependencies by category & ecosystem (`--json`, `--diagram`) |
-| `bootcamp radar <url>` | Tech radar + onboarding-risk score (`--json`, `--check`, `--max-risk`) |
-| `bootcamp impact <url> [file]` | Change impact / blast radius from the import graph (`--json`, `--top`) |
-| `bootcamp coupling <url>` | Rank modules by import coupling: load-bearing core, hubs, orphans (`--json`, `--top`) |
-| `bootcamp cycles <url>` | Detect circular import dependencies (`--json`, `--check`, `--max-cycles`) |
-| `bootcamp preflight <url>` | Check your machine against the repo's declared toolchain (`--json`, `--check`) |
-| `bootcamp owners <url>` | "Who do I ask?" — CODEOWNERS map + maintainers + top committers (`--json`) |
-| `bootcamp tasks <url>` | "How do I build/test/run this?" — cross-ecosystem task discovery grouped by category (`--json`, `--category`) |
+| Command                        | Description                                                                                                   |
+| ------------------------------ | ------------------------------------------------------------------------------------------------------------- |
+| `bootcamp docs <url>`          | Analyze documentation drift (`--check`, `--fix`)                                                              |
+| `bootcamp scan <url>`          | Combined health + metrics + security dashboard from one scan (`--json`, `--check`, `--min-score`)             |
+| `bootcamp health <url>`        | Score onboarding-readiness (`--json`, `--check`, `--min-score`)                                               |
+| `bootcamp metrics <url>`       | Report codebase metrics & approachability (`--json`, `--check`, `--min-score`)                                |
+| `bootcamp security <url>`      | Analyze security patterns & score (`--json`, `--check`, `--min-score`)                                        |
+| `bootcamp deps <url>`          | Report dependencies by category & ecosystem (`--json`, `--diagram`)                                           |
+| `bootcamp radar <url>`         | Tech radar + onboarding-risk score (`--json`, `--check`, `--max-risk`)                                        |
+| `bootcamp impact <url> [file]` | Change impact / blast radius from the import graph (`--json`, `--top`)                                        |
+| `bootcamp coupling <url>`      | Rank modules by import coupling: load-bearing core, hubs, orphans (`--json`, `--top`)                         |
+| `bootcamp cycles <url>`        | Detect circular import dependencies (`--json`, `--check`, `--max-cycles`)                                     |
+| `bootcamp preflight <url>`     | Check your machine against the repo's declared toolchain (`--json`, `--check`)                                |
+| `bootcamp owners <url>`        | "Who do I ask?" — CODEOWNERS map + maintainers + top committers (`--json`)                                    |
+| `bootcamp tasks <url>`         | "How do I build/test/run this?" — cross-ecosystem task discovery grouped by category (`--json`, `--category`) |
 
 ### Configure & maintain
 
-| Command | Description |
-|---------|-------------|
-| `bootcamp init` | Scaffold a `.bootcamprc.json` config (`--force`, `--print`, `--path`, `--style`) |
-| `bootcamp styles` | List the built-in style packs and the sections each enables (`--json`, alias: `style`) |
-| `bootcamp doctor` | Diagnose your environment (`--json`) |
-| `bootcamp completion <shell>` | Print a shell completion script (bash, zsh, fish) |
-| `bootcamp cache list\|prune\|clear` | Manage the analysis cache |
+| Command                             | Description                                                                            |
+| ----------------------------------- | -------------------------------------------------------------------------------------- |
+| `bootcamp init`                     | Scaffold a `.bootcamprc.json` config (`--force`, `--print`, `--path`, `--style`)       |
+| `bootcamp styles`                   | List the built-in style packs and the sections each enables (`--json`, alias: `style`) |
+| `bootcamp doctor`                   | Diagnose your environment (`--json`)                                                   |
+| `bootcamp completion <shell>`       | Print a shell completion script (bash, zsh, fish)                                      |
+| `bootcamp cache list\|prune\|clear` | Manage the analysis cache                                                              |
 
 ## Programmatic API
 
@@ -994,19 +1031,19 @@ export default {
     focus: "all",
     style: "oss",
     model: "claude-sonnet-4-5",
-    maxFiles: 200
+    maxFiles: 200,
   },
   customStyle: {
     emoji: true,
-    firstTasksCount: 10
+    firstTasksCount: 10,
   },
   plugins: [],
   prompts: {
-    system: "You are a helpful assistant for onboarding developers."
+    system: "You are a helpful assistant for onboarding developers.",
   },
   output: {
-    excludeDocs: ["RUNBOOK.md"]
-  }
+    excludeDocs: ["RUNBOOK.md"],
+  },
 };
 ```
 
@@ -1025,14 +1062,17 @@ Example `.bootcamp-prompts.md`:
 
 ```markdown
 ## Focus Areas
+
 - Pay special attention to the plugin architecture in src/plugins/
 - The event bus in src/events/ is central to the system
 
 ## Terminology
+
 - "Widget" refers to UI components in our domain
 - "Pipeline" is our term for the data processing chain
 
 ## Onboarding Notes
+
 - New developers should start with the src/core/ module
 - Ignore the legacy/ directory — it is scheduled for removal
 ```
@@ -1042,6 +1082,7 @@ Example `.bootcamp-prompts.md`:
 Extend Repo Bootcamp with custom analyzers:
 
 Plugins can hook into three stages:
+
 - **Analyzer plugins** via `analyze(...)` (enrich facts and add docs)
 - **Formatter plugins** via `formatDocuments(...)` (transform generated docs)
 - **Output target plugins** via `writeOutput(...)` (publish/store outputs elsewhere)
@@ -1115,6 +1156,7 @@ npm run test:coverage
 ## Model Configuration
 
 The tool uses these models in order of preference:
+
 1. `claude-opus-4-5`
 2. `claude-sonnet-4-5`
 3. `claude-sonnet-4-20250514`
@@ -1153,7 +1195,7 @@ MIT
 
 **[Repo Bootcamp](https://github.com/Arthur742Ramos/repo-bootcamp)** showcases the power of the [GitHub Copilot SDK](https://github.com/github/copilot-sdk) for building agentic developer tools.
 
-*Stop wasting time on manual onboarding docs. Let AI do the heavy lifting.*
+_Stop wasting time on manual onboarding docs. Let AI do the heavy lifting._
 
 [![Built with Copilot SDK](https://img.shields.io/badge/Built%20with-GitHub%20Copilot%20SDK-8957e5?logo=github&logoColor=white&style=for-the-badge)](https://github.com/github/copilot-sdk)
 

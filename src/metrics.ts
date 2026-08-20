@@ -215,9 +215,7 @@ function median(values: number[]): number {
   if (values.length === 0) return 0;
   const sorted = [...values].sort((a, b) => a - b);
   const mid = Math.floor(sorted.length / 2);
-  return sorted.length % 2 === 0
-    ? Math.round((sorted[mid - 1] + sorted[mid]) / 2)
-    : sorted[mid];
+  return sorted.length % 2 === 0 ? Math.round((sorted[mid - 1] + sorted[mid]) / 2) : sorted[mid];
 }
 
 function classifySize(sourceFiles: number): CodebaseSizeClass {
@@ -264,7 +262,9 @@ function computeApproachability(input: {
   } else if (effectiveSizeClass === "tiny" || effectiveSizeClass === "small") {
     factors.push(`Compact codebase (${input.sourceFiles} source files) is quick to navigate`);
   } else {
-    factors.push(`${effectiveSizeClass} codebase (${input.sourceFiles} source files) takes longer to learn`);
+    factors.push(
+      `${effectiveSizeClass} codebase (${input.sourceFiles} source files) takes longer to learn`
+    );
   }
 
   if (input.sourceFiles === 0) {
@@ -285,20 +285,28 @@ function computeApproachability(input: {
 
   if (input.averageCodeBytes > 16 * 1024) {
     score -= 18;
-    factors.push(`Large average file size (${formatBytes(input.averageCodeBytes)}) suggests dense modules`);
+    factors.push(
+      `Large average file size (${formatBytes(input.averageCodeBytes)}) suggests dense modules`
+    );
   } else if (input.averageCodeBytes > 8 * 1024) {
     score -= 10;
     factors.push(`Above-average file size (${formatBytes(input.averageCodeBytes)})`);
   } else if (input.averageCodeBytes > 0) {
-    factors.push(`Small average file size (${formatBytes(input.averageCodeBytes)}) keeps modules focused`);
+    factors.push(
+      `Small average file size (${formatBytes(input.averageCodeBytes)}) keeps modules focused`
+    );
   }
 
   if (input.largestCodeBytes > 100 * 1024) {
     score -= 14;
-    factors.push(`A very large file (${formatBytes(input.largestCodeBytes)}) concentrates complexity`);
+    factors.push(
+      `A very large file (${formatBytes(input.largestCodeBytes)}) concentrates complexity`
+    );
   } else if (input.largestCodeBytes > 50 * 1024) {
     score -= 8;
-    factors.push(`A large file (${formatBytes(input.largestCodeBytes)}) may be a complexity hotspot`);
+    factors.push(
+      `A large file (${formatBytes(input.largestCodeBytes)}) may be a complexity hotspot`
+    );
   }
 
   if (input.languageCount > 7) {
@@ -480,14 +488,20 @@ export function generateMetricsDocs(metrics: CodebaseMetrics, projectName: strin
 
   lines.push("# Codebase Metrics");
   lines.push("");
-  lines.push(`Quantitative snapshot of **${projectName}** to help you gauge scope before diving in.`);
+  lines.push(
+    `Quantitative snapshot of **${projectName}** to help you gauge scope before diving in.`
+  );
   lines.push("");
 
   lines.push("## Approachability");
   lines.push("");
-  lines.push(`${scoreEmoji} **${appr.score}/100** (Grade: ${appr.grade}) — ${SIZE_CLASS_LABEL[metrics.sizeClass]} codebase`);
+  lines.push(
+    `${scoreEmoji} **${appr.score}/100** (Grade: ${appr.grade}) — ${SIZE_CLASS_LABEL[metrics.sizeClass]} codebase`
+  );
   lines.push("");
-  lines.push("How easy this codebase looks to pick up, based on size, test coverage, file density, and language spread.");
+  lines.push(
+    "How easy this codebase looks to pick up, based on size, test coverage, file density, and language spread."
+  );
   lines.push("");
   for (const factor of appr.factors) {
     lines.push(`- ${factor}`);
@@ -515,7 +529,9 @@ export function generateMetricsDocs(metrics: CodebaseMetrics, projectName: strin
     lines.push("| Language | Files | Size | Share |");
     lines.push("|----------|-------|------|-------|");
     for (const lang of metrics.languages) {
-      lines.push(`| ${lang.language} | ${lang.files} | ${formatBytes(lang.bytes)} | ${lang.percentage}% |`);
+      lines.push(
+        `| ${lang.language} | ${lang.files} | ${formatBytes(lang.bytes)} | ${lang.percentage}% |`
+      );
     }
     lines.push("");
   }
@@ -523,7 +539,9 @@ export function generateMetricsDocs(metrics: CodebaseMetrics, projectName: strin
   if (metrics.hotspots.length > 0) {
     lines.push("## Largest Files (Hotspots)");
     lines.push("");
-    lines.push("These files carry the most code by size — likely high-impact areas to read early or refactor carefully.");
+    lines.push(
+      "These files carry the most code by size — likely high-impact areas to read early or refactor carefully."
+    );
     lines.push("");
     lines.push("| File | Language | Size |");
     lines.push("|------|----------|------|");
@@ -541,14 +559,18 @@ export function generateMetricsDocs(metrics: CodebaseMetrics, projectName: strin
     lines.push("| Directory | Files | Size | Share |");
     lines.push("|-----------|-------|------|-------|");
     for (const dir of metrics.directories) {
-      lines.push(`| \`${dir.path}\` | ${dir.files} | ${formatBytes(dir.bytes)} | ${dir.percentage}% |`);
+      lines.push(
+        `| \`${dir.path}\` | ${dir.files} | ${formatBytes(dir.bytes)} | ${dir.percentage}% |`
+      );
     }
     lines.push("");
   }
 
   lines.push("---");
   lines.push("");
-  lines.push("_Metrics are computed deterministically from the file scan (no AI), so they're stable across runs._");
+  lines.push(
+    "_Metrics are computed deterministically from the file scan (no AI), so they're stable across runs._"
+  );
   lines.push("");
 
   return lines.join("\n");

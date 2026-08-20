@@ -72,8 +72,19 @@ describe("getIndexHtml", () => {
     it("has a results container", () => {
       const html = getIndexHtml();
       expect(html).toContain('id="results"');
+      expect(html).toContain('aria-labelledby="resultsHeading"');
+      expect(html).toContain('id="resultsHeading"');
       expect(html).toContain('id="stats"');
       expect(html).toContain('id="files"');
+    });
+
+    it("explains how to interpret the headline scores", () => {
+      const html = getIndexHtml();
+      expect(html).toContain('id="scoreGuide"');
+      expect(html).toContain('aria-describedby="scoreGuide"');
+      expect(html).toContain("Higher security scores are better");
+      expect(html).toContain("lower onboarding risk scores are better");
+      expect(html).toContain("A (strongest) to F (weakest)");
     });
 
     it("has a modal for viewing files", () => {
@@ -147,7 +158,7 @@ describe("getIndexHtml", () => {
 
     it("defines the streamProgress function", () => {
       const html = getIndexHtml();
-      expect(html).toContain("function streamProgress(jobId)");
+      expect(html).toContain("function streamProgress(jobId, runToken");
     });
 
     it("defines the showResults function", () => {
@@ -292,15 +303,25 @@ describe("getIndexHtml", () => {
     it("distinguishes a settled stream from an interruption", () => {
       const html = getIndexHtml();
       expect(html).toContain("let settled = false");
-      expect(html).toContain("if (settled) return");
+      expect(html).toContain("if (settled || !isCurrentRun(jobId, runToken)) return");
     });
 
     it("shows a visible retry notice and falls back to polling on interruption", () => {
       const html = getIndexHtml();
       expect(html).toContain("Connection lost");
-      expect(html).toContain("function pollJobStatus(jobId)");
+      expect(html).toContain("function pollJobStatus(jobId, runToken");
       expect(html).toContain("job.status === 'complete'");
       expect(html).toContain("job.status === 'error'");
+    });
+
+    it("ignores stale stream and polling results after a new run starts", () => {
+      const html = getIndexHtml();
+      expect(html).toContain("let activeRunToken = 0");
+      expect(html).toContain("function beginRun()");
+      expect(html).toContain("function isCurrentRun(jobId, runToken)");
+      expect(html).toContain("if (!isCurrentRun(jobId, runToken)) return;");
+      expect(html).toContain("pollTimer = setTimeout(poll, 2000)");
+      expect(html).toContain("clearTimeout(pollTimer)");
     });
   });
 
@@ -356,7 +377,9 @@ describe("getIndexHtml", () => {
   describe("completion announcement and focus (E4b)", () => {
     it("no longer wraps the bulk-rendered results in an always-on live region", () => {
       const html = getIndexHtml();
-      expect(html).toContain('<div class="results" id="results">');
+      expect(html).toContain(
+        '<section class="results" id="results" aria-labelledby="resultsHeading">'
+      );
       expect(html).not.toContain('id="results" aria-live');
     });
 
@@ -369,8 +392,9 @@ describe("getIndexHtml", () => {
 
     it("moves focus to the results heading and announces completion", () => {
       const html = getIndexHtml();
-      expect(html).toContain('id="filesHeading"');
+      expect(html).toContain('id="resultsHeading"');
       expect(html).toContain('tabindex="-1"');
+      expect(html).toContain("getElementById('resultsHeading')");
       expect(html).toContain("heading.focus()");
       expect(html).toContain("heading.scrollIntoView(");
       expect(html).toContain("Analysis complete");

@@ -235,11 +235,11 @@ _${spec.program} "$@"
 export function renderFish(spec: CompletionSpec): string {
   const lines: string[] = [];
   lines.push(`# fish completion for ${spec.program}`);
-  lines.push(`# Install: ${spec.program} completion fish > ~/.config/fish/completions/${spec.program}.fish`);
-  lines.push("");
   lines.push(
-    `function __fish_${spec.program}_no_subcommand`
+    `# Install: ${spec.program} completion fish > ~/.config/fish/completions/${spec.program}.fish`
   );
+  lines.push("");
+  lines.push(`function __fish_${spec.program}_no_subcommand`);
   const tokens = uniqueSorted(allCommandTokens(spec)).join(" ");
   lines.push(`  set -l cmds ${tokens}`);
   lines.push(`  for i in (commandline -opc)`);
@@ -272,9 +272,7 @@ export function renderFish(spec: CompletionSpec): string {
       .map((n) => `__fish_seen_subcommand_from ${n}`)
       .join("; or ");
     for (const opt of uniqueSorted(command.options)) {
-      lines.push(
-        `complete -c ${spec.program} -n '${condition}' -l '${opt.replace(/^--/, "")}'`
-      );
+      lines.push(`complete -c ${spec.program} -n '${condition}' -l '${opt.replace(/^--/, "")}'`);
     }
   }
 

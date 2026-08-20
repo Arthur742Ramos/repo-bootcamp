@@ -1,26 +1,34 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
 vi.mock("chalk", () => {
-  const makeChalk = (): any => new Proxy((...args: any[]) => args.join(""), {
-    get: () => makeChalk(),
-    apply: (_t: any, _a: any, args: any[]) => args.join(""),
-  });
+  const makeChalk = (): any =>
+    new Proxy((...args: any[]) => args.join(""), {
+      get: () => makeChalk(),
+      apply: (_t: any, _a: any, args: any[]) => args.join(""),
+    });
   return { default: makeChalk() };
 });
 
 vi.mock("ora", () => ({
   default: vi.fn().mockImplementation(() => ({
-    start: vi.fn().mockReturnThis(), succeed: vi.fn().mockReturnThis(),
-    fail: vi.fn().mockReturnThis(), warn: vi.fn().mockReturnThis(),
-    stop: vi.fn().mockReturnThis(), text: "",
+    start: vi.fn().mockReturnThis(),
+    succeed: vi.fn().mockReturnThis(),
+    fail: vi.fn().mockReturnThis(),
+    warn: vi.fn().mockReturnThis(),
+    stop: vi.fn().mockReturnThis(),
+    text: "",
   })),
 }));
 
 import { ProgressTracker, createProgressBar } from "../src/progress.js";
 
 describe("ProgressTracker extra branches", () => {
-  beforeEach(() => { vi.useFakeTimers(); });
-  afterEach(() => { vi.useRealTimers(); });
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
 
   it("analyze phase with tool calls and timer", () => {
     const p = new ProgressTracker(true);

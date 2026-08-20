@@ -2,17 +2,10 @@
   "repoName": "sindresorhus/ky",
   "purpose": "Tiny Fetch-based HTTP client with ergonomic helpers, retries, and hooks.",
   "description": "Ky is a small, dependency-free HTTP client built on the Fetch API for modern runtimes like browsers and Node.js. It adds method shortcuts, typed response helpers, retry and timeout handling, and hook-based lifecycle extensions. The source exports a factory that creates Ky instances with merged defaults and exposes helper symbols for retry control.",
-  "sources": [
-    "readme.md",
-    "package.json",
-    "source/index.ts",
-    "source/core/Ky.ts"
-  ],
+  "sources": ["readme.md", "package.json", "source/index.ts", "source/core/Ky.ts"],
   "confidence": "high",
   "stack": {
-    "languages": [
-      "TypeScript"
-    ],
+    "languages": ["TypeScript"],
     "frameworks": [],
     "buildSystem": "npm",
     "packageManager": null,
@@ -20,10 +13,7 @@
     "hasCi": true
   },
   "quickstart": {
-    "prerequisites": [
-      "Node.js >=18",
-      "npm"
-    ],
+    "prerequisites": ["Node.js >=18", "npm"],
     "steps": [
       "Install dependencies: npm install",
       "Run tests and lint/build: npm test",
@@ -62,61 +52,39 @@
         "fix": "Run npx playwright install --with-deps before running npm test."
       }
     ],
-    "sources": [
-      "package.json",
-      ".github/workflows/main.yml"
-    ]
+    "sources": ["package.json", ".github/workflows/main.yml"]
   },
   "structure": {
     "keyDirs": [
       {
         "path": "source",
         "purpose": "Library TypeScript source and public exports.",
-        "keyFiles": [
-          "source/index.ts"
-        ]
+        "keyFiles": ["source/index.ts"]
       },
       {
         "path": "source/core",
         "purpose": "Core request engine, retry, hooks, and response helpers.",
-        "keyFiles": [
-          "source/core/Ky.ts"
-        ]
+        "keyFiles": ["source/core/Ky.ts"]
       },
       {
         "path": "source/errors",
         "purpose": "Error types thrown by the client.",
-        "keyFiles": [
-          "source/errors/HTTPError.ts",
-          "source/errors/TimeoutError.ts"
-        ]
+        "keyFiles": ["source/errors/HTTPError.ts", "source/errors/TimeoutError.ts"]
       },
       {
         "path": "source/utils",
         "purpose": "Shared helpers for merging options, normalization, and body/timeout handling.",
-        "keyFiles": [
-          "source/utils/merge.ts",
-          "source/utils/normalize.ts",
-          "source/utils/body.ts"
-        ]
+        "keyFiles": ["source/utils/merge.ts", "source/utils/normalize.ts", "source/utils/body.ts"]
       },
       {
         "path": "source/types",
         "purpose": "Public TypeScript type definitions for options, hooks, and responses.",
-        "keyFiles": [
-          "source/types/options.ts",
-          "source/types/hooks.ts",
-          "source/types/ky.ts"
-        ]
+        "keyFiles": ["source/types/options.ts", "source/types/hooks.ts", "source/types/ky.ts"]
       },
       {
         "path": "test",
         "purpose": "AVA test suite and helpers.",
-        "keyFiles": [
-          "test/fetch.ts",
-          "test/hooks.ts",
-          "test/helpers/create-http-test-server.ts"
-        ]
+        "keyFiles": ["test/fetch.ts", "test/hooks.ts", "test/helpers/create-http-test-server.ts"]
       }
     ],
     "entrypoints": [
@@ -126,25 +94,16 @@
         "description": "Exports the ky factory, helpers, and public types."
       }
     ],
-    "testDirs": [
-      "test"
-    ],
+    "testDirs": ["test"],
     "docsDirs": [],
-    "sources": [
-      "source/index.ts",
-      "source/core/Ky.ts",
-      "readme.md"
-    ]
+    "sources": ["source/index.ts", "source/core/Ky.ts", "readme.md"]
   },
   "ci": {
     "workflows": [
       {
         "name": "CI",
         "file": ".github/workflows/main.yml",
-        "triggers": [
-          "push",
-          "pull_request"
-        ],
+        "triggers": ["push", "pull_request"],
         "mainSteps": [
           "actions/checkout",
           "actions/setup-node",
@@ -154,12 +113,8 @@
         ]
       }
     ],
-    "mainChecks": [
-      "npm test"
-    ],
-    "sources": [
-      ".github/workflows/main.yml"
-    ]
+    "mainChecks": ["npm test"],
+    "sources": [".github/workflows/main.yml"]
   },
   "contrib": {
     "howToAddFeature": [
@@ -227,11 +182,7 @@
         "description": "Configurable retry limits, status codes, delays, and custom shouldRetry logic."
       }
     ],
-    "sources": [
-      "source/index.ts",
-      "source/core/Ky.ts",
-      "readme.md"
-    ]
+    "sources": ["source/index.ts", "source/core/Ky.ts", "readme.md"]
   },
   "firstTasks": [
     {
@@ -239,10 +190,7 @@
       "description": "Add a short prerequisite note in the Install section that Node.js >=18 is required, matching package.json engines.",
       "difficulty": "beginner",
       "category": "docs",
-      "files": [
-        "readme.md",
-        "package.json"
-      ],
+      "files": ["readme.md", "package.json"],
       "why": "Keeps contributor setup instructions aligned with the supported runtime."
     },
     {
@@ -250,11 +198,7 @@
       "description": "Add a brief README snippet showing how to stop retries in beforeRetry and how to trigger retries from afterResponse.",
       "difficulty": "beginner",
       "category": "docs",
-      "files": [
-        "readme.md",
-        "source/index.ts",
-        "source/core/Ky.ts"
-      ],
+      "files": ["readme.md", "source/index.ts", "source/core/Ky.ts"],
       "why": "These helpers are part of the public API but are easy to miss without explicit docs."
     },
     {
@@ -262,10 +206,7 @@
       "description": "Add an AVA test that asserts ky throws when prefixUrl is used with an input starting with '/'.",
       "difficulty": "beginner",
       "category": "test",
-      "files": [
-        "source/core/Ky.ts",
-        "test/fetch.ts"
-      ],
+      "files": ["source/core/Ky.ts", "test/fetch.ts"],
       "why": "Guards against regressions in URL normalization behavior."
     },
     {
@@ -273,10 +214,7 @@
       "description": "Verify that undefined values are removed while null values are preserved when building search params.",
       "difficulty": "beginner",
       "category": "test",
-      "files": [
-        "source/core/Ky.ts",
-        "test/fetch.ts"
-      ],
+      "files": ["source/core/Ky.ts", "test/fetch.ts"],
       "why": "Confirms documented query normalization behavior."
     },
     {
@@ -284,10 +222,7 @@
       "description": "Add a test to ensure beforeError can change error name/message and is invoked before throwing.",
       "difficulty": "intermediate",
       "category": "test",
-      "files": [
-        "source/core/Ky.ts",
-        "test/hooks.ts"
-      ],
+      "files": ["source/core/Ky.ts", "test/hooks.ts"],
       "why": "Improves coverage of hook customization logic."
     },
     {
@@ -295,10 +230,7 @@
       "description": "Create a test showing that retry.shouldRetry overrides status code and timeout checks.",
       "difficulty": "intermediate",
       "category": "test",
-      "files": [
-        "source/core/Ky.ts",
-        "test/hooks.ts"
-      ],
+      "files": ["source/core/Ky.ts", "test/hooks.ts"],
       "why": "Ensures custom retry logic remains the top-priority decision point."
     },
     {
@@ -306,11 +238,7 @@
       "description": "Extract the Retry-After/RateLimit parsing logic from Ky.#calculateRetryDelay into a helper in source/utils and add focused tests.",
       "difficulty": "intermediate",
       "category": "refactor",
-      "files": [
-        "source/core/Ky.ts",
-        "source/utils/normalize.ts",
-        "test/fetch.ts"
-      ],
+      "files": ["source/core/Ky.ts", "source/utils/normalize.ts", "test/fetch.ts"],
       "why": "Simplifies the retry flow and makes header parsing easier to test."
     },
     {
@@ -318,10 +246,7 @@
       "description": "Tighten TypeScript overloads so defaults passed to ky.create/ky.extend are reflected in the returned instance types.",
       "difficulty": "advanced",
       "category": "feature",
-      "files": [
-        "source/types/ky.ts",
-        "source/index.ts"
-      ],
+      "files": ["source/types/ky.ts", "source/index.ts"],
       "why": "Enhances developer experience for advanced TypeScript consumers."
     },
     {
@@ -343,9 +268,6 @@
     "deploySteps": [],
     "observability": [],
     "incidents": [],
-    "sources": [
-      "readme.md",
-      "package.json"
-    ]
+    "sources": ["readme.md", "package.json"]
   }
 }

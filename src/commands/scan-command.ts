@@ -6,11 +6,7 @@ import { extractDependencies } from "../deps.js";
 import { computeRepoHealth, type RepoHealth } from "../health.js";
 import { computeCodebaseMetrics, type CodebaseMetrics } from "../metrics.js";
 import { generateTechRadar, getRiskEmoji } from "../radar.js";
-import {
-  analyzeSecurityPatterns,
-  getSecurityGrade,
-  type SecurityAnalysis,
-} from "../security.js";
+import { analyzeSecurityPatterns, getSecurityGrade, type SecurityAnalysis } from "../security.js";
 import { scanRepositoryFiles } from "../services/clone-service.js";
 import type { TechRadar } from "../types.js";
 import { finiteOr } from "../utils.js";
@@ -135,7 +131,9 @@ function printReport(
     tips.push(`Security: ${criticalOrHigh.recommendation || criticalOrHigh.title}`);
   }
   if (metrics.approachability.factors.length > 0) {
-    const negative = metrics.approachability.factors.find((f) => /large|complex|big|above/i.test(f));
+    const negative = metrics.approachability.factors.find((f) =>
+      /large|complex|big|above/i.test(f)
+    );
     if (negative) {
       tips.push(`Metrics: ${negative}`);
     }
@@ -171,7 +169,10 @@ export async function runScanCommand(repoUrl: string, opts: ScanCommandOptions):
   const minScore = finiteOr(opts.minScore, 70);
 
   await withResolvedRepo(repoUrl, opts, "Scan failed", async (repoSource) => {
-    const scan = await scanRepositoryFiles(repoSource.path, finiteOr(opts.maxFiles, 500, { min: 1 }));
+    const scan = await scanRepositoryFiles(
+      repoSource.path,
+      finiteOr(opts.maxFiles, 500, { min: 1 })
+    );
     const packageJson = await readFile(join(repoSource.path, "package.json"), "utf-8")
       .then((content) => JSON.parse(content) as Record<string, unknown>)
       .catch(() => undefined);
@@ -199,9 +200,18 @@ export async function runScanCommand(repoUrl: string, opts: ScanCommandOptions):
             filesScanned,
             scores: {
               health: { score: health.score, grade: health.grade },
-              metrics: { score: metrics.approachability.score, grade: metrics.approachability.grade },
-              security: { score: security.score, grade: getSecurityGrade(security.score, security.sourceFilesScanned) },
-              onboardingRisk: { score: radar.onboardingRisk.score, grade: radar.onboardingRisk.grade },
+              metrics: {
+                score: metrics.approachability.score,
+                grade: metrics.approachability.grade,
+              },
+              security: {
+                score: security.score,
+                grade: getSecurityGrade(security.score, security.sourceFilesScanned),
+              },
+              onboardingRisk: {
+                score: radar.onboardingRisk.score,
+                grade: radar.onboardingRisk.grade,
+              },
               lowest: scores.lowest,
             },
             health,

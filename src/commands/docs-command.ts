@@ -23,7 +23,11 @@ export async function runDocsCommand(
     repoSource = await resolveRepo(repoUrl, process.cwd(), opts.branch || undefined);
     console.log(chalk.dim(`Analyzing: ${repoSource.repoInfo.fullName}`));
   } catch (error: unknown) {
-    console.error(chalk.red(`❌ Failed to resolve repository: ${error instanceof Error ? error.message : String(error)}`));
+    console.error(
+      chalk.red(
+        `❌ Failed to resolve repository: ${error instanceof Error ? error.message : String(error)}`
+      )
+    );
     process.exit(1);
   }
 
@@ -66,7 +70,11 @@ export async function runDocsCommand(
         if (d.type === "missing") {
           console.log(chalk.dim("   - ") + chalk.cyan(d.actual) + chalk.dim(" not documented"));
         } else if (d.type === "extra") {
-          console.log(chalk.dim("   - ") + chalk.cyan(d.documented) + chalk.dim(" documented but doesn't exist"));
+          console.log(
+            chalk.dim("   - ") +
+              chalk.cyan(d.documented) +
+              chalk.dim(" documented but doesn't exist")
+          );
         }
       }
       console.log();
@@ -116,7 +124,9 @@ export async function runDocsCommand(
           }
         }
         console.log(
-          chalk.green(`\n   Applied ${fixResult.changesApplied} fix(es) to ${fixResult.filesModified} file(s)`)
+          chalk.green(
+            `\n   Applied ${fixResult.changesApplied} fix(es) to ${fixResult.filesModified} file(s)`
+          )
         );
       } else {
         console.log(chalk.dim("   No automatic fixes available for detected issues."));

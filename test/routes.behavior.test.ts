@@ -70,14 +70,17 @@ async function setupRoutes(overrides: SetupOverrides = {}) {
     outputTargets: [],
   });
   const writeGeneratedOutputs = vi.fn().mockResolvedValue({ documentCount: 2 });
+  const quickAsk = vi.fn().mockResolvedValue("Start with src/index.ts, then run the test task.");
   const applyOutputFormat = vi.fn().mockImplementation((docs) => docs);
   const readFile = vi.fn().mockResolvedValue("# Bootcamp");
+  const writeFile = vi.fn().mockResolvedValue(undefined);
   const mkdir = vi.fn().mockResolvedValue(undefined);
   const rm = vi.fn().mockResolvedValue(undefined);
 
   vi.doMock("../src/ingest.js", () => ({
     parseGitHubUrl,
   }));
+  vi.doMock("../src/interactive.js", () => ({ quickAsk }));
   vi.doMock("../src/services/config-resolution.js", () => ({
     resolveRunConfiguration,
   }));
@@ -106,6 +109,7 @@ async function setupRoutes(overrides: SetupOverrides = {}) {
     return {
       ...actual,
       readFile,
+      writeFile,
       mkdir,
       rm,
     };
@@ -128,8 +132,10 @@ async function setupRoutes(overrides: SetupOverrides = {}) {
       orchestrateAnalysis,
       prepareOutputDocuments,
       writeGeneratedOutputs,
+      quickAsk,
       applyOutputFormat,
       readFile,
+      writeFile,
       rm,
     },
     pruneExpiredJobs,
@@ -172,10 +178,13 @@ describe("web routes analysis lifecycle", () => {
     const statusResponse = await waitForTerminalStatus(http, jobId);
     expect(statusResponse.body.status).toBe("complete");
     expect(statusResponse.body.result.files).toContain("BOOTCAMP.md");
+    expect(statusResponse.body.result.files).toContain("ANALYSIS_MANIFEST.json");
 
     const streamResponse = await http.get(`/api/jobs/${jobId}/stream`);
     expect(streamResponse.status).toBe(200);
     expect(streamResponse.text).toContain('"type":"complete"');
+    expect(streamResponse.headers["cache-control"]).toContain("no-transform");
+    expect(streamResponse.headers["x-accel-buffering"]).toBe("no");
 
     const fileResponse = await http.get(`/api/jobs/${jobId}/files/BOOTCAMP.md`);
     expect(fileResponse.status).toBe(200);
@@ -188,6 +197,28 @@ describe("web routes analysis lifecycle", () => {
     expect(jsonFileResponse.status).toBe(200);
     expect(jsonFileResponse.headers["content-type"]).toContain("text/plain");
     expect(jsonFileResponse.headers["content-type"]).not.toContain("application/json");
+
+    const downloadResponse = await http.get(`/api/jobs/${jobId}/download`);
+    expect(downloadResponse.status).toBe(200);
+    expect(downloadResponse.headers["content-type"]).toContain("application/zip");
+    expect(downloadResponse.headers["content-disposition"]).toContain("bootcamp.zip");
+
+    const completedCancelResponse = await http.post(`/api/jobs/${jobId}/cancel`);
+    expect(completedCancelResponse.status).toBe(409);
+
+    const askResponse = await http.post(`/api/jobs/${jobId}/ask`).send({
+      question: "Where should I start reading?",
+    });
+    expect(askResponse.status).toBe(200);
+    expect(askResponse.body.answer).toContain("src/index.ts");
+    expect(mocks.quickAsk).toHaveBeenCalledWith(
+      "/tmp/mock-routes-repo",
+      expect.objectContaining({ fullName: "owner/repo" }),
+      expect.anything(),
+      "Where should I start reading?",
+      false,
+      "mock-model"
+    );
 
     expect(mocks.parseGitHubUrl).toHaveBeenCalled();
     expect(mocks.cloneRepository).toHaveBeenCalled();
@@ -248,6 +279,19 @@ describe("web routes analysis lifecycle", () => {
     expect(failedReadResponse.body.error).toBe("Failed to read generated file");
     expect(failedReadResponse.body.error).not.toContain("disk failure");
     expect(errorSpy).toHaveBeenCalled();
+  });
+
+  it("returns a clear error for cancelling an unknown job", async () => {
+    const { app } = await setupRoutes();
+    const response = await request(app).post("/api/jobs/job_missing/cancel");
+    expect(response.status).toBe(404);
+    expect(response.body.error).toBe("Job not found");
+  });
+
+  it("returns a clear error for asking an unknown job", async () => {
+    const { app } = await setupRoutes();
+    const response = await request(app).post("/api/jobs/job_missing/ask").send({ question: "" });
+    expect(response.status).toBe(404);
   });
 
   it("clamps and allowlists client-supplied options", async () => {
