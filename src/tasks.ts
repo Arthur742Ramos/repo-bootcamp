@@ -20,14 +20,7 @@ import type { Command } from "./types.js";
 
 /** Coarse grouping used for report sections and getting-started ordering. */
 export type TaskCategory =
-  | "install"
-  | "build"
-  | "test"
-  | "lint"
-  | "dev"
-  | "run"
-  | "release"
-  | "other";
+  "install" | "build" | "test" | "lint" | "dev" | "run" | "release" | "other";
 
 /** JavaScript package managers whose `run` invocation we can emit. */
 export type PackageManager = "npm" | "pnpm" | "yarn" | "bun";
