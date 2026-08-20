@@ -53,9 +53,9 @@ async function createFixtureRepo(): Promise<FixtureRepo> {
         },
       },
       null,
-      2,
+      2
     ),
-    "utf-8",
+    "utf-8"
   );
   await writeFile(join(sourceRepoPath, "README.md"), "# Fixture source\n", "utf-8");
   await writeFile(join(sourceRepoPath, "src", "index.ts"), "export const answer = 42;\n", "utf-8");
@@ -222,7 +222,7 @@ describe("critical flag behavior", () => {
     };
   }
 };`,
-        "utf-8",
+        "utf-8"
       );
 
       const scanResult = await scanRepo(fixture.sourceRepoPath, 200);

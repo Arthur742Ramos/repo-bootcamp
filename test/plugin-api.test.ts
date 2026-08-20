@@ -1,9 +1,5 @@
 import { describe, it, expect } from "vitest";
-import {
-  isAnalyzerPlugin,
-  isFormatterPlugin,
-  isOutputTargetPlugin,
-} from "../src/plugin-api.js";
+import { isAnalyzerPlugin, isFormatterPlugin, isOutputTargetPlugin } from "../src/plugin-api.js";
 import type {
   PluginDocument,
   PluginOutput,
@@ -216,7 +212,12 @@ describe("plugin-api interfaces", () => {
         factsPatch: { repoName: "overridden" },
       }),
     };
-    const output = await analyzer.analyze("/repo", {} as any, { repoName: "my-repo" } as any, {} as any);
+    const output = await analyzer.analyze(
+      "/repo",
+      {} as any,
+      { repoName: "my-repo" } as any,
+      {} as any
+    );
     expect(output.docs[0].content).toContain("my-repo");
     expect(output.factsPatch?.repoName).toBe("overridden");
   });
@@ -228,10 +229,13 @@ describe("plugin-api interfaces", () => {
       formatDocuments: async (docs) =>
         docs.map((d) => ({ ...d, content: d.content.toUpperCase() })),
     };
-    const result = await formatter.formatDocuments(
-      [{ name: "a.md", content: "hello" }],
-      { repoPath: "/repo", repoInfo: {} as any, scanResult: {} as any, facts: {} as any, options: {} as any },
-    );
+    const result = await formatter.formatDocuments([{ name: "a.md", content: "hello" }], {
+      repoPath: "/repo",
+      repoInfo: {} as any,
+      scanResult: {} as any,
+      facts: {} as any,
+      options: {} as any,
+    });
     expect(result[0].content).toBe("HELLO");
   });
 
@@ -240,7 +244,9 @@ describe("plugin-api interfaces", () => {
     const target: OutputTargetPlugin = {
       type: "output-target",
       name: "capture-target",
-      writeOutput: async (ctx) => { captured = ctx; },
+      writeOutput: async (ctx) => {
+        captured = ctx;
+      },
     };
     const ctx: OutputTargetContext = {
       documents: [{ name: "B.md", content: "b" }],

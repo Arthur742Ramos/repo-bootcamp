@@ -95,11 +95,14 @@ describe("computeRepoHealth", () => {
 
   it("detects a root SECURITY policy and one under .github/", () => {
     expect(
-      computeRepoHealth(scan([{ path: "SECURITY.md" }])).checks.find((c) => c.id === "security-policy")?.status
+      computeRepoHealth(scan([{ path: "SECURITY.md" }])).checks.find(
+        (c) => c.id === "security-policy"
+      )?.status
     ).toBe("pass");
     expect(
-      computeRepoHealth(scan([{ path: ".github/SECURITY.md" }])).checks.find((c) => c.id === "security-policy")
-        ?.status
+      computeRepoHealth(scan([{ path: ".github/SECURITY.md" }])).checks.find(
+        (c) => c.id === "security-policy"
+      )?.status
     ).toBe("pass");
   });
 
@@ -125,8 +128,9 @@ describe("computeRepoHealth", () => {
 
   it("detects CI from a workflow file and from stack metadata", () => {
     expect(
-      computeRepoHealth(scan([{ path: ".github/workflows/test.yaml" }])).checks.find((c) => c.id === "ci")
-        ?.status
+      computeRepoHealth(scan([{ path: ".github/workflows/test.yaml" }])).checks.find(
+        (c) => c.id === "ci"
+      )?.status
     ).toBe("pass");
     expect(
       computeRepoHealth(scan([{ path: "src/index.ts" }], { stack: { hasCi: true } })).checks.find(
@@ -140,10 +144,12 @@ describe("computeRepoHealth", () => {
 
   it("recognizes Go and Python test naming conventions", () => {
     expect(
-      computeRepoHealth(scan([{ path: "pkg/server_test.go" }])).checks.find((c) => c.id === "tests")?.status
+      computeRepoHealth(scan([{ path: "pkg/server_test.go" }])).checks.find((c) => c.id === "tests")
+        ?.status
     ).toBe("pass");
     expect(
-      computeRepoHealth(scan([{ path: "app/test_main.py" }])).checks.find((c) => c.id === "tests")?.status
+      computeRepoHealth(scan([{ path: "app/test_main.py" }])).checks.find((c) => c.id === "tests")
+        ?.status
     ).toBe("pass");
   });
 

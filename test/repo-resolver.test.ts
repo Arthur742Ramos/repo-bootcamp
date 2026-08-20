@@ -176,9 +176,7 @@ describe("resolveRepo", () => {
   });
 
   it("should throw error for non-existent local path", async () => {
-    await expect(resolveRepo("/tmp/non-existent-path-12345")).rejects.toThrow(
-      /does not exist/
-    );
+    await expect(resolveRepo("/tmp/non-existent-path-12345")).rejects.toThrow(/does not exist/);
   });
 
   it("should throw error if path is a file, not directory", async () => {

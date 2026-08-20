@@ -302,6 +302,7 @@ test.describe("web UI", () => {
 
     await page.keyboard.press("Escape");
     await expect(page.locator("#modal")).toBeHidden();
+    await expect(page.locator('[data-file="BOOTCAMP.md"]')).toBeFocused();
 
     const { stderr } = serverProcess.getOutput();
     expect(stderr).not.toContain("Analysis failed");

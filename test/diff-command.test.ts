@@ -1,10 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
 vi.mock("chalk", () => {
-  const makeChalk = (): any => new Proxy((...args: any[]) => args.join(""), {
-    get: () => makeChalk(),
-    apply: (_t: any, _a: any, args: any[]) => args.join(""),
-  });
+  const makeChalk = (): any =>
+    new Proxy((...args: any[]) => args.join(""), {
+      get: () => makeChalk(),
+      apply: (_t: any, _a: any, args: any[]) => args.join(""),
+    });
   return { default: makeChalk() };
 });
 
@@ -27,7 +28,14 @@ vi.mock("../src/diff.js", () => ({
     if (target === "invalid") throw new Error("Invalid PR reference");
     return { repoUrl: "https://github.com/test/repo", prNumber: 42 };
   }),
-  fetchPullRequestRefs: vi.fn().mockResolvedValue({ baseRef: "abc", headRef: "def", baseName: "main", headName: "feature", title: "Test PR", url: "https://github.com/test/repo/pull/42" }),
+  fetchPullRequestRefs: vi.fn().mockResolvedValue({
+    baseRef: "abc",
+    headRef: "def",
+    baseName: "main",
+    headName: "feature",
+    title: "Test PR",
+    url: "https://github.com/test/repo/pull/42",
+  }),
   analyzeDiff: vi.fn().mockResolvedValue({ files: [], additions: 10, deletions: 5 }),
   generateDiffDocs: vi.fn().mockReturnValue("# DIFF\nChanges"),
 }));
@@ -58,14 +66,22 @@ vi.mock("../src/services/config-resolution.js", () => ({
 
 vi.mock("fs/promises", async () => {
   const actual = await vi.importActual<typeof import("fs/promises")>("fs/promises");
-  return { ...actual, mkdir: vi.fn().mockResolvedValue(undefined), writeFile: vi.fn().mockResolvedValue(undefined) };
+  return {
+    ...actual,
+    mkdir: vi.fn().mockResolvedValue(undefined),
+    writeFile: vi.fn().mockResolvedValue(undefined),
+  };
 });
 
 import { runPullRequestDiff } from "../src/commands/diff-command.js";
 
 describe("runPullRequestDiff", () => {
-  const mockExit = vi.spyOn(process, "exit").mockImplementation((() => { throw new Error("process.exit"); }) as any);
-  beforeEach(() => { vi.clearAllMocks(); });
+  const mockExit = vi.spyOn(process, "exit").mockImplementation((() => {
+    throw new Error("process.exit");
+  }) as any);
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
 
   it("runs successfully end-to-end", async () => {
     await runPullRequestDiff("test/repo#42", {});
@@ -78,7 +94,9 @@ describe("runPullRequestDiff", () => {
   });
 
   it("exits on invalid format", async () => {
-    await expect(runPullRequestDiff("test/repo#42", { format: "bad-format" })).rejects.toThrow("process.exit");
+    await expect(runPullRequestDiff("test/repo#42", { format: "bad-format" })).rejects.toThrow(
+      "process.exit"
+    );
   });
 
   it("keeps temp when keepTemp is true", async () => {
@@ -93,14 +111,20 @@ describe("runPullRequestDiff", () => {
 });
 
 describe("runPullRequestDiff error branches", () => {
-  const mockExit = vi.spyOn(process, "exit").mockImplementation((() => { throw new Error("process.exit"); }) as any);
-  beforeEach(() => { vi.clearAllMocks(); });
+  const mockExit = vi.spyOn(process, "exit").mockImplementation((() => {
+    throw new Error("process.exit");
+  }) as any);
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
 
   it("exits on invalid repo URL", async () => {
     const { parsePullRequestTarget } = await import("../src/diff.js");
     (parsePullRequestTarget as any).mockReturnValueOnce({ repoUrl: "bad-repo", prNumber: 1 });
     const { parseGitHubUrl } = await import("../src/ingest.js");
-    (parseGitHubUrl as any).mockImplementationOnce(() => { throw new Error("Invalid repo"); });
+    (parseGitHubUrl as any).mockImplementationOnce(() => {
+      throw new Error("Invalid repo");
+    });
     await expect(runPullRequestDiff("test/repo#1", {})).rejects.toThrow("process.exit");
   });
 

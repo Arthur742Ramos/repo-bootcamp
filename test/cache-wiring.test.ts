@@ -90,7 +90,12 @@ describe("orchestrateAnalysis facts cache wiring", () => {
     expect(readCacheMock).toHaveBeenCalledWith(
       "owner/repo",
       "abc123",
-      expect.objectContaining({ focus: "all", style: "oss", model: "gpt-live", audience: "backend" })
+      expect.objectContaining({
+        focus: "all",
+        style: "oss",
+        model: "gpt-live",
+        audience: "backend",
+      })
     );
     expect(analyzeRepoMock).toHaveBeenCalledTimes(1);
     expect(writeCacheMock).toHaveBeenCalledWith(
@@ -104,7 +109,11 @@ describe("orchestrateAnalysis facts cache wiring", () => {
   });
 
   it("returns cached facts without invoking the model on a hit", async () => {
-    const cachedFacts = { repoName: "owner/repo", firstTasks: [], cached: true } as unknown as RepoFacts;
+    const cachedFacts = {
+      repoName: "owner/repo",
+      firstTasks: [],
+      cached: true,
+    } as unknown as RepoFacts;
     readCacheMock.mockResolvedValue(cachedFacts);
 
     const result = await orchestrateAnalysis({

@@ -23,7 +23,9 @@ const { sharedMockSession, sharedMockClient } = vi.hoisted(() => {
 // Mock the @github/copilot-sdk module
 vi.mock("@github/copilot-sdk", () => {
   return {
-    CopilotClient: vi.fn(function () { return sharedMockClient; }),
+    CopilotClient: vi.fn(function () {
+      return sharedMockClient;
+    }),
     defineTool: vi.fn((name: string, config: any) => ({ name, ...config })),
   };
 });
@@ -49,7 +51,12 @@ vi.mock("fs", async () => {
 });
 
 import type { RepoInfo, ScanResult, BootcampOptions } from "../src/types.js";
-import { analyzeRepo, readCustomPrompt, formatCustomPromptSection, type AnalysisStats } from "../src/agent.js";
+import {
+  analyzeRepo,
+  readCustomPrompt,
+  formatCustomPromptSection,
+  type AnalysisStats,
+} from "../src/agent.js";
 import * as fs from "fs";
 
 // ─── Test fixtures ───────────────────────────────────────────────────────────
@@ -79,9 +86,7 @@ function makeMockScanResult(overrides: Partial<ScanResult> = {}): ScanResult {
       hasDocker: false,
       hasCi: true,
     },
-    commands: [
-      { name: "build", command: "npm run build", source: "package.json" },
-    ],
+    commands: [{ name: "build", command: "npm run build", source: "package.json" }],
     ciWorkflows: [],
     readme: "# Test Repo",
     contributing: null,
@@ -250,7 +255,6 @@ beforeEach(() => {
 
 describe("model fallback", () => {
   it("uses the first model that succeeds", async () => {
-    
     configureSessionResponse(VALID_REPO_FACTS_JSON);
 
     await analyzeRepo("/tmp/repo", makeMockRepoInfo(), makeMockScanResult(), makeMockOptions());
@@ -261,7 +265,6 @@ describe("model fallback", () => {
   });
 
   it("falls back when the first model is not available", async () => {
-    
     let callCount = 0;
     const mockSession = {
       on: vi.fn().mockImplementation(() => vi.fn()),
@@ -292,14 +295,18 @@ describe("model fallback", () => {
       return undefined;
     });
 
-    const result = await analyzeRepo("/tmp/repo", makeMockRepoInfo(), makeMockScanResult(), makeMockOptions());
+    const result = await analyzeRepo(
+      "/tmp/repo",
+      makeMockRepoInfo(),
+      makeMockScanResult(),
+      makeMockOptions()
+    );
 
     expect(sharedMockClient.createSession).toHaveBeenCalledTimes(2);
     expect(result.stats.model).toBe("claude-sonnet-4-5");
   });
 
   it("tries all models before throwing", async () => {
-    
     sharedMockClient.createSession.mockRejectedValue(new Error("model not available"));
 
     await expect(
@@ -308,7 +315,6 @@ describe("model fallback", () => {
   });
 
   it("throws immediately on non-model errors", async () => {
-    
     sharedMockClient.createSession.mockRejectedValue(new Error("network timeout"));
 
     await expect(
@@ -317,7 +323,6 @@ describe("model fallback", () => {
   });
 
   it("uses override model first when specified", async () => {
-    
     configureSessionResponse(VALID_REPO_FACTS_JSON);
 
     await analyzeRepo(
@@ -451,7 +456,12 @@ describe("standard mode (with tools)", () => {
       },
     });
 
-    const { facts } = await analyzeRepo("/tmp/repo", makeMockRepoInfo(), scanResult, makeMockOptions());
+    const { facts } = await analyzeRepo(
+      "/tmp/repo",
+      makeMockRepoInfo(),
+      scanResult,
+      makeMockOptions()
+    );
 
     // Scanned stack values should override LLM values
     expect(facts.stack.hasDocker).toBe(true);
@@ -461,7 +471,6 @@ describe("standard mode (with tools)", () => {
   });
 
   it("configures tools in session config", async () => {
-    
     configureSessionResponse(VALID_REPO_FACTS_JSON);
 
     await analyzeRepo("/tmp/repo", makeMockRepoInfo(), makeMockScanResult(), makeMockOptions());
@@ -478,7 +487,6 @@ describe("standard mode (with tools)", () => {
   });
 
   it("sets system message in session config", async () => {
-    
     configureSessionResponse(VALID_REPO_FACTS_JSON);
 
     await analyzeRepo("/tmp/repo", makeMockRepoInfo(), makeMockScanResult(), makeMockOptions());
@@ -503,7 +511,6 @@ describe("standard mode (with tools)", () => {
   });
 
   it("calls sharedMockClient.stop() on success", async () => {
-    
     configureSessionResponse(VALID_REPO_FACTS_JSON);
 
     await analyzeRepo("/tmp/repo", makeMockRepoInfo(), makeMockScanResult(), makeMockOptions());
@@ -512,7 +519,6 @@ describe("standard mode (with tools)", () => {
   });
 
   it("calls sharedMockClient.stop() on error", async () => {
-    
     configureSessionResponse("not valid json at all");
 
     // Need to configure the mock for retries too (all return invalid JSON)
@@ -534,7 +540,6 @@ describe("standard mode (with tools)", () => {
 
 describe("event handling", () => {
   it("accumulates response from assistant.message_delta events", async () => {
-    
     const mockSession = {
       on: vi.fn().mockImplementation(() => vi.fn()),
       sendAndWait: vi.fn(),
@@ -567,12 +572,16 @@ describe("event handling", () => {
       return undefined;
     });
 
-    const { facts } = await analyzeRepo("/tmp/repo", makeMockRepoInfo(), makeMockScanResult(), makeMockOptions());
+    const { facts } = await analyzeRepo(
+      "/tmp/repo",
+      makeMockRepoInfo(),
+      makeMockScanResult(),
+      makeMockOptions()
+    );
     expect(facts.repoName).toBe("test-owner/test-repo");
   });
 
   it("falls back to assistant.message content when no deltas received", async () => {
-    
     const mockSession = {
       on: vi.fn().mockImplementation(() => vi.fn()),
       sendAndWait: vi.fn(),
@@ -595,12 +604,16 @@ describe("event handling", () => {
       return undefined;
     });
 
-    const { facts } = await analyzeRepo("/tmp/repo", makeMockRepoInfo(), makeMockScanResult(), makeMockOptions());
+    const { facts } = await analyzeRepo(
+      "/tmp/repo",
+      makeMockRepoInfo(),
+      makeMockScanResult(),
+      makeMockOptions()
+    );
     expect(facts.repoName).toBe("test-owner/test-repo");
   });
 
   it("tracks totalEvents across all event types", async () => {
-    
     const mockSession = {
       on: vi.fn().mockImplementation(() => vi.fn()),
       sendAndWait: vi.fn(),
@@ -636,12 +649,16 @@ describe("event handling", () => {
       return undefined;
     });
 
-    const { stats } = await analyzeRepo("/tmp/repo", makeMockRepoInfo(), makeMockScanResult(), makeMockOptions());
+    const { stats } = await analyzeRepo(
+      "/tmp/repo",
+      makeMockRepoInfo(),
+      makeMockScanResult(),
+      makeMockOptions()
+    );
     expect(stats.totalEvents).toBe(3);
   });
 
   it("calls onProgress callback for reasoning events", async () => {
-    
     const mockSession = {
       on: vi.fn().mockImplementation(() => vi.fn()),
       sendAndWait: vi.fn(),
@@ -671,7 +688,13 @@ describe("event handling", () => {
     });
 
     const onProgress = vi.fn();
-    await analyzeRepo("/tmp/repo", makeMockRepoInfo(), makeMockScanResult(), makeMockOptions(), onProgress);
+    await analyzeRepo(
+      "/tmp/repo",
+      makeMockRepoInfo(),
+      makeMockScanResult(),
+      makeMockOptions(),
+      onProgress
+    );
 
     expect(onProgress).toHaveBeenCalledWith("thinking...");
   });
@@ -711,7 +734,6 @@ describe("event handling", () => {
   });
 
   it("writes deltas to stdout in verbose mode", async () => {
-    
     const mockSession = {
       on: vi.fn().mockImplementation(() => vi.fn()),
       sendAndWait: vi.fn(),
@@ -749,11 +771,16 @@ describe("event handling", () => {
 describe("retry logic", () => {
   it("retries when first response fails validation, succeeds on retry", async () => {
     const mockSession = configureSessionResponses([
-      '{"invalid": true}',         // First attempt: missing required fields
-      VALID_REPO_FACTS_JSON,       // Second attempt: valid
+      '{"invalid": true}', // First attempt: missing required fields
+      VALID_REPO_FACTS_JSON, // Second attempt: valid
     ]);
 
-    const { facts } = await analyzeRepo("/tmp/repo", makeMockRepoInfo(), makeMockScanResult(), makeMockOptions());
+    const { facts } = await analyzeRepo(
+      "/tmp/repo",
+      makeMockRepoInfo(),
+      makeMockScanResult(),
+      makeMockOptions()
+    );
 
     expect(facts.repoName).toBe("test-owner/test-repo");
     expect(mockSession.sendAndWait).toHaveBeenCalledTimes(2);
@@ -761,9 +788,9 @@ describe("retry logic", () => {
 
   it("retries up to maxRetries (2) times then throws", async () => {
     const mockSession = configureSessionResponses([
-      '{"invalid": true}',    // attempt 1
+      '{"invalid": true}', // attempt 1
       '{"still": "invalid"}', // retry 1
-      '{"nope": "nope"}',     // retry 2
+      '{"nope": "nope"}', // retry 2
     ]);
 
     await expect(
@@ -776,12 +803,17 @@ describe("retry logic", () => {
 
   it("succeeds on second retry", async () => {
     const mockSession = configureSessionResponses([
-      "not json at all",       // attempt 1
-      '{"bad": "structure"}',  // retry 1
-      VALID_REPO_FACTS_JSON,   // retry 2
+      "not json at all", // attempt 1
+      '{"bad": "structure"}', // retry 1
+      VALID_REPO_FACTS_JSON, // retry 2
     ]);
 
-    const { facts } = await analyzeRepo("/tmp/repo", makeMockRepoInfo(), makeMockScanResult(), makeMockOptions());
+    const { facts } = await analyzeRepo(
+      "/tmp/repo",
+      makeMockRepoInfo(),
+      makeMockScanResult(),
+      makeMockOptions()
+    );
     expect(facts.repoName).toBe("test-owner/test-repo");
     expect(mockSession.sendAndWait).toHaveBeenCalledTimes(3);
   });
@@ -794,22 +826,38 @@ describe("response parsing", () => {
     const wrappedResponse = "Here is the analysis:\n```json\n" + VALID_REPO_FACTS_JSON + "\n```\n";
     configureSessionResponse(wrappedResponse);
 
-    const { facts } = await analyzeRepo("/tmp/repo", makeMockRepoInfo(), makeMockScanResult(), makeMockOptions());
+    const { facts } = await analyzeRepo(
+      "/tmp/repo",
+      makeMockRepoInfo(),
+      makeMockScanResult(),
+      makeMockOptions()
+    );
     expect(facts.repoName).toBe("test-owner/test-repo");
   });
 
   it("parses JSON embedded in surrounding text", async () => {
-    const wrappedResponse = "Here is my analysis:\n" + VALID_REPO_FACTS_JSON + "\n\nHope this helps!";
+    const wrappedResponse =
+      "Here is my analysis:\n" + VALID_REPO_FACTS_JSON + "\n\nHope this helps!";
     configureSessionResponse(wrappedResponse);
 
-    const { facts } = await analyzeRepo("/tmp/repo", makeMockRepoInfo(), makeMockScanResult(), makeMockOptions());
+    const { facts } = await analyzeRepo(
+      "/tmp/repo",
+      makeMockRepoInfo(),
+      makeMockScanResult(),
+      makeMockOptions()
+    );
     expect(facts.repoName).toBe("test-owner/test-repo");
   });
 
   it("parses raw JSON response", async () => {
     configureSessionResponse(VALID_REPO_FACTS_JSON);
 
-    const { facts } = await analyzeRepo("/tmp/repo", makeMockRepoInfo(), makeMockScanResult(), makeMockOptions());
+    const { facts } = await analyzeRepo(
+      "/tmp/repo",
+      makeMockRepoInfo(),
+      makeMockScanResult(),
+      makeMockOptions()
+    );
     expect(facts.repoName).toBe("test-owner/test-repo");
   });
 
@@ -826,7 +874,6 @@ describe("response parsing", () => {
 
 describe("fast mode", () => {
   it("does not configure tools in fast mode", async () => {
-    
     configureSessionResponse(VALID_REPO_FACTS_JSON);
 
     await analyzeRepo(
@@ -855,7 +902,6 @@ describe("fast mode", () => {
   });
 
   it("uses a simpler system message in fast mode", async () => {
-    
     configureSessionResponse(VALID_REPO_FACTS_JSON);
 
     await analyzeRepo(
@@ -938,7 +984,6 @@ describe("verbose mode", () => {
   });
 
   it("logs tool call events in verbose mode", async () => {
-    
     const mockSession = {
       on: vi.fn().mockImplementation(() => vi.fn()),
       sendAndWait: vi.fn(),
@@ -986,14 +1031,24 @@ describe("stats tracking", () => {
   it("records model used", async () => {
     configureSessionResponse(VALID_REPO_FACTS_JSON);
 
-    const { stats } = await analyzeRepo("/tmp/repo", makeMockRepoInfo(), makeMockScanResult(), makeMockOptions());
+    const { stats } = await analyzeRepo(
+      "/tmp/repo",
+      makeMockRepoInfo(),
+      makeMockScanResult(),
+      makeMockOptions()
+    );
     expect(stats.model).toBe("claude-opus-4-5");
   });
 
   it("records response length", async () => {
     configureSessionResponse(VALID_REPO_FACTS_JSON);
 
-    const { stats } = await analyzeRepo("/tmp/repo", makeMockRepoInfo(), makeMockScanResult(), makeMockOptions());
+    const { stats } = await analyzeRepo(
+      "/tmp/repo",
+      makeMockRepoInfo(),
+      makeMockScanResult(),
+      makeMockOptions()
+    );
     expect(stats.responseLength).toBe(VALID_REPO_FACTS_JSON.length);
   });
 
@@ -1001,7 +1056,12 @@ describe("stats tracking", () => {
     configureSessionResponse(VALID_REPO_FACTS_JSON);
 
     const before = Date.now();
-    const { stats } = await analyzeRepo("/tmp/repo", makeMockRepoInfo(), makeMockScanResult(), makeMockOptions());
+    const { stats } = await analyzeRepo(
+      "/tmp/repo",
+      makeMockRepoInfo(),
+      makeMockScanResult(),
+      makeMockOptions()
+    );
     const after = Date.now();
 
     expect(stats.startTime).toBeGreaterThanOrEqual(before);
@@ -1010,12 +1070,16 @@ describe("stats tracking", () => {
   });
 
   it("records tool calls via onToolCall callback", async () => {
-    
     // We need to verify the onToolCall callback is wired up.
     // Since tools are passed as SDK tools, we verify they appear in the config.
     configureSessionResponse(VALID_REPO_FACTS_JSON);
 
-    const { stats } = await analyzeRepo("/tmp/repo", makeMockRepoInfo(), makeMockScanResult(), makeMockOptions());
+    const { stats } = await analyzeRepo(
+      "/tmp/repo",
+      makeMockRepoInfo(),
+      makeMockScanResult(),
+      makeMockOptions()
+    );
 
     // No tool calls in this test since the session mock doesn't invoke tools
     expect(stats.toolCalls).toEqual([]);
@@ -1027,7 +1091,6 @@ describe("stats tracking", () => {
 
 describe("tool dispatching", () => {
   it("creates tools with correct names for session", async () => {
-    
     configureSessionResponse(VALID_REPO_FACTS_JSON);
 
     await analyzeRepo("/tmp/repo", makeMockRepoInfo(), makeMockScanResult(), makeMockOptions());
@@ -1041,7 +1104,6 @@ describe("tool dispatching", () => {
   });
 
   it("records tool calls to stats when onToolCall fires", async () => {
-    
     const mockSession = {
       on: vi.fn().mockImplementation(() => vi.fn()),
       sendAndWait: vi.fn(),
@@ -1071,7 +1133,12 @@ describe("tool dispatching", () => {
       return undefined;
     });
 
-    const { stats } = await analyzeRepo("/tmp/repo", makeMockRepoInfo(), makeMockScanResult(), makeMockOptions());
+    const { stats } = await analyzeRepo(
+      "/tmp/repo",
+      makeMockRepoInfo(),
+      makeMockScanResult(),
+      makeMockOptions()
+    );
 
     // Tools should have been passed to the session
     expect(capturedTools.length).toBe(4);
@@ -1101,7 +1168,6 @@ describe("tool dispatching", () => {
   });
 
   it("passes repoPath context to tools", async () => {
-    
     let capturedTools: any[] = [];
     const mockSession = {
       on: vi.fn().mockImplementation(() => vi.fn()),
@@ -1128,7 +1194,12 @@ describe("tool dispatching", () => {
       return undefined;
     });
 
-    await analyzeRepo("/my/custom/path", makeMockRepoInfo(), makeMockScanResult(), makeMockOptions());
+    await analyzeRepo(
+      "/my/custom/path",
+      makeMockRepoInfo(),
+      makeMockScanResult(),
+      makeMockOptions()
+    );
 
     // The tools are created with getRepoTools which uses the repoPath
     expect(capturedTools.length).toBe(4);
@@ -1139,7 +1210,6 @@ describe("tool dispatching", () => {
 
 describe("error handling", () => {
   it("throws when all models fail", async () => {
-    
     sharedMockClient.createSession.mockRejectedValue(new Error("model not available"));
 
     await expect(
@@ -1148,7 +1218,6 @@ describe("error handling", () => {
   });
 
   it("wraps fast mode errors", async () => {
-    
     const mockSession = {
       on: vi.fn().mockImplementation(() => vi.fn()),
       sendAndWait: vi.fn().mockRejectedValue(new Error("timeout")),
@@ -1181,7 +1250,6 @@ describe("error handling", () => {
   });
 
   it("propagates sendAndWait errors in standard mode", async () => {
-    
     const mockSession = {
       on: vi.fn().mockImplementation(() => vi.fn()),
       sendAndWait: vi.fn().mockRejectedValue(new Error("connection lost")),
@@ -1195,7 +1263,6 @@ describe("error handling", () => {
   });
 
   it("still calls sharedMockClient.stop() when sendAndWait throws", async () => {
-    
     const mockSession = {
       on: vi.fn().mockImplementation(() => vi.fn()),
       sendAndWait: vi.fn().mockRejectedValue(new Error("fail")),
@@ -1219,7 +1286,10 @@ describe("prompt construction", () => {
 
     await analyzeRepo(
       "/tmp/repo",
-      makeMockRepoInfo({ fullName: "my-org/cool-project", url: "https://github.com/my-org/cool-project" }),
+      makeMockRepoInfo({
+        fullName: "my-org/cool-project",
+        url: "https://github.com/my-org/cool-project",
+      }),
       makeMockScanResult(),
       makeMockOptions()
     );
@@ -1235,7 +1305,16 @@ describe("prompt construction", () => {
     await analyzeRepo(
       "/tmp/repo",
       makeMockRepoInfo(),
-      makeMockScanResult({ stack: { languages: ["Rust", "Go"], frameworks: ["Actix"], buildSystem: "cargo", packageManager: null, hasDocker: true, hasCi: false } }),
+      makeMockScanResult({
+        stack: {
+          languages: ["Rust", "Go"],
+          frameworks: ["Actix"],
+          buildSystem: "cargo",
+          packageManager: null,
+          hasDocker: true,
+          hasCi: false,
+        },
+      }),
       makeMockOptions()
     );
 
@@ -1368,12 +1447,7 @@ describe("prompt construction", () => {
 
     const mockSession = configureSessionResponse(VALID_REPO_FACTS_JSON);
 
-    await analyzeRepo(
-      "/tmp/repo",
-      makeMockRepoInfo(),
-      makeMockScanResult(),
-      makeMockOptions()
-    );
+    await analyzeRepo("/tmp/repo", makeMockRepoInfo(), makeMockScanResult(), makeMockOptions());
 
     const prompt = mockSession.sendAndWait.mock.calls[0][0].prompt;
     expect(prompt).toContain("Repository Guidance");
@@ -1412,27 +1486,21 @@ describe("readCustomPrompt", () => {
   });
 
   it("returns content when file exists", () => {
-    (fs.existsSync as Mock).mockImplementation((p: string) =>
-      p.endsWith(".bootcamp-prompts.md")
-    );
+    (fs.existsSync as Mock).mockImplementation((p: string) => p.endsWith(".bootcamp-prompts.md"));
     (fs.readFileSync as Mock).mockReturnValue("Focus on security aspects");
 
     expect(readCustomPrompt("/some/repo")).toBe("Focus on security aspects");
   });
 
   it("returns null for empty file", () => {
-    (fs.existsSync as Mock).mockImplementation((p: string) =>
-      p.endsWith(".bootcamp-prompts.md")
-    );
+    (fs.existsSync as Mock).mockImplementation((p: string) => p.endsWith(".bootcamp-prompts.md"));
     (fs.readFileSync as Mock).mockReturnValue("   ");
 
     expect(readCustomPrompt("/some/repo")).toBeNull();
   });
 
   it("truncates content at 8000 chars", () => {
-    (fs.existsSync as Mock).mockImplementation((p: string) =>
-      p.endsWith(".bootcamp-prompts.md")
-    );
+    (fs.existsSync as Mock).mockImplementation((p: string) => p.endsWith(".bootcamp-prompts.md"));
     const longContent = "x".repeat(10000);
     (fs.readFileSync as Mock).mockReturnValue(longContent);
 
@@ -1441,9 +1509,7 @@ describe("readCustomPrompt", () => {
   });
 
   it("returns null when readFileSync throws", () => {
-    (fs.existsSync as Mock).mockImplementation((p: string) =>
-      p.endsWith(".bootcamp-prompts.md")
-    );
+    (fs.existsSync as Mock).mockImplementation((p: string) => p.endsWith(".bootcamp-prompts.md"));
     (fs.readFileSync as Mock).mockImplementation(() => {
       throw new Error("permission denied");
     });
@@ -1591,7 +1657,8 @@ describe("fast mode prompt construction", () => {
       return p.endsWith("README.md") || p.endsWith("package.json");
     });
     readFileSyncMock.mockImplementation((p: string) => {
-      if (typeof p === "string" && p.endsWith("README.md")) return "# My Project\nSome readme content";
+      if (typeof p === "string" && p.endsWith("README.md"))
+        return "# My Project\nSome readme content";
       if (typeof p === "string" && p.endsWith("package.json")) return '{"name": "my-project"}';
       return "";
     });
@@ -1781,7 +1848,7 @@ describe("stack merge", () => {
     const scanResult = makeMockScanResult({
       stack: {
         languages: ["TypeScript"],
-        frameworks: ["Express"],  // Same as in VALID_REPO_FACTS_JSON
+        frameworks: ["Express"], // Same as in VALID_REPO_FACTS_JSON
         buildSystem: "npm",
         packageManager: "npm",
         hasDocker: false,
@@ -1789,7 +1856,12 @@ describe("stack merge", () => {
       },
     });
 
-    const { facts } = await analyzeRepo("/tmp/repo", makeMockRepoInfo(), scanResult, makeMockOptions());
+    const { facts } = await analyzeRepo(
+      "/tmp/repo",
+      makeMockRepoInfo(),
+      scanResult,
+      makeMockOptions()
+    );
 
     // Should not have duplicates
     const expressCount = facts.stack.frameworks.filter((f: string) => f === "Express").length;
@@ -1802,7 +1874,7 @@ describe("stack merge", () => {
     const scanResult = makeMockScanResult({
       stack: {
         languages: ["TypeScript"],
-        frameworks: ["Fastify"],  // Different from LLM's "Express"
+        frameworks: ["Fastify"], // Different from LLM's "Express"
         buildSystem: "npm",
         packageManager: "npm",
         hasDocker: false,
@@ -1810,7 +1882,12 @@ describe("stack merge", () => {
       },
     });
 
-    const { facts } = await analyzeRepo("/tmp/repo", makeMockRepoInfo(), scanResult, makeMockOptions());
+    const { facts } = await analyzeRepo(
+      "/tmp/repo",
+      makeMockRepoInfo(),
+      scanResult,
+      makeMockOptions()
+    );
 
     expect(facts.stack.frameworks).toContain("Fastify");
     expect(facts.stack.frameworks).toContain("Express");
@@ -1830,7 +1907,12 @@ describe("stack merge", () => {
       },
     });
 
-    const { facts } = await analyzeRepo("/tmp/repo", makeMockRepoInfo(), scanResult, makeMockOptions());
+    const { facts } = await analyzeRepo(
+      "/tmp/repo",
+      makeMockRepoInfo(),
+      scanResult,
+      makeMockOptions()
+    );
 
     expect(facts.stack.buildSystem).toBe("pip");
     expect(facts.stack.hasDocker).toBe(true);
@@ -1843,10 +1925,7 @@ describe("stack merge", () => {
 
 describe("retry prompt content", () => {
   it("first retry prompt includes validation error summary", async () => {
-    const mockSession = configureSessionResponses([
-      '{"invalid": true}',
-      VALID_REPO_FACTS_JSON,
-    ]);
+    const mockSession = configureSessionResponses(['{"invalid": true}', VALID_REPO_FACTS_JSON]);
 
     await analyzeRepo("/tmp/repo", makeMockRepoInfo(), makeMockScanResult(), makeMockOptions());
 
@@ -1912,10 +1991,7 @@ describe("session configuration", () => {
   });
 
   it("sends retry prompts with 5 minute timeout", async () => {
-    const mockSession = configureSessionResponses([
-      '{"invalid": true}',
-      VALID_REPO_FACTS_JSON,
-    ]);
+    const mockSession = configureSessionResponses(['{"invalid": true}', VALID_REPO_FACTS_JSON]);
 
     await analyzeRepo("/tmp/repo", makeMockRepoInfo(), makeMockScanResult(), makeMockOptions());
 

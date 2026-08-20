@@ -59,22 +59,28 @@ export interface OutputTargetPlugin {
 export type BootcampPlugin = AnalyzerPlugin | FormatterPlugin | OutputTargetPlugin;
 
 export function isAnalyzerPlugin(plugin: unknown): plugin is AnalyzerPlugin {
-  return typeof plugin === "object"
-    && plugin !== null
-    && typeof (plugin as { name?: unknown }).name === "string"
-    && typeof (plugin as { analyze?: unknown }).analyze === "function";
+  return (
+    typeof plugin === "object" &&
+    plugin !== null &&
+    typeof (plugin as { name?: unknown }).name === "string" &&
+    typeof (plugin as { analyze?: unknown }).analyze === "function"
+  );
 }
 
 export function isFormatterPlugin(plugin: unknown): plugin is FormatterPlugin {
-  return typeof plugin === "object"
-    && plugin !== null
-    && typeof (plugin as { name?: unknown }).name === "string"
-    && typeof (plugin as { formatDocuments?: unknown }).formatDocuments === "function";
+  return (
+    typeof plugin === "object" &&
+    plugin !== null &&
+    typeof (plugin as { name?: unknown }).name === "string" &&
+    typeof (plugin as { formatDocuments?: unknown }).formatDocuments === "function"
+  );
 }
 
 export function isOutputTargetPlugin(plugin: unknown): plugin is OutputTargetPlugin {
-  return typeof plugin === "object"
-    && plugin !== null
-    && typeof (plugin as { name?: unknown }).name === "string"
-    && typeof (plugin as { writeOutput?: unknown }).writeOutput === "function";
+  return (
+    typeof plugin === "object" &&
+    plugin !== null &&
+    typeof (plugin as { name?: unknown }).name === "string" &&
+    typeof (plugin as { writeOutput?: unknown }).writeOutput === "function"
+  );
 }

@@ -67,8 +67,7 @@ function printReport(deps: DependencyAnalysis, repoName: string): void {
     console.log(chalk.bold("By category"));
     for (const category of deps.categories.slice(0, 10)) {
       const shown = category.deps.slice(0, 8).join(", ");
-      const extra =
-        category.deps.length > 8 ? chalk.dim(` +${category.deps.length - 8} more`) : "";
+      const extra = category.deps.length > 8 ? chalk.dim(` +${category.deps.length - 8} more`) : "";
       console.log(`  ${chalk.cyan(category.name)}${chalk.dim(": ")}${shown}${extra}`);
     }
     console.log();

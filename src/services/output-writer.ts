@@ -76,7 +76,10 @@ export async function writeGeneratedOutputs({
     const renderResult = await renderOutputDiagrams(outputDir, format);
     if (renderResult.rendered) {
       if (!options.quiet) {
-        console.log(chalk.cyan("\nDiagrams rendered: ") + chalk.white(renderResult.files.map((f) => basename(f)).join(", ")));
+        console.log(
+          chalk.cyan("\nDiagrams rendered: ") +
+            chalk.white(renderResult.files.map((f) => basename(f)).join(", "))
+        );
       }
     } else if (renderResult.error) {
       if (!options.quiet) {

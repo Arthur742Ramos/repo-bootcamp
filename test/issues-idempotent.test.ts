@@ -86,9 +86,7 @@ beforeEach(() => {
 
 describe("createIssuesFromTasks idempotency", () => {
   it("skips tasks whose title already exists and creates the rest", async () => {
-    execFileMock.mockImplementation(
-      route(JSON.stringify([{ title: "Existing task" }])) as any
-    );
+    execFileMock.mockImplementation(route(JSON.stringify([{ title: "Existing task" }])) as any);
 
     const results = await createIssuesFromTasks(tasks, repoInfo, {});
 

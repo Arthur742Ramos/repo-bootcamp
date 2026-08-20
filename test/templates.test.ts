@@ -158,7 +158,7 @@ describe("getIndexHtml", () => {
 
     it("defines the streamProgress function", () => {
       const html = getIndexHtml();
-      expect(html).toContain("function streamProgress(jobId)");
+      expect(html).toContain("function streamProgress(jobId, runToken");
     });
 
     it("defines the showResults function", () => {
@@ -303,15 +303,25 @@ describe("getIndexHtml", () => {
     it("distinguishes a settled stream from an interruption", () => {
       const html = getIndexHtml();
       expect(html).toContain("let settled = false");
-      expect(html).toContain("if (settled) return");
+      expect(html).toContain("if (settled || !isCurrentRun(jobId, runToken)) return");
     });
 
     it("shows a visible retry notice and falls back to polling on interruption", () => {
       const html = getIndexHtml();
       expect(html).toContain("Connection lost");
-      expect(html).toContain("function pollJobStatus(jobId)");
+      expect(html).toContain("function pollJobStatus(jobId, runToken");
       expect(html).toContain("job.status === 'complete'");
       expect(html).toContain("job.status === 'error'");
+    });
+
+    it("ignores stale stream and polling results after a new run starts", () => {
+      const html = getIndexHtml();
+      expect(html).toContain("let activeRunToken = 0");
+      expect(html).toContain("function beginRun()");
+      expect(html).toContain("function isCurrentRun(jobId, runToken)");
+      expect(html).toContain("if (!isCurrentRun(jobId, runToken)) return;");
+      expect(html).toContain("pollTimer = setTimeout(poll, 2000)");
+      expect(html).toContain("clearTimeout(pollTimer)");
     });
   });
 

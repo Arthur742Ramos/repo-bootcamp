@@ -67,9 +67,7 @@ vi.mock("fs/promises", () => ({
 
 import { runParallelAnalysis } from "../src/analysis.js";
 
-const mockFiles: FileInfo[] = [
-  { path: "src/index.ts", size: 500, isDirectory: false },
-];
+const mockFiles: FileInfo[] = [{ path: "src/index.ts", size: 500, isDirectory: false }];
 
 const mockScanResult: ScanResult = {
   files: mockFiles,
@@ -179,18 +177,18 @@ describe("runParallelAnalysis", () => {
       mockScanResult.files,
       mockDeps,
       mockSecurity,
-      true,  // !!scanResult.readme
-      false  // !!scanResult.contributing
+      true, // !!scanResult.readme
+      false // !!scanResult.contributing
     );
   });
 
   it("merges frameworks from deps when deps are available", async () => {
     await runParallelAnalysis("/repo", mockScanResult);
 
-    expect(mergeFrameworksFromDepsMock).toHaveBeenCalledWith(
-      mockScanResult.stack,
-      ["express", "vitest"]
-    );
+    expect(mergeFrameworksFromDepsMock).toHaveBeenCalledWith(mockScanResult.stack, [
+      "express",
+      "vitest",
+    ]);
   });
 
   it("does not merge frameworks when deps is null", async () => {

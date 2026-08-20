@@ -36,9 +36,7 @@ const mockFacts: RepoFacts = {
       { name: "test", command: "npm test", source: "package.json" },
       { name: "build", command: "npm run build", source: "package.json" },
     ],
-    commonErrors: [
-      { error: "Port already in use", fix: "Kill the process using port 3000" },
-    ],
+    commonErrors: [{ error: "Port already in use", fix: "Kill the process using port 3000" }],
     sources: ["README.md"],
   },
   structure: {
@@ -46,16 +44,19 @@ const mockFacts: RepoFacts = {
       { path: "src/", purpose: "Main source code", keyFiles: ["src/index.ts"] },
       { path: "test/", purpose: "Test files" },
     ],
-    entrypoints: [
-      { path: "src/index.ts", type: "main", description: "Main entry point" },
-    ],
+    entrypoints: [{ path: "src/index.ts", type: "main", description: "Main entry point" }],
     testDirs: ["test/", "__tests__/"],
     docsDirs: ["docs/"],
     sources: ["package.json"],
   },
   ci: {
     workflows: [
-      { name: "CI", file: ".github/workflows/ci.yml", triggers: ["push", "pull_request"], mainSteps: ["test", "build"] },
+      {
+        name: "CI",
+        file: ".github/workflows/ci.yml",
+        triggers: ["push", "pull_request"],
+        mainSteps: ["test", "build"],
+      },
     ],
     mainChecks: ["lint", "test", "build"],
     sources: [".github/workflows/ci.yml"],
@@ -101,9 +102,7 @@ const mockFacts: RepoFacts = {
     applicable: true,
     deploySteps: ["Build", "Push to registry", "Deploy to K8s"],
     observability: ["Prometheus metrics", "Grafana dashboards"],
-    incidents: [
-      { name: "High latency", check: "Check database connections" },
-    ],
+    incidents: [{ name: "High latency", check: "Check database connections" }],
     sources: ["RUNBOOK.md"],
   },
 };
@@ -281,7 +280,10 @@ describe("generateFirstTasks", () => {
     };
 
     const minimal = generateFirstTasks(expandedFacts, { audience: "backend", style: "minimal" });
-    const corporate = generateFirstTasks(expandedFacts, { audience: "backend", style: "corporate" });
+    const corporate = generateFirstTasks(expandedFacts, {
+      audience: "backend",
+      style: "corporate",
+    });
 
     expect((minimal.match(/^### /gm) || []).length).toBe(3);
     expect(minimal).not.toContain("Why this matters");
@@ -396,11 +398,7 @@ describe("edge cases", () => {
   });
 
   it("handles different audience options", () => {
-    const audiences: Array<"backend" | "frontend" | "sre"> = [
-      "backend",
-      "frontend",
-      "sre",
-    ];
+    const audiences: Array<"backend" | "frontend" | "sre"> = ["backend", "frontend", "sre"];
     for (const audience of audiences) {
       const opts = { ...mockOptions, audience };
       const result = generateBootcamp(mockFacts, opts);
@@ -435,9 +433,30 @@ describe("edge cases", () => {
     const allDifficulties = {
       ...mockFacts,
       firstTasks: [
-        { title: "Easy", description: "d", difficulty: "beginner" as const, category: "docs" as const, files: [], why: "w" },
-        { title: "Medium", description: "d", difficulty: "intermediate" as const, category: "test" as const, files: [], why: "w" },
-        { title: "Hard", description: "d", difficulty: "advanced" as const, category: "feature" as const, files: [], why: "w" },
+        {
+          title: "Easy",
+          description: "d",
+          difficulty: "beginner" as const,
+          category: "docs" as const,
+          files: [],
+          why: "w",
+        },
+        {
+          title: "Medium",
+          description: "d",
+          difficulty: "intermediate" as const,
+          category: "test" as const,
+          files: [],
+          why: "w",
+        },
+        {
+          title: "Hard",
+          description: "d",
+          difficulty: "advanced" as const,
+          category: "feature" as const,
+          files: [],
+          why: "w",
+        },
       ],
     };
     const result = generateFirstTasks(allDifficulties);

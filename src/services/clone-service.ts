@@ -18,12 +18,12 @@ function validateCloneRequest(repoInfo: RepoInfo, branch?: string): void {
   }
   if (branch) {
     if (
-      /[\r\n\t]/.test(branch)
-      || branch.startsWith("-")
-      || branch.includes("..")
-      || branch.includes("@{")
-      || branch.includes("\\")
-      || !/^[A-Za-z0-9._/-]+$/.test(branch)
+      /[\r\n\t]/.test(branch) ||
+      branch.startsWith("-") ||
+      branch.includes("..") ||
+      branch.includes("@{") ||
+      branch.includes("\\") ||
+      !/^[A-Za-z0-9._/-]+$/.test(branch)
     ) {
       throw new Error("Branch contains unsafe characters");
     }

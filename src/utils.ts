@@ -79,7 +79,9 @@ export function getFlagValue(args: string[], flags: string[]): string | undefine
  * that collide with root-command flags. Pure (takes `args`) for testability.
  */
 export function hasFlag(args: string[], flags: string[]): boolean {
-  return args.some((arg) => flags.includes(arg) || flags.some((flag) => arg.startsWith(`${flag}=`)));
+  return args.some(
+    (arg) => flags.includes(arg) || flags.some((flag) => arg.startsWith(`${flag}=`))
+  );
 }
 
 /**
@@ -178,6 +180,6 @@ export function isTestFile(path: string): boolean {
         segment === "spec" ||
         segment === "specs" ||
         segment === "__tests__" ||
-        segment === "__mocks__",
+        segment === "__mocks__"
     );
 }

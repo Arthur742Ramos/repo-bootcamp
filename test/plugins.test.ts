@@ -2,9 +2,9 @@ import { mkdtemp, rm, writeFile } from "fs/promises";
 import { tmpdir } from "os";
 import { join } from "path";
 import { describe, it, expect } from "vitest";
-import { 
-  STYLE_PACKS, 
-  getStyleConfig, 
+import {
+  STYLE_PACKS,
+  getStyleConfig,
   generateExampleConfig,
   examplePlugin,
   loadConfig,
@@ -223,12 +223,7 @@ describe("Template Packs + Plugin System", () => {
         },
       } as any;
 
-      const output = await examplePlugin.analyze(
-        "/tmp/repo",
-        mockScanResult,
-        mockFacts,
-        {} as any
-      );
+      const output = await examplePlugin.analyze("/tmp/repo", mockScanResult, mockFacts, {} as any);
 
       expect(output.docs).toBeInstanceOf(Array);
       expect(output.docs.length).toBeGreaterThan(0);
@@ -246,12 +241,7 @@ describe("Template Packs + Plugin System", () => {
         },
       } as any;
 
-      const output = await examplePlugin.analyze(
-        "/tmp/repo",
-        mockScanResult,
-        mockFacts,
-        {} as any
-      );
+      const output = await examplePlugin.analyze("/tmp/repo", mockScanResult, mockFacts, {} as any);
 
       expect(output.docs[0].content).toContain("TypeScript");
       expect(output.docs[0].content).toContain("JavaScript");

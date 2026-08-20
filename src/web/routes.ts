@@ -549,8 +549,10 @@ export function registerRoutes(app: Application): void {
     }
 
     res.setHeader("Content-Type", "text/event-stream");
-    res.setHeader("Cache-Control", "no-cache");
+    res.setHeader("Cache-Control", "no-cache, no-transform");
     res.setHeader("Connection", "keep-alive");
+    res.setHeader("X-Accel-Buffering", "no");
+    res.flushHeaders();
 
     // Send existing progress
     for (const event of job.progress) {
@@ -562,19 +564,36 @@ export function registerRoutes(app: Application): void {
       return;
     }
 
-    // Stream new events
+    // Stream new events. Remove the listener on every close path so a browser
+    // disconnect cannot retain a response or keep receiving writes after the
+    // socket has gone away.
+    let streamClosed = false;
     const onProgress = (event: ProgressEvent) => {
+      if (streamClosed || res.writableEnded) {
+        return;
+      }
       res.write(`data: ${JSON.stringify(event)}\n\n`);
       if (event.type === "complete" || event.type === "error" || event.type === "cancelled") {
-        res.end();
+        streamClosed = true;
+        job.emitter.off("progress", onProgress);
+        if (!res.writableEnded) {
+          res.end();
+        }
       }
+    };
+
+    const cleanupStream = () => {
+      if (streamClosed) {
+        return;
+      }
+      streamClosed = true;
+      job.emitter.off("progress", onProgress);
     };
 
     job.emitter.on("progress", onProgress);
 
-    req.on("close", () => {
-      job.emitter.off("progress", onProgress);
-    });
+    req.once("close", cleanupStream);
+    res.once("close", cleanupStream);
   });
 
   // Get job status

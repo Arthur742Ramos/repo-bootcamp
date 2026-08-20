@@ -25,7 +25,7 @@ describe("ProgressTracker", () => {
     tracker.recordToolCall("read_file");
     tracker.recordToolCall("list_files");
     tracker.recordToolCall("search");
-    
+
     expect(tracker.getToolCallCount()).toBe(3);
   });
 
@@ -33,7 +33,7 @@ describe("ProgressTracker", () => {
     const before = tracker.getElapsedTime();
     await new Promise((r) => setTimeout(r, 60));
     const after = tracker.getElapsedTime();
-    
+
     expect(after).toBeGreaterThan(before);
     expect(after).toBeGreaterThanOrEqual(50); // Allow some timing variance
   });
@@ -42,9 +42,9 @@ describe("ProgressTracker", () => {
     tracker.startPhase("analyze");
     tracker.recordToolCall("read_file");
     tracker.recordToolCall("search");
-    
+
     const stats = tracker.getStats();
-    
+
     expect(stats.toolCalls).toBe(2);
     expect(stats.toolNames).toEqual(["read_file", "search"]);
     expect(stats.totalTime).toBeGreaterThanOrEqual(0);
@@ -53,14 +53,14 @@ describe("ProgressTracker", () => {
   it("should handle multiple phases", () => {
     tracker.startPhase("clone");
     tracker.succeed("Cloned");
-    
+
     tracker.startPhase("scan");
     tracker.succeed("Scanned");
-    
+
     tracker.startPhase("analyze");
     tracker.recordToolCall("read_file");
     tracker.succeed("Analyzed");
-    
+
     expect(tracker.getToolCallCount()).toBe(1);
   });
 });
@@ -142,7 +142,9 @@ describe("ProgressTracker - additional branch coverage", () => {
 
   it("should handle update with very long message", () => {
     tracker.startPhase("analyze");
-    tracker.update("This is a very long message that should be truncated because it exceeds forty characters");
+    tracker.update(
+      "This is a very long message that should be truncated because it exceeds forty characters"
+    );
   });
 
   it("should track tool calls", () => {
