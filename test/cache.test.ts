@@ -3,7 +3,15 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { readCache, writeCache, clearCache, getCacheDir, getCacheVersion, listCacheEntries, pruneCache } from "../src/cache.js";
+import {
+  readCache,
+  writeCache,
+  clearCache,
+  getCacheDir,
+  getCacheVersion,
+  listCacheEntries,
+  pruneCache,
+} from "../src/cache.js";
 import { mkdir, rm, readdir, utimes, readFile, writeFile } from "fs/promises";
 import { join } from "path";
 import { tmpdir } from "os";
@@ -287,9 +295,7 @@ describe("cache", () => {
       const files = await readdir(cacheDir);
       const jsonFiles = files.filter((f) => f.endsWith(".json"));
       const past = new Date(Date.now() - 1000);
-      await Promise.all(
-        jsonFiles.map((f) => utimes(join(cacheDir, f), past, past))
-      );
+      await Promise.all(jsonFiles.map((f) => utimes(join(cacheDir, f), past, past)));
 
       const pruned = await pruneCache(0);
       expect(pruned).toBeGreaterThanOrEqual(2);
@@ -429,14 +435,10 @@ describe("cache", () => {
 
       // Give all files the same mtime so the tiebreaker is exercised.
       const sameTime = new Date("2024-06-01T00:00:00.000Z");
-      await Promise.all(
-        files.map((f) => utimes(join(cacheDir, f), sameTime, sameTime))
-      );
+      await Promise.all(files.map((f) => utimes(join(cacheDir, f), sameTime, sameTime)));
 
       const entries = await listCacheEntries();
-      const ourFiles = entries
-        .filter((e) => e.file.startsWith("list-sort-"))
-        .map((e) => e.file);
+      const ourFiles = entries.filter((e) => e.file.startsWith("list-sort-")).map((e) => e.file);
       // Equal mtimes → alphabetical tiebreaker
       expect(ourFiles).toEqual(["list-sort-a.json", "list-sort-b.json", "list-sort-c.json"]);
 

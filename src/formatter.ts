@@ -90,9 +90,18 @@ export function markdownToHtml(md: string): string {
     if (line.startsWith(placeholderPrefix) && line.endsWith(placeholderSuffix)) {
       const indexText = line.slice(placeholderPrefix.length, -placeholderSuffix.length);
       if (/^\d+$/.test(indexText)) {
-        if (inList) { html.push("</ul>"); inList = false; }
-        if (inOrderedList) { html.push("</ol>"); inOrderedList = false; }
-        if (inTable) { html.push("</table>"); inTable = false; }
+        if (inList) {
+          html.push("</ul>");
+          inList = false;
+        }
+        if (inOrderedList) {
+          html.push("</ol>");
+          inOrderedList = false;
+        }
+        if (inTable) {
+          html.push("</table>");
+          inTable = false;
+        }
         html.push(codeBlockPlaceholders[parseInt(indexText, 10)]);
         continue;
       }
@@ -100,9 +109,18 @@ export function markdownToHtml(md: string): string {
 
     // Passthrough HTML tags (e.g. <details>, <summary>)
     if (/^\s*</.test(line)) {
-      if (inList) { html.push("</ul>"); inList = false; }
-      if (inOrderedList) { html.push("</ol>"); inOrderedList = false; }
-      if (inTable) { html.push("</table>"); inTable = false; }
+      if (inList) {
+        html.push("</ul>");
+        inList = false;
+      }
+      if (inOrderedList) {
+        html.push("</ol>");
+        inOrderedList = false;
+      }
+      if (inTable) {
+        html.push("</table>");
+        inTable = false;
+      }
       html.push(line);
       continue;
     }
@@ -110,9 +128,18 @@ export function markdownToHtml(md: string): string {
     // Headings
     const headingMatch = line.match(/^(#{1,6})\s+(.*)/);
     if (headingMatch) {
-      if (inList) { html.push("</ul>"); inList = false; }
-      if (inOrderedList) { html.push("</ol>"); inOrderedList = false; }
-      if (inTable) { html.push("</table>"); inTable = false; }
+      if (inList) {
+        html.push("</ul>");
+        inList = false;
+      }
+      if (inOrderedList) {
+        html.push("</ol>");
+        inOrderedList = false;
+      }
+      if (inTable) {
+        html.push("</table>");
+        inTable = false;
+      }
       const level = headingMatch[1].length;
       html.push(`<h${level}>${convertInlineFormatting(headingMatch[2])}</h${level}>`);
       continue;
@@ -120,18 +147,36 @@ export function markdownToHtml(md: string): string {
 
     // Horizontal rule
     if (/^---+\s*$/.test(line)) {
-      if (inList) { html.push("</ul>"); inList = false; }
-      if (inOrderedList) { html.push("</ol>"); inOrderedList = false; }
-      if (inTable) { html.push("</table>"); inTable = false; }
+      if (inList) {
+        html.push("</ul>");
+        inList = false;
+      }
+      if (inOrderedList) {
+        html.push("</ol>");
+        inOrderedList = false;
+      }
+      if (inTable) {
+        html.push("</table>");
+        inTable = false;
+      }
       html.push("<hr />");
       continue;
     }
 
     // Blockquote
     if (/^>\s*(.*)/.test(line)) {
-      if (inList) { html.push("</ul>"); inList = false; }
-      if (inOrderedList) { html.push("</ol>"); inOrderedList = false; }
-      if (inTable) { html.push("</table>"); inTable = false; }
+      if (inList) {
+        html.push("</ul>");
+        inList = false;
+      }
+      if (inOrderedList) {
+        html.push("</ol>");
+        inOrderedList = false;
+      }
+      if (inTable) {
+        html.push("</table>");
+        inTable = false;
+      }
       const text = line.replace(/^>\s*/, "");
       html.push(`<blockquote>${convertInlineFormatting(text)}</blockquote>`);
       continue;
@@ -142,13 +187,20 @@ export function markdownToHtml(md: string): string {
       // Skip separator rows (e.g. |---|---|)
       if (/^\|[\s-:|]+\|$/.test(line)) continue;
 
-      const cells = line.split("|").slice(1, -1).map(c => c.trim());
+      const cells = line
+        .split("|")
+        .slice(1, -1)
+        .map((c) => c.trim());
       if (!inTable) {
         html.push("<table>");
         inTable = true;
-        html.push("<tr>" + cells.map(c => `<th>${convertInlineFormatting(c)}</th>`).join("") + "</tr>");
+        html.push(
+          "<tr>" + cells.map((c) => `<th>${convertInlineFormatting(c)}</th>`).join("") + "</tr>"
+        );
       } else {
-        html.push("<tr>" + cells.map(c => `<td>${convertInlineFormatting(c)}</td>`).join("") + "</tr>");
+        html.push(
+          "<tr>" + cells.map((c) => `<td>${convertInlineFormatting(c)}</td>`).join("") + "</tr>"
+        );
       }
       continue;
     } else if (inTable) {
@@ -159,8 +211,14 @@ export function markdownToHtml(md: string): string {
     // Unordered list item
     const ulMatch = line.match(/^(\s*)[-*]\s+(.+)/);
     if (ulMatch) {
-      if (inOrderedList) { html.push("</ol>"); inOrderedList = false; }
-      if (!inList) { html.push("<ul>"); inList = true; }
+      if (inOrderedList) {
+        html.push("</ol>");
+        inOrderedList = false;
+      }
+      if (!inList) {
+        html.push("<ul>");
+        inList = true;
+      }
       let content = ulMatch[2];
       content = content.replace(/^\[x\]\s*/i, "☑ ").replace(/^\[ \]\s*/, "☐ ");
       html.push(`<li>${convertInlineFormatting(content)}</li>`);
@@ -170,15 +228,27 @@ export function markdownToHtml(md: string): string {
     // Ordered list item
     const olMatch = line.match(/^\s*\d+\.\s+(.*)/);
     if (olMatch) {
-      if (inList) { html.push("</ul>"); inList = false; }
-      if (!inOrderedList) { html.push("<ol>"); inOrderedList = true; }
+      if (inList) {
+        html.push("</ul>");
+        inList = false;
+      }
+      if (!inOrderedList) {
+        html.push("<ol>");
+        inOrderedList = true;
+      }
       html.push(`<li>${convertInlineFormatting(olMatch[1])}</li>`);
       continue;
     }
 
     // Close open lists on non-list lines
-    if (inList) { html.push("</ul>"); inList = false; }
-    if (inOrderedList) { html.push("</ol>"); inOrderedList = false; }
+    if (inList) {
+      html.push("</ul>");
+      inList = false;
+    }
+    if (inOrderedList) {
+      html.push("</ol>");
+      inOrderedList = false;
+    }
 
     // Blank line
     if (line.trim() === "") continue;
@@ -283,9 +353,12 @@ ${mermaidRuntime}
  */
 export function getFileExtension(format: OutputFormat): string {
   switch (format) {
-    case "html": return ".html";
-    case "pdf": return ".html";
-    default: return "";
+    case "html":
+      return ".html";
+    case "pdf":
+      return ".html";
+    default:
+      return "";
   }
 }
 
@@ -309,11 +382,7 @@ export function formatFileName(originalName: string, format: OutputFormat): stri
  * Convert document content based on the chosen format.
  * Non-markdown files (JSON, mermaid) are returned unchanged.
  */
-export function formatContent(
-  content: string,
-  originalName: string,
-  format: OutputFormat,
-): string {
+export function formatContent(content: string, originalName: string, format: OutputFormat): string {
   if (format === "markdown") return content;
 
   // Don't convert non-markdown files

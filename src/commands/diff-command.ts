@@ -2,7 +2,12 @@ import chalk from "chalk";
 import { mkdir, writeFile } from "fs/promises";
 import { join } from "path";
 
-import { analyzeDiff, fetchPullRequestRefs, generateDiffDocs, parsePullRequestTarget } from "../diff.js";
+import {
+  analyzeDiff,
+  fetchPullRequestRefs,
+  generateDiffDocs,
+  parsePullRequestTarget,
+} from "../diff.js";
 import { formatDocName, type OutputFormat, applyOutputFormat } from "../formatter.js";
 import { parseGitHubUrl } from "../ingest.js";
 import { ProgressTracker } from "../progress.js";
@@ -18,7 +23,10 @@ export interface PullRequestDiffOptions {
   verbose?: boolean;
 }
 
-export async function runPullRequestDiff(prTarget: string, options: PullRequestDiffOptions): Promise<void> {
+export async function runPullRequestDiff(
+  prTarget: string,
+  options: PullRequestDiffOptions
+): Promise<void> {
   console.log(chalk.bold.blue("\n=== Repo Bootcamp - PR Diff ===\n"));
 
   let targetInfo: { repoUrl: string; prNumber: number };
@@ -105,7 +113,9 @@ export async function runPullRequestDiff(prTarget: string, options: PullRequestD
       for (const doc of formattedDocs) {
         await writeFile(join(outputDir, doc.name), doc.content, "utf-8");
       }
-      progress.succeed(`Generated ${formattedDocs.length} file${formattedDocs.length === 1 ? "" : "s"}`);
+      progress.succeed(
+        `Generated ${formattedDocs.length} file${formattedDocs.length === 1 ? "" : "s"}`
+      );
     } catch (error: unknown) {
       progress.fail(`Write failed: ${(error as Error).message}`);
       process.exit(1);
@@ -128,7 +138,11 @@ export async function runPullRequestDiff(prTarget: string, options: PullRequestD
 
   console.log();
   console.log(chalk.green("  ╔══════════════════════════════════════════════════════╗"));
-  console.log(chalk.green("  ║") + chalk.white.bold("        ✓ PR Diff Generated Successfully!           ") + chalk.green("║"));
+  console.log(
+    chalk.green("  ║") +
+      chalk.white.bold("        ✓ PR Diff Generated Successfully!           ") +
+      chalk.green("║")
+  );
   console.log(chalk.green("  ╚══════════════════════════════════════════════════════╝"));
   console.log();
   console.log(chalk.white(`  📁 Output: ${chalk.cyan.bold(outputDir + "/")}`));

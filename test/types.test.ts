@@ -4,11 +4,7 @@
  */
 
 import { describe, it, expect } from "vitest";
-import type {
-  StackInfo,
-  ScanResult,
-  RepoFacts,
-} from "../src/types.js";
+import type { StackInfo, ScanResult, RepoFacts } from "../src/types.js";
 
 describe("types", () => {
   it("ScanResult keySourceFiles is a real Map", () => {

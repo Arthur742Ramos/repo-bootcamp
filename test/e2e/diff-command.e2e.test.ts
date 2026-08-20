@@ -112,12 +112,18 @@ async function createDiffFixture(baseDir: string): Promise<DiffFixture> {
   return { bareRepoPath, baseSha, headSha };
 }
 
-async function startPullRequestApiServer(baseSha: string, headSha: string): Promise<{
+async function startPullRequestApiServer(
+  baseSha: string,
+  headSha: string
+): Promise<{
   server: Server;
   apiBaseUrl: string;
 }> {
   const server = createServer((req, res) => {
-    if (req.method === "GET" && req.url === `/repos/${FIXTURE_OWNER}/${FIXTURE_REPO}/pulls/${PR_NUMBER}`) {
+    if (
+      req.method === "GET" &&
+      req.url === `/repos/${FIXTURE_OWNER}/${FIXTURE_REPO}/pulls/${PR_NUMBER}`
+    ) {
       res.writeHead(200, { "Content-Type": "application/json" });
       res.end(
         JSON.stringify({
@@ -207,7 +213,9 @@ describe("diff command", () => {
 
     const diffDoc = await readFile(join(outputDir, outputFile), "utf-8");
     expect(diffDoc).toContain("Fixture PR");
-    expect(diffDoc).toContain("Comparison for **fixture-repo**: `main` → `PR #123 (feature/pr-123)`");
+    expect(diffDoc).toContain(
+      "Comparison for **fixture-repo**: `main` → `PR #123 (feature/pr-123)`"
+    );
     expect(diffDoc).toContain("- `zod`");
     expect(diffDoc).toContain("- `API_TOKEN`");
     expect(diffDoc).toContain("- `npm run lint`");

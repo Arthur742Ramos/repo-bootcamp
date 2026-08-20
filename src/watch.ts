@@ -65,7 +65,8 @@ export async function fetchAndCheckUpdates(
     const { stdout } = await execFileAsync("git", ["rev-parse", "@{u}"], { cwd: repoPath });
     remoteSha = stdout.trim();
   } catch (err: unknown) {
-    if (process.env.DEBUG) console.error("[debug] primary rev-parse failed:", (err as Error).message);
+    if (process.env.DEBUG)
+      console.error("[debug] primary rev-parse failed:", (err as Error).message);
     const { stdout } = await execFileAsync("git", ["rev-parse", "FETCH_HEAD"], { cwd: repoPath });
     remoteSha = stdout.trim();
   }
@@ -97,10 +98,7 @@ export async function fetchAndCheckUpdates(
  * 1. Periodic polling via `git fetch` (primary)
  * 2. `fs.watch` on git refs/HEAD files for local ref changes (supplementary)
  */
-export function startWatch(
-  repoPath: string,
-  opts: WatchOptions
-): WatchHandle {
+export function startWatch(repoPath: string, opts: WatchOptions): WatchHandle {
   let lastSha = "";
   let running = false;
   let stopped = false;
@@ -141,16 +139,12 @@ export function startWatch(
         // failure), the next poll re-detects the still-unprocessed commit and
         // retries instead of silently leaving the docs stale.
         lastSha = result.newSha;
-        console.log(
-          chalk.green("\n  ✓ Watch: analysis updated. Waiting for next change...\n")
-        );
+        console.log(chalk.green("\n  ✓ Watch: analysis updated. Waiting for next change...\n"));
       } else {
         log("No new commits.");
       }
     } catch (err: unknown) {
-      console.log(
-        chalk.yellow(`  ⚠ Watch poll error: ${(err as Error).message}`)
-      );
+      console.log(chalk.yellow(`  ⚠ Watch poll error: ${(err as Error).message}`));
     } finally {
       running = false;
     }
@@ -193,8 +187,7 @@ export function startWatch(
 
   // Print initial watch message
   console.log(
-    chalk.cyan(`\n  👀 Watch mode active `) +
-      chalk.dim(`(polling every ${opts.intervalSeconds}s)`)
+    chalk.cyan(`\n  👀 Watch mode active `) + chalk.dim(`(polling every ${opts.intervalSeconds}s)`)
   );
   if (opts.allowHardReset) {
     console.log(

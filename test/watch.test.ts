@@ -59,8 +59,8 @@ describe("fetchAndCheckUpdates", () => {
   });
 
   it("returns updated: false when SHA matches", async () => {
-    mockExecResult("");           // git fetch origin
-    mockExecResult("abc1234\n");  // git rev-parse @{u}
+    mockExecResult(""); // git fetch origin
+    mockExecResult("abc1234\n"); // git rev-parse @{u}
 
     const result = await fetchAndCheckUpdates("/tmp/repo", "abc1234");
     expect(result.updated).toBe(false);
@@ -68,9 +68,9 @@ describe("fetchAndCheckUpdates", () => {
   });
 
   it("returns updated: true when SHA differs", async () => {
-    mockExecResult("");            // git fetch origin
-    mockExecResult("newsha99\n");  // git rev-parse @{u}
-    mockExecResult("");            // git merge --ff-only
+    mockExecResult(""); // git fetch origin
+    mockExecResult("newsha99\n"); // git rev-parse @{u}
+    mockExecResult(""); // git merge --ff-only
 
     const result = await fetchAndCheckUpdates("/tmp/repo", "oldsha11");
     expect(result.updated).toBe(true);
@@ -78,10 +78,10 @@ describe("fetchAndCheckUpdates", () => {
   });
 
   it("falls back to FETCH_HEAD when upstream tracking fails", async () => {
-    mockExecResult("");                 // git fetch origin
-    mockExecError("no upstream");       // git rev-parse @{u} fails
-    mockExecResult("fallback1\n");      // git rev-parse FETCH_HEAD
-    mockExecResult("");                 // git merge --ff-only
+    mockExecResult(""); // git fetch origin
+    mockExecError("no upstream"); // git rev-parse @{u} fails
+    mockExecResult("fallback1\n"); // git rev-parse FETCH_HEAD
+    mockExecResult(""); // git merge --ff-only
 
     const result = await fetchAndCheckUpdates("/tmp/repo", "oldsha11");
     expect(result.updated).toBe(true);
@@ -89,20 +89,18 @@ describe("fetchAndCheckUpdates", () => {
   });
 
   it("refuses hard reset when ff-merge fails without force", async () => {
-    mockExecResult("");            // git fetch origin
-    mockExecResult("newsha99\n");  // git rev-parse @{u}
-    mockExecError("not ff");       // git merge --ff-only fails
+    mockExecResult(""); // git fetch origin
+    mockExecResult("newsha99\n"); // git rev-parse @{u}
+    mockExecError("not ff"); // git merge --ff-only fails
 
-    await expect(
-      fetchAndCheckUpdates("/tmp/repo", "oldsha11")
-    ).rejects.toThrow("--watch-force");
+    await expect(fetchAndCheckUpdates("/tmp/repo", "oldsha11")).rejects.toThrow("--watch-force");
   });
 
   it("falls back to hard reset only when force is enabled", async () => {
-    mockExecResult("");            // git fetch origin
-    mockExecResult("newsha99\n");  // git rev-parse @{u}
-    mockExecError("not ff");       // git merge --ff-only fails
-    mockExecResult("");            // git reset --hard
+    mockExecResult(""); // git fetch origin
+    mockExecResult("newsha99\n"); // git rev-parse @{u}
+    mockExecError("not ff"); // git merge --ff-only fails
+    mockExecResult(""); // git reset --hard
 
     const result = await fetchAndCheckUpdates("/tmp/repo", "oldsha11", {
       allowHardReset: true,
@@ -147,11 +145,11 @@ describe("startWatch", () => {
       intervalSeconds: 15,
       onChangeDetected: vi.fn(),
     });
-    
-    const output = consoleSpy.mock.calls.map(c => String(c[0])).join(" ");
+
+    const output = consoleSpy.mock.calls.map((c) => String(c[0])).join(" ");
     expect(output).toContain("Watch mode active");
     expect(output).toContain("15s");
-    
+
     handle.stop();
     consoleSpy.mockRestore();
   });

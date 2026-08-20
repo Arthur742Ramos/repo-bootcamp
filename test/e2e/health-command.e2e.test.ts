@@ -7,10 +7,7 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import { runCli } from "./helpers.js";
 
-async function createRepo(
-  baseDir: string,
-  files: Record<string, string>
-): Promise<string> {
+async function createRepo(baseDir: string, files: Record<string, string>): Promise<string> {
   const repoDir = join(baseDir, "fixture-health-repo");
   await mkdir(repoDir, { recursive: true });
 
@@ -21,7 +18,10 @@ async function createRepo(
   }
 
   execFileSync("git", ["init", "-b", "main"], { cwd: repoDir, stdio: "ignore" });
-  execFileSync("git", ["config", "user.email", "test@example.com"], { cwd: repoDir, stdio: "ignore" });
+  execFileSync("git", ["config", "user.email", "test@example.com"], {
+    cwd: repoDir,
+    stdio: "ignore",
+  });
   execFileSync("git", ["config", "user.name", "Test User"], { cwd: repoDir, stdio: "ignore" });
   execFileSync("git", ["add", "-A"], { cwd: repoDir, stdio: "ignore" });
   execFileSync("git", ["commit", "-m", "init", "--no-gpg-sign"], { cwd: repoDir, stdio: "ignore" });
@@ -40,7 +40,8 @@ const HEALTHY_FILES: Record<string, string> = {
   ".github/ISSUE_TEMPLATE/bug.yml": "name: Bug\n",
   ".github/PULL_REQUEST_TEMPLATE.md": "## Description\n",
   ".github/CODEOWNERS": "* @owner\n",
-  ".github/workflows/ci.yml": "name: CI\non: [push]\njobs:\n  t:\n    runs-on: ubuntu-latest\n    steps:\n      - run: npm test\n",
+  ".github/workflows/ci.yml":
+    "name: CI\non: [push]\njobs:\n  t:\n    runs-on: ubuntu-latest\n    steps:\n      - run: npm test\n",
   ".github/dependabot.yml": "version: 2\n",
   ".eslintrc.json": "{}\n",
   ".prettierrc": "{}\n",

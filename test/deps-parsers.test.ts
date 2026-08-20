@@ -218,7 +218,7 @@ describe("dependency manifest parsers", () => {
         "dependencies = [",
         '  "flask>=2.0",',
         '  "requests[security]>=2.28",',
-        '  "rich; python_version >= \'3.8\'",',
+        "  \"rich; python_version >= '3.8'\",",
         "]",
         "[project.optional-dependencies]",
         'test = ["pytest>=7", "coverage"]',
@@ -230,7 +230,13 @@ describe("dependency manifest parsers", () => {
     const deps = await extractDependencies(dir);
     expect(deps?.packageManager).toBe("pip");
     // Extras (`[security]`) and env markers (`; python_version …`) are stripped.
-    expect(names(deps!.runtime).sort()).toEqual(["coverage", "flask", "pytest", "requests", "rich"]);
+    expect(names(deps!.runtime).sort()).toEqual([
+      "coverage",
+      "flask",
+      "pytest",
+      "requests",
+      "rich",
+    ]);
     expect(deps!.runtime.find((d) => d.name === "requests")?.version).toContain("2.28");
     // The build-system requires array must not leak in as a dependency.
     expect(names(deps!.runtime)).not.toContain("hatchling");

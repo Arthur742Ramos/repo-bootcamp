@@ -77,7 +77,20 @@ graph TD
   });
 
   it("should handle all diagram types as starters", () => {
-    const types = ["classDiagram", "stateDiagram", "erDiagram", "gantt", "pie", "journey", "gitGraph", "mindmap", "timeline", "quadrantChart", "sankey", "xychart"];
+    const types = [
+      "classDiagram",
+      "stateDiagram",
+      "erDiagram",
+      "gantt",
+      "pie",
+      "journey",
+      "gitGraph",
+      "mindmap",
+      "timeline",
+      "quadrantChart",
+      "sankey",
+      "xychart",
+    ];
     for (const type of types) {
       const content = `${type}\n    A --> B`;
       const diagrams = parseMermaidFile(content);

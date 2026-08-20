@@ -72,7 +72,13 @@ function printReport(
     .sort((a, b) => b.fanIn - a.fanIn || a.file.localeCompare(b.file))
     .slice(0, top)
     .map((m) => ({ value: m.fanIn, file: m.file }));
-  printList("Load-bearing core", "(most depended-upon — start reading here)", core, chalk.green, "⬆");
+  printList(
+    "Load-bearing core",
+    "(most depended-upon — start reading here)",
+    core,
+    chalk.green,
+    "⬆"
+  );
 
   const hubs = [...modules]
     .filter((m) => m.fanOut > 0)
@@ -113,7 +119,10 @@ export async function runCouplingCommand(
   const top = finiteOr(opts.top, 12, { min: 1 });
 
   await withResolvedRepo(repoUrl, opts, "Coupling analysis failed", async (repoSource) => {
-    const scan = await scanRepositoryFiles(repoSource.path, finiteOr(opts.maxFiles, 500, { min: 1 }));
+    const scan = await scanRepositoryFiles(
+      repoSource.path,
+      finiteOr(opts.maxFiles, 500, { min: 1 })
+    );
     const graph = await buildImportGraph(repoSource.path, scan.files);
 
     const modules: ModuleCoupling[] = [...graph.entries()]
@@ -129,7 +138,9 @@ export async function runCouplingCommand(
     // imported by nothing (a strong, low-false-positive dead-code signal),
     // excluding tests and tooling entry points loaded externally.
     const orphans = modules
-      .filter((m) => m.fanIn === 0 && m.fanOut === 0 && !isTestFile(m.file) && !isConfigOrScript(m.file))
+      .filter(
+        (m) => m.fanIn === 0 && m.fanOut === 0 && !isTestFile(m.file) && !isConfigOrScript(m.file)
+      )
       .map((m) => m.file)
       .sort((a, b) => a.localeCompare(b));
 
@@ -144,8 +155,14 @@ export async function runCouplingCommand(
             repo: repoSource.repoInfo.fullName,
             moduleCount: modules.length,
             edgeCount,
-            core: [...modules].filter((m) => m.fanIn > 0).sort(byFanIn).slice(0, top),
-            hubs: [...modules].filter((m) => m.fanOut > 0).sort(byFanOut).slice(0, top),
+            core: [...modules]
+              .filter((m) => m.fanIn > 0)
+              .sort(byFanIn)
+              .slice(0, top),
+            hubs: [...modules]
+              .filter((m) => m.fanOut > 0)
+              .sort(byFanOut)
+              .slice(0, top),
             orphans,
           },
           null,

@@ -684,9 +684,7 @@ export async function runMainCommand(repoUrl: string, options: BootcampOptions):
           facts: styledFacts,
           options,
           format: outputFormat,
-          durationMs: result.stats.endTime
-            ? result.stats.endTime - result.stats.startTime
-            : 0,
+          durationMs: result.stats.endTime ? result.stats.endTime - result.stats.startTime : 0,
           model: result.stats.model,
           toolCalls: result.stats.toolCalls.length,
         });

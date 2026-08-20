@@ -77,8 +77,10 @@ export interface SecurityAnalysis {
 import securityPackagesJson from "./data/security-packages.json" with { type: "json" };
 import securityPatternsJson from "./data/security-patterns.json" with { type: "json" };
 
-const SECURITY_PACKAGES: Record<string, SecurityDependency> =
-  securityPackagesJson as Record<string, SecurityDependency>;
+const SECURITY_PACKAGES: Record<string, SecurityDependency> = securityPackagesJson as Record<
+  string,
+  SecurityDependency
+>;
 
 /**
  * Patterns that might indicate security issues (loaded from JSON, compiled to RegExp)
@@ -90,7 +92,7 @@ const CONCERN_PATTERNS: Array<{
   category: string;
   description: string;
   recommendation: string;
-}> = securityPatternsJson.concernPatterns.map(p => ({
+}> = securityPatternsJson.concernPatterns.map((p) => ({
   ...p,
   pattern: new RegExp(p.pattern, (p as { flags?: string }).flags),
   severity: p.severity as Severity,
@@ -104,7 +106,7 @@ const AUTH_PATTERNS: Array<{
   type: string;
   library?: string;
   description: string;
-}> = securityPatternsJson.authPatterns.map(p => ({
+}> = securityPatternsJson.authPatterns.map((p) => ({
   ...p,
   pattern: new RegExp(p.pattern, (p as { flags?: string }).flags),
 }));
@@ -141,8 +143,8 @@ export async function analyzeSecurityPatterns(
   // Check dependencies for security packages
   if (packageJson) {
     const allDeps = {
-      ...(packageJson.dependencies as Record<string, string> || {}),
-      ...(packageJson.devDependencies as Record<string, string> || {}),
+      ...((packageJson.dependencies as Record<string, string>) || {}),
+      ...((packageJson.devDependencies as Record<string, string>) || {}),
     };
 
     for (const [name, info] of Object.entries(SECURITY_PACKAGES)) {
@@ -167,41 +169,40 @@ export async function analyzeSecurityPatterns(
 
     // Check for ORM (SQL injection prevention)
     const orms = ["prisma", "@prisma/client", "sequelize", "typeorm", "drizzle-orm", "knex"];
-    if (orms.some(orm => allDeps[orm])) {
+    if (orms.some((orm) => allDeps[orm])) {
       analysis.hasSqlInjectionPrevention = true;
     }
   }
 
   // Check for env files and gitignore
-  const fileNames = files.map(f => f.path);
-  analysis.secretsHandling.envFiles = fileNames.filter(f =>
-    /^\.env(\..+)?$/.test(basename(f)) && !/\.(example|sample|template)$/i.test(basename(f))
+  const fileNames = files.map((f) => f.path);
+  analysis.secretsHandling.envFiles = fileNames.filter(
+    (f) => /^\.env(\..+)?$/.test(basename(f)) && !/\.(example|sample|template)$/i.test(basename(f))
   );
-  analysis.secretsHandling.hasEnvExample = fileNames.some(f => 
-    f.includes(".env.example") || f.includes(".env.sample")
+  analysis.secretsHandling.hasEnvExample = fileNames.some(
+    (f) => f.includes(".env.example") || f.includes(".env.sample")
   );
-  analysis.secretsHandling.configFiles = fileNames.filter(f =>
-    /config\.(json|yaml|yml)$/i.test(f) && !f.includes("tsconfig")
+  analysis.secretsHandling.configFiles = fileNames.filter(
+    (f) => /config\.(json|yaml|yml)$/i.test(f) && !f.includes("tsconfig")
   );
 
   // Check .gitignore for secrets patterns
   try {
     const gitignore = await readFile(join(repoPath, ".gitignore"), "utf-8");
-    analysis.secretsHandling.gitignoreSecrets = 
-      gitignore.includes(".env") || 
-      gitignore.includes("*.pem") || 
-      gitignore.includes("secrets");
+    analysis.secretsHandling.gitignoreSecrets =
+      gitignore.includes(".env") || gitignore.includes("*.pem") || gitignore.includes("secrets");
   } catch {
     // No .gitignore
   }
 
   // Scan source files for security patterns and concerns
-  const sourceFiles = files.filter(f =>
-    !f.isDirectory &&
-    /\.(ts|js|tsx|jsx|py|go|rs|java)$/.test(f.path) &&
-    !f.path.includes("node_modules") &&
-    !f.path.includes(".min.") &&
-    f.size < MAX_SECURITY_FILE_SIZE
+  const sourceFiles = files.filter(
+    (f) =>
+      !f.isDirectory &&
+      /\.(ts|js|tsx|jsx|py|go|rs|java)$/.test(f.path) &&
+      !f.path.includes("node_modules") &&
+      !f.path.includes(".min.") &&
+      f.size < MAX_SECURITY_FILE_SIZE
   );
 
   // Rank the most security-relevant files first so the MAX_SECURITY_SCAN_FILES cap
@@ -253,12 +254,10 @@ export async function analyzeSecurityPatterns(
 
       // Check for security concerns
       const lines = content.split("\n");
-      const seenFindings = new Set<string>(
-        analysis.findings.map(f => `${f.title}::${f.file}`)
-      );
+      const seenFindings = new Set<string>(analysis.findings.map((f) => `${f.title}::${f.file}`));
       for (let lineIdx = 0; lineIdx < lines.length; lineIdx++) {
         const line = lines[lineIdx];
-        
+
         // Skip comments and test files
         if (line.trim().startsWith("//") || line.trim().startsWith("#")) continue;
         if (file.path.includes(".test.") || file.path.includes(".spec.")) continue;
@@ -287,7 +286,6 @@ export async function analyzeSecurityPatterns(
       if (/Content-Security-Policy|contentSecurityPolicy/i.test(content)) {
         analysis.headers.hasCSP = true;
       }
-
     }
   }
 
@@ -344,8 +342,12 @@ function securityScanPriority(file: FileInfo): number {
   if (SECURITY_RELEVANT_NAME.test(name)) priority += 10;
   else if (SECURITY_RELEVANT_NAME.test(path)) priority += 5;
   // De-prioritise tests/fixtures/examples/generated code — findings there are noise.
-  if (/\.(?:test|spec)\./.test(name) ||
-      /(?:^|\/)(?:tests?|__tests__|__mocks__|fixtures?|examples?|mocks?|dist|build|vendor)\//.test(path)) {
+  if (
+    /\.(?:test|spec)\./.test(name) ||
+    /(?:^|\/)(?:tests?|__tests__|__mocks__|fixtures?|examples?|mocks?|dist|build|vendor)\//.test(
+      path
+    )
+  ) {
     priority -= 8;
   }
   // Prefer first-party source over co-located config/scripts at the repo root.
@@ -375,8 +377,7 @@ function calculateSecurityScore(analysis: SecurityAnalysis): number {
   if (analysis.secretsHandling.hasEnvExample) score += SECURITY_BONUS.envExample;
 
   // Deduct if no auth security deps but has auth patterns
-  if (analysis.authPatterns.length > 0 && 
-      !analysis.securityDeps.some(d => d.type === "crypto")) {
+  if (analysis.authPatterns.length > 0 && !analysis.securityDeps.some((d) => d.type === "crypto")) {
     score += SECURITY_BONUS.noAuthCrypto;
   }
 
@@ -418,7 +419,9 @@ export function generateSecurityDocs(analysis: SecurityAnalysis, projectName: st
   lines.push("## Security Score");
   lines.push("");
   if (insufficientCoverage) {
-    lines.push("⚠️ **Insufficient coverage** — no source files were scanned, so no security grade can be assigned.");
+    lines.push(
+      "⚠️ **Insufficient coverage** — no source files were scanned, so no security grade can be assigned."
+    );
   } else {
     const scoreColor = analysis.score >= 80 ? "🟢" : analysis.score >= 60 ? "🟡" : "🔴";
     lines.push(`${scoreColor} **${analysis.score}/100** (Grade: ${grade})`);
@@ -428,19 +431,19 @@ export function generateSecurityDocs(analysis: SecurityAnalysis, projectName: st
   // Security measures in place
   lines.push("## Security Measures");
   lines.push("");
-  
+
   const measures: string[] = [];
   if (analysis.headers.hasHelmet) measures.push("✅ Security headers (Helmet)");
   else measures.push("⚠️ No security headers middleware detected");
-  
+
   if (analysis.headers.hasCors) measures.push("✅ CORS configured");
   if (analysis.headers.hasCSP) measures.push("✅ Content Security Policy");
   if (analysis.hasRateLimiting) measures.push("✅ Rate limiting");
   else measures.push("⚠️ No rate limiting detected");
-  
+
   if (analysis.hasInputValidation) measures.push("✅ Input validation");
   else measures.push("⚠️ No validation library detected");
-  
+
   if (analysis.hasSqlInjectionPrevention) measures.push("✅ SQL injection prevention (ORM)");
   if (analysis.secretsHandling.gitignoreSecrets) measures.push("✅ Secrets excluded from git");
   if (analysis.secretsHandling.hasEnvExample) measures.push("✅ Environment example file provided");
@@ -459,7 +462,12 @@ export function generateSecurityDocs(analysis: SecurityAnalysis, projectName: st
       if (auth.library) {
         lines.push(`- **Library:** \`${auth.library}\``);
       }
-      lines.push(`- **Files:** ${auth.files.slice(0, 5).map(f => `\`${f}\``).join(", ")}`);
+      lines.push(
+        `- **Files:** ${auth.files
+          .slice(0, 5)
+          .map((f) => `\`${f}\``)
+          .join(", ")}`
+      );
       lines.push("");
     }
   }
@@ -477,10 +485,12 @@ export function generateSecurityDocs(analysis: SecurityAnalysis, projectName: st
   }
 
   // Findings
-  const criticalFindings = analysis.findings.filter(f => f.severity === "critical");
-  const highFindings = analysis.findings.filter(f => f.severity === "high");
-  const mediumFindings = analysis.findings.filter(f => f.severity === "medium");
-  const otherFindings = analysis.findings.filter(f => f.severity === "low" || f.severity === "info");
+  const criticalFindings = analysis.findings.filter((f) => f.severity === "critical");
+  const highFindings = analysis.findings.filter((f) => f.severity === "high");
+  const mediumFindings = analysis.findings.filter((f) => f.severity === "medium");
+  const otherFindings = analysis.findings.filter(
+    (f) => f.severity === "low" || f.severity === "info"
+  );
 
   if (analysis.findings.length > 0) {
     lines.push("## Findings");
@@ -535,7 +545,9 @@ export function generateSecurityDocs(analysis: SecurityAnalysis, projectName: st
     lines.push("## Findings");
     lines.push("");
     if (insufficientCoverage) {
-      lines.push("⚠️ No source files were scanned, so the absence of findings is not evidence of a clean codebase.");
+      lines.push(
+        "⚠️ No source files were scanned, so the absence of findings is not evidence of a clean codebase."
+      );
     } else {
       lines.push("✅ No security concerns detected in the scanned files.");
     }
@@ -559,7 +571,7 @@ export function generateSecurityDocs(analysis: SecurityAnalysis, projectName: st
   // Recommendations
   lines.push("## Recommendations");
   lines.push("");
-  
+
   const recs: string[] = [];
   if (!analysis.headers.hasHelmet) {
     recs.push("- Add `helmet` middleware for security headers");

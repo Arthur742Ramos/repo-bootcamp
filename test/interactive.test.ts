@@ -99,7 +99,7 @@ describe("InteractiveSession", () => {
     writeSpy.mockRestore();
 
     expect(mockGetRepoTools).toHaveBeenCalledWith(
-      expect.objectContaining({ repoPath: "/repo", verbose: true }),
+      expect.objectContaining({ repoPath: "/repo", verbose: true })
     );
     expect(mockCreateSession).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -109,13 +109,13 @@ describe("InteractiveSession", () => {
           content: expect.stringContaining("expert assistant"),
         },
         tools: expect.any(Array),
-      }),
+      })
     );
     expect(mockSession.sendAndWait).toHaveBeenCalledWith(
       expect.objectContaining({
         prompt: expect.stringContaining("Repository Context"),
       }),
-      120000,
+      120000
     );
   });
 
@@ -172,7 +172,9 @@ describe("InteractiveSession", () => {
     expect(first).toBe("First answer");
     expect(second).toBe("Second answer");
     expect(mockSession.on).toHaveBeenCalledTimes(1);
-    expect((mockSession.sendAndWait.mock.calls[0][0].prompt as string)).toContain("Repository Context");
+    expect(mockSession.sendAndWait.mock.calls[0][0].prompt as string).toContain(
+      "Repository Context"
+    );
     expect(mockSession.sendAndWait.mock.calls[1][0].prompt).toBe("second");
   });
 
@@ -193,7 +195,7 @@ describe("InteractiveSession", () => {
     expect(mockWriteFile).toHaveBeenCalledWith(
       outputPath,
       expect.stringContaining("# Interactive Session Transcript"),
-      "utf-8",
+      "utf-8"
     );
   });
 
@@ -231,7 +233,7 @@ describe("InteractiveSession", () => {
       expect.objectContaining({
         prompt: expect.stringContaining("A demo application"),
       }),
-      120000,
+      120000
     );
   });
 
@@ -250,7 +252,7 @@ describe("InteractiveSession", () => {
       expect.objectContaining({
         prompt: expect.stringContaining("TypeScript"),
       }),
-      120000,
+      120000
     );
   });
 
@@ -406,7 +408,7 @@ describe("InteractiveSession", () => {
         content: "Hi there!",
         citations: ["src/app.ts"],
         timestamp: new Date("2024-01-01T00:00:01.000Z"),
-      },
+      }
     );
 
     await session.saveTranscript("/tmp/output");
@@ -445,9 +447,7 @@ describe("InteractiveSession", () => {
     const session = new InteractiveSession("/repo", repoInfo, scanResult);
     await session.initialize();
 
-    expect(mockGetRepoTools).toHaveBeenCalledWith(
-      expect.objectContaining({ verbose: false }),
-    );
+    expect(mockGetRepoTools).toHaveBeenCalledWith(expect.objectContaining({ verbose: false }));
   });
 });
 
@@ -474,9 +474,9 @@ describe("quickAsk", () => {
     mockSession.sendAndWait.mockRejectedValue(new Error("Connection failed"));
 
     const writeSpy = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
-    await expect(
-      quickAsk("/repo", repoInfo, scanResult, "Question"),
-    ).rejects.toThrow("Connection failed");
+    await expect(quickAsk("/repo", repoInfo, scanResult, "Question")).rejects.toThrow(
+      "Connection failed"
+    );
     writeSpy.mockRestore();
 
     expect(mockStop).toHaveBeenCalled();
@@ -494,9 +494,7 @@ describe("quickAsk", () => {
     }
     writeSpy.mockRestore();
 
-    expect(mockGetRepoTools).toHaveBeenCalledWith(
-      expect.objectContaining({ verbose: true }),
-    );
+    expect(mockGetRepoTools).toHaveBeenCalledWith(expect.objectContaining({ verbose: true }));
   });
 });
 
@@ -529,7 +527,14 @@ const stripAnsi = (s: string): string => s.replace(ANSI, "");
 function scanWith(paths: Array<{ path: string; isDirectory?: boolean }>): ScanResult {
   return {
     files: paths.map((p) => ({ path: p.path, size: 1, isDirectory: Boolean(p.isDirectory) })),
-    stack: { languages: [], frameworks: [], buildSystem: "", packageManager: "", hasDocker: false, hasCi: false },
+    stack: {
+      languages: [],
+      frameworks: [],
+      buildSystem: "",
+      packageManager: "",
+      hasDocker: false,
+      hasCi: false,
+    },
     commands: [],
     ciWorkflows: [],
     readme: null,
@@ -558,12 +563,24 @@ describe("classifyInteractiveInput", () => {
   it("recognizes known slash commands and their aliases", () => {
     expect(classifyInteractiveInput("/help")).toEqual({ kind: "command", name: "help", args: "" });
     expect(classifyInteractiveInput("/?")).toEqual({ kind: "command", name: "help", args: "" });
-    expect(classifyInteractiveInput("/files")).toEqual({ kind: "command", name: "files", args: "" });
-    expect(classifyInteractiveInput("/clear")).toEqual({ kind: "command", name: "clear", args: "" });
+    expect(classifyInteractiveInput("/files")).toEqual({
+      kind: "command",
+      name: "files",
+      args: "",
+    });
+    expect(classifyInteractiveInput("/clear")).toEqual({
+      kind: "command",
+      name: "clear",
+      args: "",
+    });
   });
 
   it("captures trailing args for slash commands", () => {
-    expect(classifyInteractiveInput("/files src")).toEqual({ kind: "command", name: "files", args: "src" });
+    expect(classifyInteractiveInput("/files src")).toEqual({
+      kind: "command",
+      name: "files",
+      args: "src",
+    });
   });
 
   it("is case-insensitive about the command token", () => {
@@ -601,11 +618,15 @@ describe("renderInteractiveHelp", () => {
 
 describe("renderFileList", () => {
   it("lists detected files and excludes directories", () => {
-    const out = stripAnsi(renderFileList(scanWith([
-      { path: "src/index.ts" },
-      { path: "src", isDirectory: true },
-      { path: "README.md" },
-    ])));
+    const out = stripAnsi(
+      renderFileList(
+        scanWith([
+          { path: "src/index.ts" },
+          { path: "src", isDirectory: true },
+          { path: "README.md" },
+        ])
+      )
+    );
     expect(out).toContain("Detected files (2)");
     expect(out).toContain("src/index.ts");
     expect(out).toContain("README.md");

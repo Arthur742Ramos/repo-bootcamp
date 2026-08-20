@@ -107,7 +107,11 @@ async function createLocalFixtureRepo(): Promise<string> {
   const repoDir = await mkdtemp(join(tmpdir(), "bootcamp-no-clone-"));
   await mkdir(join(repoDir, "src"), { recursive: true });
   await writeFile(join(repoDir, "README.md"), "# no-clone fixture\n", "utf-8");
-  await writeFile(join(repoDir, "package.json"), JSON.stringify({ name: "no-clone-fixture" }, null, 2), "utf-8");
+  await writeFile(
+    join(repoDir, "package.json"),
+    JSON.stringify({ name: "no-clone-fixture" }, null, 2),
+    "utf-8"
+  );
   await writeFile(join(repoDir, "src", "index.ts"), "export const fixture = true;\n", "utf-8");
 
   execSync("git init -b main", { cwd: repoDir, stdio: "ignore" });
@@ -205,7 +209,7 @@ describe("runMainCommand --no-clone behavior", () => {
         runMainCommand(repoPath, {
           ...BASE_OPTIONS,
           output: outputDir,
-        }),
+        })
       ).rejects.toThrow("EXIT_0");
     } finally {
       exitSpy.mockRestore();
@@ -302,7 +306,7 @@ describe("runMainCommand --no-clone behavior", () => {
           jsonOnly: false,
           quiet: true,
           output: outputDir,
-        }),
+        })
       ).rejects.toThrow("EXIT_0");
     } finally {
       exitSpy.mockRestore();
@@ -413,7 +417,7 @@ describe("runMainCommand summary.json", () => {
     let summary: any;
     try {
       await expect(
-        runMainCommand(repoPath, { ...BASE_OPTIONS, jsonOnly: false, output: outputDir }),
+        runMainCommand(repoPath, { ...BASE_OPTIONS, jsonOnly: false, output: outputDir })
       ).rejects.toThrow("EXIT_0");
       summary = JSON.parse(await readFile(join(outputDir, "summary.json"), "utf-8"));
     } finally {
@@ -430,7 +434,13 @@ describe("runMainCommand summary.json", () => {
     expect(typeof summary.scores.security.grade).toBe("string");
     expect(summary.scores.onboardingRisk).toEqual({ score: 10, grade: "A" });
     expect(summary.scores.approachability).toEqual({ score: 90, grade: "A" });
-    expect(summary.scores.health).toEqual({ score: 90, grade: "A", passCount: 1, warnCount: 0, failCount: 0 });
+    expect(summary.scores.health).toEqual({
+      score: 90,
+      grade: "A",
+      passCount: 1,
+      warnCount: 0,
+      failCount: 0,
+    });
     expect(summary.deps).toEqual({ total: 3, runtime: 2, dev: 1 });
   });
 });
@@ -521,7 +531,9 @@ describe("runMainCommand --watch and --interactive", () => {
       expect(scanRepositoryFiles.mock.calls.length).toBe(scansBefore + 1);
       expect(analyzeRepo).toHaveBeenCalledTimes(1);
       expect(writeGeneratedOutputs.mock.calls.length).toBe(writesBefore + 1);
-      const lastWrite = writeGeneratedOutputs.mock.calls.at(-1)![0] as { allowIssueCreation?: boolean };
+      const lastWrite = writeGeneratedOutputs.mock.calls.at(-1)![0] as {
+        allowIssueCreation?: boolean;
+      };
       expect(lastWrite.allowIssueCreation).toBe(false);
 
       // SIGINT stops the watch handle before exiting.

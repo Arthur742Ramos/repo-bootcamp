@@ -7,10 +7,7 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import { runCli } from "./helpers.js";
 
-async function createRepo(
-  baseDir: string,
-  files: Record<string, string>
-): Promise<string> {
+async function createRepo(baseDir: string, files: Record<string, string>): Promise<string> {
   const repoDir = join(baseDir, "fixture-metrics-repo");
   await mkdir(repoDir, { recursive: true });
 
@@ -21,7 +18,10 @@ async function createRepo(
   }
 
   execFileSync("git", ["init", "-b", "main"], { cwd: repoDir, stdio: "ignore" });
-  execFileSync("git", ["config", "user.email", "test@example.com"], { cwd: repoDir, stdio: "ignore" });
+  execFileSync("git", ["config", "user.email", "test@example.com"], {
+    cwd: repoDir,
+    stdio: "ignore",
+  });
   execFileSync("git", ["config", "user.name", "Test User"], { cwd: repoDir, stdio: "ignore" });
   execFileSync("git", ["add", "-A"], { cwd: repoDir, stdio: "ignore" });
   execFileSync("git", ["commit", "-m", "init", "--no-gpg-sign"], { cwd: repoDir, stdio: "ignore" });
@@ -76,7 +76,9 @@ describe("metrics command", () => {
     expect(typeof parsed.approachability.grade).toBe("string");
     expect(parsed.sizeClass).toBeDefined();
     expect(Array.isArray(parsed.languages)).toBe(true);
-    expect(parsed.languages.some((l: { language: string }) => l.language === "TypeScript")).toBe(true);
+    expect(parsed.languages.some((l: { language: string }) => l.language === "TypeScript")).toBe(
+      true
+    );
     expect(Array.isArray(parsed.hotspots)).toBe(true);
     expect(parsed.sourceFiles).toBeGreaterThan(0);
     expect(parsed.testFiles).toBeGreaterThan(0);

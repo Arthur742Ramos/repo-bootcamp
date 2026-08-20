@@ -85,7 +85,10 @@ export async function runImpactCommand(
   const top = finiteOr(opts.top, 10, { min: 1 });
 
   await withResolvedRepo(repoUrl, opts, "Impact analysis failed", async (repoSource) => {
-    const scan = await scanRepositoryFiles(repoSource.path, finiteOr(opts.maxFiles, 500, { min: 1 }));
+    const scan = await scanRepositoryFiles(
+      repoSource.path,
+      finiteOr(opts.maxFiles, 500, { min: 1 })
+    );
     const graph = await buildImportGraph(repoSource.path, scan.files);
 
     const normalized = file ? normalizePath(file) : undefined;

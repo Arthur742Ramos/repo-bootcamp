@@ -58,11 +58,17 @@ export function normalizeScanScope(options: BootcampOptions): void {
   }
 
   if (typeof options.subdir === "string") {
-    const trimmed = options.subdir.trim().replace(/^\.\/+/, "").replace(/[/\\]+$/, "");
+    const trimmed = options.subdir
+      .trim()
+      .replace(/^\.\/+/, "")
+      .replace(/[/\\]+$/, "");
     options.subdir = trimmed.length > 0 ? trimmed : undefined;
   }
 
-  if (options.subdir && (isAbsolute(options.subdir) || options.subdir.split(/[/\\]/).includes(".."))) {
+  if (
+    options.subdir &&
+    (isAbsolute(options.subdir) || options.subdir.split(/[/\\]/).includes(".."))
+  ) {
     throw new Error(
       `Invalid subdir: ${options.subdir}. Use a relative path within the repository (no leading / and no "..").`
     );
@@ -83,7 +89,9 @@ export function resolveOutputFormat(format?: string): OutputFormat {
   return candidate as OutputFormat;
 }
 
-export async function resolveRunConfiguration(options: BootcampOptions): Promise<ResolvedRunConfiguration> {
+export async function resolveRunConfiguration(
+  options: BootcampOptions
+): Promise<ResolvedRunConfiguration> {
   const config = await loadConfig();
   const defaults = config?.defaults;
 

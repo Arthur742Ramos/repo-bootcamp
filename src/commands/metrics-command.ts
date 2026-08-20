@@ -1,10 +1,6 @@
 import chalk from "chalk";
 
-import {
-  computeCodebaseMetrics,
-  formatBytes,
-  type CodebaseMetrics,
-} from "../metrics.js";
+import { computeCodebaseMetrics, formatBytes, type CodebaseMetrics } from "../metrics.js";
 import { scanRepositoryFiles } from "../services/clone-service.js";
 import { finiteOr } from "../utils.js";
 import { withResolvedRepo } from "./_shared.js";
@@ -50,7 +46,11 @@ function printReport(metrics: CodebaseMetrics, repoName: string): void {
     )
   );
 
-  console.log(`${emoji} ` + chalk.bold("Approachability ") + color.bold(`${appr.score}/100 (Grade: ${appr.grade})`));
+  console.log(
+    `${emoji} ` +
+      chalk.bold("Approachability ") +
+      color.bold(`${appr.score}/100 (Grade: ${appr.grade})`)
+  );
   if (appr.factors.length > 0) {
     for (const factor of appr.factors) {
       console.log(chalk.dim(`  • ${factor}`));
@@ -105,7 +105,9 @@ function printReport(metrics: CodebaseMetrics, repoName: string): void {
   if (metrics.hotspots.length > 0) {
     console.log(chalk.bold("Largest files") + chalk.dim(" (review hotspots)"));
     for (const hotspot of metrics.hotspots) {
-      console.log(`  ${chalk.dim(formatBytes(hotspot.bytes).padStart(9))}  ` + chalk.cyan(hotspot.path));
+      console.log(
+        `  ${chalk.dim(formatBytes(hotspot.bytes).padStart(9))}  ` + chalk.cyan(hotspot.path)
+      );
     }
     console.log();
   }
@@ -118,11 +120,17 @@ function printReport(metrics: CodebaseMetrics, repoName: string): void {
  * `--min-score`. Reuses the same `computeCodebaseMetrics` engine that powers
  * `METRICS.md`.
  */
-export async function runMetricsCommand(repoUrl: string, opts: MetricsCommandOptions): Promise<void> {
+export async function runMetricsCommand(
+  repoUrl: string,
+  opts: MetricsCommandOptions
+): Promise<void> {
   const minScore = finiteOr(opts.minScore, 70);
 
   await withResolvedRepo(repoUrl, opts, "Metrics analysis failed", async (repoSource) => {
-    const scan = await scanRepositoryFiles(repoSource.path, finiteOr(opts.maxFiles, 500, { min: 1 }));
+    const scan = await scanRepositoryFiles(
+      repoSource.path,
+      finiteOr(opts.maxFiles, 500, { min: 1 })
+    );
     const metrics = computeCodebaseMetrics(scan);
 
     if (opts.json) {

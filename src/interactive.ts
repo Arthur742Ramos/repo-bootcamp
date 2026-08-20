@@ -5,7 +5,15 @@
 
 import * as readline from "readline";
 import chalk from "chalk";
-import type { LlmClient, LlmSession, LlmSessionEvent, RepoFacts, RepoInfo, ScanResult, Transcript } from "./types.js";
+import type {
+  LlmClient,
+  LlmSession,
+  LlmSessionEvent,
+  RepoFacts,
+  RepoInfo,
+  ScanResult,
+  Transcript,
+} from "./types.js";
 import { getRepoTools } from "./tools.js";
 import {
   createDefaultLlmClient,
@@ -408,7 +416,11 @@ export async function runInteractiveMode(
 ): Promise<void> {
   console.log(chalk.bold.cyan("\n=== Interactive Mode ==="));
   console.log(chalk.gray(`Repository: ${repoInfo.fullName}`));
-  console.log(chalk.gray("Type your questions about the codebase. Type '/help' for commands, 'exit' to quit.\n"));
+  console.log(
+    chalk.gray(
+      "Type your questions about the codebase. Type '/help' for commands, 'exit' to quit.\n"
+    )
+  );
 
   const session = new InteractiveSession(
     repoPath,

@@ -99,8 +99,14 @@ describe("gatherRequirements", () => {
     const reqs = await gatherRequirements(dir);
     const byTool = Object.fromEntries(reqs.map((r) => [r.tool, r]));
 
-    expect(byTool["Node.js"]).toMatchObject({ required: ">=20", source: "package.json engines.node" });
-    expect(byTool["pnpm"]).toMatchObject({ required: "8.6.0", source: "package.json packageManager" });
+    expect(byTool["Node.js"]).toMatchObject({
+      required: ">=20",
+      source: "package.json engines.node",
+    });
+    expect(byTool["pnpm"]).toMatchObject({
+      required: "8.6.0",
+      source: "package.json packageManager",
+    });
     expect(byTool["Python"]).toMatchObject({ required: ">=3.10", source: "pyproject.toml" });
     expect(byTool["Go"]).toMatchObject({ required: "1.21", source: "go.mod" });
   });

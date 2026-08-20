@@ -16,7 +16,10 @@ async function createRepo(baseDir: string, files: Record<string, string>): Promi
     await writeFile(fullPath, content, "utf-8");
   }
   execFileSync("git", ["init", "-b", "main"], { cwd: repoDir, stdio: "ignore" });
-  execFileSync("git", ["config", "user.email", "test@example.com"], { cwd: repoDir, stdio: "ignore" });
+  execFileSync("git", ["config", "user.email", "test@example.com"], {
+    cwd: repoDir,
+    stdio: "ignore",
+  });
   execFileSync("git", ["config", "user.name", "Test User"], { cwd: repoDir, stdio: "ignore" });
   execFileSync("git", ["add", "-A"], { cwd: repoDir, stdio: "ignore" });
   execFileSync("git", ["commit", "-m", "init", "--no-gpg-sign"], { cwd: repoDir, stdio: "ignore" });

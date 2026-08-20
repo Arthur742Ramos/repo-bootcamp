@@ -32,9 +32,7 @@ interface CacheEntry<T = unknown> {
   value: T;
 }
 
-export type CacheReadResult<T> =
-  | { hit: true; value: T }
-  | { hit: false };
+export type CacheReadResult<T> = { hit: true; value: T } | { hit: false };
 
 export interface CacheGenerationOptions {
   focus?: string;
@@ -81,15 +79,13 @@ function cacheKey(
 ): string {
   const normalizedOptions = normalizeGenerationOptions(generationOptions);
   const optionsFingerprint = serializeGenerationOptions(normalizedOptions);
-  const baseSeed = optionsFingerprint === "focus=|style=|model=|audience="
-    ? `${repoFullName}@${commitSha}`
-    : `${repoFullName}@${commitSha}|${optionsFingerprint}`;
+  const baseSeed =
+    optionsFingerprint === "focus=|style=|model=|audience="
+      ? `${repoFullName}@${commitSha}`
+      : `${repoFullName}@${commitSha}|${optionsFingerprint}`;
   const hashSeed = phase === "facts" ? baseSeed : `${baseSeed}|phase=${phase}`;
 
-  const hash = createHash("sha256")
-    .update(hashSeed)
-    .digest("hex")
-    .substring(0, 16);
+  const hash = createHash("sha256").update(hashSeed).digest("hex").substring(0, 16);
   const safeName = repoFullName.replace(/\//g, "-");
   const phaseSuffix = phase === "facts" ? "" : `-${phase}`;
   return `${safeName}${phaseSuffix}-${hash}.json`;
@@ -170,7 +166,12 @@ export async function readCache(
   commitSha: string,
   generationOptions?: CacheGenerationOptions
 ): Promise<RepoFacts | null> {
-  const result = await readPhaseCache<RepoFacts>("facts", repoFullName, commitSha, generationOptions);
+  const result = await readPhaseCache<RepoFacts>(
+    "facts",
+    repoFullName,
+    commitSha,
+    generationOptions
+  );
   if (!result.hit) {
     return null;
   }
@@ -196,9 +197,7 @@ export async function clearCache(): Promise<number> {
   try {
     const files = await readdir(CACHE_DIR);
     const jsonFiles = files.filter((f) => f.endsWith(".json"));
-    await Promise.all(
-      jsonFiles.map((f) => rm(join(CACHE_DIR, f), { force: true }))
-    );
+    await Promise.all(jsonFiles.map((f) => rm(join(CACHE_DIR, f), { force: true })));
     return jsonFiles.length;
   } catch (err: unknown) {
     if (process.env.DEBUG) console.error("[debug]", (err as Error).message);
@@ -300,7 +299,9 @@ const VALID_PHASES: ReadonlySet<CachePhase> = new Set<CachePhase>([
   "cycles",
 ]);
 
-function hasRequiredShape(raw: unknown): raw is Required<
+function hasRequiredShape(
+  raw: unknown
+): raw is Required<
   Pick<RawCacheEntryShape, "version" | "phase" | "repoFullName" | "commitSha" | "createdAt">
 > &
   RawCacheEntryShape {

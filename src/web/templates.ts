@@ -450,6 +450,8 @@ export function getIndexHtml(nonce?: string): string {
     let currentRunOptions = {};
     let progressStartedAt = null;
     let progressTimer = null;
+    let activeRunToken = 0;
+    let pollTimer = null;
 
     const fileDescriptions = {
       'BOOTCAMP': 'One-page overview',
@@ -548,6 +550,25 @@ export function getIndexHtml(nonce?: string): string {
       try { localStorage.removeItem('repo-bootcamp-job-id'); } catch (error) { /* storage is optional */ }
     }
 
+    function cancelStatusRecovery() {
+      if (pollTimer !== null) clearTimeout(pollTimer);
+      pollTimer = null;
+    }
+
+    function beginRun() {
+      activeRunToken += 1;
+      cancelStatusRecovery();
+      if (currentEventSource) {
+        currentEventSource.close();
+        currentEventSource = null;
+      }
+      return activeRunToken;
+    }
+
+    function isCurrentRun(jobId, runToken) {
+      return runToken === activeRunToken && currentJobId === jobId;
+    }
+
     function startProgressClock(startAt) {
       progressStartedAt = startAt || Date.now();
       clearInterval(progressTimer);
@@ -589,6 +610,7 @@ export function getIndexHtml(nonce?: string): string {
       setUrlError('');
 
       const status = document.getElementById('statusMsg');
+      const runToken = beginRun();
       currentRunOptions = getRunOptions();
       setAnalysisBusy(true);
       document.getElementById('retryBtn').hidden = true;
@@ -617,7 +639,7 @@ export function getIndexHtml(nonce?: string): string {
 
         currentJobId = payload.jobId;
         rememberJob(payload.jobId);
-        streamProgress(payload.jobId);
+        streamProgress(payload.jobId, runToken);
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         addProgressItem(message, 'error');
@@ -627,13 +649,18 @@ export function getIndexHtml(nonce?: string): string {
       }
     }
 
-    function streamProgress(jobId) {
+    function streamProgress(jobId, runToken = activeRunToken) {
+      if (!isCurrentRun(jobId, runToken)) return;
       if (currentEventSource) currentEventSource.close();
       const evtSource = new EventSource('/api/jobs/' + jobId + '/stream');
       currentEventSource = evtSource;
       let settled = false;
 
       evtSource.onmessage = (event) => {
+        if (!isCurrentRun(jobId, runToken)) {
+          evtSource.close();
+          return;
+        }
         let data;
         try {
           data = JSON.parse(event.data);
@@ -668,6 +695,7 @@ export function getIndexHtml(nonce?: string): string {
           currentEventSource = null;
           forgetJob();
           stopProgressClock();
+          cancelStatusRecovery();
           resetButton();
         } else if (data.type === 'error') {
           settled = true;
@@ -676,6 +704,7 @@ export function getIndexHtml(nonce?: string): string {
           evtSource.close();
           currentEventSource = null;
           stopProgressClock();
+          cancelStatusRecovery();
           document.getElementById('retryBtn').hidden = false;
           forgetJob();
           resetButton();
@@ -686,6 +715,7 @@ export function getIndexHtml(nonce?: string): string {
           evtSource.close();
           currentEventSource = null;
           stopProgressClock();
+          cancelStatusRecovery();
           document.getElementById('retryBtn').hidden = false;
           forgetJob();
           resetButton();
@@ -695,7 +725,7 @@ export function getIndexHtml(nonce?: string): string {
       evtSource.onerror = () => {
         // A clean end-of-stream after 'complete'/'error' also surfaces as onerror;
         // once we've settled there is nothing to recover.
-        if (settled) return;
+        if (settled || !isCurrentRun(jobId, runToken)) return;
         // The job keeps running server-side. Close this stream so the browser's
         // built-in auto-reconnect doesn't replay the entire buffered log, show a
         // visible retry notice, then poll the job status until it finishes.
@@ -704,24 +734,29 @@ export function getIndexHtml(nonce?: string): string {
         currentEventSource = null;
         addProgressItem('Connection lost — retrying…', 'warning');
         document.getElementById('statusMsg').textContent = 'Connection lost. Retrying analysis status.';
-        pollJobStatus(jobId);
+        pollJobStatus(jobId, runToken);
       };
     }
 
-    function pollJobStatus(jobId) {
+    function pollJobStatus(jobId, runToken = activeRunToken) {
+      if (!isCurrentRun(jobId, runToken)) return;
       let attempts = 0;
       const maxAttempts = 150; // ~5 minutes at a 2s interval
 
       const poll = async () => {
+        pollTimer = null;
+        if (!isCurrentRun(jobId, runToken)) return;
         attempts++;
         try {
           const res = await fetch('/api/jobs/' + jobId);
           const job = await readJsonResponse(res);
+          if (!isCurrentRun(jobId, runToken)) return;
           if (job.status === 'complete' && job.result) {
             addProgressItem('Reconnected — analysis complete.', 'success');
             showResults(job.result);
             forgetJob();
             stopProgressClock();
+            cancelStatusRecovery();
             resetButton();
             return;
           }
@@ -732,6 +767,7 @@ export function getIndexHtml(nonce?: string): string {
             document.getElementById('retryBtn').hidden = false;
             forgetJob();
             stopProgressClock();
+            cancelStatusRecovery();
             resetButton();
             return;
           }
@@ -741,6 +777,7 @@ export function getIndexHtml(nonce?: string): string {
             document.getElementById('retryBtn').hidden = false;
             forgetJob();
             stopProgressClock();
+            cancelStatusRecovery();
             resetButton();
             return;
           }
@@ -753,10 +790,10 @@ export function getIndexHtml(nonce?: string): string {
           resetButton();
           return;
         }
-        setTimeout(poll, 2000);
+        pollTimer = setTimeout(poll, 2000);
       };
 
-      setTimeout(poll, 2000);
+      pollTimer = setTimeout(poll, 2000);
     }
 
     function addProgressItem(message, type = '') {
@@ -1161,6 +1198,7 @@ export function getIndexHtml(nonce?: string): string {
         if (!response.ok) { forgetJob(); return; }
         const job = await readJsonResponse(response);
         if (!job || !job.id) { forgetJob(); return; }
+        const runToken = beginRun();
         currentJobId = job.id;
         if (job.repoUrl) document.getElementById('repoUrl').value = job.repoUrl;
         document.getElementById('progress').hidden = false;
@@ -1168,7 +1206,7 @@ export function getIndexHtml(nonce?: string): string {
         startProgressClock(job.startedAt || Date.now());
         setAnalysisBusy(job.status === 'pending' || job.status === 'running');
         addProgressItem('Reconnected to the previous analysis.', 'warning');
-        streamProgress(job.id);
+        streamProgress(job.id, runToken);
       } catch (error) {
         forgetJob();
       }
