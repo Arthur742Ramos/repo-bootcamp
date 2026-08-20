@@ -48,11 +48,9 @@ function remoteSource() {
 }
 
 describe("runCouplingCommand", () => {
-  const mockExit = vi
-    .spyOn(process, "exit")
-    .mockImplementation((() => {
-      throw new Error("process.exit");
-    }) as any);
+  const mockExit = vi.spyOn(process, "exit").mockImplementation((() => {
+    throw new Error("process.exit");
+  }) as any);
   let logSpy: ReturnType<typeof vi.spyOn>;
 
   beforeEach(() => {
@@ -125,13 +123,17 @@ describe("runCouplingCommand", () => {
 
   it("exits 1 when the repository cannot be resolved", async () => {
     resolveRepoMock.mockRejectedValueOnce(new Error("nope"));
-    await expect(runCouplingCommand("https://github.com/test/repo", {})).rejects.toThrow("process.exit");
+    await expect(runCouplingCommand("https://github.com/test/repo", {})).rejects.toThrow(
+      "process.exit"
+    );
     expect(mockExit).toHaveBeenCalledWith(1);
   });
 
   it("exits non-zero and cleans up when the graph build fails", async () => {
     buildImportGraphMock.mockRejectedValueOnce(new Error("boom"));
-    await expect(runCouplingCommand("https://github.com/test/repo", {})).rejects.toThrow("process.exit");
+    await expect(runCouplingCommand("https://github.com/test/repo", {})).rejects.toThrow(
+      "process.exit"
+    );
     expect(mockCleanup).toHaveBeenCalled();
   });
 });

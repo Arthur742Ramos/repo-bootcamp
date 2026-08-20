@@ -183,6 +183,8 @@ describe("web routes analysis lifecycle", () => {
     const streamResponse = await http.get(`/api/jobs/${jobId}/stream`);
     expect(streamResponse.status).toBe(200);
     expect(streamResponse.text).toContain('"type":"complete"');
+    expect(streamResponse.headers["cache-control"]).toContain("no-transform");
+    expect(streamResponse.headers["x-accel-buffering"]).toBe("no");
 
     const fileResponse = await http.get(`/api/jobs/${jobId}/files/BOOTCAMP.md`);
     expect(fileResponse.status).toBe(200);

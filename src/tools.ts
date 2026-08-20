@@ -1,6 +1,6 @@
 /**
  * Copilot SDK Tools for Repo Bootcamp
- * 
+ *
  * Provides agentic tools that the model can use to explore the repository.
  */
 
@@ -71,54 +71,57 @@ export function safePath(repoPath: string, targetPath: string): string {
  */
 function createReadFileTool(context: ToolContext): Tool<ReadFileToolArgs> {
   return defineTool("read_file", {
-    description: "Read the contents of a file from the repository. Use this to examine source code, configuration files, and documentation.",
+    description:
+      "Read the contents of a file from the repository. Use this to examine source code, configuration files, and documentation.",
     parameters: {
       type: "object",
-    properties: {
-      path: {
-        type: "string",
-        description: "Path to the file relative to repository root (e.g., 'src/index.ts', 'package.json')",
+      properties: {
+        path: {
+          type: "string",
+          description:
+            "Path to the file relative to repository root (e.g., 'src/index.ts', 'package.json')",
+        },
+        maxLines: {
+          type: "number",
+          description: "Maximum number of lines to return (default: 500)",
+        },
       },
-      maxLines: {
-        type: "number",
-        description: "Maximum number of lines to return (default: 500)",
-      },
+      required: ["path"],
     },
-    required: ["path"],
-  },
-  handler: async (args: ReadFileToolArgs) => {
-    const { path, maxLines = 500 } = args;
-    const fullPath = safePath(context.repoPath, path);
+    handler: async (args: ReadFileToolArgs) => {
+      const { path, maxLines = 500 } = args;
+      const fullPath = safePath(context.repoPath, path);
 
-    context.onToolCall?.("read_file", { path });
+      context.onToolCall?.("read_file", { path });
 
-    try {
-      // Symlink containment: safePath's check is purely lexical, so a symlink
-      // *inside* the repo could still resolve to a target outside it. Dereference
-      // both the repo root and the resolved target, then re-check containment.
-      // Realpath BOTH sides so a canonicalized root (e.g. macOS /var ->
-      // /private/var) never false-rejects a legitimate read.
-      const realRoot = await realpath(context.repoPath);
-      const realTarget = await realpath(fullPath);
-      if (!isPathInsideDir(realRoot, realTarget)) {
-        throw new Error("Path escapes repository root");
+      try {
+        // Symlink containment: safePath's check is purely lexical, so a symlink
+        // *inside* the repo could still resolve to a target outside it. Dereference
+        // both the repo root and the resolved target, then re-check containment.
+        // Realpath BOTH sides so a canonicalized root (e.g. macOS /var ->
+        // /private/var) never false-rejects a legitimate read.
+        const realRoot = await realpath(context.repoPath);
+        const realTarget = await realpath(fullPath);
+        if (!isPathInsideDir(realRoot, realTarget)) {
+          throw new Error("Path escapes repository root");
+        }
+
+        const content = await readFile(fullPath, "utf-8");
+        const lines = content.split("\n");
+        const truncated = lines.slice(0, maxLines).join("\n");
+        const result =
+          lines.length > maxLines
+            ? `${truncated}\n\n... (truncated, showing ${maxLines} of ${lines.length} lines)`
+            : truncated;
+
+        context.onToolResult?.("read_file", `Read ${lines.length} lines from ${path}`);
+        return { textResultForLlm: result, resultType: "success" as const };
+      } catch (error: unknown) {
+        const errorMsg = `Error reading file ${path}: ${(error as Error).message}`;
+        context.onToolResult?.("read_file", errorMsg);
+        return { textResultForLlm: errorMsg, resultType: "failure" as const };
       }
-
-      const content = await readFile(fullPath, "utf-8");
-      const lines = content.split("\n");
-      const truncated = lines.slice(0, maxLines).join("\n");
-      const result = lines.length > maxLines
-        ? `${truncated}\n\n... (truncated, showing ${maxLines} of ${lines.length} lines)`
-        : truncated;
-
-      context.onToolResult?.("read_file", `Read ${lines.length} lines from ${path}`);
-      return { textResultForLlm: result, resultType: "success" as const };
-    } catch (error: unknown) {
-      const errorMsg = `Error reading file ${path}: ${(error as Error).message}`;
-      context.onToolResult?.("read_file", errorMsg);
-      return { textResultForLlm: errorMsg, resultType: "failure" as const };
-    }
-  },
+    },
   });
 }
 
@@ -127,87 +130,86 @@ function createReadFileTool(context: ToolContext): Tool<ReadFileToolArgs> {
  */
 function createListFilesTool(context: ToolContext): Tool<ListFilesToolArgs> {
   return defineTool("list_files", {
-  description: "List files and directories in a path. Use this to explore the repository structure.",
-  parameters: {
-    type: "object",
-    properties: {
-      path: {
-        type: "string",
-        description: "Path relative to repository root (default: root directory)",
-      },
-      pattern: {
-        type: "string",
-        description: "Optional glob pattern to filter files (e.g., '*.ts', '*.py')",
-      },
-      recursive: {
-        type: "boolean",
-        description: "Whether to list files recursively (default: false)",
-      },
-      maxResults: {
-        type: "number",
-        description: "Maximum number of results (default: 100)",
+    description:
+      "List files and directories in a path. Use this to explore the repository structure.",
+    parameters: {
+      type: "object",
+      properties: {
+        path: {
+          type: "string",
+          description: "Path relative to repository root (default: root directory)",
+        },
+        pattern: {
+          type: "string",
+          description: "Optional glob pattern to filter files (e.g., '*.ts', '*.py')",
+        },
+        recursive: {
+          type: "boolean",
+          description: "Whether to list files recursively (default: false)",
+        },
+        maxResults: {
+          type: "number",
+          description: "Maximum number of results (default: 100)",
+        },
       },
     },
-  },
-  handler: async (args: ListFilesToolArgs) => {
-    const { path = "", pattern, recursive = false, maxResults = 100 } = args;
-    const fullPath = safePath(context.repoPath, path);
+    handler: async (args: ListFilesToolArgs) => {
+      const { path = "", pattern, recursive = false, maxResults = 100 } = args;
+      const fullPath = safePath(context.repoPath, path);
 
-    context.onToolCall?.("list_files", { path, pattern, recursive });
+      context.onToolCall?.("list_files", { path, pattern, recursive });
 
-    try {
-      const results: string[] = [];
+      try {
+        const results: string[] = [];
 
-      async function scanDir(dir: string, depth: number = 0): Promise<void> {
-        if (results.length >= maxResults) return;
+        async function scanDir(dir: string, depth: number = 0): Promise<void> {
+          if (results.length >= maxResults) return;
 
-        const entries = await readdir(dir, { withFileTypes: true });
+          const entries = await readdir(dir, { withFileTypes: true });
 
-        for (const entry of entries) {
-          if (results.length >= maxResults) break;
+          for (const entry of entries) {
+            if (results.length >= maxResults) break;
 
-          // Skip common unimportant directories
-          if (entry.isDirectory() && SKIP_DIRS.has(entry.name)) {
-            continue;
-          }
-
-          const entryPath = join(dir, entry.name);
-          const relativePath = relative(context.repoPath, entryPath);
-
-          // Apply pattern filter if specified
-          if (pattern) {
-            const regex = new RegExp(pattern.replace(/\*/g, ".*").replace(/\?/g, "."));
-            if (!regex.test(entry.name)) {
-              if (entry.isDirectory() && recursive) {
-                await scanDir(entryPath, depth + 1);
-              }
+            // Skip common unimportant directories
+            if (entry.isDirectory() && SKIP_DIRS.has(entry.name)) {
               continue;
             }
-          }
 
-          const prefix = entry.isDirectory() ? "[dir]  " : "[file] ";
-          results.push(`${prefix}${toPosixPath(relativePath)}`);
+            const entryPath = join(dir, entry.name);
+            const relativePath = relative(context.repoPath, entryPath);
 
-          if (entry.isDirectory() && recursive) {
-            await scanDir(entryPath, depth + 1);
+            // Apply pattern filter if specified
+            if (pattern) {
+              const regex = new RegExp(pattern.replace(/\*/g, ".*").replace(/\?/g, "."));
+              if (!regex.test(entry.name)) {
+                if (entry.isDirectory() && recursive) {
+                  await scanDir(entryPath, depth + 1);
+                }
+                continue;
+              }
+            }
+
+            const prefix = entry.isDirectory() ? "[dir]  " : "[file] ";
+            results.push(`${prefix}${toPosixPath(relativePath)}`);
+
+            if (entry.isDirectory() && recursive) {
+              await scanDir(entryPath, depth + 1);
+            }
           }
         }
+
+        await scanDir(fullPath);
+
+        const result = results.length > 0 ? results.join("\n") : "No files found matching criteria";
+
+        context.onToolResult?.("list_files", `Found ${results.length} items`);
+        return { textResultForLlm: result, resultType: "success" as const };
+      } catch (error: unknown) {
+        const errorMsg = `Error listing files in ${path}: ${(error as Error).message}`;
+        context.onToolResult?.("list_files", errorMsg);
+        return { textResultForLlm: errorMsg, resultType: "failure" as const };
       }
-
-      await scanDir(fullPath);
-
-      const result = results.length > 0
-        ? results.join("\n")
-        : "No files found matching criteria";
-
-      context.onToolResult?.("list_files", `Found ${results.length} items`);
-      return { textResultForLlm: result, resultType: "success" as const };
-    } catch (error: unknown) {
-      const errorMsg = `Error listing files in ${path}: ${(error as Error).message}`;
-      context.onToolResult?.("list_files", errorMsg);
-      return { textResultForLlm: errorMsg, resultType: "failure" as const };
-    }
-  },
+    },
   });
 }
 
@@ -216,95 +218,98 @@ function createListFilesTool(context: ToolContext): Tool<ListFilesToolArgs> {
  */
 function createSearchTool(context: ToolContext): Tool<SearchToolArgs> {
   return defineTool("search", {
-  description: "Search for a pattern in repository files using ripgrep. Use this to find specific code patterns, function definitions, imports, etc.",
-  parameters: {
-    type: "object",
-    properties: {
-      pattern: {
-        type: "string",
-        description: "Search pattern (regex supported)",
+    description:
+      "Search for a pattern in repository files using ripgrep. Use this to find specific code patterns, function definitions, imports, etc.",
+    parameters: {
+      type: "object",
+      properties: {
+        pattern: {
+          type: "string",
+          description: "Search pattern (regex supported)",
+        },
+        path: {
+          type: "string",
+          description: "Path to search in (default: entire repository)",
+        },
+        filePattern: {
+          type: "string",
+          description: "File pattern to filter (e.g., '*.ts', '*.py')",
+        },
+        maxResults: {
+          type: "number",
+          description: "Maximum number of results (default: 50)",
+        },
       },
-      path: {
-        type: "string",
-        description: "Path to search in (default: entire repository)",
-      },
-      filePattern: {
-        type: "string",
-        description: "File pattern to filter (e.g., '*.ts', '*.py')",
-      },
-      maxResults: {
-        type: "number",
-        description: "Maximum number of results (default: 50)",
-      },
+      required: ["pattern"],
     },
-    required: ["pattern"],
-  },
-  handler: async (args: SearchToolArgs) => {
-    const { pattern, path = "", filePattern, maxResults = 50 } = args;
-    // Validate the requested search path stays inside the repo (path traversal guard).
-    const searchPath = safePath(context.repoPath, path);
-    const repoRoot = resolve(context.repoPath);
-    // Express the search target as a forward-slash relative path so ripgrep
-    // emits matches with paths the LLM can feed back into read_file/list_files.
-    const relSearchPath = relative(repoRoot, searchPath);
-    const rgTarget = toPosixPath(relSearchPath) || ".";
+    handler: async (args: SearchToolArgs) => {
+      const { pattern, path = "", filePattern, maxResults = 50 } = args;
+      // Validate the requested search path stays inside the repo (path traversal guard).
+      const searchPath = safePath(context.repoPath, path);
+      const repoRoot = resolve(context.repoPath);
+      // Express the search target as a forward-slash relative path so ripgrep
+      // emits matches with paths the LLM can feed back into read_file/list_files.
+      const relSearchPath = relative(repoRoot, searchPath);
+      const rgTarget = toPosixPath(relSearchPath) || ".";
 
-    context.onToolCall?.("search", { pattern, path, filePattern });
+      context.onToolCall?.("search", { pattern, path, filePattern });
 
-    try {
-      // --path-separator / normalizes Windows backslashes to forward slashes
-      // in printed paths; combined with cwd + a relative search target, the
-      // output never contains absolute paths.
-      const rgArgs = [
-        "--line-number",
-        "--no-heading",
-        "--path-separator",
-        "/",
-        "--max-count",
-        String(maxResults),
-      ];
-      if (filePattern) {
-        // The glob is passed as the value of `--glob`, before the `--`
-        // separator, so a leading dash could be parsed as a ripgrep flag.
-        // Reject it — a real glob never begins with `-`.
-        if (filePattern.startsWith("-")) {
-          const errorMsg = `Error searching: invalid file pattern (must not start with '-'): ${filePattern}`;
-          context.onToolResult?.("search", errorMsg);
-          return { textResultForLlm: errorMsg, resultType: "failure" as const };
+      try {
+        // --path-separator / normalizes Windows backslashes to forward slashes
+        // in printed paths; combined with cwd + a relative search target, the
+        // output never contains absolute paths.
+        const rgArgs = [
+          "--line-number",
+          "--no-heading",
+          "--path-separator",
+          "/",
+          "--max-count",
+          String(maxResults),
+        ];
+        if (filePattern) {
+          // The glob is passed as the value of `--glob`, before the `--`
+          // separator, so a leading dash could be parsed as a ripgrep flag.
+          // Reject it — a real glob never begins with `-`.
+          if (filePattern.startsWith("-")) {
+            const errorMsg = `Error searching: invalid file pattern (must not start with '-'): ${filePattern}`;
+            context.onToolResult?.("search", errorMsg);
+            return { textResultForLlm: errorMsg, resultType: "failure" as const };
+          }
+          rgArgs.push("--glob", filePattern);
         }
-        rgArgs.push("--glob", filePattern);
+        // `--` makes ripgrep treat everything after it as positional (the pattern
+        // and the path), neutralizing flag injection via a model-controlled
+        // pattern such as `--pre=<cmd>` or `-f<file>`. The pattern itself may
+        // legitimately begin with `-` (e.g. `->`, `-webkit-`), so we rely on the
+        // `--` guard rather than rejecting dash-prefixed patterns.
+        rgArgs.push("--", pattern, rgTarget);
+
+        const { stdout } = await execFileAsync("rg", rgArgs, {
+          cwd: repoRoot,
+          timeout: 30000,
+        });
+
+        const lines = stdout.split("\n").filter(Boolean);
+
+        const result =
+          lines.length > 0 ? lines.join("\n") : `No matches found for pattern: ${pattern}`;
+
+        context.onToolResult?.("search", `Found ${lines.length} matches`);
+        return { textResultForLlm: result, resultType: "success" as const };
+      } catch (error: unknown) {
+        // ripgrep returns exit code 1 when no matches found
+        if ((error as { code?: number }).code === 1) {
+          context.onToolResult?.("search", "No matches found");
+          return {
+            textResultForLlm: `No matches found for pattern: ${pattern}`,
+            resultType: "success" as const,
+          };
+        }
+        const errorMsg = `Error searching: ${(error as Error).message}`;
+        context.onToolResult?.("search", errorMsg);
+        return { textResultForLlm: errorMsg, resultType: "failure" as const };
       }
-      // `--` makes ripgrep treat everything after it as positional (the pattern
-      // and the path), neutralizing flag injection via a model-controlled
-      // pattern such as `--pre=<cmd>` or `-f<file>`. The pattern itself may
-      // legitimately begin with `-` (e.g. `->`, `-webkit-`), so we rely on the
-      // `--` guard rather than rejecting dash-prefixed patterns.
-      rgArgs.push("--", pattern, rgTarget);
-
-      const { stdout } = await execFileAsync("rg", rgArgs, {
-        cwd: repoRoot,
-        timeout: 30000,
-      });
-
-      const lines = stdout.split("\n").filter(Boolean);
-
-      const result = lines.length > 0
-        ? lines.join("\n")
-        : `No matches found for pattern: ${pattern}`;
-
-      context.onToolResult?.("search", `Found ${lines.length} matches`);
-      return { textResultForLlm: result, resultType: "success" as const };
-    } catch (error: unknown) {
-      // ripgrep returns exit code 1 when no matches found
-      if ((error as { code?: number }).code === 1) {
-        context.onToolResult?.("search", "No matches found");
-        return { textResultForLlm: `No matches found for pattern: ${pattern}`, resultType: "success" as const };
-      }
-      const errorMsg = `Error searching: ${(error as Error).message}`;
-      context.onToolResult?.("search", errorMsg);
-      return { textResultForLlm: errorMsg, resultType: "failure" as const };
-    }
-  },
+    },
   });
 }
 
@@ -313,73 +318,78 @@ function createSearchTool(context: ToolContext): Tool<SearchToolArgs> {
  */
 function createRepoMetadataTool(context: ToolContext): Tool<RepoMetadataToolArgs> {
   return defineTool("get_repo_metadata", {
-  description: "Get metadata about the repository including detected stack, available commands, and file statistics.",
-  parameters: {
-    type: "object",
-    properties: {},
-  },
-  handler: async () => {
-    context.onToolCall?.("get_repo_metadata", {});
+    description:
+      "Get metadata about the repository including detected stack, available commands, and file statistics.",
+    parameters: {
+      type: "object",
+      properties: {},
+    },
+    handler: async () => {
+      context.onToolCall?.("get_repo_metadata", {});
 
-    try {
-      // Count files by extension
-      const extCounts: Record<string, number> = {};
-      let totalFiles = 0;
-      let totalSize = 0;
+      try {
+        // Count files by extension
+        const extCounts: Record<string, number> = {};
+        let totalFiles = 0;
+        let totalSize = 0;
 
-      async function countFiles(dir: string): Promise<void> {
-        const entries = await readdir(dir, { withFileTypes: true });
-        for (const entry of entries) {
-          if (entry.isDirectory()) {
-            if (!["node_modules", ".git", "dist", "build", "vendor"].includes(entry.name)) {
-              await countFiles(join(dir, entry.name));
-            }
-          } else {
-            totalFiles++;
-            const ext = entry.name.includes(".") ? entry.name.split(".").pop()! : "no-ext";
-            extCounts[ext] = (extCounts[ext] || 0) + 1;
-            try {
-              const stats = await stat(join(dir, entry.name));
-              totalSize += stats.size;
-            } catch (error: unknown) {
-              console.error(
-                `[tools:get_repo_metadata] Failed to stat ${join(dir, entry.name)}: ${(error as Error).message}`
-              );
+        async function countFiles(dir: string): Promise<void> {
+          const entries = await readdir(dir, { withFileTypes: true });
+          for (const entry of entries) {
+            if (entry.isDirectory()) {
+              if (!["node_modules", ".git", "dist", "build", "vendor"].includes(entry.name)) {
+                await countFiles(join(dir, entry.name));
+              }
+            } else {
+              totalFiles++;
+              const ext = entry.name.includes(".") ? entry.name.split(".").pop()! : "no-ext";
+              extCounts[ext] = (extCounts[ext] || 0) + 1;
+              try {
+                const stats = await stat(join(dir, entry.name));
+                totalSize += stats.size;
+              } catch (error: unknown) {
+                console.error(
+                  `[tools:get_repo_metadata] Failed to stat ${join(dir, entry.name)}: ${(error as Error).message}`
+                );
+              }
             }
           }
         }
-      }
 
-      await countFiles(context.repoPath);
+        await countFiles(context.repoPath);
 
-      // Get git info
-      let gitInfo = "";
-      try {
-        const { stdout: branch } = await execFileAsync("git", ["rev-parse", "--abbrev-ref", "HEAD"], {
-          cwd: context.repoPath,
-        });
-        const { stdout: commits } = await execFileAsync("git", ["rev-list", "--count", "HEAD"], {
-          cwd: context.repoPath,
-        });
-        const { stdout: remotes } = await execFileAsync("git", ["remote", "-v"], {
-          cwd: context.repoPath,
-        });
-        gitInfo = `Branch: ${branch.trim()}\nCommits: ${commits.trim()}\nRemotes:\n${remotes.trim()}`;
-      } catch (error: unknown) {
-        console.error(
-          `[tools:get_repo_metadata] Failed to collect git metadata: ${(error as Error).message}`
-        );
-        gitInfo = "Git info not available";
-      }
+        // Get git info
+        let gitInfo = "";
+        try {
+          const { stdout: branch } = await execFileAsync(
+            "git",
+            ["rev-parse", "--abbrev-ref", "HEAD"],
+            {
+              cwd: context.repoPath,
+            }
+          );
+          const { stdout: commits } = await execFileAsync("git", ["rev-list", "--count", "HEAD"], {
+            cwd: context.repoPath,
+          });
+          const { stdout: remotes } = await execFileAsync("git", ["remote", "-v"], {
+            cwd: context.repoPath,
+          });
+          gitInfo = `Branch: ${branch.trim()}\nCommits: ${commits.trim()}\nRemotes:\n${remotes.trim()}`;
+        } catch (error: unknown) {
+          console.error(
+            `[tools:get_repo_metadata] Failed to collect git metadata: ${(error as Error).message}`
+          );
+          gitInfo = "Git info not available";
+        }
 
-      // Top extensions
-      const topExts = Object.entries(extCounts)
-        .sort((a, b) => b[1] - a[1])
-        .slice(0, 10)
-        .map(([ext, count]) => `  .${ext}: ${count}`)
-        .join("\n");
+        // Top extensions
+        const topExts = Object.entries(extCounts)
+          .sort((a, b) => b[1] - a[1])
+          .slice(0, 10)
+          .map(([ext, count]) => `  .${ext}: ${count}`)
+          .join("\n");
 
-      const result = `Repository Statistics:
+        const result = `Repository Statistics:
 Total files: ${totalFiles}
 Total size: ${(totalSize / 1024 / 1024).toFixed(2)} MB
 
@@ -388,14 +398,14 @@ ${topExts}
 
 ${gitInfo}`;
 
-      context.onToolResult?.("get_repo_metadata", `Collected metadata for ${totalFiles} files`);
-      return { textResultForLlm: result, resultType: "success" as const };
-    } catch (error: unknown) {
-      const errorMsg = `Error getting metadata: ${(error as Error).message}`;
-      context.onToolResult?.("get_repo_metadata", errorMsg);
-      return { textResultForLlm: errorMsg, resultType: "failure" as const };
-    }
-  },
+        context.onToolResult?.("get_repo_metadata", `Collected metadata for ${totalFiles} files`);
+        return { textResultForLlm: result, resultType: "success" as const };
+      } catch (error: unknown) {
+        const errorMsg = `Error getting metadata: ${(error as Error).message}`;
+        context.onToolResult?.("get_repo_metadata", errorMsg);
+        return { textResultForLlm: errorMsg, resultType: "failure" as const };
+      }
+    },
   });
 }
 

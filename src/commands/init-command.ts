@@ -84,6 +84,8 @@ export async function runInitCommand(opts: InitCommandOptions): Promise<void> {
   console.log(chalk.green(`✓ Created ${targetPath}`));
   console.log(chalk.dim("Customize style, defaults, prompts, and excluded docs to taste."));
   console.log(
-    chalk.dim("Next: run ") + chalk.cyan("bootcamp <repo-url>") + chalk.dim(" — the config is picked up automatically.")
+    chalk.dim("Next: run ") +
+      chalk.cyan("bootcamp <repo-url>") +
+      chalk.dim(" — the config is picked up automatically.")
   );
 }

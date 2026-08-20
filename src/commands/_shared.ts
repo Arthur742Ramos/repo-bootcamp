@@ -49,7 +49,9 @@ export async function withResolvedRepo(
     repoSource = await resolveRepo(repoUrl, process.cwd(), opts.branch || undefined);
   } catch (error: unknown) {
     console.error(
-      chalk.red(`Failed to resolve repository: ${error instanceof Error ? error.message : String(error)}`)
+      chalk.red(
+        `Failed to resolve repository: ${error instanceof Error ? error.message : String(error)}`
+      )
     );
     process.exit(1);
     return;

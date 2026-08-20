@@ -35,13 +35,10 @@ function invokeExecCallback(
   optsOrCb: unknown,
   maybeCb: unknown,
   error: Error | null,
-  result: { stdout: string; stderr: string } = { stdout: "", stderr: "" },
+  result: { stdout: string; stderr: string } = { stdout: "", stderr: "" }
 ): void {
-  const callback = typeof maybeCb === "function"
-    ? maybeCb
-    : typeof optsOrCb === "function"
-      ? optsOrCb
-      : undefined;
+  const callback =
+    typeof maybeCb === "function" ? maybeCb : typeof optsOrCb === "function" ? optsOrCb : undefined;
   if (typeof callback === "function") {
     callback(error, result);
   }
@@ -54,11 +51,16 @@ describe("cloneRepo error boundaries", () => {
   });
 
   it("returns timeout-specific clone errors", async () => {
-    const timeoutError = Object.assign(new Error("Command timed out"), { code: "ETIMEDOUT", killed: true });
-    mockExecFile.mockImplementation((_cmd: unknown, _args: unknown, optsOrCb: unknown, maybeCb?: unknown) => {
-      invokeExecCallback(optsOrCb, maybeCb, timeoutError);
-      return {} as never;
+    const timeoutError = Object.assign(new Error("Command timed out"), {
+      code: "ETIMEDOUT",
+      killed: true,
     });
+    mockExecFile.mockImplementation(
+      (_cmd: unknown, _args: unknown, optsOrCb: unknown, maybeCb?: unknown) => {
+        invokeExecCallback(optsOrCb, maybeCb, timeoutError);
+        return {} as never;
+      }
+    );
 
     await expect(cloneRepo(makeRepoInfo(), "/tmp/target")).rejects.toThrow(
       "Failed to clone repository: git clone timed out after 120s"
@@ -70,10 +72,12 @@ describe("cloneRepo error boundaries", () => {
       code: 128,
       stderr: "fatal: repository 'owner/repo.git' not found\n",
     });
-    mockExecFile.mockImplementation((_cmd: unknown, _args: unknown, optsOrCb: unknown, maybeCb?: unknown) => {
-      invokeExecCallback(optsOrCb, maybeCb, cloneError);
-      return {} as never;
-    });
+    mockExecFile.mockImplementation(
+      (_cmd: unknown, _args: unknown, optsOrCb: unknown, maybeCb?: unknown) => {
+        invokeExecCallback(optsOrCb, maybeCb, cloneError);
+        return {} as never;
+      }
+    );
 
     await expect(cloneRepo(makeRepoInfo(), "/tmp/target")).rejects.toThrow(
       "Failed to clone repository: git clone exited with code 128: fatal: repository 'owner/repo.git' not found"
@@ -83,14 +87,18 @@ describe("cloneRepo error boundaries", () => {
   it("uses metadata-specific boundary when post-clone git reads fail", async () => {
     const metadataError = new Error("rev-parse failed");
     mockExecFile
-      .mockImplementationOnce((_cmd: unknown, _args: unknown, optsOrCb: unknown, maybeCb?: unknown) => {
-        invokeExecCallback(optsOrCb, maybeCb, null, { stdout: "", stderr: "" });
-        return {} as never;
-      })
-      .mockImplementationOnce((_cmd: unknown, _args: unknown, optsOrCb: unknown, maybeCb?: unknown) => {
-        invokeExecCallback(optsOrCb, maybeCb, metadataError);
-        return {} as never;
-      });
+      .mockImplementationOnce(
+        (_cmd: unknown, _args: unknown, optsOrCb: unknown, maybeCb?: unknown) => {
+          invokeExecCallback(optsOrCb, maybeCb, null, { stdout: "", stderr: "" });
+          return {} as never;
+        }
+      )
+      .mockImplementationOnce(
+        (_cmd: unknown, _args: unknown, optsOrCb: unknown, maybeCb?: unknown) => {
+          invokeExecCallback(optsOrCb, maybeCb, metadataError);
+          return {} as never;
+        }
+      );
 
     await expect(cloneRepo(makeRepoInfo(), "/tmp/target")).rejects.toThrow(
       "Failed to read cloned repository metadata: rev-parse failed"
@@ -115,7 +123,7 @@ describe("cloneRepo hardening", () => {
         calls.push({ args: args as string[], opts });
         invokeExecCallback(optsOrCb, maybeCb, null, { stdout: "main\n", stderr: "" });
         return {} as never;
-      },
+      }
     );
 
     await cloneRepo(makeRepoInfo(), "/tmp/target");
@@ -145,7 +153,7 @@ describe("cloneRepo hardening", () => {
         // repoInfo.branch / repoInfo.commitSha. Report "feature" as HEAD.
         invokeExecCallback(optsOrCb, maybeCb, null, { stdout: "feature\n", stderr: "" });
         return {} as never;
-      },
+      }
     );
 
     const repoInfo = makeRepoInfo();

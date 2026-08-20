@@ -92,7 +92,9 @@ function printReport(analysis: SecurityAnalysis, repoName: string, filesScanned:
   if (analysis.securityDeps.length > 0) {
     console.log(chalk.bold("Security dependencies"));
     for (const dep of analysis.securityDeps) {
-      console.log(`  ${chalk.cyan(dep.name)}` + (dep.purpose ? chalk.dim(` — ${dep.purpose}`) : ""));
+      console.log(
+        `  ${chalk.cyan(dep.name)}` + (dep.purpose ? chalk.dim(` — ${dep.purpose}`) : "")
+      );
     }
     console.log();
   }
@@ -103,7 +105,9 @@ function printReport(analysis: SecurityAnalysis, repoName: string, filesScanned:
       (a, b) => SEVERITY_ORDER.indexOf(a.severity) - SEVERITY_ORDER.indexOf(b.severity)
     );
     for (const finding of sorted) {
-      const where = finding.file ? chalk.dim(` (${finding.file}${finding.line ? `:${finding.line}` : ""})`) : "";
+      const where = finding.file
+        ? chalk.dim(` (${finding.file}${finding.line ? `:${finding.line}` : ""})`)
+        : "";
       console.log(`  ${SEVERITY_ICON[finding.severity]} ` + chalk.cyan(finding.title) + where);
       if (finding.recommendation) {
         console.log(chalk.dim(`      → ${finding.recommendation}`));
@@ -120,11 +124,17 @@ function printReport(analysis: SecurityAnalysis, repoName: string, filesScanned:
  * `--min-score`. Reuses the same `analyzeSecurityPatterns` engine that powers
  * `SECURITY.md` — mirroring `bootcamp health` and `bootcamp metrics`.
  */
-export async function runSecurityCommand(repoUrl: string, opts: SecurityCommandOptions): Promise<void> {
+export async function runSecurityCommand(
+  repoUrl: string,
+  opts: SecurityCommandOptions
+): Promise<void> {
   const minScore = finiteOr(opts.minScore, 70);
 
   await withResolvedRepo(repoUrl, opts, "Security analysis failed", async (repoSource) => {
-    const scan = await scanRepositoryFiles(repoSource.path, finiteOr(opts.maxFiles, 500, { min: 1 }));
+    const scan = await scanRepositoryFiles(
+      repoSource.path,
+      finiteOr(opts.maxFiles, 500, { min: 1 })
+    );
     const packageJson = await readFile(join(repoSource.path, "package.json"), "utf-8")
       .then((content) => JSON.parse(content) as Record<string, unknown>)
       .catch(() => undefined);
@@ -151,7 +161,9 @@ export async function runSecurityCommand(repoUrl: string, opts: SecurityCommandO
     if (opts.check && analysis.score < minScore) {
       if (!opts.json) {
         console.error(
-          chalk.red(`❌ Security score ${analysis.score}/100 is below the required minimum of ${minScore}.`)
+          chalk.red(
+            `❌ Security score ${analysis.score}/100 is below the required minimum of ${minScore}.`
+          )
         );
       }
       return 1;

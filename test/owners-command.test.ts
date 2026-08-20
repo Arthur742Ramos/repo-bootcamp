@@ -5,7 +5,14 @@ import { parseCodeowners, ownersForPath } from "../src/commands/owners-command.j
 describe("parseCodeowners", () => {
   it("parses rules, skipping comments and blank lines", () => {
     const rules = parseCodeowners(
-      ["# top comment", "* @org/maintainers", "", "/src/ @alice @bob  # inline comment", "docs/ carol@example.com", "noowner/"].join("\n")
+      [
+        "# top comment",
+        "* @org/maintainers",
+        "",
+        "/src/ @alice @bob  # inline comment",
+        "docs/ carol@example.com",
+        "noowner/",
+      ].join("\n")
     );
     expect(rules).toEqual([
       { pattern: "*", owners: ["@org/maintainers"] },

@@ -28,7 +28,7 @@ describe("Change Impact Map", () => {
 
       // Should include various entry points
       const entryPoints = ["src/index.ts", "src/app.ts", "src/server.ts", "src/cli.ts"];
-      const found = entryPoints.filter(ep => keyFiles.includes(ep));
+      const found = entryPoints.filter((ep) => keyFiles.includes(ep));
       expect(found.length).toBeGreaterThan(0);
     });
 

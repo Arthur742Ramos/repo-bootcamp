@@ -301,9 +301,7 @@ describe("pipeline wiring", () => {
           name: "formatter-plugin",
           formatDocuments: vi.fn(async (documents: { name: string; content: string }[]) =>
             documents.map((doc) =>
-              doc.name === "BOOTCAMP.md"
-                ? { ...doc, content: `${doc.content}\nformatted` }
-                : doc
+              doc.name === "BOOTCAMP.md" ? { ...doc, content: `${doc.content}\nformatted` } : doc
             )
           ),
         },

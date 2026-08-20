@@ -69,7 +69,9 @@ export function colorizeReport(report: DoctorReport): string {
   lines.push("");
   for (const check of report.checks) {
     const color = STATUS_COLOR[check.status];
-    lines.push(`  ${color(STATUS_GLYPH[check.status])} ${chalk.white(check.label)}: ${chalk.dim(check.detail)}`);
+    lines.push(
+      `  ${color(STATUS_GLYPH[check.status])} ${chalk.white(check.label)}: ${chalk.dim(check.detail)}`
+    );
     if (check.remedy && (check.status === "fail" || check.status === "warn")) {
       lines.push(`      ${chalk.dim("→ " + check.remedy)}`);
     }

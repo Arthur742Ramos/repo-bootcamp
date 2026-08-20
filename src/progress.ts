@@ -138,9 +138,10 @@ export class ProgressTracker {
 
       if (this.lastMessage) {
         // Truncate long messages
-        const msg = this.lastMessage.length > 40 
-          ? this.lastMessage.substring(0, 37) + "..." 
-          : this.lastMessage;
+        const msg =
+          this.lastMessage.length > 40
+            ? this.lastMessage.substring(0, 37) + "..."
+            : this.lastMessage;
         text += chalk.white(` ${msg}`);
       }
     } else if (this.lastMessage) {
@@ -258,10 +259,11 @@ export class ProgressTracker {
    * Print a phase overview header
    */
   static printPhaseOverview(): void {
-    console.log(chalk.gray("\nPhases: ") + 
-      Object.entries(PHASE_ICONS)
-        .map(([phase, icon]) => `${icon} ${phase}`)
-        .join(chalk.gray(" → "))
+    console.log(
+      chalk.gray("\nPhases: ") +
+        Object.entries(PHASE_ICONS)
+          .map(([phase, icon]) => `${icon} ${phase}`)
+          .join(chalk.gray(" → "))
     );
     console.log();
   }

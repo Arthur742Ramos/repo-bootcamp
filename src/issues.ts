@@ -71,7 +71,11 @@ export interface IssueResult {
 /**
  * Check if gh CLI is available and authenticated
  */
-export async function checkGhAuth(): Promise<{ available: boolean; authenticated: boolean; error?: string }> {
+export async function checkGhAuth(): Promise<{
+  available: boolean;
+  authenticated: boolean;
+  error?: string;
+}> {
   try {
     await execFileAsync("which", ["gh"]);
   } catch {
@@ -82,10 +86,10 @@ export async function checkGhAuth(): Promise<{ available: boolean; authenticated
     await execFileAsync("gh", ["auth", "status"]);
     return { available: true, authenticated: true };
   } catch {
-    return { 
-      available: true, 
-      authenticated: false, 
-      error: "gh CLI not authenticated. Run 'gh auth login' first." 
+    return {
+      available: true,
+      authenticated: false,
+      error: "gh CLI not authenticated. Run 'gh auth login' first.",
     };
   }
 }
@@ -95,9 +99,12 @@ export async function checkGhAuth(): Promise<{ available: boolean; authenticated
  */
 function difficultyToLabel(difficulty: FirstTask["difficulty"]): string {
   switch (difficulty) {
-    case "beginner": return "good first issue";
-    case "intermediate": return "help wanted";
-    case "advanced": return "enhancement";
+    case "beginner":
+      return "good first issue";
+    case "intermediate":
+      return "help wanted";
+    case "advanced":
+      return "enhancement";
   }
 }
 
@@ -106,11 +113,16 @@ function difficultyToLabel(difficulty: FirstTask["difficulty"]): string {
  */
 function categoryToLabel(category: FirstTask["category"]): string {
   switch (category) {
-    case "bug-fix": return "bug";
-    case "test": return "testing";
-    case "docs": return "documentation";
-    case "refactor": return "refactor";
-    case "feature": return "enhancement";
+    case "bug-fix":
+      return "bug";
+    case "test":
+      return "testing";
+    case "docs":
+      return "documentation";
+    case "refactor":
+      return "refactor";
+    case "feature":
+      return "enhancement";
   }
 }
 
@@ -129,14 +141,16 @@ ${task.why}
 ## Difficulty
 
 **${task.difficulty.charAt(0).toUpperCase() + task.difficulty.slice(1)}** - ${
-    task.difficulty === "beginner" ? "Great for newcomers!" :
-    task.difficulty === "intermediate" ? "Some familiarity with the codebase helpful." :
-    "Requires deep understanding of the codebase."
+    task.difficulty === "beginner"
+      ? "Great for newcomers!"
+      : task.difficulty === "intermediate"
+        ? "Some familiarity with the codebase helpful."
+        : "Requires deep understanding of the codebase."
   }
 
 ## Files to Look At
 
-${task.files.map(f => `- ${fileLink(f, repoInfo)}`).join("\n")}
+${task.files.map((f) => `- ${fileLink(f, repoInfo)}`).join("\n")}
 
 ---
 
@@ -146,29 +160,27 @@ ${task.files.map(f => `- ${fileLink(f, repoInfo)}`).join("\n")}
   return {
     title: task.title,
     body,
-    labels: [
-      difficultyToLabel(task.difficulty),
-      categoryToLabel(task.category),
-    ],
+    labels: [difficultyToLabel(task.difficulty), categoryToLabel(task.category)],
   };
 }
 
 /**
  * Create a single GitHub issue
  */
-async function createIssue(
-  payload: IssuePayload,
-  repoInfo: RepoInfo
-): Promise<IssueResult> {
+async function createIssue(payload: IssuePayload, repoInfo: RepoInfo): Promise<IssueResult> {
   try {
     // Build arguments array (safe from shell injection)
     const args = [
-      "issue", "create",
-      "--repo", repoInfo.fullName,
-      "--title", payload.title,
-      "--body", payload.body,
+      "issue",
+      "create",
+      "--repo",
+      repoInfo.fullName,
+      "--title",
+      payload.title,
+      "--body",
+      payload.body,
     ];
-    
+
     // Add labels
     for (const label of payload.labels) {
       args.push("--label", label);
@@ -201,14 +213,29 @@ async function fetchExistingIssueTitles(repoFullName: string): Promise<Set<strin
   try {
     const { stdout } = await execFileAsync(
       "gh",
-      ["issue", "list", "--repo", repoFullName, "--state", "all", "--limit", "200", "--json", "title"],
+      [
+        "issue",
+        "list",
+        "--repo",
+        repoFullName,
+        "--state",
+        "all",
+        "--limit",
+        "200",
+        "--json",
+        "title",
+      ],
       { timeout: 30000 }
     );
     const parsed = JSON.parse(stdout) as unknown;
     if (!Array.isArray(parsed)) return new Set();
     return new Set(
       parsed
-        .map((item) => (item && typeof (item as { title?: unknown }).title === "string" ? (item as { title: string }).title : null))
+        .map((item) =>
+          item && typeof (item as { title?: unknown }).title === "string"
+            ? (item as { title: string }).title
+            : null
+        )
         .filter((title): title is string => title !== null)
     );
   } catch (error: unknown) {
@@ -235,7 +262,9 @@ export async function createIssuesFromTasks(
   if (!options.dryRun) {
     const auth = await checkGhAuth();
     if (!auth.available) {
-      console.error(chalk.red("Error: gh CLI not found. Please install it from https://cli.github.com"));
+      console.error(
+        chalk.red("Error: gh CLI not found. Please install it from https://cli.github.com")
+      );
       throw new Error("gh CLI not available");
     }
     if (!auth.authenticated) {
@@ -251,7 +280,9 @@ export async function createIssuesFromTasks(
     ? new Set<string>()
     : await fetchExistingIssueTitles(repoInfo.fullName);
 
-  console.log(chalk.cyan(`\n${options.dryRun ? "[DRY RUN] " : ""}Creating ${tasks.length} issues...\n`));
+  console.log(
+    chalk.cyan(`\n${options.dryRun ? "[DRY RUN] " : ""}Creating ${tasks.length} issues...\n`)
+  );
 
   for (let i = 0; i < tasks.length; i++) {
     const task = tasks[i];
@@ -287,14 +318,14 @@ export async function createIssuesFromTasks(
       }
 
       // Small delay to avoid rate limiting
-      await new Promise(r => setTimeout(r, 500));
+      await new Promise((r) => setTimeout(r, 500));
     }
   }
 
   // Summary
-  const skipped = results.filter(r => r.skipped).length;
-  const successful = results.filter(r => r.success && !r.skipped).length;
-  const failed = results.filter(r => !r.success).length;
+  const skipped = results.filter((r) => r.skipped).length;
+  const successful = results.filter((r) => r.success && !r.skipped).length;
+  const failed = results.filter((r) => !r.success).length;
 
   console.log();
   if (options.dryRun) {

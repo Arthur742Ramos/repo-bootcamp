@@ -60,8 +60,6 @@ export interface DocsAnalysisResult {
   };
 }
 
-
-
 /**
  * Parse package.json from repo
  */
@@ -201,8 +199,8 @@ export async function analyzeFrameworkDocs(repoPath: string): Promise<FrameworkI
   if (!readme || !pkg) return issues;
 
   const deps = {
-    ...(pkg.dependencies as Record<string, string> || {}),
-    ...(pkg.devDependencies as Record<string, string> || {}),
+    ...((pkg.dependencies as Record<string, string>) || {}),
+    ...((pkg.devDependencies as Record<string, string>) || {}),
   };
 
   // Major frameworks that should be documented
@@ -273,7 +271,7 @@ export async function analyzeCLIDrift(repoPath: string): Promise<CLIDrift[]> {
 
   // A string `bin` takes the package's `name` as the command (npm convention);
   // `Object.keys` of a string would yield character indices ("0", "1", …).
-  const binName = typeof bin === "string" ? ((pkg.name as string) || "") : Object.keys(bin)[0];
+  const binName = typeof bin === "string" ? (pkg.name as string) || "" : Object.keys(bin)[0];
   if (!binName) return drift;
 
   // Try to get --help output
@@ -384,15 +382,17 @@ export async function analyzePrerequisites(repoPath: string): Promise<Prerequisi
   }
 
   // Check for docker-compose or Dockerfile
-  const hasDocker = await readFileSafe(join(repoPath, "docker-compose.yml")) !== null ||
-    await readFileSafe(join(repoPath, "docker-compose.yaml")) !== null ||
-    await readFileSafe(join(repoPath, "Dockerfile")) !== null;
+  const hasDocker =
+    (await readFileSafe(join(repoPath, "docker-compose.yml"))) !== null ||
+    (await readFileSafe(join(repoPath, "docker-compose.yaml"))) !== null ||
+    (await readFileSafe(join(repoPath, "Dockerfile"))) !== null;
   if (hasDocker) tools.docker = true;
 
   // Check if prerequisites are documented
   for (const [tool, required] of Object.entries(tools)) {
     if (required) {
-      const documented = readmeLower.includes(tool) ||
+      const documented =
+        readmeLower.includes(tool) ||
         readmeLower.includes("prerequisite") ||
         readmeLower.includes("requirement");
 
@@ -478,13 +478,14 @@ export async function analyzeBadges(repoPath: string): Promise<BadgeIssue[]> {
  * Run full docs analysis on a repository
  */
 export async function analyzeDocumentation(repoPath: string): Promise<DocsAnalysisResult> {
-  const [versionMismatches, frameworkIssues, cliDrift, prerequisiteIssues, badgeIssues] = await Promise.all([
-    analyzeVersionMismatches(repoPath),
-    analyzeFrameworkDocs(repoPath),
-    analyzeCLIDrift(repoPath),
-    analyzePrerequisites(repoPath),
-    analyzeBadges(repoPath),
-  ]);
+  const [versionMismatches, frameworkIssues, cliDrift, prerequisiteIssues, badgeIssues] =
+    await Promise.all([
+      analyzeVersionMismatches(repoPath),
+      analyzeFrameworkDocs(repoPath),
+      analyzeCLIDrift(repoPath),
+      analyzePrerequisites(repoPath),
+      analyzeBadges(repoPath),
+    ]);
 
   const errors = versionMismatches.length + badgeIssues.filter((b) => b.status === "broken").length;
   const warnings =

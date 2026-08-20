@@ -51,11 +51,9 @@ function remoteSource() {
 }
 
 describe("runCyclesCommand", () => {
-  const mockExit = vi
-    .spyOn(process, "exit")
-    .mockImplementation((() => {
-      throw new Error("process.exit");
-    }) as any);
+  const mockExit = vi.spyOn(process, "exit").mockImplementation((() => {
+    throw new Error("process.exit");
+  }) as any);
   let logSpy: ReturnType<typeof vi.spyOn>;
   let errSpy: ReturnType<typeof vi.spyOn>;
 
@@ -164,9 +162,9 @@ describe("runCyclesCommand", () => {
     buildImportGraphMock.mockResolvedValueOnce(
       graphOf({ "src/a.ts": ["src/b.ts"], "src/b.ts": ["src/a.ts"] })
     );
-    await expect(
-      runCyclesCommand("https://github.com/test/repo", { check: true })
-    ).rejects.toThrow("process.exit");
+    await expect(runCyclesCommand("https://github.com/test/repo", { check: true })).rejects.toThrow(
+      "process.exit"
+    );
     expect(mockExit).toHaveBeenCalledWith(1);
     expect(mockCleanup).toHaveBeenCalled();
   });
@@ -225,17 +223,17 @@ describe("runCyclesCommand", () => {
 
   it("exits 1 when the repository cannot be resolved", async () => {
     resolveRepoMock.mockRejectedValueOnce(new Error("nope"));
-    await expect(
-      runCyclesCommand("https://github.com/test/repo", {})
-    ).rejects.toThrow("process.exit");
+    await expect(runCyclesCommand("https://github.com/test/repo", {})).rejects.toThrow(
+      "process.exit"
+    );
     expect(mockExit).toHaveBeenCalledWith(1);
   });
 
   it("exits non-zero and cleans up when the graph build fails", async () => {
     buildImportGraphMock.mockRejectedValueOnce(new Error("boom"));
-    await expect(
-      runCyclesCommand("https://github.com/test/repo", {})
-    ).rejects.toThrow("process.exit");
+    await expect(runCyclesCommand("https://github.com/test/repo", {})).rejects.toThrow(
+      "process.exit"
+    );
     expect(mockCleanup).toHaveBeenCalled();
   });
 });

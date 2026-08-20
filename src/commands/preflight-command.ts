@@ -275,7 +275,12 @@ function evaluate(req: ToolRequirement, installed: string | null): PreflightResu
   return { tool: req.tool, required: req.required, source: req.source, installed, status, remedy };
 }
 
-const GLYPH: Record<CheckStatus, string> = { ok: "✅", mismatch: "⚠️", missing: "❌", unknown: "•" };
+const GLYPH: Record<CheckStatus, string> = {
+  ok: "✅",
+  mismatch: "⚠️",
+  missing: "❌",
+  unknown: "•",
+};
 
 function printReport(results: PreflightResult[], repoName: string): void {
   console.log(chalk.bold("\n🚀 Preflight"));

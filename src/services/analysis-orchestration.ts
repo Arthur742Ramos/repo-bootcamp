@@ -20,7 +20,14 @@ import type { FormatterPlugin, OutputTargetPlugin } from "../plugin-api.js";
 import { ProgressTracker } from "../progress.js";
 import { generateRadarDocs } from "../radar.js";
 import { generateSecurityDocs, type SecurityAnalysis } from "../security.js";
-import type { BootcampOptions, DiffSummary, RepoFacts, RepoInfo, ScanResult, TechRadar } from "../types.js";
+import type {
+  BootcampOptions,
+  DiffSummary,
+  RepoFacts,
+  RepoInfo,
+  ScanResult,
+  TechRadar,
+} from "../types.js";
 import chalk from "chalk";
 
 export interface GeneratedDoc {
@@ -120,13 +127,20 @@ export async function orchestrateAnalysis({
     }
   }
 
-  const result = await analyzeRepo(repoPath, repoInfo, scanResult, options, (msg) => {
-    if (msg.startsWith("Tool:")) {
-      const toolName = msg.replace("Tool:", "").trim();
-      progress.recordToolCall(toolName);
-    }
-    progress.update(msg);
-  }, styleConfig);
+  const result = await analyzeRepo(
+    repoPath,
+    repoInfo,
+    scanResult,
+    options,
+    (msg) => {
+      if (msg.startsWith("Tool:")) {
+        const toolName = msg.replace("Tool:", "").trim();
+        progress.recordToolCall(toolName);
+      }
+      progress.update(msg);
+    },
+    styleConfig
+  );
 
   const durationMs = Date.now() - analysisStart;
   progress.succeed("Analysis complete");
@@ -237,7 +251,10 @@ export async function prepareOutputDocuments({
     { name: "ONBOARDING.md", content: generateOnboarding(finalFacts, options) },
     { name: "ARCHITECTURE.md", content: generateArchitecture(finalFacts, options, repoInfo) },
     { name: "CODEMAP.md", content: generateCodemap(finalFacts, repoInfo) },
-    { name: "FIRST_TASKS.md", content: generateFirstTasks(finalFacts, options, styleConfig, repoInfo) },
+    {
+      name: "FIRST_TASKS.md",
+      content: generateFirstTasks(finalFacts, options, styleConfig, repoInfo),
+    },
     { name: "diagrams.mmd", content: generateDiagrams(finalFacts) },
     { name: "repo_facts.json", content: JSON.stringify(finalFacts, null, 2) },
   ];
@@ -305,13 +322,10 @@ export async function prepareOutputDocuments({
   }
 
   const excludedDocs = new Set(
-    (config?.output?.excludeDocs || [])
-      .map((doc) => doc.trim())
-      .filter((doc) => doc.length > 0)
+    (config?.output?.excludeDocs || []).map((doc) => doc.trim()).filter((doc) => doc.length > 0)
   );
-  let includedDocuments = excludedDocs.size > 0
-    ? documents.filter((doc) => !excludedDocs.has(doc.name))
-    : documents;
+  let includedDocuments =
+    excludedDocs.size > 0 ? documents.filter((doc) => !excludedDocs.has(doc.name)) : documents;
 
   for (const formatter of pluginFormatters) {
     try {

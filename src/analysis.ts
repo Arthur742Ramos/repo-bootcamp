@@ -41,13 +41,11 @@ export async function runParallelAnalysis(
   repoPath: string,
   scanResult: ScanResult,
   progress?: ProgressTracker,
-  cacheOptions?: ParallelAnalysisCacheOptions,
+  cacheOptions?: ParallelAnalysisCacheOptions
 ): Promise<ParallelAnalysisResult> {
   progress?.update("Running analyzers in parallel…");
   const useCache = Boolean(
-    cacheOptions?.repoFullName &&
-    cacheOptions?.commitSha &&
-    cacheOptions?.noCache !== true
+    cacheOptions?.repoFullName && cacheOptions?.commitSha && cacheOptions?.noCache !== true
   );
   const cacheRepo = cacheOptions?.repoFullName || "";
   const cacheSha = cacheOptions?.commitSha || "";
@@ -89,10 +87,7 @@ export async function runParallelAnalysis(
     return await extractDependencies(repoPath);
   }).then((deps) => {
     if (deps) {
-      const allDepNames = [
-        ...deps.runtime.map(d => d.name),
-        ...deps.dev.map(d => d.name),
-      ];
+      const allDepNames = [...deps.runtime.map((d) => d.name), ...deps.dev.map((d) => d.name)];
       mergeFrameworksFromDeps(scanResult.stack, allDepNames);
     }
     return deps;
@@ -105,14 +100,10 @@ export async function runParallelAnalysis(
     .then((pkgContent) => JSON.parse(pkgContent) as Record<string, unknown>)
     .catch(() => undefined);
 
-  const securityPromise = runCachedPhase<SecurityAnalysis>(
-    "security",
-    "security",
-    async () => {
-      const packageJson = await packageJsonPromise;
-      return await analyzeSecurityPatterns(repoPath, scanResult.files, packageJson);
-    }
-  );
+  const securityPromise = runCachedPhase<SecurityAnalysis>("security", "security", async () => {
+    const packageJson = await packageJsonPromise;
+    return await analyzeSecurityPatterns(repoPath, scanResult.files, packageJson);
+  });
 
   const MAX_KEY_FILES_FOR_IMPACT = 10;
 
@@ -128,27 +119,21 @@ export async function runParallelAnalysis(
     return importGraphPromise;
   };
 
-  const impactsPromise = runCachedPhase<ChangeImpact[]>(
-    "impact",
-    "impact",
-    async () => {
-      const importGraph = await getImportGraph();
-      const keyFiles = getKeyFilesForImpact(scanResult.files);
-      return await Promise.all(
-        keyFiles.slice(0, MAX_KEY_FILES_FOR_IMPACT).map(file =>
-          analyzeChangeImpact(repoPath, scanResult.files, file, importGraph)
-        )
-      );
-    }
-  );
+  const impactsPromise = runCachedPhase<ChangeImpact[]>("impact", "impact", async () => {
+    const importGraph = await getImportGraph();
+    const keyFiles = getKeyFilesForImpact(scanResult.files);
+    return await Promise.all(
+      keyFiles
+        .slice(0, MAX_KEY_FILES_FOR_IMPACT)
+        .map((file) => analyzeChangeImpact(repoPath, scanResult.files, file, importGraph))
+    );
+  });
 
   // Cached as its own phase so a warm run skips both the Tarjan pass and the
   // graph build. The compute closure shares getImportGraph(), so when the impact
   // phase misses too, the graph is still built only once.
-  const cyclesPromise = runCachedPhase<CyclesSummary>(
-    "cycles",
-    "cycles",
-    async () => detectCyclesInImportGraph(await getImportGraph())
+  const cyclesPromise = runCachedPhase<CyclesSummary>("cycles", "cycles", async () =>
+    detectCyclesInImportGraph(await getImportGraph())
   );
 
   // radar depends on deps + security, but runs as soon as both resolve

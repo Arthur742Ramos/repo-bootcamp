@@ -106,15 +106,16 @@ function buildContext(scan: ScanResult): DetectionContext {
 
   const readmeLength = computeReadmeLength(scan, files);
 
-  const ciFromFiles = hasPath(paths, /(^|\/)\.github\/workflows\/.+\.ya?ml$/)
-    || hasPath(paths, /(^|\/)\.gitlab-ci\.yml$/)
-    || hasPath(paths, /(^|\/)\.circleci\//)
-    || hasPath(paths, /(^|\/)azure-pipelines\.yml$/)
-    || hasPath(paths, /(^|\/)\.travis\.yml$/)
-    || hasPath(paths, /(^|\/)jenkinsfile$/)
-    || hasPath(paths, /(^|\/)bitbucket-pipelines\.yml$/)
-    || hasPath(paths, /(^|\/)\.drone\.yml$/)
-    || hasPath(paths, /(^|\/)appveyor\.yml$/);
+  const ciFromFiles =
+    hasPath(paths, /(^|\/)\.github\/workflows\/.+\.ya?ml$/) ||
+    hasPath(paths, /(^|\/)\.gitlab-ci\.yml$/) ||
+    hasPath(paths, /(^|\/)\.circleci\//) ||
+    hasPath(paths, /(^|\/)azure-pipelines\.yml$/) ||
+    hasPath(paths, /(^|\/)\.travis\.yml$/) ||
+    hasPath(paths, /(^|\/)jenkinsfile$/) ||
+    hasPath(paths, /(^|\/)bitbucket-pipelines\.yml$/) ||
+    hasPath(paths, /(^|\/)\.drone\.yml$/) ||
+    hasPath(paths, /(^|\/)appveyor\.yml$/);
   const hasCi = Boolean(scan.stack?.hasCi) || ciFromFiles;
 
   return { paths, readmeLength, hasCi };
@@ -174,7 +175,8 @@ const CHECK_SPECS: CheckSpec[] = [
         return {
           status: "warn",
           detail: `README is brief (~${ctx.readmeLength} chars)`,
-          recommendation: "Expand the README with setup steps, usage examples, and links to deeper docs",
+          recommendation:
+            "Expand the README with setup steps, usage examples, and links to deeper docs",
         };
       }
       return {
@@ -225,10 +227,7 @@ const CHECK_SPECS: CheckSpec[] = [
     evaluate: (ctx) =>
       hasMetaFile(ctx.paths, /^code[-_]?of[-_]?conduct(\.[a-z0-9]+)?$/)
         ? present("Code of Conduct")
-        : missing(
-            "Code of Conduct",
-            "Add a CODE_OF_CONDUCT.md to set community expectations"
-          ),
+        : missing("Code of Conduct", "Add a CODE_OF_CONDUCT.md to set community expectations"),
   },
   {
     id: "security-policy",
@@ -238,10 +237,7 @@ const CHECK_SPECS: CheckSpec[] = [
     evaluate: (ctx) =>
       hasMetaFile(ctx.paths, /^security(\.[a-z0-9]+)?$/)
         ? present("Security policy")
-        : missing(
-            "Security policy",
-            "Add SECURITY.md explaining how to report vulnerabilities"
-          ),
+        : missing("Security policy", "Add SECURITY.md explaining how to report vulnerabilities"),
   },
   {
     id: "issue-templates",
@@ -348,7 +344,10 @@ const CHECK_SPECS: CheckSpec[] = [
     evaluate: (ctx) =>
       hasPath(ctx.paths, /(^|\/)\.gitignore$/)
         ? present(".gitignore")
-        : missing(".gitignore", "Add a .gitignore to keep build artifacts and secrets out of version control"),
+        : missing(
+            ".gitignore",
+            "Add a .gitignore to keep build artifacts and secrets out of version control"
+          ),
   },
   {
     id: "ci",
@@ -369,10 +368,7 @@ const CHECK_SPECS: CheckSpec[] = [
     category: "Automation",
     weight: 1,
     evaluate: (ctx) =>
-      hasPath(
-        ctx.paths,
-        /(^|\/)(dependabot\.ya?ml|renovate\.json|\.renovaterc(\.[a-z]+)?)$/
-      )
+      hasPath(ctx.paths, /(^|\/)(dependabot\.ya?ml|renovate\.json|\.renovaterc(\.[a-z]+)?)$/)
         ? present("Dependency automation")
         : missing(
             "Dependency automation",
@@ -385,10 +381,10 @@ const CHECK_SPECS: CheckSpec[] = [
     category: "Automation",
     weight: 1,
     evaluate: (ctx) =>
-      hasPath(ctx.paths, /(^|\/)\.husky\//)
-        || hasPath(ctx.paths, /(^|\/)\.pre-commit-config\.ya?ml$/)
-        || hasPath(ctx.paths, /(^|\/)\.githooks\//)
-        || hasPath(ctx.paths, /(^|\/)lefthook\.ya?ml$/)
+      hasPath(ctx.paths, /(^|\/)\.husky\//) ||
+      hasPath(ctx.paths, /(^|\/)\.pre-commit-config\.ya?ml$/) ||
+      hasPath(ctx.paths, /(^|\/)\.githooks\//) ||
+      hasPath(ctx.paths, /(^|\/)lefthook\.ya?ml$/)
         ? present("Git hooks / pre-commit")
         : missing(
             "Git hooks / pre-commit",
@@ -535,7 +531,9 @@ export function generateHealthDocs(health: RepoHealth, projectName: string): str
 
   lines.push("---");
   lines.push("");
-  lines.push("_Health is computed deterministically from the file scan (no AI), so it's stable across runs._");
+  lines.push(
+    "_Health is computed deterministically from the file scan (no AI), so it's stable across runs._"
+  );
   lines.push("");
 
   return lines.join("\n");

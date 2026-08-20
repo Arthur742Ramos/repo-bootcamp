@@ -44,33 +44,19 @@ describe("Tech Radar", () => {
 
   describe("generateTechRadar", () => {
     it("should identify modern technologies", () => {
-      const radar = generateTechRadar(
-        mockStack,
-        mockFiles,
-        mockDeps,
-        mockSecurity,
-        true,
-        true
-      );
+      const radar = generateTechRadar(mockStack, mockFiles, mockDeps, mockSecurity, true, true);
 
       // vitest and zod should be detected as modern
-      expect(radar.modern.some(s => s.name === "vitest")).toBe(true);
-      expect(radar.modern.some(s => s.name === "zod")).toBe(true);
+      expect(radar.modern.some((s) => s.name === "vitest")).toBe(true);
+      expect(radar.modern.some((s) => s.name === "zod")).toBe(true);
     });
 
     it("should identify stable technologies", () => {
-      const radar = generateTechRadar(
-        mockStack,
-        mockFiles,
-        mockDeps,
-        mockSecurity,
-        true,
-        true
-      );
+      const radar = generateTechRadar(mockStack, mockFiles, mockDeps, mockSecurity, true, true);
 
       // TypeScript, eslint should be stable
-      expect(radar.stable.some(s => s.name === "typescript")).toBe(true);
-      expect(radar.stable.some(s => s.name === "eslint")).toBe(true);
+      expect(radar.stable.some((s) => s.name === "typescript")).toBe(true);
+      expect(radar.stable.some((s) => s.name === "eslint")).toBe(true);
     });
 
     it("should identify legacy technologies", () => {
@@ -92,8 +78,8 @@ describe("Tech Radar", () => {
         true
       );
 
-      expect(radar.legacy.some(s => s.name === "moment")).toBe(true);
-      expect(radar.legacy.some(s => s.name === "lodash")).toBe(true);
+      expect(radar.legacy.some((s) => s.name === "moment")).toBe(true);
+      expect(radar.legacy.some((s) => s.name === "lodash")).toBe(true);
     });
 
     it("should identify risky technologies", () => {
@@ -115,19 +101,12 @@ describe("Tech Radar", () => {
         true
       );
 
-      expect(radar.risky.some(s => s.name === "node-sass")).toBe(true);
-      expect(radar.risky.some(s => s.name === "tslint")).toBe(true);
+      expect(radar.risky.some((s) => s.name === "node-sass")).toBe(true);
+      expect(radar.risky.some((s) => s.name === "tslint")).toBe(true);
     });
 
     it("should calculate onboarding risk", () => {
-      const radar = generateTechRadar(
-        mockStack,
-        mockFiles,
-        mockDeps,
-        mockSecurity,
-        true,
-        true
-      );
+      const radar = generateTechRadar(mockStack, mockFiles, mockDeps, mockSecurity, true, true);
 
       expect(radar.onboardingRisk).toBeDefined();
       expect(radar.onboardingRisk.score).toBeGreaterThanOrEqual(0);
@@ -159,14 +138,7 @@ describe("Tech Radar", () => {
     });
 
     it("should increase risk when no CI", () => {
-      const withCi = generateTechRadar(
-        mockStack,
-        mockFiles,
-        mockDeps,
-        mockSecurity,
-        true,
-        true
-      );
+      const withCi = generateTechRadar(mockStack, mockFiles, mockDeps, mockSecurity, true, true);
 
       const stackWithoutCi: StackInfo = { ...mockStack, hasCi: false };
       const withoutCi = generateTechRadar(
@@ -182,14 +154,7 @@ describe("Tech Radar", () => {
     });
 
     it("should handle null dependencies", () => {
-      const radar = generateTechRadar(
-        mockStack,
-        mockFiles,
-        null,
-        mockSecurity,
-        true,
-        true
-      );
+      const radar = generateTechRadar(mockStack, mockFiles, null, mockSecurity, true, true);
 
       expect(radar).toBeDefined();
       expect(radar.modern).toBeInstanceOf(Array);
@@ -198,14 +163,7 @@ describe("Tech Radar", () => {
 
   describe("generateRadarDocs", () => {
     it("should generate valid markdown", () => {
-      const radar = generateTechRadar(
-        mockStack,
-        mockFiles,
-        mockDeps,
-        mockSecurity,
-        true,
-        true
-      );
+      const radar = generateTechRadar(mockStack, mockFiles, mockDeps, mockSecurity, true, true);
 
       const docs = generateRadarDocs(radar, "test-repo");
 
@@ -215,14 +173,7 @@ describe("Tech Radar", () => {
     });
 
     it("should include modern technologies section", () => {
-      const radar = generateTechRadar(
-        mockStack,
-        mockFiles,
-        mockDeps,
-        mockSecurity,
-        true,
-        true
-      );
+      const radar = generateTechRadar(mockStack, mockFiles, mockDeps, mockSecurity, true, true);
 
       const docs = generateRadarDocs(radar, "test-repo");
 

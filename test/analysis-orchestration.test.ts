@@ -6,10 +6,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { BootcampOptions, RepoFacts, RepoInfo, ScanResult } from "../src/types.js";
 import type { StyleConfig } from "../src/plugins.js";
 
-const {
-  analyzeRepoMock,
-  runParallelAnalysisMock,
-} = vi.hoisted(() => ({
+const { analyzeRepoMock, runParallelAnalysisMock } = vi.hoisted(() => ({
   analyzeRepoMock: vi.fn(),
   runParallelAnalysisMock: vi.fn(),
 }));
@@ -77,7 +74,10 @@ vi.mock("chalk", () => ({
   default: { yellow: (s: string) => s },
 }));
 
-import { orchestrateAnalysis, prepareOutputDocuments } from "../src/services/analysis-orchestration.js";
+import {
+  orchestrateAnalysis,
+  prepareOutputDocuments,
+} from "../src/services/analysis-orchestration.js";
 import { ProgressTracker } from "../src/progress.js";
 
 const defaultOptions: BootcampOptions = {
@@ -176,7 +176,12 @@ beforeEach(() => {
       authPatterns: [],
       securityDeps: [],
       findings: [],
-      secretsHandling: { envFiles: [], configFiles: [], gitignoreSecrets: true, hasEnvExample: false },
+      secretsHandling: {
+        envFiles: [],
+        configFiles: [],
+        gitignoreSecrets: true,
+        hasEnvExample: false,
+      },
       headers: { hasHelmet: false, hasCors: false, hasCSP: false },
       hasRateLimiting: false,
       hasInputValidation: false,
@@ -217,7 +222,13 @@ describe("orchestrateAnalysis", () => {
     const progress = { update: vi.fn(), succeed: vi.fn(), recordToolCall: vi.fn() } as any;
 
     analyzeRepoMock.mockImplementation(
-      async (_path: string, _info: any, _scan: any, _opts: any, onMessage: (msg: string) => void) => {
+      async (
+        _path: string,
+        _info: any,
+        _scan: any,
+        _opts: any,
+        onMessage: (msg: string) => void
+      ) => {
         onMessage("Tool: readFile");
         onMessage("Processing...");
         return {
@@ -274,7 +285,7 @@ describe("prepareOutputDocuments", () => {
       progress,
     });
 
-    const docNames = result.documents.map(d => d.name);
+    const docNames = result.documents.map((d) => d.name);
     expect(docNames).toContain("BOOTCAMP.md");
     expect(docNames).toContain("ONBOARDING.md");
     expect(docNames).toContain("ARCHITECTURE.md");
@@ -298,7 +309,7 @@ describe("prepareOutputDocuments", () => {
       progress,
     });
 
-    const docNames = result.documents.map(d => d.name);
+    const docNames = result.documents.map((d) => d.name);
     expect(docNames).toContain("RUNBOOK.md");
     expect(docNames).toContain("SECURITY.md");
     expect(docNames).toContain("RADAR.md");
@@ -328,7 +339,7 @@ describe("prepareOutputDocuments", () => {
       progress,
     });
 
-    const docNames = result.documents.map(d => d.name);
+    const docNames = result.documents.map((d) => d.name);
     expect(docNames).not.toContain("RUNBOOK.md");
     expect(docNames).not.toContain("SECURITY.md");
     expect(docNames).not.toContain("RADAR.md");
@@ -381,9 +392,39 @@ describe("prepareOutputDocuments", () => {
     const progress = { update: vi.fn(), succeed: vi.fn(), recordToolCall: vi.fn() } as any;
     runParallelAnalysisMock.mockResolvedValue({
       deps: null,
-      security: { score: 85, authPatterns: [], securityDeps: [], findings: [], secretsHandling: { envFiles: [], configFiles: [], gitignoreSecrets: true, hasEnvExample: false }, headers: { hasHelmet: false, hasCors: false, hasCSP: false }, hasRateLimiting: false, hasInputValidation: false, hasSqlInjectionPrevention: false },
-      radar: { modern: [], stable: [], legacy: [], risky: [], onboardingRisk: { score: 20, grade: "A", factors: [] } },
-      impacts: [{ file: "src/index.ts", affectedFiles: ["src/app.ts"], affectedTests: [], affectedDocs: [], importedBy: [], imports: [] }],
+      security: {
+        score: 85,
+        authPatterns: [],
+        securityDeps: [],
+        findings: [],
+        secretsHandling: {
+          envFiles: [],
+          configFiles: [],
+          gitignoreSecrets: true,
+          hasEnvExample: false,
+        },
+        headers: { hasHelmet: false, hasCors: false, hasCSP: false },
+        hasRateLimiting: false,
+        hasInputValidation: false,
+        hasSqlInjectionPrevention: false,
+      },
+      radar: {
+        modern: [],
+        stable: [],
+        legacy: [],
+        risky: [],
+        onboardingRisk: { score: 20, grade: "A", factors: [] },
+      },
+      impacts: [
+        {
+          file: "src/index.ts",
+          affectedFiles: ["src/app.ts"],
+          affectedTests: [],
+          affectedDocs: [],
+          importedBy: [],
+          imports: [],
+        },
+      ],
     });
 
     const result = await prepareOutputDocuments({
@@ -397,7 +438,7 @@ describe("prepareOutputDocuments", () => {
       progress,
     });
 
-    expect(result.documents.map(d => d.name)).toContain("IMPACT.md");
+    expect(result.documents.map((d) => d.name)).toContain("IMPACT.md");
   });
 
   it("excludes IMPACT.md when impacts are empty", async () => {
@@ -414,6 +455,6 @@ describe("prepareOutputDocuments", () => {
       progress,
     });
 
-    expect(result.documents.map(d => d.name)).not.toContain("IMPACT.md");
+    expect(result.documents.map((d) => d.name)).not.toContain("IMPACT.md");
   });
 });

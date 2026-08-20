@@ -33,7 +33,7 @@ describe("safePath", () => {
     expect(safePath("/repo", "src/index.ts")).toBe(resolve("/repo", "src/index.ts"));
     expect(safePath("/repo", "package.json")).toBe(resolve("/repo", "package.json"));
     expect(safePath("/repo", "src/deep/nested/file.ts")).toBe(
-      resolve("/repo", "src/deep/nested/file.ts"),
+      resolve("/repo", "src/deep/nested/file.ts")
     );
   });
 
@@ -115,10 +115,7 @@ describe("read_file tool", () => {
 
     const result = await tool.handler({ path: "src/index.ts" }, {} as any);
 
-    expect(mockReadFile).toHaveBeenCalledWith(
-      resolve("/test/repo", "src/index.ts"),
-      "utf-8",
-    );
+    expect(mockReadFile).toHaveBeenCalledWith(resolve("/test/repo", "src/index.ts"), "utf-8");
     expect(result).toEqual({
       textResultForLlm: "line1\nline2\nline3",
       resultType: "success",
@@ -126,10 +123,7 @@ describe("read_file tool", () => {
     expect(ctx.onToolCall).toHaveBeenCalledWith("read_file", {
       path: "src/index.ts",
     });
-    expect(ctx.onToolResult).toHaveBeenCalledWith(
-      "read_file",
-      "Read 3 lines from src/index.ts",
-    );
+    expect(ctx.onToolResult).toHaveBeenCalledWith("read_file", "Read 3 lines from src/index.ts");
   });
 
   it("truncates long files to default maxLines (500)", async () => {
@@ -142,7 +136,7 @@ describe("read_file tool", () => {
 
     const expected = lines.slice(0, 500).join("\n");
     expect((result as any).textResultForLlm).toBe(
-      `${expected}\n\n... (truncated, showing 500 of 600 lines)`,
+      `${expected}\n\n... (truncated, showing 500 of 600 lines)`
     );
     expect((result as any).resultType).toBe("success");
   });
@@ -153,14 +147,11 @@ describe("read_file tool", () => {
     const lines = Array.from({ length: 20 }, (_, i) => `line ${i + 1}`);
     mockReadFile.mockResolvedValue(lines.join("\n"));
 
-    const result = await tool.handler(
-      { path: "file.ts", maxLines: 5 },
-      {} as any,
-    );
+    const result = await tool.handler({ path: "file.ts", maxLines: 5 }, {} as any);
 
     const expected = lines.slice(0, 5).join("\n");
     expect((result as any).textResultForLlm).toBe(
-      `${expected}\n\n... (truncated, showing 5 of 20 lines)`,
+      `${expected}\n\n... (truncated, showing 5 of 20 lines)`
     );
   });
 
@@ -169,10 +160,7 @@ describe("read_file tool", () => {
     const tool = getTool(ctx, "read_file");
     mockReadFile.mockResolvedValue("a\nb\nc");
 
-    const result = await tool.handler(
-      { path: "short.ts", maxLines: 10 },
-      {} as any,
-    );
+    const result = await tool.handler({ path: "short.ts", maxLines: 10 }, {} as any);
 
     expect((result as any).textResultForLlm).toBe("a\nb\nc");
     expect((result as any).resultType).toBe("success");
@@ -186,13 +174,12 @@ describe("read_file tool", () => {
     const result = await tool.handler({ path: "missing.ts" }, {} as any);
 
     expect(result).toEqual({
-      textResultForLlm:
-        "Error reading file missing.ts: ENOENT: no such file",
+      textResultForLlm: "Error reading file missing.ts: ENOENT: no such file",
       resultType: "failure",
     });
     expect(ctx.onToolResult).toHaveBeenCalledWith(
       "read_file",
-      "Error reading file missing.ts: ENOENT: no such file",
+      "Error reading file missing.ts: ENOENT: no such file"
     );
   });
 
@@ -211,18 +198,18 @@ describe("read_file tool", () => {
     const ctx = makeContext();
     const tool = getTool(ctx, "read_file");
 
-    await expect(
-      tool.handler({ path: "../../../etc/passwd" }, {} as any)
-    ).rejects.toThrow("Path escapes repository root");
+    await expect(tool.handler({ path: "../../../etc/passwd" }, {} as any)).rejects.toThrow(
+      "Path escapes repository root"
+    );
   });
 
   it("rejects absolute path attempts", async () => {
     const ctx = makeContext();
     const tool = getTool(ctx, "read_file");
 
-    await expect(
-      tool.handler({ path: "/etc/passwd" }, {} as any)
-    ).rejects.toThrow("Path escapes repository root");
+    await expect(tool.handler({ path: "/etc/passwd" }, {} as any)).rejects.toThrow(
+      "Path escapes repository root"
+    );
   });
 
   it("works without callbacks", async () => {
@@ -241,7 +228,7 @@ describe("read_file tool", () => {
     // A symlink inside the repo dereferences to a target outside it. safePath's
     // lexical check passes, so realpath containment must catch this.
     mockRealpath.mockImplementation(async (p: any) =>
-      p === "/test/repo" ? "/test/repo" : "/etc/passwd",
+      p === "/test/repo" ? "/test/repo" : "/etc/passwd"
     );
     mockReadFile.mockResolvedValue("root:x:0:0:root:/root:/bin/bash");
 
@@ -255,21 +242,24 @@ describe("read_file tool", () => {
 
   // POSIX-only: uses absolute /var paths and a /var -> /private/var realpath mock;
   // on Windows those are not absolute and the substring never matches, so skip.
-  it.skipIf(process.platform === "win32")("allows reads when realpath canonicalizes the repo root (e.g. /var -> /private/var)", async () => {
-    const ctx = makeContext({ repoPath: "/var/folders/repo" });
-    const tool = getTool(ctx, "read_file");
-    // Both the root and the target canonicalize the same way; realpathing BOTH
-    // sides is what prevents a false rejection here.
-    mockRealpath.mockImplementation(async (p: any) =>
-      (p as string).replace("/var/", "/private/var/"),
-    );
-    mockReadFile.mockResolvedValue("ok");
+  it.skipIf(process.platform === "win32")(
+    "allows reads when realpath canonicalizes the repo root (e.g. /var -> /private/var)",
+    async () => {
+      const ctx = makeContext({ repoPath: "/var/folders/repo" });
+      const tool = getTool(ctx, "read_file");
+      // Both the root and the target canonicalize the same way; realpathing BOTH
+      // sides is what prevents a false rejection here.
+      mockRealpath.mockImplementation(async (p: any) =>
+        (p as string).replace("/var/", "/private/var/")
+      );
+      mockReadFile.mockResolvedValue("ok");
 
-    const result = await tool.handler({ path: "src/index.ts" }, {} as any);
+      const result = await tool.handler({ path: "src/index.ts" }, {} as any);
 
-    expect((result as any).resultType).toBe("success");
-    expect((result as any).textResultForLlm).toBe("ok");
-  });
+      expect((result as any).resultType).toBe("success");
+      expect((result as any).textResultForLlm).toBe("ok");
+    }
+  );
 });
 
 describe("list_files tool", () => {
@@ -369,9 +359,7 @@ describe("list_files tool", () => {
   it("respects maxResults limit", async () => {
     const ctx = makeContext();
     const tool = getTool(ctx, "list_files");
-    const entries = Array.from({ length: 10 }, (_, i) =>
-      makeDirent(`file${i}.ts`, false),
-    );
+    const entries = Array.from({ length: 10 }, (_, i) => makeDirent(`file${i}.ts`, false));
     mockReaddir.mockResolvedValue(entries as any);
 
     const result = await tool.handler({ maxResults: 3 }, {} as any);
@@ -384,9 +372,7 @@ describe("list_files tool", () => {
     const ctx = makeContext();
     const tool = getTool(ctx, "list_files");
 
-    mockReaddir.mockResolvedValueOnce([
-      makeDirent("src", true),
-    ] as any);
+    mockReaddir.mockResolvedValueOnce([makeDirent("src", true)] as any);
     mockReaddir.mockRejectedValueOnce(new Error("should not be called"));
 
     const result = await tool.handler({ recursive: true, maxResults: 1 }, {} as any);
@@ -399,15 +385,11 @@ describe("list_files tool", () => {
   it("returns message when no files match", async () => {
     const ctx = makeContext();
     const tool = getTool(ctx, "list_files");
-    mockReaddir.mockResolvedValue([
-      makeDirent("README.md", false),
-    ] as any);
+    mockReaddir.mockResolvedValue([makeDirent("README.md", false)] as any);
 
     const result = await tool.handler({ pattern: "*.py" }, {} as any);
 
-    expect((result as any).textResultForLlm).toBe(
-      "No files found matching criteria",
-    );
+    expect((result as any).textResultForLlm).toBe("No files found matching criteria");
   });
 
   it("handles error reading directory", async () => {
@@ -418,9 +400,7 @@ describe("list_files tool", () => {
     const result = await tool.handler({ path: "nonexistent" }, {} as any);
 
     expect((result as any).resultType).toBe("failure");
-    expect((result as any).textResultForLlm).toContain(
-      "Error listing files in nonexistent",
-    );
+    expect((result as any).textResultForLlm).toContain("Error listing files in nonexistent");
   });
 
   it("scans recursively", async () => {
@@ -433,9 +413,7 @@ describe("list_files tool", () => {
       makeDirent("file.ts", false),
     ] as any);
     // Second call: src dir
-    mockReaddir.mockResolvedValueOnce([
-      makeDirent("index.ts", false),
-    ] as any);
+    mockReaddir.mockResolvedValueOnce([makeDirent("index.ts", false)] as any);
 
     const result = await tool.handler({ recursive: true }, {} as any);
 
@@ -450,18 +428,11 @@ describe("list_files tool", () => {
     const tool = getTool(ctx, "list_files");
 
     // Root: has a dir that doesn't match pattern
-    mockReaddir.mockResolvedValueOnce([
-      makeDirent("lib", true),
-    ] as any);
+    mockReaddir.mockResolvedValueOnce([makeDirent("lib", true)] as any);
     // lib dir: has a matching file
-    mockReaddir.mockResolvedValueOnce([
-      makeDirent("helper.ts", false),
-    ] as any);
+    mockReaddir.mockResolvedValueOnce([makeDirent("helper.ts", false)] as any);
 
-    const result = await tool.handler(
-      { pattern: "*.ts", recursive: true },
-      {} as any,
-    );
+    const result = await tool.handler({ pattern: "*.ts", recursive: true }, {} as any);
 
     expect((result as any).textResultForLlm).toContain("lib/helper.ts");
   });
@@ -484,34 +455,30 @@ describe("search tool", () => {
 
   // execFile is promisified, so mock must call the callback
   function mockExecFileSuccess(stdout: string) {
-    mockExecFile.mockImplementation(
-      (_cmd: any, _args: any, _opts: any, cb?: any) => {
-        const callback = cb || _opts;
-        if (typeof callback === "function") {
-          callback(null, { stdout, stderr: "" });
-        }
-        return {} as any;
-      },
-    );
+    mockExecFile.mockImplementation((_cmd: any, _args: any, _opts: any, cb?: any) => {
+      const callback = cb || _opts;
+      if (typeof callback === "function") {
+        callback(null, { stdout, stderr: "" });
+      }
+      return {} as any;
+    });
   }
 
   function mockExecFileError(error: { message: string; code?: number }) {
-    mockExecFile.mockImplementation(
-      (_cmd: any, _args: any, _opts: any, cb?: any) => {
-        const callback = cb || _opts;
-        if (typeof callback === "function") {
-          callback(error);
-        }
-        return {} as any;
-      },
-    );
+    mockExecFile.mockImplementation((_cmd: any, _args: any, _opts: any, cb?: any) => {
+      const callback = cb || _opts;
+      if (typeof callback === "function") {
+        callback(error);
+      }
+      return {} as any;
+    });
   }
 
   it("searches with basic pattern", async () => {
     const ctx = makeContext();
     const tool = getTool(ctx, "search");
     mockExecFileSuccess(
-      "/test/repo/src/index.ts:1:import foo\n/test/repo/src/utils.ts:5:const foo = 1\n",
+      "/test/repo/src/index.ts:1:import foo\n/test/repo/src/utils.ts:5:const foo = 1\n"
     );
 
     const result = await tool.handler({ pattern: "foo" }, {} as any);
@@ -532,10 +499,7 @@ describe("search tool", () => {
     const tool = getTool(ctx, "search");
     mockExecFileSuccess("/test/repo/src/app.ts:2:export class App\n");
 
-    await tool.handler(
-      { pattern: "class", filePattern: "*.ts" },
-      {} as any,
-    );
+    await tool.handler({ pattern: "class", filePattern: "*.ts" }, {} as any);
 
     // Verify execFile was called with --glob *.ts in args
     const call = mockExecFile.mock.calls[0];
@@ -549,10 +513,7 @@ describe("search tool", () => {
     const tool = getTool(ctx, "search");
     mockExecFileSuccess("/test/repo/file.ts:1:match\n");
 
-    await tool.handler(
-      { pattern: "match", maxResults: 10 },
-      {} as any,
-    );
+    await tool.handler({ pattern: "match", maxResults: 10 }, {} as any);
 
     const call = mockExecFile.mock.calls[0];
     const args = call[1] as string[];
@@ -583,9 +544,7 @@ describe("search tool", () => {
     const result = await tool.handler({ pattern: "nonexistent" }, {} as any);
 
     expect((result as any).resultType).toBe("success");
-    expect((result as any).textResultForLlm).toBe(
-      "No matches found for pattern: nonexistent",
-    );
+    expect((result as any).textResultForLlm).toBe("No matches found for pattern: nonexistent");
   });
 
   it("returns failure on ripgrep error (non-code-1)", async () => {
@@ -606,9 +565,7 @@ describe("search tool", () => {
 
     const result = await tool.handler({ pattern: "nothing" }, {} as any);
 
-    expect((result as any).textResultForLlm).toBe(
-      "No matches found for pattern: nothing",
-    );
+    expect((result as any).textResultForLlm).toBe("No matches found for pattern: nothing");
   });
 
   it("makes paths relative in output", async () => {
@@ -616,15 +573,11 @@ describe("search tool", () => {
     const tool = getTool(ctx, "search");
     // Real ripgrep, with cwd set and --path-separator /, emits relative
     // forward-slash paths. The mock reflects that contract.
-    mockExecFileSuccess(
-      "deep/nested/file.ts:42:found it\n",
-    );
+    mockExecFileSuccess("deep/nested/file.ts:42:found it\n");
 
     const result = await tool.handler({ pattern: "found" }, {} as any);
 
-    expect((result as any).textResultForLlm).toBe(
-      "deep/nested/file.ts:42:found it",
-    );
+    expect((result as any).textResultForLlm).toBe("deep/nested/file.ts:42:found it");
   });
 
   it("works without callbacks", async () => {
@@ -672,10 +625,7 @@ describe("search tool", () => {
     const tool = getTool(ctx, "search");
     mockExecFileSuccess("");
 
-    const result = await tool.handler(
-      { pattern: "x", filePattern: "--pre=evil" },
-      {} as any,
-    );
+    const result = await tool.handler({ pattern: "x", filePattern: "--pre=evil" }, {} as any);
 
     expect((result as any).resultType).toBe("failure");
     expect((result as any).textResultForLlm).toContain("invalid file pattern");
@@ -752,7 +702,7 @@ describe("get_repo_metadata tool", () => {
     expect(ctx.onToolCall).toHaveBeenCalledWith("get_repo_metadata", {});
     expect(ctx.onToolResult).toHaveBeenCalledWith(
       "get_repo_metadata",
-      "Collected metadata for 2 files",
+      "Collected metadata for 2 files"
     );
   });
 
@@ -760,9 +710,7 @@ describe("get_repo_metadata tool", () => {
     const ctx = makeContext();
     const tool = getTool(ctx, "get_repo_metadata");
 
-    mockReaddir.mockResolvedValueOnce([
-      makeDirent("file.py", false),
-    ] as any);
+    mockReaddir.mockResolvedValueOnce([makeDirent("file.py", false)] as any);
     mockStat.mockResolvedValueOnce({ size: 512 } as any);
 
     // git commands all fail
@@ -813,13 +761,9 @@ describe("get_repo_metadata tool", () => {
     const tool = getTool(ctx, "get_repo_metadata");
 
     // root
-    mockReaddir.mockResolvedValueOnce([
-      makeDirent("src", true),
-    ] as any);
+    mockReaddir.mockResolvedValueOnce([makeDirent("src", true)] as any);
     // src
-    mockReaddir.mockResolvedValueOnce([
-      makeDirent("main.ts", false),
-    ] as any);
+    mockReaddir.mockResolvedValueOnce([makeDirent("main.ts", false)] as any);
 
     mockStat.mockResolvedValueOnce({ size: 256 } as any);
 
@@ -864,9 +808,7 @@ describe("get_repo_metadata tool", () => {
     const ctx = makeContext();
     const tool = getTool(ctx, "get_repo_metadata");
 
-    mockReaddir.mockResolvedValueOnce([
-      makeDirent("file.ts", false),
-    ] as any);
+    mockReaddir.mockResolvedValueOnce([makeDirent("file.ts", false)] as any);
     mockStat.mockRejectedValueOnce(new Error("permission denied"));
 
     mockExecFile.mockImplementation((_cmd: any, _args: any, _opts: any, cb?: any) => {
@@ -900,9 +842,7 @@ describe("get_repo_metadata tool", () => {
     const ctx = makeContext({ onToolCall: undefined, onToolResult: undefined });
     const tool = getTool(ctx, "get_repo_metadata");
 
-    mockReaddir.mockResolvedValueOnce([
-      makeDirent("a.ts", false),
-    ] as any);
+    mockReaddir.mockResolvedValueOnce([makeDirent("a.ts", false)] as any);
     mockStat.mockResolvedValueOnce({ size: 10 } as any);
 
     mockExecFile.mockImplementation((_cmd: any, _args: any, _opts: any, cb?: any) => {

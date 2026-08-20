@@ -59,11 +59,9 @@ function remoteSource() {
 }
 
 describe("runImpactCommand", () => {
-  const mockExit = vi
-    .spyOn(process, "exit")
-    .mockImplementation((() => {
-      throw new Error("process.exit");
-    }) as any);
+  const mockExit = vi.spyOn(process, "exit").mockImplementation((() => {
+    throw new Error("process.exit");
+  }) as any);
   let logSpy: ReturnType<typeof vi.spyOn>;
   let errorSpy: ReturnType<typeof vi.spyOn>;
 
@@ -162,18 +160,18 @@ describe("runImpactCommand", () => {
 
   it("exits non-zero and cleans up when the scan fails", async () => {
     scanMock.mockRejectedValueOnce(new Error("scan boom"));
-    await expect(
-      runImpactCommand("https://github.com/test/repo", undefined, {})
-    ).rejects.toThrow("process.exit");
+    await expect(runImpactCommand("https://github.com/test/repo", undefined, {})).rejects.toThrow(
+      "process.exit"
+    );
     expect(errorSpy).toHaveBeenCalled();
     expect(mockCleanup).toHaveBeenCalled();
   });
 
   it("exits 1 when the repository cannot be resolved", async () => {
     resolveRepoMock.mockRejectedValueOnce(new Error("nope"));
-    await expect(
-      runImpactCommand("https://github.com/test/repo", undefined, {})
-    ).rejects.toThrow("process.exit");
+    await expect(runImpactCommand("https://github.com/test/repo", undefined, {})).rejects.toThrow(
+      "process.exit"
+    );
     expect(mockExit).toHaveBeenCalledWith(1);
   });
 });

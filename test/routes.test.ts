@@ -2,10 +2,11 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import request from "supertest";
 
 vi.mock("chalk", () => {
-  const makeChalk = (): any => new Proxy((...args: any[]) => args.join(""), {
-    get: () => makeChalk(),
-    apply: (_t: any, _a: any, args: any[]) => args.join(""),
-  });
+  const makeChalk = (): any =>
+    new Proxy((...args: any[]) => args.join(""), {
+      get: () => makeChalk(),
+      apply: (_t: any, _a: any, args: any[]) => args.join(""),
+    });
   return { default: makeChalk() };
 });
 
@@ -18,7 +19,11 @@ vi.mock("../src/ingest.js", () => ({
 
 vi.mock("../src/services/clone-service.js", () => ({
   cloneRepository: vi.fn().mockResolvedValue("/tmp/cloned"),
-  scanRepositoryFiles: vi.fn().mockResolvedValue({ files: [{ path: "a.ts" }], keySourceFiles: new Set(), stack: { languages: ["TS"], packageManager: "npm" } }),
+  scanRepositoryFiles: vi.fn().mockResolvedValue({
+    files: [{ path: "a.ts" }],
+    keySourceFiles: new Set(),
+    stack: { languages: ["TS"], packageManager: "npm" },
+  }),
   cleanupRepository: vi.fn().mockResolvedValue(undefined),
 }));
 
@@ -94,12 +99,16 @@ function createTestApp() {
 }
 
 describe("web routes", () => {
-  afterEach(() => { stopJobPruner(); });
+  afterEach(() => {
+    stopJobPruner();
+  });
 
   describe("POST /api/analyze", () => {
     it("returns jobId for valid request", async () => {
       const app = createTestApp();
-      const res = await request(app).post("/api/analyze").send({ repoUrl: "https://github.com/test/repo" });
+      const res = await request(app)
+        .post("/api/analyze")
+        .send({ repoUrl: "https://github.com/test/repo" });
       expect(res.status).toBe(200);
       expect(res.body.jobId).toBeDefined();
     });
@@ -118,7 +127,9 @@ describe("web routes", () => {
 
     it("rejects too-long repoUrl", async () => {
       const app = createTestApp();
-      const res = await request(app).post("/api/analyze").send({ repoUrl: "x".repeat(501) });
+      const res = await request(app)
+        .post("/api/analyze")
+        .send({ repoUrl: "x".repeat(501) });
       expect(res.status).toBe(400);
     });
 
@@ -130,19 +141,26 @@ describe("web routes", () => {
 
     it("rejects non-object body", async () => {
       const app = createTestApp();
-      const res = await request(app).post("/api/analyze").send("not json").set("Content-Type", "application/json");
+      const res = await request(app)
+        .post("/api/analyze")
+        .send("not json")
+        .set("Content-Type", "application/json");
       expect(res.status).toBe(400);
     });
 
     it("rejects non-object options", async () => {
       const app = createTestApp();
-      const res = await request(app).post("/api/analyze").send({ repoUrl: "https://github.com/test/repo", options: "bad" });
+      const res = await request(app)
+        .post("/api/analyze")
+        .send({ repoUrl: "https://github.com/test/repo", options: "bad" });
       expect(res.status).toBe(400);
     });
 
     it("accepts valid options object", async () => {
       const app = createTestApp();
-      const res = await request(app).post("/api/analyze").send({ repoUrl: "https://github.com/test/repo", options: { branch: "dev" } });
+      const res = await request(app)
+        .post("/api/analyze")
+        .send({ repoUrl: "https://github.com/test/repo", options: { branch: "dev" } });
       expect(res.status).toBe(200);
     });
   });
@@ -156,7 +174,9 @@ describe("web routes", () => {
 
     it("returns job status after creation", async () => {
       const app = createTestApp();
-      const createRes = await request(app).post("/api/analyze").send({ repoUrl: "https://github.com/test/repo" });
+      const createRes = await request(app)
+        .post("/api/analyze")
+        .send({ repoUrl: "https://github.com/test/repo" });
       const jobId = createRes.body.jobId;
       const res = await request(app).get(`/api/jobs/${jobId}`);
       expect(res.status).toBe(200);

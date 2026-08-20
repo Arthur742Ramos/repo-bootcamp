@@ -38,7 +38,10 @@ async function createFixtureRepo(baseDir: string): Promise<string> {
   );
 
   execFileSync("git", ["init", "-b", "main"], { cwd: repoDir, stdio: "ignore" });
-  execFileSync("git", ["config", "user.email", "test@example.com"], { cwd: repoDir, stdio: "ignore" });
+  execFileSync("git", ["config", "user.email", "test@example.com"], {
+    cwd: repoDir,
+    stdio: "ignore",
+  });
   execFileSync("git", ["config", "user.name", "Test User"], { cwd: repoDir, stdio: "ignore" });
   execFileSync("git", ["add", "-A"], { cwd: repoDir, stdio: "ignore" });
   execFileSync("git", ["commit", "-m", "init", "--no-gpg-sign"], { cwd: repoDir, stdio: "ignore" });
@@ -84,7 +87,9 @@ function buildMockFacts(repoName: string): RepoFacts {
     },
     architecture: {
       overview: "Small Express application.",
-      components: [{ name: "Application", description: "Express app bootstrap", directory: "src/" }],
+      components: [
+        { name: "Application", description: "Express app bootstrap", directory: "src/" },
+      ],
       dataFlow: "HTTP -> app -> response",
       keyAbstractions: [{ name: "app", description: "Express application instance" }],
       codeExamples: [],

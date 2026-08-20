@@ -41,7 +41,8 @@ describe("security pattern detection", () => {
 
   it("flags `SELECT … ${id}` (keyword before interpolation)", async () => {
     const a = await scan({
-      "src/db.ts": "export function q(userId: string) {\n  return `SELECT * FROM users WHERE id = ${userId}`;\n}\n",
+      "src/db.ts":
+        "export function q(userId: string) {\n  return `SELECT * FROM users WHERE id = ${userId}`;\n}\n",
     });
     expect(titles(a)).toContain("Potential SQL injection");
   });
