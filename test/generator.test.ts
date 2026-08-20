@@ -270,9 +270,7 @@ describe("generateFirstTasks", () => {
         title: `Task ${i + 1}`,
         description: `Description ${i + 1}`,
         difficulty: (i % 3 === 0 ? "beginner" : i % 3 === 1 ? "intermediate" : "advanced") as
-          | "beginner"
-          | "intermediate"
-          | "advanced",
+          "beginner" | "intermediate" | "advanced",
         category: "docs" as const,
         files: [`file-${i + 1}.ts`],
         why: `Why ${i + 1}`,
