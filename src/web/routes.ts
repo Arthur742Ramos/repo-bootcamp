@@ -660,8 +660,7 @@ export function registerRoutes(app: Application): void {
       let repoPath: string | null = null;
       try {
         const manifest = job.result.manifest as
-          | { repository?: { branch?: string }; options?: { maxFiles?: number } }
-          | undefined;
+          { repository?: { branch?: string }; options?: { maxFiles?: number } } | undefined;
         const repoInfo = parseGitHubUrl(job.repoUrl);
         const branch = manifest?.repository?.branch;
         repoPath = await cloneRepository(repoInfo, branch, false);
