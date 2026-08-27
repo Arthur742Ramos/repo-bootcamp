@@ -49,6 +49,10 @@ interface AnalysisJob {
     manifest?: unknown;
     recommendations?: unknown[];
     quickstartCommands?: unknown[];
+    scoreDetails?: {
+      security: { findings: number; scannedFiles: number };
+      onboardingRisk: { factors: string[] };
+    };
     issuePreview?: string;
   };
   error?: string;
@@ -381,6 +385,15 @@ async function runAnalysis(job: AnalysisJob, options: Record<string, unknown>): 
       manifest,
       recommendations: (preparedFacts.firstTasks ?? []).slice(0, 3),
       quickstartCommands: (preparedFacts.quickstart?.commands ?? []).slice(0, 6),
+      scoreDetails: {
+        security: {
+          findings: security.findings.length,
+          scannedFiles: security.sourceFilesScanned ?? 0,
+        },
+        onboardingRisk: {
+          factors: radar.onboardingRisk.factors.slice(0, 4),
+        },
+      },
       issuePreview: preparedFacts.firstTasks?.length
         ? generateIssuePreview(preparedFacts.firstTasks, repoInfo)
         : undefined,
@@ -647,7 +660,8 @@ export function registerRoutes(app: Application): void {
       let repoPath: string | null = null;
       try {
         const manifest = job.result.manifest as
-          { repository?: { branch?: string }; options?: { maxFiles?: number } } | undefined;
+          | { repository?: { branch?: string }; options?: { maxFiles?: number } }
+          | undefined;
         const repoInfo = parseGitHubUrl(job.repoUrl);
         const branch = manifest?.repository?.branch;
         repoPath = await cloneRepository(repoInfo, branch, false);
