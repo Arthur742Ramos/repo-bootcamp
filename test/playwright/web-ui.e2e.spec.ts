@@ -254,12 +254,24 @@ test.describe("web UI", () => {
     await expect(page.locator("#analyzeBtn")).toHaveText("Analyze");
     await expect(page.locator("#results")).toHaveClass(/show/);
     await expect(page.locator("#resultsHeading")).toBeFocused();
+    await expect(page.locator("#phaseRail .phase-step.complete")).toHaveCount(6);
     await expect(page.locator("#scoreGuide")).toContainText("Higher security scores are better");
     await expect(page.locator("#scoreGuide")).toContainText(
       "lower onboarding risk scores are better"
     );
     await expect(page.locator("#stats")).toContainText("Security Score");
     await expect(page.locator("#stats")).toContainText("Onboarding Risk");
+    await page.locator("#scoreExplain").locator("summary").click();
+    await expect(page.locator("#securityScoreExplain")).toBeVisible();
+    await expect(page.locator("#riskScoreExplain")).toBeVisible();
+    await expect(page.locator("#quickstartPanel")).toBeVisible();
+    await expect(page.locator("#quickstartCommands")).toContainText("npm test");
+    await expect(page.locator("#quickstartCommands")).toContainText("npm run build");
+    await expect(page.locator("#cliCommand")).toContainText(
+      "bootcamp https://github.com/test/fixture-web-ui-repo"
+    );
+    await page.locator("#copyCommandBtn").click();
+    await expect(page.locator("#copyCommandBtn")).toHaveText("Copied!");
     await expect(page.locator("#files")).toContainText("BOOTCAMP.md");
     await expect(page.locator("#files")).toContainText("repo_facts.json");
     await expect(page.locator("#nextSteps")).toContainText("Add a health check route");
@@ -267,13 +279,14 @@ test.describe("web UI", () => {
 
     await page.locator("#fileSearch").fill("security");
     await expect(page.locator('[data-file="SECURITY.md"]')).toBeVisible();
+    await expect(page.locator("#fileCount")).toContainText("of");
     await expect(page.locator('[data-file="BOOTCAMP.md"]')).toBeHidden();
     await page.locator("#fileSearch").fill("");
 
     const kitDownloadPromise = page.waitForEvent("download");
     await page.locator("#downloadAllBtn").click();
     const kitDownload = await kitDownloadPromise;
-    expect(kitDownload.suggestedFilename()).toBe("repo-bootcamp-kit.zip");
+    expect(kitDownload.suggestedFilename()).toBe("test-fixture-web-ui-repo-bootcamp.zip");
 
     const issueDownloadPromise = page.waitForEvent("download");
     await page.locator("#issuesPreviewBtn").click();

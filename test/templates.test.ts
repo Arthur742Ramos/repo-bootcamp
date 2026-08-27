@@ -58,6 +58,8 @@ describe("getIndexHtml", () => {
     it("has a progress container", () => {
       const html = getIndexHtml();
       expect(html).toContain('id="progress"');
+      expect(html).toContain('id="phaseRail"');
+      expect(html).toContain('data-phase="cleanup"');
     });
 
     it("has a useful initial state that explains the run", () => {
@@ -85,6 +87,16 @@ describe("getIndexHtml", () => {
       expect(html).toContain("Higher security scores are better");
       expect(html).toContain("lower onboarding risk scores are better");
       expect(html).toContain("A (strongest) to F (weakest)");
+      expect(html).toContain('id="scoreExplain"');
+      expect(html).toContain('id="riskFactors"');
+    });
+
+    it("makes the first-run path actionable", () => {
+      const html = getIndexHtml();
+      expect(html).toContain('id="cliCommand"');
+      expect(html).toContain('id="quickstartPanel"');
+      expect(html).toContain("renderQuickstartCommands(data.quickstartCommands)");
+      expect(html).toContain("Open FIRST_TASKS.md");
     });
 
     it("has a modal for viewing files", () => {

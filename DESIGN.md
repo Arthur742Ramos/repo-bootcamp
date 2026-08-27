@@ -214,6 +214,12 @@ The only permitted "lift" is interactive feedback: a focused control gets a 2px 
 
 The honest readout. `surface` panel, `mono` lines, scroll-pinned to newest. Phase lines are prefixed `▶` in `accent`; success lines `✓` in `success`; error lines `✗` in `danger`; plain steps in `ink-muted`. This is where "show the work" lives — it is never replaced by a single spinner.
 
+### Phase rail, command rows, and score explanation
+
+- **Phase rail:** A six-step, compact progress index (Parse, Clone, Scan, Analyze, Generate, Clean up). The active phase uses `accent`; completed phases use `success`; failures use `danger` or `warning`. The rail supplements the detailed log and never replaces it.
+- **Command rows:** Reusable copyable terminal rows show the exact CLI invocation and repository-detected first commands. Commands and paths use `mono`; labels stay in `label` sans. Hide the detected-command panel when no trustworthy command is available.
+- **Score explanation:** A native disclosure under the score guide explains scan coverage and the highest-impact onboarding factors. Keep the summary collapsed by default so the readout stays fast to scan.
+
 ### Modal (file preview)
 
 `role="dialog"`, `aria-modal`, `surface` body, 1px `border`, `rounded.md`, on a plain `rgba(0,0,0,0.8)` scrim (no blur). Closes on `×`, backdrop click, and Escape. Must trap focus while open and restore focus to the trigger on close. Build a semantic z-index scale (scrim → modal → toast → tooltip); never arbitrary `999`/`1000`.

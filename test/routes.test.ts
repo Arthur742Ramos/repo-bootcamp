@@ -47,8 +47,8 @@ vi.mock("../src/services/analysis-orchestration.js", () => ({
   prepareOutputDocuments: vi.fn().mockResolvedValue({
     documents: [{ name: "BOOTCAMP.md", content: "# Boot" }],
     facts: { firstTasks: [], stack: {} },
-    security: { score: 90 },
-    radar: { onboardingRisk: { score: 20, grade: "A" } },
+    security: { score: 90, findings: [], sourceFilesScanned: 1 },
+    radar: { onboardingRisk: { score: 20, grade: "A", factors: [] } },
     deps: { totalCount: 5, runtime: [1, 2], dev: [3, 4, 5] },
     outputTargets: [],
   }),

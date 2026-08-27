@@ -56,7 +56,23 @@ export function getIndexHtml(nonce?: string): string {
       -webkit-font-smoothing: antialiased;
     }
     body.modal-open { overflow: hidden; }
-    .container { max-width: 900px; margin: 0 auto; }
+    .skip-link {
+      position: fixed;
+      top: 0.75rem;
+      left: 0.75rem;
+      z-index: var(--z-toast);
+      padding: 0.6rem 0.8rem;
+      border: 1px solid var(--accent);
+      border-radius: var(--r-sm);
+      background: var(--surface);
+      color: var(--ink);
+      font-size: 0.8125rem;
+      font-weight: 600;
+      transform: translateY(-180%);
+      transition: transform var(--dur-fast) var(--ease);
+    }
+    .skip-link:focus { transform: translateY(0); }
+    .container { max-width: 900px; margin: 0 auto; padding-bottom: 3rem; }
     .sr-only {
       position: absolute;
       width: 1px;
@@ -80,7 +96,7 @@ export function getIndexHtml(nonce?: string): string {
     .subtitle { color: var(--ink-muted); max-width: 70ch; text-wrap: pretty; }
     .analyze-form { margin: 2rem 0; }
     .field-label { display: block; margin-bottom: 0.5rem; color: var(--ink); font-size: 0.8125rem; font-weight: 600; }
-    .input-group { display: flex; gap: 0.75rem; }
+    .input-group { display: flex; gap: 0.75rem; align-items: stretch; }
     .field-hint { color: var(--ink-muted); font-size: 0.8125rem; margin-top: 0.5rem; }
     .field-error { color: var(--danger); font-size: 0.8125rem; margin-top: 0.5rem; }
     .field-error[hidden] { display: none; }
@@ -144,6 +160,7 @@ export function getIndexHtml(nonce?: string): string {
     button { font-family: var(--font-sans); cursor: pointer; }
     #analyzeBtn {
       padding: 0.8rem 1.75rem;
+      min-height: 44px;
       border: none;
       border-radius: var(--r-sm);
       background: var(--accent);
@@ -177,25 +194,109 @@ export function getIndexHtml(nonce?: string): string {
     .progress-item.success { color: var(--success); }
     .progress-item.warning { color: var(--warning); }
     .progress-item.error { color: var(--danger); }
+    .phase-rail {
+      display: grid;
+      grid-template-columns: repeat(6, minmax(0, 1fr));
+      gap: 0.5rem;
+      list-style: none;
+      margin: 0.25rem 0 1rem;
+    }
+    .phase-step {
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+      min-width: 0;
+      color: var(--ink-subtle);
+      font-size: 0.7rem;
+      font-weight: 600;
+    }
+    .phase-dot {
+      display: grid;
+      flex: 0 0 1.45rem;
+      place-items: center;
+      width: 1.45rem;
+      height: 1.45rem;
+      border: 1px solid var(--border);
+      border-radius: 50%;
+      color: var(--ink-subtle);
+      font: 700 0.7rem var(--font-mono);
+    }
+    .phase-step span:last-child { overflow: hidden; text-overflow: ellipsis; }
+    .phase-step.active { color: var(--accent); }
+    .phase-step.active .phase-dot { border-color: var(--accent); color: var(--accent); }
+    .phase-step.complete { color: var(--success); }
+    .phase-step.complete .phase-dot { border-color: var(--success); color: var(--success); }
+    .phase-step.error { color: var(--danger); }
+    .phase-step.error .phase-dot { border-color: var(--danger); color: var(--danger); }
+    .phase-step.cancelled { color: var(--warning); }
+    .phase-step.cancelled .phase-dot { border-color: var(--warning); color: var(--warning); }
     .results { display: none; }
     .results.show { display: block; }
     #resultsHeading { border-radius: var(--r-sm); margin-bottom: 0.5rem; }
     #resultsHeading:focus { outline: none; }
     #resultsHeading:focus-visible { box-shadow: 0 0 0 2px var(--canvas), 0 0 0 4px var(--accent); }
-    .score-guide { color: var(--ink-muted); font-size: 0.8125rem; margin-bottom: 1rem; max-width: 70ch; text-wrap: pretty; }
-    .result-summary { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(260px, 0.8fr); gap: 1rem; margin: 1.25rem 0 1.5rem; }
-    .summary-panel { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-md); padding: 1.25rem; }
+    .score-guide { color: var(--ink-muted); font-size: 0.8125rem; margin-bottom: 0.75rem; max-width: 70ch; text-wrap: pretty; }
+    .score-explain { margin-bottom: 1.25rem; border-bottom: 1px solid var(--border); padding-bottom: 0.75rem; }
+    .score-explain summary { width: fit-content; color: var(--ink); cursor: pointer; font-size: 0.8125rem; font-weight: 600; }
+    .score-explain summary:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--accent); }
+    .score-explain-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; margin-top: 0.75rem; }
+    .score-explain-grid h3 { font-size: 0.8125rem; margin-bottom: 0.25rem; }
+    .score-explain-grid p, .score-factors { color: var(--ink-muted); font-size: 0.75rem; line-height: 1.5; }
+    .score-factors { list-style: none; display: grid; gap: 0.25rem; margin-top: 0.4rem; }
+    .score-factors li::before { content: '•'; color: var(--warning); margin-right: 0.4rem; }
+    .result-summary { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(260px, 0.8fr); align-items: start; gap: 1rem; margin: 1.25rem 0 1.5rem; }
+    .summary-panel { align-self: start; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-md); padding: 1.25rem; }
     .summary-panel h3 { font-size: 1rem; margin-bottom: 0.5rem; }
     .summary-panel p { color: var(--ink-muted); font-size: 0.875rem; line-height: 1.5; }
     .result-meta { color: var(--ink-muted); font: 0.75rem var(--font-mono); margin-top: 0.75rem; overflow-wrap: anywhere; }
+    .result-meta a { color: var(--accent); text-decoration-color: transparent; text-underline-offset: 0.15em; }
+    .result-meta a:hover { text-decoration-color: currentColor; }
     .next-steps { list-style: none; display: grid; gap: 0.65rem; margin-top: 0.75rem; }
     .next-step { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 0.65rem; align-items: start; }
     .next-step-marker { color: var(--accent); font: 700 0.875rem var(--font-mono); }
     .next-step-title { color: var(--ink); font-size: 0.8125rem; font-weight: 600; }
     .next-step-detail { color: var(--ink-muted); font-size: 0.75rem; margin-top: 0.15rem; }
+    .next-step-action {
+      display: inline-block;
+      margin-top: 0.35rem;
+      border: 0;
+      padding: 0;
+      background: transparent;
+      color: var(--accent);
+      font: 600 0.75rem var(--font-sans);
+      text-decoration: underline;
+      text-decoration-color: transparent;
+      text-underline-offset: 0.15em;
+    }
+    .next-step-action:hover { text-decoration-color: currentColor; }
+    .next-step-action:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--accent); }
     .result-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; margin: 1rem 0; }
     .result-toolbar-actions { display: flex; gap: 0.5rem; flex-wrap: wrap; }
     .summary-actions { margin-top: 0.9rem; }
+    .command-panel, .quickstart-panel { margin-top: 1rem; border-top: 1px solid var(--border); padding-top: 0.9rem; }
+    .command-header, .quickstart-header { display: flex; align-items: baseline; justify-content: space-between; gap: 0.75rem; }
+    .command-header h4, .quickstart-header h4 { color: var(--ink); font-size: 0.8125rem; }
+    .command-header span, .quickstart-header span { color: var(--ink-muted); font-size: 0.7rem; }
+    .command-row {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      margin-top: 0.55rem;
+      border: 1px solid var(--border);
+      border-radius: var(--r-sm);
+      background: var(--canvas);
+      padding: 0.45rem 0.55rem;
+    }
+    .command-prefix { color: var(--success); font: 700 0.8rem var(--font-mono); }
+    .command-row code { min-width: 0; flex: 1; overflow-wrap: anywhere; color: var(--ink); font: 0.78rem var(--font-mono); }
+    .command-row .icon-btn { flex: 0 0 auto; }
+    .quickstart-list { display: grid; gap: 0.5rem; margin-top: 0.65rem; }
+    .quickstart-item { display: flex; align-items: center; gap: 0.65rem; min-width: 0; }
+    .quickstart-copy { display: flex; align-items: baseline; gap: 0.55rem; min-width: 0; flex: 1; }
+    .quickstart-name { flex: 0 0 auto; color: var(--ink-muted); font-size: 0.72rem; font-weight: 600; }
+    .quickstart-copy code { min-width: 0; overflow-wrap: anywhere; color: var(--ink); font: 0.78rem var(--font-mono); }
+    .quickstart-source { color: var(--ink-subtle); font: 0.68rem var(--font-mono); }
+    .command-row .icon-btn, .quickstart-item .icon-btn { padding: 0.35rem 0.6rem; font-size: 0.72rem; }
     .ask-panel { margin-top: 1rem; border-top: 1px solid var(--border); padding-top: 0.9rem; }
     .ask-panel summary { color: var(--ink); cursor: pointer; font-size: 0.8125rem; font-weight: 600; }
     .ask-panel summary:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--accent); }
@@ -205,10 +306,13 @@ export function getIndexHtml(nonce?: string): string {
     .ask-answer { color: var(--ink); font-size: 0.8125rem; line-height: 1.55; margin-top: 0.75rem; white-space: pre-wrap; }
     .ask-answer.error { color: var(--danger); }
     .ask-answer[hidden] { display: none; }
+    .files-heading-copy { display: flex; align-items: baseline; gap: 0.65rem; min-width: 0; }
+    .file-count { color: var(--ink-muted); font: 0.72rem var(--font-mono); white-space: nowrap; }
     #fileSearch { flex: 1; max-width: 340px; padding: 0.65rem 0.75rem; }
     #filesHeading { margin-bottom: 1rem; }
-    .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 1rem; margin-bottom: 2rem; }
+    .stats { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 1rem; margin-bottom: 2rem; }
     .stat { background: var(--surface); border: 1px solid var(--border); padding: 1.25rem 1rem; border-radius: var(--r-md); text-align: center; }
+    .stat.primary { background: var(--surface-raised); }
     .stat-value { font-family: var(--font-mono); font-size: 2rem; font-weight: 700; color: var(--ink); line-height: 1; }
     .stat-value.success { color: var(--success); }
     .stat-value.warning { color: var(--warning); }
@@ -292,10 +396,20 @@ export function getIndexHtml(nonce?: string): string {
       .empty-details { grid-template-columns: 1fr; gap: 0.25rem; }
       .empty-details dd { margin-bottom: 0.5rem; }
       .options-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .phase-rail { grid-template-columns: repeat(3, minmax(0, 1fr)); row-gap: 0.65rem; }
+      .phase-step { font-size: 0.68rem; }
+      .score-explain-grid { grid-template-columns: 1fr; }
+      .command-header, .quickstart-header { align-items: flex-start; flex-direction: column; gap: 0.2rem; }
+      .quickstart-copy { align-items: flex-start; flex-direction: column; gap: 0.1rem; }
       .result-summary { grid-template-columns: 1fr; }
       .result-toolbar { align-items: stretch; flex-direction: column; }
       #fileSearch { max-width: none; }
       .ask-form { flex-direction: column; }
+      .files-heading-copy { align-items: flex-start; flex-direction: column; gap: 0.2rem; }
+    }
+    @media (min-width: 641px) and (max-width: 820px) {
+      .stats { grid-template-columns: repeat(3, minmax(0, 1fr)); }
     }
     @media (prefers-reduced-motion: reduce) {
       * { transition: none !important; animation: none !important; scroll-behavior: auto !important; }
@@ -303,7 +417,8 @@ export function getIndexHtml(nonce?: string): string {
   </style>
 </head>
 <body>
-  <div class="container">
+  <a class="skip-link" href="#mainContent">Skip to content</a>
+  <main class="container" id="mainContent">
     <h1>Repo Bootcamp</h1>
     <p class="subtitle">Turn a public GitHub, GitLab, or Bitbucket repository into a Day-1 onboarding kit.</p>
 
@@ -315,9 +430,11 @@ export function getIndexHtml(nonce?: string): string {
           id="repoUrl"
           placeholder="https://github.com/owner/repo"
           inputmode="url"
+          autocomplete="url"
           autocapitalize="none"
           autocorrect="off"
           spellcheck="false"
+          aria-required="true"
           aria-describedby="repoUrlHint repoUrlError"
         />
         <button type="submit" id="analyzeBtn">Analyze</button>
@@ -366,6 +483,14 @@ export function getIndexHtml(nonce?: string): string {
         <span class="progress-title">Analysis progress</span>
         <span class="progress-meta" id="progressMeta"></span>
       </div>
+      <ol class="phase-rail" id="phaseRail" aria-label="Analysis phases">
+        <li class="phase-step" data-phase="parse"><span class="phase-dot">1</span><span>Parse</span></li>
+        <li class="phase-step" data-phase="clone"><span class="phase-dot">2</span><span>Clone</span></li>
+        <li class="phase-step" data-phase="scan"><span class="phase-dot">3</span><span>Scan</span></li>
+        <li class="phase-step" data-phase="analyze"><span class="phase-dot">4</span><span>Analyze</span></li>
+        <li class="phase-step" data-phase="generate"><span class="phase-dot">5</span><span>Generate</span></li>
+        <li class="phase-step" data-phase="cleanup"><span class="phase-dot">6</span><span>Clean up</span></li>
+      </ol>
       <div id="progressItems"></div>
     </div>
     <div id="statusMsg" role="status" class="sr-only"></div>
@@ -386,16 +511,47 @@ export function getIndexHtml(nonce?: string): string {
     <section class="results" id="results" aria-labelledby="resultsHeading">
       <h2 id="resultsHeading" tabindex="-1">Analysis Readout</h2>
       <p class="score-guide" id="scoreGuide">Higher security scores are better; lower onboarding risk scores are better. Grades run from A (strongest) to F (weakest).</p>
+      <details class="score-explain" id="scoreExplain">
+        <summary>How these scores were earned</summary>
+        <div class="score-explain-grid">
+          <div>
+            <h3>Security</h3>
+            <p id="securityScoreExplain">Based on detected security patterns and protections in the scanned source files.</p>
+          </div>
+          <div>
+            <h3>Onboarding risk</h3>
+            <p id="riskScoreExplain">Lower is better. The score reflects documentation, tests, CI, dependency, and complexity signals.</p>
+            <ul class="score-factors" id="riskFactors"></ul>
+          </div>
+        </div>
+      </details>
       <div class="stats" id="stats" aria-describedby="scoreGuide"></div>
       <div class="result-summary">
         <section class="summary-panel" aria-labelledby="summaryHeading">
           <h3 id="summaryHeading">Start here</h3>
-          <p id="summaryDescription">The analysis is complete. Begin with the recommended task and the setup commands below.</p>
+          <p id="summaryDescription">The analysis is complete. Use the commands below, then take the recommended first task.</p>
           <p class="result-meta" id="resultMeta"></p>
+          <div class="command-panel" id="cliCommandPanel">
+            <div class="command-header">
+              <h4>Continue in your terminal</h4>
+              <span>Re-run this scan locally</span>
+            </div>
+            <div class="command-row">
+              <span class="command-prefix" aria-hidden="true">$</span>
+              <code id="cliCommand"></code>
+              <button class="icon-btn" type="button" id="copyCommandBtn">Copy</button>
+            </div>
+          </div>
+          <div class="quickstart-panel" id="quickstartPanel" hidden>
+            <div class="quickstart-header">
+              <h4>First commands</h4>
+              <span>Detected from the repository</span>
+            </div>
+            <div class="quickstart-list" id="quickstartCommands"></div>
+          </div>
           <div class="result-toolbar-actions summary-actions">
-            <button class="secondary-btn" type="button" id="copyCommandBtn">Copy CLI command</button>
             <button class="secondary-btn" type="button" id="downloadAllBtn">Download kit</button>
-            <button class="secondary-btn" type="button" id="issuesPreviewBtn" hidden>Issue preview</button>
+            <button class="secondary-btn" type="button" id="issuesPreviewBtn" hidden>Download issue preview</button>
           </div>
           <details class="ask-panel" id="askPanel">
             <summary>Ask a follow-up question</summary>
@@ -412,13 +568,16 @@ export function getIndexHtml(nonce?: string): string {
         </section>
       </div>
       <div class="result-toolbar">
-        <h2 id="filesHeading">Generated Files</h2>
+        <div class="files-heading-copy">
+          <h2 id="filesHeading">Generated Files</h2>
+          <span class="file-count" id="fileCount" aria-live="polite"></span>
+        </div>
         <input id="fileSearch" type="search" placeholder="Filter files…" aria-label="Filter generated files" />
       </div>
       <div class="files" id="files"></div>
       <p class="empty-filter" id="emptyFilter" hidden>No generated files match that filter.</p>
     </section>
-  </div>
+  </main>
 
   <div
     class="modal"
@@ -452,6 +611,9 @@ export function getIndexHtml(nonce?: string): string {
     let progressTimer = null;
     let activeRunToken = 0;
     let pollTimer = null;
+    let renderedProgressCount = 0;
+
+    const phaseOrder = ['parse', 'clone', 'scan', 'analyze', 'generate', 'cleanup'];
 
     const fileDescriptions = {
       'BOOTCAMP': 'One-page overview',
@@ -562,11 +724,52 @@ export function getIndexHtml(nonce?: string): string {
         currentEventSource.close();
         currentEventSource = null;
       }
+      currentJobId = null;
+      renderedProgressCount = 0;
       return activeRunToken;
     }
 
     function isCurrentRun(jobId, runToken) {
       return runToken === activeRunToken && currentJobId === jobId;
+    }
+
+    function resetPhaseRail() {
+      document.querySelectorAll('#phaseRail .phase-step').forEach((step) => {
+        step.classList.remove('active', 'complete', 'error', 'cancelled');
+        step.removeAttribute('aria-current');
+      });
+    }
+
+    function updatePhaseRail(phase) {
+      const phaseIndex = phaseOrder.indexOf(String(phase || ''));
+      if (phaseIndex < 0) return;
+      document.querySelectorAll('#phaseRail .phase-step').forEach((step) => {
+        const stepIndex = phaseOrder.indexOf(String(step.dataset.phase || ''));
+        step.classList.remove('active', 'complete', 'error', 'cancelled');
+        step.removeAttribute('aria-current');
+        if (stepIndex < phaseIndex) step.classList.add('complete');
+        if (stepIndex === phaseIndex) {
+          step.classList.add('active');
+          step.setAttribute('aria-current', 'step');
+        }
+      });
+    }
+
+    function finishPhaseRail(state) {
+      const steps = document.querySelectorAll('#phaseRail .phase-step');
+      if (state === 'complete') {
+        steps.forEach((step) => {
+          step.classList.remove('active', 'error', 'cancelled');
+          step.removeAttribute('aria-current');
+          step.classList.add('complete');
+        });
+        return;
+      }
+      const active = document.querySelector('#phaseRail .phase-step.active');
+      if (active) {
+        active.classList.remove('active');
+        active.classList.add(state === 'cancelled' ? 'cancelled' : 'error');
+      }
     }
 
     function startProgressClock(startAt) {
@@ -592,6 +795,8 @@ export function getIndexHtml(nonce?: string): string {
       btn.disabled = isBusy;
       btn.textContent = isBusy ? 'Analyzing...' : 'Analyze';
       cancelBtn.hidden = !isBusy;
+      cancelBtn.disabled = isBusy && !currentJobId;
+      cancelBtn.textContent = isBusy && !currentJobId ? 'Starting…' : 'Cancel analysis';
       if (isBusy) form.setAttribute('aria-busy', 'true');
       else form.removeAttribute('aria-busy');
     }
@@ -614,6 +819,7 @@ export function getIndexHtml(nonce?: string): string {
       currentRunOptions = getRunOptions();
       setAnalysisBusy(true);
       document.getElementById('retryBtn').hidden = true;
+      resetPhaseRail();
 
       const progress = document.getElementById('progress');
       progress.hidden = false;
@@ -639,6 +845,8 @@ export function getIndexHtml(nonce?: string): string {
 
         currentJobId = payload.jobId;
         rememberJob(payload.jobId);
+        document.getElementById('cancelBtn').disabled = false;
+        document.getElementById('cancelBtn').textContent = 'Cancel analysis';
         streamProgress(payload.jobId, runToken);
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
@@ -669,6 +877,7 @@ export function getIndexHtml(nonce?: string): string {
           evtSource.close();
           currentEventSource = null;
           addProgressItem('The server sent invalid progress data.', 'error');
+          finishPhaseRail('error');
           document.getElementById('statusMsg').textContent = 'Analysis stopped because progress data was invalid';
           resetButton();
           return;
@@ -678,18 +887,21 @@ export function getIndexHtml(nonce?: string): string {
           evtSource.close();
           currentEventSource = null;
           addProgressItem('The server sent an invalid progress event.', 'error');
+          finishPhaseRail('error');
           document.getElementById('statusMsg').textContent = 'Analysis stopped because a progress event was invalid';
           resetButton();
           return;
         }
 
+        renderedProgressCount += 1;
         if (data.type === 'phase') {
-          addProgressItem(data.message, 'phase');
+          addProgressItem(data.message, 'phase', data.phase);
         } else if (data.type === 'progress') {
           addProgressItem(data.message);
         } else if (data.type === 'complete') {
           settled = true;
           addProgressItem(data.message, 'success');
+          finishPhaseRail('complete');
           showResults(data.data);
           evtSource.close();
           currentEventSource = null;
@@ -700,6 +912,7 @@ export function getIndexHtml(nonce?: string): string {
         } else if (data.type === 'error') {
           settled = true;
           addProgressItem(data.message, 'error');
+          finishPhaseRail('error');
           document.getElementById('statusMsg').textContent = 'Analysis failed: ' + data.message;
           evtSource.close();
           currentEventSource = null;
@@ -711,6 +924,7 @@ export function getIndexHtml(nonce?: string): string {
         } else if (data.type === 'cancelled') {
           settled = true;
           addProgressItem(data.message, 'warning');
+          finishPhaseRail('cancelled');
           document.getElementById('statusMsg').textContent = 'Analysis cancelled';
           evtSource.close();
           currentEventSource = null;
@@ -738,6 +952,17 @@ export function getIndexHtml(nonce?: string): string {
       };
     }
 
+    function replayMissingProgress(events) {
+      if (!Array.isArray(events) || events.length <= renderedProgressCount) return;
+      const pending = events.slice(renderedProgressCount);
+      for (const data of pending) {
+        renderedProgressCount += 1;
+        if (!data || typeof data.type !== 'string' || typeof data.message !== 'string') continue;
+        if (data.type === 'phase') addProgressItem(data.message, 'phase', data.phase);
+        else if (data.type === 'progress') addProgressItem(data.message);
+      }
+    }
+
     function pollJobStatus(jobId, runToken = activeRunToken) {
       if (!isCurrentRun(jobId, runToken)) return;
       let attempts = 0;
@@ -751,8 +976,10 @@ export function getIndexHtml(nonce?: string): string {
           const res = await fetch('/api/jobs/' + jobId);
           const job = await readJsonResponse(res);
           if (!isCurrentRun(jobId, runToken)) return;
+          replayMissingProgress(job.progress);
           if (job.status === 'complete' && job.result) {
             addProgressItem('Reconnected — analysis complete.', 'success');
+            finishPhaseRail('complete');
             showResults(job.result);
             forgetJob();
             stopProgressClock();
@@ -763,6 +990,7 @@ export function getIndexHtml(nonce?: string): string {
           if (job.status === 'error') {
             const message = typeof job.error === 'string' ? job.error : 'Analysis failed';
             addProgressItem(message, 'error');
+            finishPhaseRail('error');
             document.getElementById('statusMsg').textContent = 'Analysis failed: ' + message;
             document.getElementById('retryBtn').hidden = false;
             forgetJob();
@@ -773,6 +1001,7 @@ export function getIndexHtml(nonce?: string): string {
           }
           if (job.status === 'cancelled') {
             addProgressItem('Analysis cancelled.', 'warning');
+            finishPhaseRail('cancelled');
             document.getElementById('statusMsg').textContent = 'Analysis cancelled';
             document.getElementById('retryBtn').hidden = false;
             forgetJob();
@@ -796,7 +1025,8 @@ export function getIndexHtml(nonce?: string): string {
       pollTimer = setTimeout(poll, 2000);
     }
 
-    function addProgressItem(message, type = '') {
+    function addProgressItem(message, type = '', phase = '') {
+      if (type === 'phase') updatePhaseRail(phase);
       const progress = document.getElementById('progressItems');
       const item = document.createElement('div');
       item.className = 'progress-item ' + type;
@@ -816,9 +1046,9 @@ export function getIndexHtml(nonce?: string): string {
       scrollContainer.scrollTop = scrollContainer.scrollHeight;
     }
 
-    function addStatCard(statsContainer, value, label, tone = '') {
+    function addStatCard(statsContainer, value, label, tone = '', kind = '') {
       const stat = document.createElement('div');
-      stat.className = 'stat';
+      stat.className = 'stat' + (kind ? ' ' + kind : '');
 
       const statValue = document.createElement('div');
       statValue.className = 'stat-value' + (tone ? ' ' + tone : '');
@@ -831,6 +1061,140 @@ export function getIndexHtml(nonce?: string): string {
       stat.appendChild(statValue);
       stat.appendChild(statLabel);
       statsContainer.appendChild(stat);
+    }
+
+    function renderResultMeta(repository, evidenceSources) {
+      const resultMeta = document.getElementById('resultMeta');
+      resultMeta.textContent = '';
+      resultMeta.removeAttribute('title');
+      const name = repository && typeof repository.fullName === 'string' ? repository.fullName : '';
+      const url = repository && typeof repository.url === 'string' ? repository.url : '';
+      if (name) {
+        if (/^https?:\\/\\//i.test(url)) {
+          const link = document.createElement('a');
+          link.href = url;
+          link.target = '_blank';
+          link.rel = 'noreferrer';
+          link.textContent = name;
+          link.title = 'Open ' + name + ' in a new tab';
+          resultMeta.appendChild(link);
+        } else {
+          resultMeta.appendChild(document.createTextNode(name));
+        }
+      }
+      const parts = [];
+      if (repository && repository.branch) parts.push('branch ' + String(repository.branch));
+      if (repository && repository.commitSha) {
+        const commit = String(repository.commitSha);
+        parts.push('commit ' + commit.slice(0, 8));
+        resultMeta.title = 'Full commit: ' + commit;
+      }
+      if (evidenceSources !== undefined) parts.push(String(evidenceSources) + ' evidence files');
+      if (parts.length > 0) {
+        if (resultMeta.textContent) resultMeta.appendChild(document.createTextNode(' · '));
+        resultMeta.appendChild(document.createTextNode(parts.join(' · ')));
+      }
+    }
+
+    function renderScoreDetails(data) {
+      const scoreDetails = data.scoreDetails && typeof data.scoreDetails === 'object'
+        ? data.scoreDetails : {};
+      const security = scoreDetails.security && typeof scoreDetails.security === 'object'
+        ? scoreDetails.security : {};
+      const findings = Number.isFinite(Number(security.findings)) ? Number(security.findings) : null;
+      const scannedFiles = Number.isFinite(Number(security.scannedFiles))
+        ? Number(security.scannedFiles) : null;
+      const securityExplain = document.getElementById('securityScoreExplain');
+      if (scannedFiles === 0) {
+        securityExplain.textContent = 'No source files were scanned, so this result is a coverage gap rather than a clean bill of health.';
+      } else if (findings === 0 && scannedFiles !== null) {
+        securityExplain.textContent = 'No security findings were detected across ' + scannedFiles + ' scanned source files.';
+      } else if (findings !== null && scannedFiles !== null) {
+        securityExplain.textContent = findings + ' security finding' + (findings === 1 ? '' : 's') + ' detected across ' + scannedFiles + ' scanned source files.';
+      } else {
+        securityExplain.textContent = 'Based on detected security patterns and protections in the scanned source files.';
+      }
+
+      const risk = scoreDetails.onboardingRisk && typeof scoreDetails.onboardingRisk === 'object'
+        ? scoreDetails.onboardingRisk : {};
+      const factors = Array.isArray(risk.factors)
+        ? risk.factors.filter((factor) => typeof factor === 'string' && factor.trim()).slice(0, 4)
+        : [];
+      const riskExplain = document.getElementById('riskScoreExplain');
+      riskExplain.textContent = factors.length
+        ? 'The highest-impact signals behind this score are listed below.'
+        : 'No significant onboarding risks were detected by the available signals.';
+      const riskFactors = document.getElementById('riskFactors');
+      riskFactors.textContent = '';
+      for (const factor of factors) {
+        const item = document.createElement('li');
+        item.textContent = factor;
+        riskFactors.appendChild(item);
+      }
+    }
+
+    async function copyText(text) {
+      try {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          await Promise.race([
+            navigator.clipboard.writeText(text),
+            new Promise((_, reject) => setTimeout(() => reject(new Error('clipboard timeout')), 1000)),
+          ]);
+          return true;
+        }
+      } catch (error) {
+        // Fall through to the legacy path for denied or unavailable clipboard APIs.
+      }
+      return legacyCopy(text);
+    }
+
+    function renderQuickstartCommands(commands) {
+      const panel = document.getElementById('quickstartPanel');
+      const list = document.getElementById('quickstartCommands');
+      list.textContent = '';
+      const validCommands = Array.isArray(commands)
+        ? commands.filter((command) => command && typeof command.command === 'string' && command.command.trim()).slice(0, 6)
+        : [];
+      for (const command of validCommands) {
+        const commandText = String(command.command).trim();
+        const item = document.createElement('div');
+        item.className = 'quickstart-item';
+        const copy = document.createElement('div');
+        copy.className = 'quickstart-copy';
+        const name = document.createElement('span');
+        name.className = 'quickstart-name';
+        name.textContent = typeof command.name === 'string' && command.name.trim() ? command.name : 'run';
+        const code = document.createElement('code');
+        code.textContent = commandText;
+        copy.appendChild(name);
+        copy.appendChild(code);
+        if (typeof command.source === 'string' && command.source.trim()) {
+          const source = document.createElement('span');
+          source.className = 'quickstart-source';
+          source.textContent = 'from ' + command.source;
+          copy.appendChild(source);
+        }
+        const button = document.createElement('button');
+        button.className = 'icon-btn';
+        button.type = 'button';
+        button.textContent = 'Copy';
+        button.setAttribute('aria-label', 'Copy ' + name.textContent + ' command');
+        button.addEventListener('click', async () => {
+          button.disabled = true;
+          button.textContent = 'Copying…';
+          const copied = await copyText(commandText);
+          button.textContent = copied ? 'Copied!' : 'Copy failed';
+          setTimeout(() => {
+            button.textContent = 'Copy';
+            button.disabled = false;
+          }, 1500);
+        });
+        item.appendChild(copy);
+        item.appendChild(button);
+        list.appendChild(item);
+      }
+      panel.hidden = validCommands.length === 0;
+      return validCommands.length;
     }
 
     function addGeneratedFile(filesContainer, filename) {
@@ -860,26 +1224,30 @@ export function getIndexHtml(nonce?: string): string {
       if (!data || typeof data !== 'object' || !data.stats || !Array.isArray(data.files)) {
         addProgressItem('Analysis finished, but the result payload was invalid.', 'error');
         document.getElementById('statusMsg').textContent = 'Analysis returned invalid results';
+        finishPhaseRail('error');
+        document.getElementById('retryBtn').hidden = false;
         return;
       }
       latestResult = data;
+      document.getElementById('emptyState').hidden = true;
       const issuePreviewButton = document.getElementById('issuesPreviewBtn');
       issuePreviewButton.hidden = !(typeof data.issuePreview === 'string' && data.issuePreview.trim());
       const stats = document.getElementById('stats');
       stats.textContent = '';
-      addStatCard(stats, data.stats.securityScore, 'Security Score (' + data.stats.securityGrade + ')', gradeTone(data.stats.securityGrade));
-      addStatCard(stats, data.stats.riskScore, 'Onboarding Risk (' + data.stats.riskGrade + ')', gradeTone(data.stats.riskGrade));
-      addStatCard(stats, data.stats.dependencies, 'Dependencies');
+      addStatCard(stats, data.stats.securityScore, 'Security Score (' + data.stats.securityGrade + ')', gradeTone(data.stats.securityGrade), 'primary');
+      addStatCard(stats, data.stats.riskScore, 'Onboarding Risk (' + data.stats.riskGrade + ')', gradeTone(data.stats.riskGrade), 'primary');
+      addStatCard(stats, data.stats.dependencies, 'Dependencies', '', 'detail');
       // Surface a metric the reader of a repo cares about (documents produced)
       // rather than internal agent telemetry; the tool-call count stays in the
       // progress log for anyone debugging the run.
-      addStatCard(stats, data.files.length, 'Files Generated');
+      addStatCard(stats, data.files.length, 'Files Generated', '', 'detail');
       if (data.stats.durationMs !== undefined) {
-        addStatCard(stats, (Number(data.stats.durationMs) / 1000).toFixed(1) + 's', 'Run time');
+        addStatCard(stats, (Number(data.stats.durationMs) / 1000).toFixed(1) + 's', 'Run time', '', 'detail');
       }
       if (data.stats.filesScanned !== undefined) {
-        addStatCard(stats, data.stats.filesScanned, 'Files Scanned');
+        addStatCard(stats, data.stats.filesScanned, 'Files Scanned', '', 'detail');
       }
+      renderScoreDetails(data);
 
       const manifest = data.manifest && typeof data.manifest === 'object' ? data.manifest : null;
       if (manifest && manifest.options && typeof manifest.options === 'object') {
@@ -887,13 +1255,12 @@ export function getIndexHtml(nonce?: string): string {
       }
       const repository = manifest && manifest.repository && typeof manifest.repository === 'object'
         ? manifest.repository : null;
-      const resultMeta = document.getElementById('resultMeta');
-      const metaParts = [];
-      if (repository && repository.fullName) metaParts.push(String(repository.fullName));
-      if (repository && repository.branch) metaParts.push('branch ' + String(repository.branch));
-      if (repository && repository.commitSha) metaParts.push('commit ' + String(repository.commitSha).slice(0, 8));
-      if (data.stats.evidenceSources !== undefined) metaParts.push(String(data.stats.evidenceSources) + ' evidence files');
-      resultMeta.textContent = metaParts.join(' · ');
+      renderResultMeta(repository, data.stats.evidenceSources);
+      document.getElementById('cliCommand').textContent = buildCliCommand();
+      const quickstartCount = renderQuickstartCommands(data.quickstartCommands);
+      document.getElementById('summaryDescription').textContent = quickstartCount
+        ? 'The analysis is complete. Run a first command, then take the recommended task.'
+        : 'The analysis is complete. Begin with the recommended task and the generated files below.';
 
       const nextSteps = document.getElementById('nextSteps');
       nextSteps.textContent = '';
@@ -915,6 +1282,14 @@ export function getIndexHtml(nonce?: string): string {
           : (task && task.why ? String(task.why) : 'Open FIRST_TASKS.md for the details.');
         copy.appendChild(title);
         copy.appendChild(detail);
+        if (data.files.includes('FIRST_TASKS.md')) {
+          const action = document.createElement('button');
+          action.className = 'next-step-action';
+          action.type = 'button';
+          action.textContent = 'Open FIRST_TASKS.md';
+          action.addEventListener('click', () => { void viewFile('FIRST_TASKS.md'); });
+          copy.appendChild(action);
+        }
         item.appendChild(marker);
         item.appendChild(copy);
         nextSteps.appendChild(item);
@@ -958,6 +1333,11 @@ export function getIndexHtml(nonce?: string): string {
         file.hidden = !matches;
         if (matches) visible++;
       });
+      document.getElementById('fileCount').textContent = fileButtons.length === 0
+        ? ''
+        : query
+          ? visible + ' of ' + fileButtons.length + ' files'
+          : fileButtons.length + ' files';
       document.getElementById('emptyFilter').hidden = visible !== 0 || fileButtons.length === 0;
     }
 
@@ -1017,22 +1397,7 @@ export function getIndexHtml(nonce?: string): string {
       const btn = document.getElementById('copyBtn');
       btn.disabled = true;
       btn.textContent = 'Copying…';
-      let copied = false;
-      try {
-        if (navigator.clipboard && navigator.clipboard.writeText) {
-          // The async clipboard API can hang or be denied in some browsers;
-          // race it against a short timeout and fall back to execCommand.
-          await Promise.race([
-            navigator.clipboard.writeText(currentFile.content),
-            new Promise((_, reject) => setTimeout(() => reject(new Error('clipboard timeout')), 1000)),
-          ]);
-          copied = true;
-        } else {
-          copied = legacyCopy(currentFile.content);
-        }
-      } catch (err) {
-        copied = legacyCopy(currentFile.content);
-      }
+      const copied = await copyText(currentFile.content);
 
       btn.textContent = copied ? 'Copied!' : 'Copy failed';
       btn.classList.toggle('copied', copied);
@@ -1056,6 +1421,14 @@ export function getIndexHtml(nonce?: string): string {
       URL.revokeObjectURL(url);
     }
 
+    function getDownloadFilename(response, fallback) {
+      const disposition = response.headers.get('content-disposition') || '';
+      const match = disposition.match(/filename="?([^";]+)"?/i);
+      if (!match || !match[1]) return fallback;
+      const filename = match[1].trim().replace(/[\\/:*?"<>|]/g, '-');
+      return filename || fallback;
+    }
+
     async function downloadAll() {
       if (!currentJobId) return;
       const btn = document.getElementById('downloadAllBtn');
@@ -1068,7 +1441,7 @@ export function getIndexHtml(nonce?: string): string {
         const url = URL.createObjectURL(blob);
         const anchor = document.createElement('a');
         anchor.href = url;
-        anchor.download = 'repo-bootcamp-kit.zip';
+        anchor.download = getDownloadFilename(response, 'repo-bootcamp-kit.zip');
         document.body.appendChild(anchor);
         anchor.click();
         document.body.removeChild(anchor);
@@ -1107,7 +1480,7 @@ export function getIndexHtml(nonce?: string): string {
         addProgressItem(error instanceof Error ? error.message : String(error), 'error');
       }
       setTimeout(() => {
-        btn.textContent = 'Issue preview';
+        btn.textContent = 'Download issue preview';
         btn.disabled = false;
       }, 1500);
     }
@@ -1125,19 +1498,16 @@ export function getIndexHtml(nonce?: string): string {
     async function copyCliCommand() {
       const btn = document.getElementById('copyCommandBtn');
       const command = buildCliCommand();
-      let copied = false;
-      try {
-        if (navigator.clipboard && navigator.clipboard.writeText) {
-          await navigator.clipboard.writeText(command);
-          copied = true;
-        } else {
-          copied = legacyCopy(command);
-        }
-      } catch (error) {
-        copied = legacyCopy(command);
-      }
-      btn.textContent = copied ? 'Copied command!' : 'Copy failed';
-      setTimeout(() => { btn.textContent = 'Copy CLI command'; }, 1500);
+      btn.disabled = true;
+      btn.textContent = 'Copying…';
+      const copied = await copyText(command);
+      btn.textContent = copied ? 'Copied!' : 'Copy failed';
+      btn.classList.toggle('copied', copied);
+      setTimeout(() => {
+        btn.textContent = 'Copy';
+        btn.classList.remove('copied');
+        btn.disabled = false;
+      }, 1500);
     }
 
     async function askQuestion() {
@@ -1201,6 +1571,9 @@ export function getIndexHtml(nonce?: string): string {
         const runToken = beginRun();
         currentJobId = job.id;
         if (job.repoUrl) document.getElementById('repoUrl').value = job.repoUrl;
+        document.getElementById('emptyState').hidden = true;
+        document.getElementById('results').classList.remove('show');
+        resetPhaseRail();
         document.getElementById('progress').hidden = false;
         document.getElementById('progressItems').textContent = '';
         startProgressClock(job.startedAt || Date.now());

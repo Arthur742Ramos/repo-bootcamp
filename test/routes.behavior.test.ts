@@ -64,7 +64,7 @@ async function setupRoutes(overrides: SetupOverrides = {}) {
       { name: "repo_facts.json", content: '{"ok":true}' },
     ],
     facts,
-    security: { score: 82 },
+    security: { score: 82, findings: [], sourceFilesScanned: 1 },
     radar: { onboardingRisk: { score: 30, grade: "B", factors: [] } },
     deps: { totalCount: 5 },
     outputTargets: [],
@@ -179,6 +179,11 @@ describe("web routes analysis lifecycle", () => {
     expect(statusResponse.body.status).toBe("complete");
     expect(statusResponse.body.result.files).toContain("BOOTCAMP.md");
     expect(statusResponse.body.result.files).toContain("ANALYSIS_MANIFEST.json");
+    expect(statusResponse.body.result.quickstartCommands).toEqual([]);
+    expect(statusResponse.body.result.scoreDetails).toEqual({
+      security: { findings: 0, scannedFiles: 1 },
+      onboardingRisk: { factors: [] },
+    });
 
     const streamResponse = await http.get(`/api/jobs/${jobId}/stream`);
     expect(streamResponse.status).toBe(200);
