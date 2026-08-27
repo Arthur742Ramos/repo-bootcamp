@@ -1,6 +1,6 @@
 {
   "name": "repo-bootcamp",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Turn any public GitHub repository into a Day 1 onboarding kit using GitHub Copilot SDK",
   "type": "module",
   "main": "dist/index.js",

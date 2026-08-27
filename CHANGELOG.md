@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+No unreleased changes yet.
+
+## [1.1.0] - 2026-08-27
+
 ### Added
 
 - `bootcamp tasks <repo-url>` command: a deterministic, cross-ecosystem **task discovery** report answering the #1 Day-1 question — "how do I build, test, and run this?" — without invoking the LLM. Parses the task-definition files a repo already ships: `package.json` scripts (package-manager aware — npm/pnpm/yarn/bun detected from `packageManager` and lockfiles), `Makefile`, `justfile`, go-task `Taskfile`, `docker-compose`, `pyproject.toml` (Poetry scripts and PEP 621 `project.scripts`), and `composer.json`. Categorizes each task (install/build/test/lint/dev/run/release/other), groups the report by category, and suggests a first-session getting-started sequence (install → build → test → dev/run). Supports `--json` and `--category <name>` filtering, with a non-zero exit on an unknown category. Also extends `COMMANDS`/`GETTING_STARTED` generation in the standard kit so **non-npm repos** (Rust, Go, Python, PHP) finally surface runnable commands; existing npm `npm run <name>` command strings are preserved byte-for-byte. Exposed via the `./tasks` package subpath and public re-exports from `src/api.ts` (`discoverTasks`, `categorizeTask`, `suggestGettingStarted`, `toCommands`, `CATEGORY_ORDER`, and related types).
@@ -151,4 +155,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Beautiful CLI output with progress indicators
   - Streaming responses during analysis
 
+[Unreleased]: https://github.com/Arthur742Ramos/repo-bootcamp/compare/v1.1.0...HEAD
+[1.1.0]: https://github.com/Arthur742Ramos/repo-bootcamp/releases/tag/v1.1.0
 [1.0.0]: https://github.com/Arthur742Ramos/repo-bootcamp/releases/tag/v1.0.0
