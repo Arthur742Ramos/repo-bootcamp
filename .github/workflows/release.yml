@@ -65,6 +65,9 @@ jobs:
       - name: Build
         run: npm run build
 
+      - name: Verify CLI entry points
+        run: npm run verify:cli
+
   publish:
     name: Publish to npm
     runs-on: ubuntu-latest

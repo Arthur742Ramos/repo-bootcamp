@@ -71,6 +71,8 @@ No unreleased changes yet.
 
 ### Fixed
 
+- Fixed silent CLI exits through npm executable symlinks and added compiled-entry smoke checks to CI and release gates.
+
 - Updated qs and humanfs transitive dependencies to address the current dependency advisories.
 - GitHub release archives and SHA-256 checksums are published independently of npm credentials after CI gates pass.
 - Closing or replacing a file preview cancels its request and ignores late responses, preventing stale contents from appearing under another filename.

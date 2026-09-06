@@ -18,6 +18,7 @@
 
 import { Command } from "commander";
 import chalk from "chalk";
+import { realpathSync } from "fs";
 import { resolve } from "path";
 import { pathToFileURL } from "url";
 
@@ -906,8 +907,17 @@ cacheCommand
     await runCacheList({ json: opts.json });
   });
 
-const isCliEntry =
-  Boolean(process.argv[1]) && import.meta.url === pathToFileURL(resolve(process.argv[1])).href;
+const isCliEntry = (() => {
+  if (!process.argv[1]) return false;
+  try {
+    // npm installs the executable as a symlink. Node resolves import.meta.url
+    // to the real file, so compare it against the canonical entry path too.
+    return import.meta.url === pathToFileURL(realpathSync(resolve(process.argv[1]))).href;
+  } catch {
+    // Importing the program from a runner with a synthetic argv must stay inert.
+    return false;
+  }
+})();
 
 if (isCliEntry) {
   program.parse();
