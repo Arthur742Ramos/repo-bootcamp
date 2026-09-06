@@ -146,3 +146,17 @@ test("links between generated files preserve the original keyboard trigger", asy
   await page.keyboard.press("Escape");
   await expect(page.getByRole("button", { name: "ONE.md", exact: true })).toBeFocused();
 });
+
+test("table of contents links focus headings and diagrams retain readable source", async ({
+  page,
+}) => {
+  const source =
+    "# Guide\n\n[Setup](#setup)\n\n## Setup\n\n```mermaid\nflowchart TD\n  A --> B\n```";
+  await page.route("**/files/**", (route) =>
+    route.fulfill({ json: { content: source, html: markdownToHtml(source) } })
+  );
+  await page.evaluate("viewFile('GUIDE.md')");
+  await page.getByRole("link", { name: "Setup" }).click();
+  await expect(page.locator("#renderedContent h2")).toBeFocused();
+  await expect(page.locator("#renderedContent pre")).toContainText("flowchart TD\n  A --> B");
+});

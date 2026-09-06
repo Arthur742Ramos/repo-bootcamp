@@ -1373,18 +1373,41 @@ export function getIndexHtml(nonce?: string): string {
       const allowed = new Set(['P', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6', 'UL', 'OL', 'LI',
         'PRE', 'CODE', 'STRONG', 'EM', 'DEL', 'BLOCKQUOTE', 'TABLE', 'THEAD', 'TBODY',
         'TR', 'TH', 'TD', 'HR', 'BR', 'DETAILS', 'SUMMARY', 'A']);
+      const headingCounts = new Map();
       const blocked = new Set(['SCRIPT', 'STYLE', 'IFRAME', 'OBJECT', 'EMBED', 'SVG', 'MATH', 'FORM', 'TEMPLATE']);
       function copy(node) {
         if (node.nodeType === Node.TEXT_NODE) return document.createTextNode(node.textContent);
         if (node.nodeType !== Node.ELEMENT_NODE || blocked.has(node.tagName)) return document.createDocumentFragment();
-        const element = allowed.has(node.tagName)
-          ? document.createElement(node.tagName.toLowerCase()) : document.createDocumentFragment();
+        const element = node.tagName === 'DIV' && node.classList.contains('mermaid')
+          ? document.createElement('pre')
+          : allowed.has(node.tagName)
+            ? document.createElement(node.tagName.toLowerCase()) : document.createDocumentFragment();
+        if (/^H[1-6]$/.test(node.tagName)) {
+          const slug = node.textContent.toLowerCase().replace(/[^a-z0-9_ -]/g, '').trim().replace(/ +/g, '-');
+          const count = headingCounts.get(slug) || 0;
+          headingCounts.set(slug, count + 1);
+          element.dataset.anchor = slug + (count ? '-' + count : '');
+          element.tabIndex = -1;
+        }
         if (node.tagName === 'A') {
           const href = node.getAttribute('href') || '';
           if (/^https?:\\/\\//i.test(href)) {
             element.setAttribute('href', href);
             element.setAttribute('target', '_blank');
             element.setAttribute('rel', 'noopener noreferrer');
+          } else if (href.startsWith('#')) {
+            element.setAttribute('href', href);
+            element.addEventListener('click', event => {
+              event.preventDefault();
+              let anchor;
+              try { anchor = decodeURIComponent(href.slice(1)); } catch { return; }
+              const heading = Array.from(document.querySelectorAll('#renderedContent [data-anchor]'))
+                .find(item => item.dataset.anchor === anchor);
+              if (heading) {
+                heading.focus();
+                heading.scrollIntoView({ block: 'start' });
+              }
+            });
           } else {
             const filename = href.replace(/^\\.\\//, '').split('#')[0];
             const file = Array.from(document.querySelectorAll('#files [data-file]'))
