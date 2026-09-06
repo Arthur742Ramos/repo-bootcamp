@@ -251,8 +251,8 @@ jobs:
       - name: Build
         run: npm run build
 
-      - name: Verify CLI loads
-        run: node dist/index.js --help
+      - name: Verify CLI entry points
+        run: npm run verify:cli
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v7

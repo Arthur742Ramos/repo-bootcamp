@@ -222,7 +222,7 @@ The honest readout. `surface` panel, `mono` lines, scroll-pinned to newest. Phas
 
 ### Modal (file preview)
 
-`role="dialog"`, `aria-modal`, `surface` body, 1px `border`, `rounded.md`, on a plain `rgba(0,0,0,0.8)` scrim (no blur). Closes on `×`, backdrop click, and Escape. Must trap focus while open and restore focus to the trigger on close. Build a semantic z-index scale (scrim → modal → toast → tooltip); never arbitrary `999`/`1000`.
+`role="dialog"`, `aria-modal`, `surface` body, 1px `border`, `rounded.md`, on a plain `rgba(0,0,0,0.8)` scrim (no blur). Closes on `×`, backdrop click, and Escape. Must trap focus while open and restore focus to the trigger on close. Markdown opens in a rendered reading view with an explicit Source toggle; Copy and Download always use the original source. JSON and other files open as source. Preview requests are cancelled when closed or replaced, and late responses are ignored. Rendered content uses an allowlisted DOM with no active HTML or remote images. Build a semantic z-index scale (scrim → modal → toast → tooltip); never arbitrary `999`/`1000`.
 
 ## 6. Do's and Don'ts
 

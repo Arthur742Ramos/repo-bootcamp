@@ -5,7 +5,7 @@ import { randomUUID } from "node:crypto";
 import { mkdir, readFile, rm, writeFile } from "fs/promises";
 import { basename, dirname, join, resolve } from "path";
 
-import { applyOutputFormat, type OutputFormat } from "../formatter.js";
+import { applyOutputFormat, markdownToHtml, type OutputFormat } from "../formatter.js";
 import { parseGitHubUrl } from "../ingest.js";
 import { quickAsk } from "../interactive.js";
 import { generateIssuePreview } from "../issues.js";
@@ -765,9 +765,13 @@ export function registerRoutes(app: Application): void {
           return;
         }
         const content = await readFile(filePath, "utf-8");
+        if (req.query.view === "preview") {
+          res.json({ content, html: /\.md$/i.test(filename) ? markdownToHtml(content) : null });
+          return;
+        }
         // Serve every generated file as inert text so repo/LLM-derived content
         // (e.g. a generated .html) can never execute in the dashboard origin.
-        // The dashboard only ever consumes these via fetch().text(); combined
+        // The default endpoint remains text-only; combined
         // with the global X-Content-Type-Options: nosniff header this removes
         // the stored-XSS sink without changing what the UI displays.
         res.setHeader("Content-Type", "text/plain; charset=utf-8");

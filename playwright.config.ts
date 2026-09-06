@@ -19,6 +19,7 @@ export default defineConfig({
     headless: true,
   },
   projects: [
+    { name: "mobile-chromium", use: { ...devices["Pixel 7"] } },
     {
       name: "chromium",
       use: {

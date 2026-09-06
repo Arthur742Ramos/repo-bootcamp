@@ -126,6 +126,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.build.json && npm run copy:data",
     "copy:data": "node --input-type=module -e \"import { cpSync } from 'node:fs'; cpSync('src/data','dist/data',{ recursive: true, force: true });\"",
+    "verify:cli": "node ./scripts/check-cli-entry.mjs",
     "verify:packaging": "node ./scripts/check-packaging.mjs",
     "security:audit": "npm audit --omit=dev --audit-level=high",
     "security:audit:all": "npm audit --audit-level=high",
