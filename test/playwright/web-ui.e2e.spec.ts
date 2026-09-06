@@ -296,7 +296,22 @@ test.describe("web UI", () => {
     await page.locator('[data-file="BOOTCAMP.md"]').click();
     await expect(page.locator("#modal")).toHaveClass(/show/);
     await expect(page.locator("#modalTitle")).toHaveText("BOOTCAMP.md");
-    await expect(page.locator("#modalContent")).toContainText("fixture-web-ui-repo");
+    await expect(page.locator("#renderedContent")).toContainText("fixture-web-ui-repo");
+    await expect(page.locator("#renderedContent h1")).toBeVisible();
+    await expect(page.locator("#closeBtn")).toBeFocused();
+    await page.keyboard.press("Tab");
+    await expect(page.locator("#renderedBtn")).toBeFocused();
+    await page.keyboard.press("Enter");
+    await page.keyboard.press("Tab");
+    await page.keyboard.press("Enter");
+    await expect(page.locator("#modalContent")).toBeVisible();
+    await page.keyboard.press("Tab");
+    await expect(page.locator("#modalContent")).toBeFocused();
+    await page.keyboard.press("Tab");
+    await expect(page.locator("#copyBtn")).toBeFocused();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
+      true
+    );
 
     // Copy button: clicking runs the copy handler and shows transient
     // confirmation. The "Copied!" label resets after a short timer, so poll for

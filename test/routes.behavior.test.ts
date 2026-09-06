@@ -198,6 +198,14 @@ describe("web routes analysis lifecycle", () => {
     // never as an active content type the dashboard origin would render.
     expect(fileResponse.headers["content-type"]).toContain("text/plain");
 
+    const previewResponse = await http.get(`/api/jobs/${jobId}/files/BOOTCAMP.md?view=preview`);
+    expect(previewResponse.status).toBe(200);
+    expect(previewResponse.headers["content-type"]).toContain("application/json");
+    expect(previewResponse.body.content).toBe(fileResponse.text);
+    expect(previewResponse.body.html).toContain("<h1>");
+    const jsonPreview = await http.get(`/api/jobs/${jobId}/files/repo_facts.json?view=preview`);
+    expect(jsonPreview.body.html).toBeNull();
+
     const jsonFileResponse = await http.get(`/api/jobs/${jobId}/files/repo_facts.json`);
     expect(jsonFileResponse.status).toBe(200);
     expect(jsonFileResponse.headers["content-type"]).toContain("text/plain");

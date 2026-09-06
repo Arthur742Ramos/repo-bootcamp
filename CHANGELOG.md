@@ -9,9 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 No unreleased changes yet.
 
-## [1.1.0] - 2026-08-27
+## [1.1.0] - 2026-09-05
 
 ### Added
+
+- Web previews offer a rendered Markdown view and an exact-source toggle, with safe links and unchanged Copy/Download output.
+- Desktop and mobile browser checks cover preview request races, failed loads, hostile Markdown, and keyboard navigation.
 
 - `bootcamp tasks <repo-url>` command: a deterministic, cross-ecosystem **task discovery** report answering the #1 Day-1 question — "how do I build, test, and run this?" — without invoking the LLM. Parses the task-definition files a repo already ships: `package.json` scripts (package-manager aware — npm/pnpm/yarn/bun detected from `packageManager` and lockfiles), `Makefile`, `justfile`, go-task `Taskfile`, `docker-compose`, `pyproject.toml` (Poetry scripts and PEP 621 `project.scripts`), and `composer.json`. Categorizes each task (install/build/test/lint/dev/run/release/other), groups the report by category, and suggests a first-session getting-started sequence (install → build → test → dev/run). Supports `--json` and `--category <name>` filtering, with a non-zero exit on an unknown category. Also extends `COMMANDS`/`GETTING_STARTED` generation in the standard kit so **non-npm repos** (Rust, Go, Python, PHP) finally surface runnable commands; existing npm `npm run <name>` command strings are preserved byte-for-byte. Exposed via the `./tasks` package subpath and public re-exports from `src/api.ts` (`discoverTasks`, `categorizeTask`, `suggestGettingStarted`, `toCommands`, `CATEGORY_ORDER`, and related types).
 - `bootcamp owners <repo-url>` command: a deterministic **ownership map** answering "who do I ask?" for any repository. Parses `CODEOWNERS` (from `.github/`, the repo root, or `docs/`), lists the **default owners** (the `*` rule), maps owners to each **top-level area** with the canonical last-match-wins semantics, lists all **maintainers**, and adds a best-effort **top-committers** list from whatever git history is available. Supports `--json`. Never invokes the LLM.
@@ -67,6 +70,10 @@ No unreleased changes yet.
 - Refactored the three deterministic scan commands (`health`, `metrics`, `security`) in `src/cli.ts` to register through a single shared `registerScanCommand` helper. They expose an identical flag surface (`--branch`, `--check`, `--min-score`, `--json`, `--max-files`, `--keep-temp`, `--verbose`) and identical option plumbing (including the raw-argv fallback for the `-b`/`-m` root-collision), so a 4th scan command is now a small config object rather than a ~28-line copy-paste. No behavior change — verified by the existing unit and E2E suites.
 
 ### Fixed
+
+- Updated qs and humanfs transitive dependencies to address the current dependency advisories.
+- GitHub release archives and SHA-256 checksums are published independently of npm credentials after CI gates pass.
+- Closing or replacing a file preview cancels its request and ignores late responses, preventing stale contents from appearing under another filename.
 
 - Several smaller correctness fixes from the audit: **PR diffs** (`src/diff.ts`) now record the _new_ path for a renamed/copied file — `git diff --name-status` emits `R<score>\toldpath\tnewpath`, and the old code joined the fields into a single `oldpath\tnewpath` string that corrupted the "Files Modified" listing and silently dropped renamed files from later per-file scans. **Markdown→HTML** (`src/formatter.ts`) now escapes the contents of inline code spans, so common type signatures like `` `Promise<void>` `` no longer emit raw `<void>` markup that browsers swallow (fenced blocks were already escaped — this restores the symmetry). The main command's **`--render-diagrams`** flag no longer renders on _every_ run: because the option carries a default value, the old `!== undefined` presence check was always true; it now detects real CLI presence via the option source. And **watch mode** (`src/watch.ts`) advances its commit cursor only after a successful re-analysis, so a transient failure during regeneration is retried on the next poll instead of leaving the generated docs permanently stale.
 - Documentation-drift analysis (`src/docs-analyzer.ts`) no longer mis-reports three cases an audit found: a string `bin` in `package.json` (the common single-binary form, e.g. `"bin": "dist/cli.js"`) now resolves the CLI command from the package **`name`** instead of `Object.keys(<string>)[0]`, which yielded the literal `"0"` for every CLI-drift entry; a Corepack `packageManager` field with an integrity hash (`pnpm@8.6.0+sha512.<hash>`) no longer triggers a spurious version mismatch (the hash suffix is stripped before comparison); and the framework-doc coverage check matches short, ambiguous terms like `ts` as **whole words**, so a README containing `scripts`/`tests` no longer makes undocumented TypeScript register as documented.

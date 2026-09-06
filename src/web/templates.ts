@@ -380,6 +380,23 @@ export function getIndexHtml(nonce?: string): string {
       line-height: 1.5;
       color: var(--ink);
     }
+    [hidden] { display: none !important; }
+    .preview-controls { display: flex; gap: 0.5rem; margin-bottom: 1rem; }
+    .preview-controls [aria-pressed="true"] { border-color: var(--accent); }
+    .markdown-preview { line-height: 1.65; overflow-wrap: anywhere; }
+    .markdown-preview > * + * { margin-top: 1rem; }
+    .markdown-preview h1 { font-size: 1.75rem; }
+    .markdown-preview h2 { font-size: 1.4rem; }
+    .markdown-preview h3 { font-size: 1.15rem; }
+    .markdown-preview p { max-width: 72ch; }
+    .markdown-preview ul, .markdown-preview ol { padding-left: 1.5rem; }
+    .markdown-preview code { font-family: var(--font-mono); font-size: 0.875em; }
+    .markdown-preview a[href] { color: var(--accent); text-decoration: underline; }
+    .markdown-preview table { display: block; max-width: 100%; overflow-x: auto; border-collapse: collapse; }
+    .markdown-preview th, .markdown-preview td { border: 1px solid var(--border); padding: 0.5rem; }
+    .markdown-preview blockquote { padding: 1rem; background: var(--canvas); }
+    .markdown-preview summary { cursor: pointer; }
+    .markdown-preview :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
     .clipboard-fallback { position: fixed; opacity: 0; pointer-events: none; }
     .empty-filter { color: var(--ink-muted); font-size: 0.8125rem; padding: 0.75rem 0; }
     .empty-filter[hidden] { display: none; }
@@ -596,6 +613,11 @@ export function getIndexHtml(nonce?: string): string {
           <button class="close" type="button" id="closeBtn" aria-label="Close file preview">&times;</button>
         </div>
       </div>
+      <div class="preview-controls" role="group" aria-label="File view" hidden id="previewControls">
+        <button class="icon-btn" type="button" id="renderedBtn" aria-pressed="true">Rendered</button>
+        <button class="icon-btn" type="button" id="sourceBtn" aria-pressed="false">Source</button>
+      </div>
+      <article id="renderedContent" class="markdown-preview" tabindex="0" aria-label="Rendered document" hidden></article>
       <pre id="modalContent" tabindex="0"></pre>
     </div>
   </div>
@@ -603,6 +625,8 @@ export function getIndexHtml(nonce?: string): string {
   <script${nonceAttribute}>
     let currentJobId = null;
     let currentFile = null;
+    let previewRequest = null;
+    let previewToken = 0;
     let lastFocused = null;
     let currentEventSource = null;
     let latestResult = null;
@@ -1341,15 +1365,65 @@ export function getIndexHtml(nonce?: string): string {
       document.getElementById('emptyFilter').hidden = visible !== 0 || fileButtons.length === 0;
     }
 
+    // Build a fresh allowlisted DOM from an inert template. Never attach repository
+    // HTML directly: discard active elements, attributes, images and unsafe URLs.
+    function renderDocument(html) {
+      const template = document.createElement('template');
+      template.innerHTML = html;
+      const allowed = new Set(['P', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6', 'UL', 'OL', 'LI',
+        'PRE', 'CODE', 'STRONG', 'EM', 'DEL', 'BLOCKQUOTE', 'TABLE', 'THEAD', 'TBODY',
+        'TR', 'TH', 'TD', 'HR', 'BR', 'DETAILS', 'SUMMARY', 'A']);
+      const blocked = new Set(['SCRIPT', 'STYLE', 'IFRAME', 'OBJECT', 'EMBED', 'SVG', 'MATH', 'FORM', 'TEMPLATE']);
+      function copy(node) {
+        if (node.nodeType === Node.TEXT_NODE) return document.createTextNode(node.textContent);
+        if (node.nodeType !== Node.ELEMENT_NODE || blocked.has(node.tagName)) return document.createDocumentFragment();
+        const element = allowed.has(node.tagName)
+          ? document.createElement(node.tagName.toLowerCase()) : document.createDocumentFragment();
+        if (node.tagName === 'A') {
+          const href = node.getAttribute('href') || '';
+          if (/^https?:\\/\\//i.test(href)) {
+            element.setAttribute('href', href);
+            element.setAttribute('target', '_blank');
+            element.setAttribute('rel', 'noopener noreferrer');
+          } else {
+            const filename = href.replace(/^\\.\\//, '').split('#')[0];
+            const file = Array.from(document.querySelectorAll('#files [data-file]'))
+              .find(button => button.dataset.file === filename);
+            if (file) {
+              element.setAttribute('href', '#');
+              element.addEventListener('click', event => {
+                event.preventDefault();
+                void viewFile(filename);
+              });
+            }
+          }
+        }
+        for (const child of node.childNodes) element.append(copy(child));
+        return element;
+      }
+      const target = document.getElementById('renderedContent');
+      target.replaceChildren(...Array.from(template.content.childNodes, copy));
+    }
+
+    function setPreviewMode(rendered) {
+      document.getElementById('modalContent').hidden = rendered;
+      document.getElementById('renderedContent').hidden = !rendered;
+      document.getElementById('renderedBtn').setAttribute('aria-pressed', String(rendered));
+      document.getElementById('sourceBtn').setAttribute('aria-pressed', String(!rendered));
+    }
+
     async function viewFile(filename) {
-      // Open the modal immediately with a loading placeholder so the click has an
-      // instant, visible response; contents stream in when the fetch resolves.
-      // currentFile stays null until a successful load so Copy/Download never act
-      // on the placeholder or on an error message.
+      if (previewRequest) previewRequest.abort();
+      const controller = new AbortController();
+      previewRequest = controller;
+      const token = ++previewToken;
       currentFile = null;
       const modalContent = document.getElementById('modalContent');
       const copyBtn = document.getElementById('copyBtn');
       const downloadBtn = document.getElementById('downloadBtn');
+      document.getElementById('previewControls').hidden = true;
+      document.getElementById('renderedContent').replaceChildren();
+      setPreviewMode(false);
       document.getElementById('modalTitle').textContent = filename;
       modalContent.classList.remove('load-error');
       modalContent.textContent = 'Loading…';
@@ -1358,25 +1432,27 @@ export function getIndexHtml(nonce?: string): string {
       copyBtn.disabled = true;
       downloadBtn.disabled = true;
       openModal();
-
       try {
-        const res = await fetch('/api/jobs/' + currentJobId + '/files/' + encodeURIComponent(filename));
-        if (!res.ok) {
-          // Error responses carry a JSON body; render a distinct error state rather
-          // than dumping {"error":"..."} into the <pre> as if it were file content.
-          modalContent.classList.add('load-error');
-          modalContent.textContent = "Couldn't load " + filename + ' (' + res.status + ' ' + res.statusText + ')';
-          return;
+        const res = await fetch('/api/jobs/' + currentJobId + '/files/' + encodeURIComponent(filename) + '?view=preview', { signal: controller.signal });
+        if (token !== previewToken) return;
+        if (!res.ok) throw new Error(res.status + ' ' + res.statusText);
+        const data = await res.json();
+        if (token !== previewToken) return;
+        currentFile = { name: filename, content: data.content };
+        modalContent.textContent = data.content;
+        if (typeof data.html === 'string') {
+          renderDocument(data.html);
+          document.getElementById('previewControls').hidden = false;
+          setPreviewMode(true);
         }
-        const content = await res.text();
-        currentFile = { name: filename, content };
-        modalContent.textContent = content;
         copyBtn.disabled = false;
         downloadBtn.disabled = false;
       } catch (err) {
+        if (token !== previewToken || controller.signal.aborted) return;
         modalContent.classList.add('load-error');
-        modalContent.textContent =
-          "Couldn't load " + filename + ': ' + (err instanceof Error ? err.message : String(err));
+        modalContent.textContent = "Couldn't load " + filename + ': ' + (err instanceof Error ? err.message : String(err));
+      } finally {
+        if (token === previewToken) previewRequest = null;
       }
     }
 
@@ -1590,7 +1666,7 @@ export function getIndexHtml(nonce?: string): string {
     // inert support) and body scrolling is locked while the modal is up. .modal is
     // a sibling of .container, so inerting .container never traps the dialog.
     function openModal() {
-      lastFocused = document.activeElement;
+      if (!document.getElementById('modal').classList.contains('show')) lastFocused = document.activeElement;
       const container = document.querySelector('.container');
       if (container) {
         container.inert = true;
@@ -1604,6 +1680,10 @@ export function getIndexHtml(nonce?: string): string {
     }
 
     function closeModal() {
+      ++previewToken;
+      if (previewRequest) previewRequest.abort();
+      previewRequest = null;
+      currentFile = null;
       const modal = document.getElementById('modal');
       if (!modal.classList.contains('show')) return;
       modal.classList.remove('show');
@@ -1649,6 +1729,8 @@ export function getIndexHtml(nonce?: string): string {
     // Modal controls are wired here (not via inline onclick) to comply with the
     // server's Content-Security-Policy, which blocks inline event handlers.
     document.getElementById('copyBtn').addEventListener('click', () => { void copyFile(); });
+    document.getElementById('renderedBtn').addEventListener('click', () => setPreviewMode(true));
+    document.getElementById('sourceBtn').addEventListener('click', () => setPreviewMode(false));
     document.getElementById('downloadBtn').addEventListener('click', downloadFile);
     document.getElementById('closeBtn').addEventListener('click', closeModal);
     document.getElementById('modal').addEventListener('click', (event) => {

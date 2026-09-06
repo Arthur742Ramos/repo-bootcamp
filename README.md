@@ -808,7 +808,7 @@ bootcamp web --port 8080
 # Then open http://localhost:3000 in your browser
 ```
 
-The browser UI streams live progress, then lets you preview each generated file in a modal with one-click **Copy** (to clipboard) and **Download** buttons.
+The browser UI streams live progress, then lets you read generated Markdown with a **Rendered / Source** toggle and links between generated documents. **Copy** and **Download** always preserve the original source. JSON and other files open as source. The reader supports keyboard navigation and mobile screens.
 
 ![Web Dashboard](media/screenshot-web-dashboard.png)
 
