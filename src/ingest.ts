@@ -5,8 +5,9 @@
 
 import { execFile } from "child_process";
 import { promisify } from "util";
-import { readFile, rm, realpath } from "fs/promises";
+import { mkdir, readFile, rm, realpath, stat, mkdtemp } from "fs/promises";
 import { join, basename, resolve, relative, isAbsolute, dirname } from "path";
+import { devNull } from "os";
 import fg from "fast-glob";
 import { Readable } from "stream";
 import type {
@@ -215,12 +216,18 @@ export async function cloneRepo(
   const tempRoot = resolve(targetDir, ".tmp");
   const safeOwner = repoInfo.owner.replace(/[^A-Za-z0-9._/-]/g, "_").replaceAll("/", "__");
   const safeRepo = repoInfo.repo.replace(/[^A-Za-z0-9._-]/g, "_");
-  const clonePath = resolve(tempRoot, `${safeOwner}__${safeRepo}`);
+  await mkdir(tempRoot, { recursive: true });
+  const clonePrefix = `${safeOwner}__${safeRepo}-`;
+  const clonePath = await mkdtemp(join(tempRoot, clonePrefix));
   if (!isPathInsideDir(tempRoot, clonePath)) {
+    await rm(clonePath, { recursive: true, force: true });
     throw new Error("Unsafe clone path");
   }
 
-  const cloneUrl = repoInfo.url.endsWith(".git") ? repoInfo.url : `${repoInfo.url}.git`;
+  const cloneUrl =
+    /^https?:\/\//i.test(repoInfo.url) && !repoInfo.url.endsWith(".git")
+      ? `${repoInfo.url}.git`
+      : repoInfo.url;
   // `-c protocol.file.allow=user` is git's post-CVE-2022-39253 default: it permits
   // the top-level, user-initiated clone (https in production; also local file://
   // used by tests and legitimate local clones) while blocking file:// smuggled via
@@ -278,8 +285,6 @@ export async function cloneRepo(
     return `Failed to clone repository: ${error.message}`;
   };
 
-  await rm(clonePath, { recursive: true, force: true });
-
   try {
     // Harden the clone environment: never prompt for or fetch credentials, and
     // ignore the operator's global/system gitconfig so an untrusted repo URL
@@ -291,11 +296,16 @@ export async function cloneRepo(
         ...process.env,
         GIT_TERMINAL_PROMPT: "0",
         GIT_ASKPASS: "echo",
-        GIT_CONFIG_GLOBAL: "/dev/null",
-        GIT_CONFIG_SYSTEM: "/dev/null",
+        GIT_CONFIG_GLOBAL: devNull,
+        GIT_CONFIG_SYSTEM: devNull,
       },
     });
   } catch (error: unknown) {
+    try {
+      await rm(clonePath, { recursive: true, force: true });
+    } catch {
+      // Preserve the original git failure; cleanup is best effort here.
+    }
     throw new Error(getCloneErrorMessage(error), { cause: error });
   }
 
@@ -314,6 +324,11 @@ export async function cloneRepo(
 
     return clonePath;
   } catch (error: unknown) {
+    try {
+      await rm(clonePath, { recursive: true, force: true });
+    } catch {
+      // Preserve the metadata failure; cleanup is best effort here.
+    }
     throw new Error(`Failed to read cloned repository metadata: ${getErrorMessage(error)}`, {
       cause: error,
     });
@@ -329,10 +344,30 @@ async function scanDirectory(
   options: { exclude?: string[]; subdir?: string } = {}
 ): Promise<FileInfo[]> {
   const { exclude = [], subdir } = options;
+  if (!Number.isInteger(maxFiles) || maxFiles <= 0) {
+    throw new Error(`Invalid maxFiles: ${maxFiles}. Use a positive integer.`);
+  }
   // `subdir` scopes the walk to a sub-path of the repo (e.g. a monorepo
   // package); `exclude` drops additional trees (generated/vendored fixtures).
   // Both default to a no-op — the CLI wiring arrives in a later wave.
-  const scanRoot = subdir ? resolve(basePath, subdir) : basePath;
+  const realBasePath = await realpath(basePath);
+  const requestedScanRoot = subdir ? resolve(basePath, subdir) : basePath;
+  let scanRoot: string;
+  try {
+    scanRoot = await realpath(requestedScanRoot);
+  } catch (error: unknown) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT" && subdir) {
+      throw new Error(`Scan subdir does not exist: ${subdir}`, { cause: error });
+    }
+    throw error;
+  }
+  if (!isPathInsideDir(realBasePath, scanRoot)) {
+    throw new Error(`Scan subdir escapes repository root: ${subdir}`);
+  }
+  const scanRootStats = await stat(scanRoot);
+  if (!scanRootStats.isDirectory()) {
+    throw new Error(`Scan subdir is not a directory: ${subdir}`);
+  }
   const ignorePatterns = [
     ...Array.from(SKIP_DIRS).flatMap((dir) => [`**/${dir}`, `**/${dir}/**`]),
     ...exclude,

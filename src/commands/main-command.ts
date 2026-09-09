@@ -285,6 +285,23 @@ export async function runMainCommand(repoUrl: string, options: BootcampOptions):
     process.exit(1);
   }
 
+  const cleanupFailedRun = async (): Promise<void> => {
+    if (repoSource?.isLocal || options.keepTemp) {
+      return;
+    }
+    try {
+      await cleanupRepository(repoPath);
+    } catch (cleanupError: unknown) {
+      console.error(
+        chalk.yellow(
+          `Could not clean up temporary files after failure: ${
+            cleanupError instanceof Error ? cleanupError.message : String(cleanupError)
+          }`
+        )
+      );
+    }
+  };
+
   const scanStart = Date.now();
   progress.startPhase("scan", `max ${options.maxFiles} files`);
   // `--exclude`/`--subdir` scope the walk (normalized in resolveRunConfiguration);
@@ -305,6 +322,7 @@ export async function runMainCommand(repoUrl: string, options: BootcampOptions):
     );
   } catch (error: unknown) {
     progress.fail(`Scan failed: ${(error as Error).message}`);
+    await cleanupFailedRun();
     process.exit(1);
   }
 
@@ -349,6 +367,7 @@ export async function runMainCommand(repoUrl: string, options: BootcampOptions):
     progress.fail(`Analysis failed: ${(error as Error).message}`);
     console.log(chalk.yellow("\nTip: Make sure you're authenticated with GitHub Copilot"));
     console.log(chalk.gray("Run: gh auth status"));
+    await cleanupFailedRun();
     process.exit(1);
   }
 
@@ -356,6 +375,7 @@ export async function runMainCommand(repoUrl: string, options: BootcampOptions):
     await mkdir(outputDir, { recursive: true });
   } catch (error: unknown) {
     console.error(chalk.red(`Failed to create output directory: ${(error as Error).message}`));
+    await cleanupFailedRun();
     process.exit(1);
   }
 
@@ -452,6 +472,7 @@ export async function runMainCommand(repoUrl: string, options: BootcampOptions):
     }
   } catch (error: unknown) {
     progress.fail(`Document generation failed: ${(error as Error).message}`);
+    await cleanupFailedRun();
     process.exit(1);
   }
 

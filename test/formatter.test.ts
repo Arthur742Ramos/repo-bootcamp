@@ -115,6 +115,17 @@ describe("markdownToHtml", () => {
     expect(html).toContain("</details>");
   });
 
+  it("escapes raw HTML and drops unsafe inline URLs", () => {
+    const html = markdownToHtml(
+      '<script>alert("xss")</script>\n\n[Unsafe](javascript:alert)\n\n![Tracker](javascript:alert)'
+    );
+    expect(html).toContain("&lt;script&gt;alert(&quot;xss&quot;)&lt;/script&gt;");
+    expect(html).not.toContain("<script>");
+    expect(html).toContain("<p>Unsafe</p>");
+    expect(html).toContain("<p>Tracker</p>");
+    expect(html).not.toContain("javascript:");
+  });
+
   it("handles checkboxes in list items", () => {
     const md = "- [ ] todo\n- [x] done";
     const html = markdownToHtml(md);
@@ -179,7 +190,7 @@ Paragraph text with **bold** and *italic*.`;
 
   it("handles links with special chars in URL", () => {
     const html = markdownToHtml("[link](https://example.com/path?q=1&b=2)");
-    expect(html).toContain('href="https://example.com/path?q=1&b=2"');
+    expect(html).toContain('href="https://example.com/path?q=1&amp;b=2"');
   });
 
   it("handles markdown with only a heading and no body", () => {

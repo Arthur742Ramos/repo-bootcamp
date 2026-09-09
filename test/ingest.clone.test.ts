@@ -1,4 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { devNull } from "os";
+import { dirname } from "path";
 
 const { mockExecFile, mockRm } = vi.hoisted(() => ({
   mockExecFile: vi.fn(),
@@ -138,8 +140,8 @@ describe("cloneRepo hardening", () => {
     const env = (cloneCall.opts?.env ?? {}) as Record<string, string | undefined>;
     expect(env.GIT_TERMINAL_PROMPT).toBe("0");
     expect(env.GIT_ASKPASS).toBe("echo");
-    expect(env.GIT_CONFIG_GLOBAL).toBe("/dev/null");
-    expect(env.GIT_CONFIG_SYSTEM).toBe("/dev/null");
+    expect(env.GIT_CONFIG_GLOBAL).toBe(devNull);
+    expect(env.GIT_CONFIG_SYSTEM).toBe(devNull);
     // The ambient environment is preserved (env is spread from process.env).
     expect(env.PATH).toBe(process.env.PATH);
   });
@@ -167,5 +169,53 @@ describe("cloneRepo hardening", () => {
     expect(cloneArgs).not.toContain("--filter=blob:none");
     // repoInfo.branch is updated from `git rev-parse --abbrev-ref HEAD`.
     expect(repoInfo.branch).toBe("feature");
+  });
+
+  it("uses an isolated clone destination for concurrent clones of the same repository", async () => {
+    const cloneDestinations: string[] = [];
+    mockExecFile.mockImplementation(
+      (_cmd: unknown, args: unknown, optsOrCb: unknown, maybeCb?: unknown) => {
+        const cloneArgs = args as string[];
+        if (cloneArgs.includes("clone")) {
+          cloneDestinations.push(cloneArgs[cloneArgs.length - 1]);
+        }
+        invokeExecCallback(optsOrCb, maybeCb, null, { stdout: "main\n", stderr: "" });
+        return {} as never;
+      }
+    );
+
+    const [first, second] = await Promise.all([
+      cloneRepo(makeRepoInfo(), "/tmp/bootcamp-concurrent-clones"),
+      cloneRepo(makeRepoInfo(), "/tmp/bootcamp-concurrent-clones"),
+    ]);
+
+    expect(first).not.toBe(second);
+    expect(new Set(cloneDestinations).size).toBe(2);
+
+    const actual = await vi.importActual<typeof import("fs/promises")>("fs/promises");
+    await actual.rm(dirname(first), { recursive: true, force: true });
+    await actual.rm(dirname(second), { recursive: true, force: true });
+  });
+
+  it("does not append .git to local file URLs", async () => {
+    const cloneCalls: string[][] = [];
+    mockExecFile.mockImplementation(
+      (_cmd: unknown, args: unknown, optsOrCb: unknown, maybeCb?: unknown) => {
+        const argsList = args as string[];
+        if (argsList.includes("clone")) cloneCalls.push(argsList);
+        invokeExecCallback(optsOrCb, maybeCb, null, { stdout: "main\n", stderr: "" });
+        return {} as never;
+      }
+    );
+
+    const repoInfo = makeRepoInfo({
+      url: "file:///tmp/source-repo",
+    });
+    const clonePath = await cloneRepo(repoInfo, "/tmp/bootcamp-file-clone");
+    expect(cloneCalls[0]).toContain("file:///tmp/source-repo");
+    expect(cloneCalls[0]).not.toContain("file:///tmp/source-repo.git");
+
+    const actual = await vi.importActual<typeof import("fs/promises")>("fs/promises");
+    await actual.rm(dirname(clonePath), { recursive: true, force: true });
   });
 });

@@ -222,6 +222,50 @@ describe("runMainCommand --no-clone behavior", () => {
     expect(cleanupRepository).not.toHaveBeenCalled();
   });
 
+  it("cleans up a remote clone when scanning fails before generation", async () => {
+    vi.resetModules();
+    const cloneRepository = vi.fn().mockResolvedValue("/tmp/remote-clone");
+    const cleanupRepository = vi.fn().mockResolvedValue(undefined);
+    const scanRepositoryFiles = vi.fn().mockRejectedValue(new Error("scan failed"));
+    const resolveRunConfiguration = vi.fn().mockResolvedValue({
+      config: null,
+      styleConfig: makeStyleConfig(),
+      outputFormat: "markdown",
+    });
+
+    vi.doMock("../src/services/clone-service.js", () => ({
+      cloneRepository,
+      cleanupRepository,
+      scanRepositoryFiles,
+    }));
+    vi.doMock("../src/services/config-resolution.js", () => ({ resolveRunConfiguration }));
+
+    const { runMainCommand } = await import("../src/commands/main-command.js");
+    const exitSpy = vi.spyOn(process, "exit").mockImplementation(((code?: number) => {
+      throw new Error(`EXIT_${code ?? 0}`);
+    }) as (code?: number) => never);
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    try {
+      await expect(
+        runMainCommand("https://github.com/test/repo", {
+          ...BASE_OPTIONS,
+          noClone: false,
+          jsonOnly: true,
+        })
+      ).rejects.toThrow("EXIT_1");
+    } finally {
+      exitSpy.mockRestore();
+      logSpy.mockRestore();
+      errorSpy.mockRestore();
+    }
+
+    expect(cloneRepository).toHaveBeenCalled();
+    expect(scanRepositoryFiles).toHaveBeenCalledWith("/tmp/remote-clone", BASE_OPTIONS.maxFiles);
+    expect(cleanupRepository).toHaveBeenCalledWith("/tmp/remote-clone");
+  });
+
   it("suppresses banner and decorative output in quiet mode, printing the output dir", async () => {
     const repoPath = await createLocalFixtureRepo();
     const outputDir = join(repoPath, "bootcamp-output");

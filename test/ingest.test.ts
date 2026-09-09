@@ -476,6 +476,44 @@ describe("scanRepo", () => {
     }
   });
 
+  it("rejects a missing scan subdir instead of silently returning an empty scan", async () => {
+    const repoPath = await mkdtemp(join(tmpdir(), "bootcamp-ingest-missing-subdir-"));
+    try {
+      await expect(scanRepo(repoPath, 500, { subdir: "packages/missing" })).rejects.toThrow(
+        "Scan subdir does not exist"
+      );
+    } finally {
+      await rm(repoPath, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects scan scopes that escape the repository root", async () => {
+    const repoPath = await mkdtemp(join(tmpdir(), "bootcamp-ingest-unsafe-subdir-"));
+    const outside = await mkdtemp(join(tmpdir(), "bootcamp-ingest-unsafe-outside-"));
+    try {
+      await expect(scanRepo(repoPath, 500, { subdir: "../" })).rejects.toThrow(
+        "Scan subdir escapes repository root"
+      );
+      await expect(scanRepo(repoPath, 500, { subdir: outside })).rejects.toThrow(
+        "Scan subdir escapes repository root"
+      );
+    } finally {
+      await rm(repoPath, { recursive: true, force: true });
+      await rm(outside, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects non-positive or non-integer scan limits", async () => {
+    const repoPath = await mkdtemp(join(tmpdir(), "bootcamp-ingest-invalid-limit-"));
+    try {
+      await expect(scanRepo(repoPath, 0)).rejects.toThrow("Invalid maxFiles");
+      await expect(scanRepo(repoPath, Number.NaN)).rejects.toThrow("Invalid maxFiles");
+      await expect(scanRepo(repoPath, 1.5)).rejects.toThrow("Invalid maxFiles");
+    } finally {
+      await rm(repoPath, { recursive: true, force: true });
+    }
+  });
+
   it("caps key source files at the byte budget while keeping the top-priority file", async () => {
     const repoPath = await mkdtemp(join(tmpdir(), "bootcamp-ingest-budget-"));
     try {
