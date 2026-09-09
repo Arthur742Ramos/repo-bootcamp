@@ -1,6 +1,7 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
-import { devNull } from "os";
-import { dirname } from "path";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { mkdtemp } from "fs/promises";
+import { tmpdir } from "os";
+import { join } from "path";
 
 const { mockExecFile, mockRm } = vi.hoisted(() => ({
   mockExecFile: vi.fn(),
@@ -21,6 +22,17 @@ vi.mock("fs/promises", async () => {
 
 import { cloneRepo } from "../src/ingest.js";
 import type { RepoInfo } from "../src/types.js";
+
+let targetDir: string;
+
+beforeEach(async () => {
+  targetDir = await mkdtemp(join(tmpdir(), "bootcamp-clone-test-"));
+});
+
+afterEach(async () => {
+  const actual = await vi.importActual<typeof import("fs/promises")>("fs/promises");
+  await actual.rm(targetDir, { recursive: true, force: true });
+});
 
 function makeRepoInfo(overrides: Partial<RepoInfo> = {}): RepoInfo {
   return {
@@ -64,7 +76,7 @@ describe("cloneRepo error boundaries", () => {
       }
     );
 
-    await expect(cloneRepo(makeRepoInfo(), "/tmp/target")).rejects.toThrow(
+    await expect(cloneRepo(makeRepoInfo(), targetDir)).rejects.toThrow(
       "Failed to clone repository: git clone timed out after 120s"
     );
   });
@@ -81,7 +93,7 @@ describe("cloneRepo error boundaries", () => {
       }
     );
 
-    await expect(cloneRepo(makeRepoInfo(), "/tmp/target")).rejects.toThrow(
+    await expect(cloneRepo(makeRepoInfo(), targetDir)).rejects.toThrow(
       "Failed to clone repository: git clone exited with code 128: fatal: repository 'owner/repo.git' not found"
     );
   });
@@ -102,7 +114,7 @@ describe("cloneRepo error boundaries", () => {
         }
       );
 
-    await expect(cloneRepo(makeRepoInfo(), "/tmp/target")).rejects.toThrow(
+    await expect(cloneRepo(makeRepoInfo(), targetDir)).rejects.toThrow(
       "Failed to read cloned repository metadata: rev-parse failed"
     );
   });
@@ -114,7 +126,7 @@ describe("cloneRepo hardening", () => {
     mockRm.mockResolvedValue(undefined);
   });
 
-  it("hardens the clone env and forbids the file:// transport", async () => {
+  it("hardens the clone env with Git-compatible null config paths", async () => {
     const calls: { args: string[]; opts: Record<string, unknown> | undefined }[] = [];
     mockExecFile.mockImplementation(
       (_cmd: unknown, args: unknown, optsOrCb: unknown, maybeCb?: unknown) => {
@@ -128,7 +140,7 @@ describe("cloneRepo hardening", () => {
       }
     );
 
-    await cloneRepo(makeRepoInfo(), "/tmp/target");
+    await cloneRepo(makeRepoInfo(), targetDir);
 
     const cloneCall = calls[0];
     // `-c protocol.file.allow=user` is a global option, so it must precede the
@@ -140,8 +152,8 @@ describe("cloneRepo hardening", () => {
     const env = (cloneCall.opts?.env ?? {}) as Record<string, string | undefined>;
     expect(env.GIT_TERMINAL_PROMPT).toBe("0");
     expect(env.GIT_ASKPASS).toBe("echo");
-    expect(env.GIT_CONFIG_GLOBAL).toBe(devNull);
-    expect(env.GIT_CONFIG_SYSTEM).toBe(devNull);
+    expect(env.GIT_CONFIG_GLOBAL).toBe("/dev/null");
+    expect(env.GIT_CONFIG_SYSTEM).toBe("/dev/null");
     // The ambient environment is preserved (env is spread from process.env).
     expect(env.PATH).toBe(process.env.PATH);
   });
@@ -159,7 +171,7 @@ describe("cloneRepo hardening", () => {
     );
 
     const repoInfo = makeRepoInfo();
-    await cloneRepo(repoInfo, "/tmp/target", "feature", true);
+    await cloneRepo(repoInfo, targetDir, "feature", true);
 
     const cloneArgs = calls[0];
     expect(cloneArgs).toContain("--branch");
@@ -185,16 +197,12 @@ describe("cloneRepo hardening", () => {
     );
 
     const [first, second] = await Promise.all([
-      cloneRepo(makeRepoInfo(), "/tmp/bootcamp-concurrent-clones"),
-      cloneRepo(makeRepoInfo(), "/tmp/bootcamp-concurrent-clones"),
+      cloneRepo(makeRepoInfo(), targetDir),
+      cloneRepo(makeRepoInfo(), targetDir),
     ]);
 
     expect(first).not.toBe(second);
     expect(new Set(cloneDestinations).size).toBe(2);
-
-    const actual = await vi.importActual<typeof import("fs/promises")>("fs/promises");
-    await actual.rm(dirname(first), { recursive: true, force: true });
-    await actual.rm(dirname(second), { recursive: true, force: true });
   });
 
   it("does not append .git to local file URLs", async () => {
@@ -211,11 +219,8 @@ describe("cloneRepo hardening", () => {
     const repoInfo = makeRepoInfo({
       url: "file:///tmp/source-repo",
     });
-    const clonePath = await cloneRepo(repoInfo, "/tmp/bootcamp-file-clone");
+    await cloneRepo(repoInfo, targetDir);
     expect(cloneCalls[0]).toContain("file:///tmp/source-repo");
     expect(cloneCalls[0]).not.toContain("file:///tmp/source-repo.git");
-
-    const actual = await vi.importActual<typeof import("fs/promises")>("fs/promises");
-    await actual.rm(dirname(clonePath), { recursive: true, force: true });
   });
 });

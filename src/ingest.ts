@@ -7,7 +7,6 @@ import { execFile } from "child_process";
 import { promisify } from "util";
 import { mkdir, readFile, rm, realpath, stat, mkdtemp } from "fs/promises";
 import { join, basename, resolve, relative, isAbsolute, dirname } from "path";
-import { devNull } from "os";
 import fg from "fast-glob";
 import { Readable } from "stream";
 import type {
@@ -296,8 +295,9 @@ export async function cloneRepo(
         ...process.env,
         GIT_TERMINAL_PROMPT: "0",
         GIT_ASKPASS: "echo",
-        GIT_CONFIG_GLOBAL: devNull,
-        GIT_CONFIG_SYSTEM: devNull,
+        // Git for Windows supports /dev/null, but rejects os.devNull's \\.\nul.
+        GIT_CONFIG_GLOBAL: "/dev/null",
+        GIT_CONFIG_SYSTEM: "/dev/null",
       },
     });
   } catch (error: unknown) {

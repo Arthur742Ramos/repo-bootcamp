@@ -201,7 +201,7 @@ describe("diff command", () => {
       tempDir
     );
 
-    expect(result.exitCode).toBe(0);
+    expect(result.exitCode, result.stderr).toBe(0);
     expect(result.stderr).not.toContain("Diff failed:");
     expect(result.stderr).not.toContain("Clone failed:");
     expect(result.stderr).not.toContain("Write failed:");
@@ -253,7 +253,7 @@ describe("diff command", () => {
       tempDir
     );
 
-    expect(result.exitCode).toBe(0);
+    expect(result.exitCode, result.stderr).toBe(0);
     const plainStdout = stripAnsi(result.stdout);
     // --format routed correctly -> HTML output file.
     expect(plainStdout).toMatch(/File:\s+\S+\.html/);
