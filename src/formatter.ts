@@ -46,42 +46,74 @@ function getMermaidRuntime(body: string): string {
  * Convert inline markdown formatting to HTML.
  */
 function convertInlineFormatting(line: string): string {
-  const tokens: string[] = [];
-  const tokenFor = (html: string): string => {
-    const token = `@@INLINE_${tokens.length}@@`;
-    tokens.push(html);
-    return token;
-  };
   const isSafeUrl = (value: string, allowRelative: boolean): boolean => {
     const trimmed = value.trim();
     if (/^https?:\/\//i.test(trimmed)) return true;
     if (!allowRelative) return false;
     return trimmed.startsWith("#") || trimmed.startsWith("./") || trimmed.startsWith("../");
   };
-  const escapedSource = line
-    // Images must be extracted before links so the leading `!` is not treated
-    // as ordinary text. Unsafe image URLs are rendered as alt text only.
-    .replace(/!\[([^\]]*)\]\(([^)]+)\)/g, (_match, alt: string, url: string) =>
-      isSafeUrl(url, false)
-        ? tokenFor(`<img src="${escapeHtml(url.trim())}" alt="${escapeHtml(alt)}" />`)
-        : alt
-    )
-    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_match, text: string, url: string) =>
-      isSafeUrl(url, true)
-        ? tokenFor(`<a href="${escapeHtml(url.trim())}">${escapeHtml(text)}</a>`)
-        : text
-    )
-    .replace(/`([^`]+)`/g, (_match, code: string) => tokenFor(`<code>${escapeHtml(code)}</code>`));
 
-  let escaped = escapeHtml(escapedSource);
-  // Bold and italic are applied after escaping source text, so repository
-  // content cannot smuggle active markup into generated HTML documents.
-  escaped = escaped.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
-  escaped = escaped.replace(/\*(.+?)\*/g, "<em>$1</em>");
+  // Render protected inline constructs as output fragments while walking the
+  // source. This avoids textual placeholders entirely: user content can never
+  // be mistaken for an internal token during restoration.
+  const render = (source: string): string => {
+    let output = "";
+    let index = 0;
 
-  return escaped.replace(/@@INLINE_(\d+)@@/g, (_match, index: string) => {
-    return tokens[Number(index)] ?? "";
-  });
+    while (index < source.length) {
+      const remainder = source.slice(index);
+
+      // Images must be checked before links so the leading `!` is not treated
+      // as ordinary text. Unsafe image URLs are rendered as escaped alt text.
+      const imageMatch = remainder.match(/^!\[([^\]]*)\]\(([^)]+)\)/);
+      if (imageMatch) {
+        const [, alt, url] = imageMatch;
+        output += isSafeUrl(url, false)
+          ? `<img src="${escapeHtml(url.trim())}" alt="${escapeHtml(alt)}" />`
+          : escapeHtml(alt);
+        index += imageMatch[0].length;
+        continue;
+      }
+
+      const linkMatch = remainder.match(/^\[([^\]]+)\]\(([^)]+)\)/);
+      if (linkMatch) {
+        const [, text, url] = linkMatch;
+        output += isSafeUrl(url, true)
+          ? `<a href="${escapeHtml(url.trim())}">${escapeHtml(text)}</a>`
+          : escapeHtml(text);
+        index += linkMatch[0].length;
+        continue;
+      }
+
+      const codeMatch = remainder.match(/^`([^`]+)`/);
+      if (codeMatch) {
+        output += `<code>${escapeHtml(codeMatch[1])}</code>`;
+        index += codeMatch[0].length;
+        continue;
+      }
+
+      const boldMatch = remainder.match(/^\*\*(.+?)\*\*/);
+      if (boldMatch) {
+        output += `<strong>${render(boldMatch[1])}</strong>`;
+        index += boldMatch[0].length;
+        continue;
+      }
+
+      const italicMatch = remainder.match(/^\*(.+?)\*/);
+      if (italicMatch) {
+        output += `<em>${render(italicMatch[1])}</em>`;
+        index += italicMatch[0].length;
+        continue;
+      }
+
+      output += escapeHtml(source[index]);
+      index += 1;
+    }
+
+    return output;
+  };
+
+  return render(line);
 }
 
 /**

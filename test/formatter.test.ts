@@ -83,6 +83,22 @@ describe("markdownToHtml", () => {
     expect(html).toContain('<a href="https://example.com">text</a>');
   });
 
+  it("preserves literal placeholder-shaped text", () => {
+    const html = markdownToHtml("@@INLINE_999@@\n\n@@INLINE_0@@ [link](https://example.com)");
+    expect(html).toContain("<p>@@INLINE_999@@</p>");
+    expect(html).toContain('<p>@@INLINE_0@@ <a href="https://example.com">link</a></p>');
+    expect(html.match(/<a href="https:\/\/example\.com">link<\/a>/g)).toHaveLength(1);
+  });
+
+  it("preserves literal placeholder-shaped text in protected inline constructs", () => {
+    const html = markdownToHtml(
+      "`@@INLINE_0@@` [@@INLINE_1@@](https://example.com) ![@@INLINE_2@@](https://example.com/image)"
+    );
+    expect(html).toContain("<code>@@INLINE_0@@</code>");
+    expect(html).toContain('<a href="https://example.com">@@INLINE_1@@</a>');
+    expect(html).toContain('<img src="https://example.com/image" alt="@@INLINE_2@@" />');
+  });
+
   it("converts images", () => {
     const html = markdownToHtml("![alt](https://img.shields.io/badge)");
     expect(html).toContain('<img src="https://img.shields.io/badge" alt="alt" />');

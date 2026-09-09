@@ -266,6 +266,246 @@ describe("runMainCommand --no-clone behavior", () => {
     expect(cleanupRepository).toHaveBeenCalledWith("/tmp/remote-clone");
   });
 
+  it("cleans up a remote clone when analysis fails", async () => {
+    vi.resetModules();
+    const cloneRepository = vi.fn().mockResolvedValue("/tmp/remote-analysis-failure");
+    const cleanupRepository = vi.fn().mockResolvedValue(undefined);
+    const scanRepositoryFiles = vi.fn().mockResolvedValue(makeScanResult());
+    const orchestrateAnalysis = vi.fn().mockRejectedValue(new Error("analysis failed"));
+    const resolveRunConfiguration = vi.fn().mockResolvedValue({
+      config: null,
+      styleConfig: makeStyleConfig(),
+      outputFormat: "markdown",
+    });
+
+    vi.doMock("../src/services/clone-service.js", () => ({
+      cloneRepository,
+      cleanupRepository,
+      scanRepositoryFiles,
+    }));
+    vi.doMock("../src/services/analysis-orchestration.js", () => ({
+      orchestrateAnalysis,
+    }));
+    vi.doMock("../src/services/config-resolution.js", () => ({ resolveRunConfiguration }));
+
+    const { runMainCommand } = await import("../src/commands/main-command.js");
+    const exitSpy = vi.spyOn(process, "exit").mockImplementation(((code?: number) => {
+      throw new Error(`EXIT_${code ?? 0}`);
+    }) as (code?: number) => never);
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    try {
+      await expect(
+        runMainCommand("https://github.com/test/repo", {
+          ...BASE_OPTIONS,
+          noClone: false,
+        })
+      ).rejects.toThrow("EXIT_1");
+    } finally {
+      exitSpy.mockRestore();
+      logSpy.mockRestore();
+      errorSpy.mockRestore();
+    }
+
+    expect(orchestrateAnalysis).toHaveBeenCalled();
+    expect(cleanupRepository).toHaveBeenCalledWith("/tmp/remote-analysis-failure");
+  });
+
+  it("does not clean up a local repository when analysis fails", async () => {
+    const repoPath = await createLocalFixtureRepo();
+
+    vi.resetModules();
+    const cleanupRepository = vi.fn();
+    const scanRepositoryFiles = vi.fn().mockResolvedValue(makeScanResult());
+    const orchestrateAnalysis = vi.fn().mockRejectedValue(new Error("analysis failed"));
+    const resolveRunConfiguration = vi.fn().mockResolvedValue({
+      config: null,
+      styleConfig: makeStyleConfig(),
+      outputFormat: "markdown",
+    });
+
+    vi.doMock("../src/services/clone-service.js", () => ({
+      cloneRepository: vi.fn(),
+      cleanupRepository,
+      scanRepositoryFiles,
+    }));
+    vi.doMock("../src/services/analysis-orchestration.js", () => ({
+      orchestrateAnalysis,
+    }));
+    vi.doMock("../src/services/config-resolution.js", () => ({ resolveRunConfiguration }));
+
+    const { runMainCommand } = await import("../src/commands/main-command.js");
+    const exitSpy = vi.spyOn(process, "exit").mockImplementation(((code?: number) => {
+      throw new Error(`EXIT_${code ?? 0}`);
+    }) as (code?: number) => never);
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    try {
+      await expect(runMainCommand(repoPath, BASE_OPTIONS)).rejects.toThrow("EXIT_1");
+    } finally {
+      exitSpy.mockRestore();
+      logSpy.mockRestore();
+      errorSpy.mockRestore();
+      await rm(repoPath, { recursive: true, force: true });
+    }
+
+    expect(cleanupRepository).not.toHaveBeenCalled();
+  });
+
+  it("keeps a remote clone when --keep-temp analysis fails", async () => {
+    vi.resetModules();
+    const cloneRepository = vi.fn().mockResolvedValue("/tmp/remote-kept-analysis");
+    const cleanupRepository = vi.fn().mockResolvedValue(undefined);
+    const scanRepositoryFiles = vi.fn().mockResolvedValue(makeScanResult());
+    const orchestrateAnalysis = vi.fn().mockRejectedValue(new Error("analysis failed"));
+    const resolveRunConfiguration = vi.fn().mockResolvedValue({
+      config: null,
+      styleConfig: makeStyleConfig(),
+      outputFormat: "markdown",
+    });
+
+    vi.doMock("../src/services/clone-service.js", () => ({
+      cloneRepository,
+      cleanupRepository,
+      scanRepositoryFiles,
+    }));
+    vi.doMock("../src/services/analysis-orchestration.js", () => ({
+      orchestrateAnalysis,
+    }));
+    vi.doMock("../src/services/config-resolution.js", () => ({ resolveRunConfiguration }));
+
+    const { runMainCommand } = await import("../src/commands/main-command.js");
+    const exitSpy = vi.spyOn(process, "exit").mockImplementation(((code?: number) => {
+      throw new Error(`EXIT_${code ?? 0}`);
+    }) as (code?: number) => never);
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    try {
+      await expect(
+        runMainCommand("https://github.com/test/repo", {
+          ...BASE_OPTIONS,
+          noClone: false,
+          keepTemp: true,
+        })
+      ).rejects.toThrow("EXIT_1");
+    } finally {
+      exitSpy.mockRestore();
+      logSpy.mockRestore();
+      errorSpy.mockRestore();
+    }
+
+    expect(cleanupRepository).not.toHaveBeenCalled();
+  });
+
+  it("cleans up a remote clone when the output directory cannot be created", async () => {
+    vi.resetModules();
+    const cloneRepository = vi.fn().mockResolvedValue("/tmp/remote-mkdir-failure");
+    const cleanupRepository = vi.fn().mockResolvedValue(undefined);
+    const scanRepositoryFiles = vi.fn().mockResolvedValue(makeScanResult());
+    const orchestrateAnalysis = vi.fn().mockResolvedValue(makeAnalysis(makeFacts()));
+    const resolveRunConfiguration = vi.fn().mockResolvedValue({
+      config: null,
+      styleConfig: makeStyleConfig(),
+      outputFormat: "markdown",
+    });
+    const actualFs = await vi.importActual<typeof import("fs/promises")>("fs/promises");
+    const mkdir = vi.fn().mockRejectedValue(new Error("mkdir failed"));
+
+    vi.doMock("fs/promises", () => ({ ...actualFs, mkdir }));
+    vi.doMock("../src/services/clone-service.js", () => ({
+      cloneRepository,
+      cleanupRepository,
+      scanRepositoryFiles,
+    }));
+    vi.doMock("../src/services/analysis-orchestration.js", () => ({
+      orchestrateAnalysis,
+    }));
+    vi.doMock("../src/services/config-resolution.js", () => ({ resolveRunConfiguration }));
+
+    const { runMainCommand } = await import("../src/commands/main-command.js");
+    const exitSpy = vi.spyOn(process, "exit").mockImplementation(((code?: number) => {
+      throw new Error(`EXIT_${code ?? 0}`);
+    }) as (code?: number) => never);
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    try {
+      await expect(
+        runMainCommand("https://github.com/test/repo", {
+          ...BASE_OPTIONS,
+          noClone: false,
+        })
+      ).rejects.toThrow("EXIT_1");
+    } finally {
+      exitSpy.mockRestore();
+      logSpy.mockRestore();
+      errorSpy.mockRestore();
+      vi.doUnmock("fs/promises");
+    }
+
+    expect(mkdir).toHaveBeenCalled();
+    expect(cleanupRepository).toHaveBeenCalledWith("/tmp/remote-mkdir-failure");
+  });
+
+  it("cleans up a remote clone when document generation fails", async () => {
+    const outputDir = join(tmpdir(), "bootcamp-generation-failure");
+    await rm(outputDir, { recursive: true, force: true });
+
+    vi.resetModules();
+    const cloneRepository = vi.fn().mockResolvedValue("/tmp/remote-generation-failure");
+    const cleanupRepository = vi.fn().mockResolvedValue(undefined);
+    const scanRepositoryFiles = vi.fn().mockResolvedValue(makeScanResult());
+    const facts = makeFacts();
+    const orchestrateAnalysis = vi.fn().mockResolvedValue(makeAnalysis(facts));
+    const prepareOutputDocuments = vi.fn().mockResolvedValue(makePreparedResult(facts));
+    const writeGeneratedOutputs = vi.fn().mockRejectedValue(new Error("generation failed"));
+    const resolveRunConfiguration = vi.fn().mockResolvedValue({
+      config: null,
+      styleConfig: makeStyleConfig(),
+      outputFormat: "markdown",
+    });
+
+    vi.doMock("../src/services/clone-service.js", () => ({
+      cloneRepository,
+      cleanupRepository,
+      scanRepositoryFiles,
+    }));
+    vi.doMock("../src/services/analysis-orchestration.js", () => ({
+      orchestrateAnalysis,
+      prepareOutputDocuments,
+    }));
+    vi.doMock("../src/services/output-writer.js", () => ({ writeGeneratedOutputs }));
+    vi.doMock("../src/services/config-resolution.js", () => ({ resolveRunConfiguration }));
+
+    const { runMainCommand } = await import("../src/commands/main-command.js");
+    const exitSpy = vi.spyOn(process, "exit").mockImplementation(((code?: number) => {
+      throw new Error(`EXIT_${code ?? 0}`);
+    }) as (code?: number) => never);
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    try {
+      await expect(
+        runMainCommand("https://github.com/test/repo", {
+          ...BASE_OPTIONS,
+          noClone: false,
+          output: outputDir,
+        })
+      ).rejects.toThrow("EXIT_1");
+    } finally {
+      exitSpy.mockRestore();
+      logSpy.mockRestore();
+      errorSpy.mockRestore();
+      await rm(outputDir, { recursive: true, force: true });
+    }
+
+    expect(writeGeneratedOutputs).toHaveBeenCalled();
+    expect(cleanupRepository).toHaveBeenCalledWith("/tmp/remote-generation-failure");
+  });
+
   it("suppresses banner and decorative output in quiet mode, printing the output dir", async () => {
     const repoPath = await createLocalFixtureRepo();
     const outputDir = join(repoPath, "bootcamp-output");

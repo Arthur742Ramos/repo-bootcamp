@@ -28,6 +28,12 @@ describe("createApp", () => {
     expect(res.text).toContain("<title>Repo Bootcamp</title>");
   });
 
+  it("responds cleanly to the browser favicon request", async () => {
+    const res = await request(createApp()).get("/favicon.ico");
+    expect(res.status).toBe(204);
+    expect(res.text).toBe("");
+  });
+
   it("sets X-Content-Type-Options nosniff header", async () => {
     const res = await request(createApp()).get("/");
     expect(res.headers["x-content-type-options"]).toBe("nosniff");
