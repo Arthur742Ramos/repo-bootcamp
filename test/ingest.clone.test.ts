@@ -1,4 +1,7 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { mkdtemp } from "fs/promises";
+import { tmpdir } from "os";
+import { join } from "path";
 
 const { mockExecFile, mockRm } = vi.hoisted(() => ({
   mockExecFile: vi.fn(),
@@ -19,6 +22,17 @@ vi.mock("fs/promises", async () => {
 
 import { cloneRepo } from "../src/ingest.js";
 import type { RepoInfo } from "../src/types.js";
+
+let targetDir: string;
+
+beforeEach(async () => {
+  targetDir = await mkdtemp(join(tmpdir(), "bootcamp-clone-test-"));
+});
+
+afterEach(async () => {
+  const actual = await vi.importActual<typeof import("fs/promises")>("fs/promises");
+  await actual.rm(targetDir, { recursive: true, force: true });
+});
 
 function makeRepoInfo(overrides: Partial<RepoInfo> = {}): RepoInfo {
   return {
@@ -62,7 +76,7 @@ describe("cloneRepo error boundaries", () => {
       }
     );
 
-    await expect(cloneRepo(makeRepoInfo(), "/tmp/target")).rejects.toThrow(
+    await expect(cloneRepo(makeRepoInfo(), targetDir)).rejects.toThrow(
       "Failed to clone repository: git clone timed out after 120s"
     );
   });
@@ -79,7 +93,7 @@ describe("cloneRepo error boundaries", () => {
       }
     );
 
-    await expect(cloneRepo(makeRepoInfo(), "/tmp/target")).rejects.toThrow(
+    await expect(cloneRepo(makeRepoInfo(), targetDir)).rejects.toThrow(
       "Failed to clone repository: git clone exited with code 128: fatal: repository 'owner/repo.git' not found"
     );
   });
@@ -100,7 +114,7 @@ describe("cloneRepo error boundaries", () => {
         }
       );
 
-    await expect(cloneRepo(makeRepoInfo(), "/tmp/target")).rejects.toThrow(
+    await expect(cloneRepo(makeRepoInfo(), targetDir)).rejects.toThrow(
       "Failed to read cloned repository metadata: rev-parse failed"
     );
   });
@@ -112,7 +126,7 @@ describe("cloneRepo hardening", () => {
     mockRm.mockResolvedValue(undefined);
   });
 
-  it("hardens the clone env and forbids the file:// transport", async () => {
+  it("hardens the clone env with Git-compatible null config paths", async () => {
     const calls: { args: string[]; opts: Record<string, unknown> | undefined }[] = [];
     mockExecFile.mockImplementation(
       (_cmd: unknown, args: unknown, optsOrCb: unknown, maybeCb?: unknown) => {
@@ -126,7 +140,7 @@ describe("cloneRepo hardening", () => {
       }
     );
 
-    await cloneRepo(makeRepoInfo(), "/tmp/target");
+    await cloneRepo(makeRepoInfo(), targetDir);
 
     const cloneCall = calls[0];
     // `-c protocol.file.allow=user` is a global option, so it must precede the
@@ -157,7 +171,7 @@ describe("cloneRepo hardening", () => {
     );
 
     const repoInfo = makeRepoInfo();
-    await cloneRepo(repoInfo, "/tmp/target", "feature", true);
+    await cloneRepo(repoInfo, targetDir, "feature", true);
 
     const cloneArgs = calls[0];
     expect(cloneArgs).toContain("--branch");
@@ -167,5 +181,46 @@ describe("cloneRepo hardening", () => {
     expect(cloneArgs).not.toContain("--filter=blob:none");
     // repoInfo.branch is updated from `git rev-parse --abbrev-ref HEAD`.
     expect(repoInfo.branch).toBe("feature");
+  });
+
+  it("uses an isolated clone destination for concurrent clones of the same repository", async () => {
+    const cloneDestinations: string[] = [];
+    mockExecFile.mockImplementation(
+      (_cmd: unknown, args: unknown, optsOrCb: unknown, maybeCb?: unknown) => {
+        const cloneArgs = args as string[];
+        if (cloneArgs.includes("clone")) {
+          cloneDestinations.push(cloneArgs[cloneArgs.length - 1]);
+        }
+        invokeExecCallback(optsOrCb, maybeCb, null, { stdout: "main\n", stderr: "" });
+        return {} as never;
+      }
+    );
+
+    const [first, second] = await Promise.all([
+      cloneRepo(makeRepoInfo(), targetDir),
+      cloneRepo(makeRepoInfo(), targetDir),
+    ]);
+
+    expect(first).not.toBe(second);
+    expect(new Set(cloneDestinations).size).toBe(2);
+  });
+
+  it("does not append .git to local file URLs", async () => {
+    const cloneCalls: string[][] = [];
+    mockExecFile.mockImplementation(
+      (_cmd: unknown, args: unknown, optsOrCb: unknown, maybeCb?: unknown) => {
+        const argsList = args as string[];
+        if (argsList.includes("clone")) cloneCalls.push(argsList);
+        invokeExecCallback(optsOrCb, maybeCb, null, { stdout: "main\n", stderr: "" });
+        return {} as never;
+      }
+    );
+
+    const repoInfo = makeRepoInfo({
+      url: "file:///tmp/source-repo",
+    });
+    await cloneRepo(repoInfo, targetDir);
+    expect(cloneCalls[0]).toContain("file:///tmp/source-repo");
+    expect(cloneCalls[0]).not.toContain("file:///tmp/source-repo.git");
   });
 });

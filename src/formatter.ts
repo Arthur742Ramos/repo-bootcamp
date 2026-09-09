@@ -46,17 +46,74 @@ function getMermaidRuntime(body: string): string {
  * Convert inline markdown formatting to HTML.
  */
 function convertInlineFormatting(line: string): string {
-  // Images (must come before links)
-  line = line.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, '<img src="$2" alt="$1" />');
-  // Links
-  line = line.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2">$1</a>');
-  // Bold
-  line = line.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
-  // Italic
-  line = line.replace(/\*(.+?)\*/g, "<em>$1</em>");
-  // Inline code
-  line = line.replace(/`([^`]+)`/g, (_m, code) => `<code>${escapeHtml(code)}</code>`);
-  return line;
+  const isSafeUrl = (value: string, allowRelative: boolean): boolean => {
+    const trimmed = value.trim();
+    if (/^https?:\/\//i.test(trimmed)) return true;
+    if (!allowRelative) return false;
+    return trimmed.startsWith("#") || trimmed.startsWith("./") || trimmed.startsWith("../");
+  };
+
+  // Render protected inline constructs as output fragments while walking the
+  // source. This avoids textual placeholders entirely: user content can never
+  // be mistaken for an internal token during restoration.
+  const render = (source: string): string => {
+    let output = "";
+    let index = 0;
+
+    while (index < source.length) {
+      const remainder = source.slice(index);
+
+      // Images must be checked before links so the leading `!` is not treated
+      // as ordinary text. Unsafe image URLs are rendered as escaped alt text.
+      const imageMatch = remainder.match(/^!\[([^\]]*)\]\(([^)]+)\)/);
+      if (imageMatch) {
+        const [, alt, url] = imageMatch;
+        output += isSafeUrl(url, false)
+          ? `<img src="${escapeHtml(url.trim())}" alt="${escapeHtml(alt)}" />`
+          : escapeHtml(alt);
+        index += imageMatch[0].length;
+        continue;
+      }
+
+      const linkMatch = remainder.match(/^\[([^\]]+)\]\(([^)]+)\)/);
+      if (linkMatch) {
+        const [, text, url] = linkMatch;
+        output += isSafeUrl(url, true)
+          ? `<a href="${escapeHtml(url.trim())}">${escapeHtml(text)}</a>`
+          : escapeHtml(text);
+        index += linkMatch[0].length;
+        continue;
+      }
+
+      const codeMatch = remainder.match(/^`([^`]+)`/);
+      if (codeMatch) {
+        output += `<code>${escapeHtml(codeMatch[1])}</code>`;
+        index += codeMatch[0].length;
+        continue;
+      }
+
+      const boldMatch = remainder.match(/^\*\*(.+?)\*\*/);
+      if (boldMatch) {
+        output += `<strong>${render(boldMatch[1])}</strong>`;
+        index += boldMatch[0].length;
+        continue;
+      }
+
+      const italicMatch = remainder.match(/^\*(.+?)\*/);
+      if (italicMatch) {
+        output += `<em>${render(italicMatch[1])}</em>`;
+        index += italicMatch[0].length;
+        continue;
+      }
+
+      output += escapeHtml(source[index]);
+      index += 1;
+    }
+
+    return output;
+  };
+
+  return render(line);
 }
 
 /**
@@ -107,7 +164,9 @@ export function markdownToHtml(md: string): string {
       }
     }
 
-    // Passthrough HTML tags (e.g. <details>, <summary>)
+    // Preserve only the disclosure tags emitted by the generator. Other raw
+    // HTML is escaped so a repository-derived document cannot execute scripts
+    // when opened through the HTML/PDF output formats.
     if (/^\s*</.test(line)) {
       if (inList) {
         html.push("</ul>");
@@ -121,7 +180,15 @@ export function markdownToHtml(md: string): string {
         html.push("</table>");
         inTable = false;
       }
-      html.push(line);
+      const trimmedLine = line.trim();
+      const summaryMatch = trimmedLine.match(/^<summary>([\s\S]*)<\/summary>$/i);
+      html.push(
+        /^<\/?details>$/i.test(trimmedLine)
+          ? trimmedLine
+          : summaryMatch
+            ? `<summary>${escapeHtml(summaryMatch[1])}</summary>`
+            : escapeHtml(line)
+      );
       continue;
     }
 

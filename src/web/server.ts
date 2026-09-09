@@ -87,6 +87,13 @@ export function createApp(): express.Application {
     res.send(getIndexHtml(res.locals.cspNonce));
   });
 
+  // Browsers request this automatically for the standalone demo page. Return
+  // an explicit empty response so the console stays clean without adding an
+  // asset or changing the committed Terminal Readout design.
+  app.get("/favicon.ico", (_req: Request, res: Response) => {
+    res.sendStatus(204);
+  });
+
   registerRoutes(app);
 
   return app;
