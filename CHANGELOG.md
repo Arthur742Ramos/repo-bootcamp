@@ -9,6 +9,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 No unreleased changes yet.
 
+## [1.1.1] - 2026-09-09
+
+### Fixed
+
+- Isolate concurrent repository clones in unique temporary directories, preserve direct `file://` clone URLs, and keep Git configuration isolation compatible with Windows.
+- Clean up temporary clones after cloning, scanning, analysis, output-directory creation, or document-generation failures while preserving local repositories and the main command's `--keep-temp` behavior.
+- Reject invalid scan limits, missing or non-directory scan paths, and subdirectories that escape the repository root through traversal or symbolic links.
+- Escape untrusted HTML and unsafe inline links/images in HTML/PDF exports while preserving literal text, inline code, and supported disclosure markup.
+- Return an empty favicon response for the web demo instead of a browser-console error.
+
+### Security
+
+- Update the `js-yaml` override to patched version `4.3.2`.
+
 ## [1.1.0] - 2026-09-05
 
 ### Added
@@ -164,6 +178,7 @@ No unreleased changes yet.
   - Beautiful CLI output with progress indicators
   - Streaming responses during analysis
 
-[Unreleased]: https://github.com/Arthur742Ramos/repo-bootcamp/compare/v1.1.0...HEAD
+[Unreleased]: https://github.com/Arthur742Ramos/repo-bootcamp/compare/v1.1.1...HEAD
+[1.1.1]: https://github.com/Arthur742Ramos/repo-bootcamp/releases/tag/v1.1.1
 [1.1.0]: https://github.com/Arthur742Ramos/repo-bootcamp/releases/tag/v1.1.0
 [1.0.0]: https://github.com/Arthur742Ramos/repo-bootcamp/releases/tag/v1.0.0
