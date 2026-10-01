@@ -220,6 +220,10 @@ The honest readout. `surface` panel, `mono` lines, scroll-pinned to newest. Phas
 - **Command rows:** Reusable copyable terminal rows show the exact CLI invocation and repository-detected first commands. Commands and paths use `mono`; labels stay in `label` sans. Hide the detected-command panel when no trustworthy command is available.
 - **Score explanation:** A native disclosure under the score guide explains scan coverage and the highest-impact onboarding factors. Keep the summary collapsed by default so the readout stays fast to scan.
 
+### Follow-up questions
+
+The question field and answer belong to the current analysis. Keep them while reading generated documents and returning with Back. Starting a new analysis clears both, cancels the obsolete client request, and restores Ask immediately. Each pending question owns its loading state; late answers, errors, and control updates from another run must be ignored, including responses whose JSON parsing finishes after the run changes. Allow one pending question per analysis. Client cancellation does not imply cancellation of server-side model work.
+
 ### Modal (file preview)
 
 Starter-task recommendations use the same audience/style selection as FIRST_TASKS.md. Each Read instructions action names its task for assistive technology and opens its numbered section with heading focus. Task numbers distinguish repeated or formatted titles; navigation matches the complete formatted heading, never just the number. Retry retains the selected section; custom documents with missing or ambiguous sections and legacy results open the full document normally.

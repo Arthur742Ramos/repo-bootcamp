@@ -627,6 +627,7 @@ export function getIndexHtml(nonce?: string): string {
 
   <script${nonceAttribute}>
     let currentJobId = null;
+    let questionRequest = null;
     let currentFile = null;
     let previewRequest = null;
     let previewToken = 0;
@@ -749,6 +750,7 @@ export function getIndexHtml(nonce?: string): string {
 
     function beginRun() {
       activeRunToken += 1;
+      resetQuestion();
       closeModal();
       cancelStatusRecovery();
       if (currentEventSource) {
@@ -1705,8 +1707,21 @@ export function getIndexHtml(nonce?: string): string {
       }, 1500);
     }
 
+    function resetQuestion() {
+      if (questionRequest) questionRequest.abort();
+      questionRequest = null;
+      document.getElementById('askQuestion').value = '';
+      const answer = document.getElementById('askAnswer');
+      answer.textContent = '';
+      answer.hidden = true;
+      answer.classList.remove('error');
+      const btn = document.getElementById('askBtn');
+      btn.disabled = false;
+      btn.textContent = 'Ask';
+    }
+
     async function askQuestion() {
-      if (!currentJobId) return;
+      if (!currentJobId || questionRequest) return;
       const input = document.getElementById('askQuestion');
       const btn = document.getElementById('askBtn');
       const answer = document.getElementById('askAnswer');
@@ -1715,25 +1730,37 @@ export function getIndexHtml(nonce?: string): string {
         input.focus();
         return;
       }
+      const jobId = currentJobId;
+      const runToken = activeRunToken;
+      const controller = new AbortController();
+      questionRequest = controller;
+      const isCurrentQuestion = () => questionRequest === controller && isCurrentRun(jobId, runToken);
       btn.disabled = true;
       btn.textContent = 'Thinking…';
       answer.classList.remove('error');
       answer.hidden = false;
       answer.textContent = 'Reading the repository…';
       try {
-        const response = await fetch('/api/jobs/' + currentJobId + '/ask', {
+        const response = await fetch('/api/jobs/' + jobId + '/ask', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ question }),
+          signal: controller.signal,
         });
+        if (!isCurrentQuestion()) return;
         const payload = await readJsonResponse(response);
+        if (!isCurrentQuestion()) return;
         answer.textContent = typeof payload.answer === 'string' ? payload.answer : 'No answer was returned.';
       } catch (error) {
+        if (!isCurrentQuestion()) return;
         answer.classList.add('error');
         answer.textContent = error instanceof Error ? error.message : String(error);
       } finally {
-        btn.disabled = false;
-        btn.textContent = 'Ask';
+        if (isCurrentQuestion()) {
+          questionRequest = null;
+          btn.disabled = false;
+          btn.textContent = 'Ask';
+        }
       }
     }
 
