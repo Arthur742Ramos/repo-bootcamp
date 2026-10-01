@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Clear follow-up questions on a new analysis and ignore obsolete answers, errors, and loading-state updates from the previous repository.
 - Follow cross-document preview links to the requested heading, including encoded fragments and duplicate heading anchors.
 - Keep keyboard focus inside the preview dialog when tabbing from a linked heading.
 
