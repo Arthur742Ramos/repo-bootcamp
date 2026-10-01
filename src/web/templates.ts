@@ -1772,14 +1772,20 @@ export function getIndexHtml(nonce?: string): string {
     async function cancelAnalysis() {
       if (!currentJobId) return;
       const btn = document.getElementById('cancelBtn');
+      const jobId = currentJobId;
+      const runToken = activeRunToken;
+      const ownsCancellation = () => isCurrentRun(jobId, runToken) && !btn.hidden;
       btn.disabled = true;
       btn.textContent = 'Cancelling…';
       try {
-        const response = await fetch('/api/jobs/' + currentJobId + '/cancel', { method: 'POST' });
+        const response = await fetch('/api/jobs/' + jobId + '/cancel', { method: 'POST' });
+        if (!ownsCancellation()) return;
         await readJsonResponse(response);
+        if (!ownsCancellation()) return;
         addProgressItem('Cancellation requested…', 'warning');
         document.getElementById('statusMsg').textContent = 'Cancellation requested';
       } catch (error) {
+        if (!ownsCancellation()) return;
         btn.disabled = false;
         btn.textContent = 'Cancel analysis';
         addProgressItem(error instanceof Error ? error.message : String(error), 'error');

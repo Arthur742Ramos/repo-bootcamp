@@ -220,6 +220,10 @@ The honest readout. `surface` panel, `mono` lines, scroll-pinned to newest. Phas
 - **Command rows:** Reusable copyable terminal rows show the exact CLI invocation and repository-detected first commands. Commands and paths use `mono`; labels stay in `label` sans. Hide the detected-command panel when no trustworthy command is available.
 - **Score explanation:** A native disclosure under the score guide explains scan coverage and the highest-impact onboarding factors. Keep the summary collapsed by default so the readout stays fast to scan.
 
+### Analysis cancellation
+
+Cancellation responses belong to the job and run that requested them. Only an active analysis may receive the acknowledgement, error, or retry-control update after fetch and JSON parsing. A newer analysis or a terminal same-job state ignores late responses. Current-request failures keep Cancel analysis retryable; an acknowledgement remains pending until streamed job status confirms cancellation.
+
 ### Saved analysis restoration
 
 Restore a saved job only while the initial page still owns the analysis form. A newer submission or an edit to the repository URL or run options supersedes pending restoration, even if the edit is reverted. Late fetch/JSON results and failures must leave the current input, result, loading controls, and saved job intact. An untouched page still reconnects normally. Failed restoration may remove only the saved ID that it looked up.
