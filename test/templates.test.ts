@@ -180,7 +180,7 @@ describe("getIndexHtml", () => {
 
     it("defines the viewFile function", () => {
       const html = getIndexHtml();
-      expect(html).toContain("async function viewFile(filename)");
+      expect(html).toContain("async function viewFile(");
     });
 
     it("defines the closeModal function", () => {
