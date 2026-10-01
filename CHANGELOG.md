@@ -7,7 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-No unreleased changes yet.
+### Fixed
+
+- Follow cross-document preview links to the requested heading, including encoded fragments and duplicate heading anchors.
+- Keep keyboard focus inside the preview dialog when tabbing from a linked heading.
+
+### Added
+
+- Retry a failed file preview from the open dialog without restarting the analysis.
 
 ## [1.1.1] - 2026-09-09
 

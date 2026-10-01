@@ -159,4 +159,61 @@ test("table of contents links focus headings and diagrams retain readable source
   await page.getByRole("link", { name: "Setup" }).click();
   await expect(page.locator("#renderedContent h2")).toBeFocused();
   await expect(page.locator("#renderedContent pre")).toContainText("flowchart TD\n  A --> B");
+  await page.keyboard.press("Tab");
+  await expect(page.locator("#copyBtn")).toBeFocused();
+});
+
+test("cross-document links focus the requested section after loading", async ({ page }) => {
+  await page.evaluate(() => {
+    const files = document.getElementById("files")!;
+    for (const name of ["ONE.md", "TWO.md"]) {
+      const button = document.createElement("button");
+      button.dataset.file = name;
+      files.append(button);
+    }
+  });
+  await page.route("**/files/**", (route) => {
+    const source = route.request().url().includes("ONE.md")
+      ? "# First guide\n\n[Setup details](./TWO.md#setup%2D1)"
+      : "# Second guide\n\n## Setup\n\nFirst setup.\n\n## Setup\n\nSecond setup.";
+    return route.fulfill({ json: { content: source, html: markdownToHtml(source) } });
+  });
+  await page.evaluate("viewFile('ONE.md')");
+  await page.getByRole("link", { name: "Setup details" }).click();
+  await expect(page.locator("#modalTitle")).toHaveText("TWO.md");
+  await expect(page.locator('#renderedContent [data-anchor="setup-1"]')).toBeFocused();
+  await expect(page.locator("#copyBtn")).toBeEnabled();
+  await page.keyboard.press("Tab");
+  await expect(page.locator("#copyBtn")).toBeFocused({ timeout: 1000 });
+  await page.keyboard.press("Shift+Tab");
+  await expect(page.locator("#renderedContent")).toBeFocused();
+});
+
+test("failed previews can be retried inside the dialog", async ({ page }) => {
+  let requests = 0;
+  await page.route("**/files/**", (route) => {
+    requests++;
+    return requests === 1
+      ? route.fulfill({ status: 503, json: { error: "temporarily unavailable" } })
+      : route.fulfill({ json: { content: "# Recovered", html: "<h1>Recovered</h1>" } });
+  });
+  await page.evaluate("viewFile('GUIDE.md')");
+  await expect(page.locator("#modalContent")).toContainText("Couldn't load GUIDE.md");
+  const retry = page.getByRole("button", { name: "Retry preview", exact: true });
+  await expect(retry).toBeVisible();
+  await page.screenshot({
+    path: `test-results/retry-preview-${test.info().project.name}.png`,
+    fullPage: true,
+  });
+  await retry.focus();
+  await page.keyboard.press("Enter");
+  await expect(page.locator("#renderedContent h1")).toHaveText("Recovered");
+  await expect(retry).toBeHidden();
+  await expect(page.locator("#copyBtn")).toBeEnabled();
+  await expect(page.locator("#downloadBtn")).toBeEnabled();
+  expect(requests).toBe(2);
+  await page.screenshot({
+    path: `test-results/recovered-preview-${test.info().project.name}.png`,
+    fullPage: true,
+  });
 });

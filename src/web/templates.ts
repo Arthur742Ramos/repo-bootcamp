@@ -619,6 +619,7 @@ export function getIndexHtml(nonce?: string): string {
       </div>
       <article id="renderedContent" class="markdown-preview" tabindex="0" aria-label="Rendered document" hidden></article>
       <pre id="modalContent" tabindex="0"></pre>
+      <button class="icon-btn" type="button" id="retryPreviewBtn" hidden>Retry preview</button>
     </div>
   </div>
 
@@ -627,6 +628,7 @@ export function getIndexHtml(nonce?: string): string {
     let currentFile = null;
     let previewRequest = null;
     let previewToken = 0;
+    let previewTarget = null;
     let lastFocused = null;
     let currentEventSource = null;
     let latestResult = null;
@@ -1365,6 +1367,17 @@ export function getIndexHtml(nonce?: string): string {
       document.getElementById('emptyFilter').hidden = visible !== 0 || fileButtons.length === 0;
     }
 
+    function focusPreviewAnchor(fragment) {
+      let anchor;
+      try { anchor = decodeURIComponent(fragment); } catch { return; }
+      const heading = Array.from(document.querySelectorAll('#renderedContent [data-anchor]'))
+        .find(item => item.dataset.anchor === anchor);
+      if (heading) {
+        heading.focus();
+        heading.scrollIntoView({ block: 'start' });
+      }
+    }
+
     // Build a fresh allowlisted DOM from an inert template. Never attach repository
     // HTML directly: discard active elements, attributes, images and unsafe URLs.
     function renderDocument(html) {
@@ -1399,24 +1412,19 @@ export function getIndexHtml(nonce?: string): string {
             element.setAttribute('href', href);
             element.addEventListener('click', event => {
               event.preventDefault();
-              let anchor;
-              try { anchor = decodeURIComponent(href.slice(1)); } catch { return; }
-              const heading = Array.from(document.querySelectorAll('#renderedContent [data-anchor]'))
-                .find(item => item.dataset.anchor === anchor);
-              if (heading) {
-                heading.focus();
-                heading.scrollIntoView({ block: 'start' });
-              }
+              focusPreviewAnchor(href.slice(1));
             });
           } else {
-            const filename = href.replace(/^\\.\\//, '').split('#')[0];
+            const separator = href.indexOf('#');
+            const filename = (separator < 0 ? href : href.slice(0, separator)).replace(/^\\.\\//, '');
+            const fragment = separator < 0 ? '' : href.slice(separator + 1);
             const file = Array.from(document.querySelectorAll('#files [data-file]'))
               .find(button => button.dataset.file === filename);
             if (file) {
               element.setAttribute('href', '#');
               element.addEventListener('click', event => {
                 event.preventDefault();
-                void viewFile(filename);
+                void viewFile(filename, fragment);
               });
             }
           }
@@ -1435,16 +1443,18 @@ export function getIndexHtml(nonce?: string): string {
       document.getElementById('sourceBtn').setAttribute('aria-pressed', String(!rendered));
     }
 
-    async function viewFile(filename) {
+    async function viewFile(filename, fragment = '') {
       if (previewRequest) previewRequest.abort();
       const controller = new AbortController();
       previewRequest = controller;
       const token = ++previewToken;
+      previewTarget = { filename, fragment };
       currentFile = null;
       const modalContent = document.getElementById('modalContent');
       const copyBtn = document.getElementById('copyBtn');
       const downloadBtn = document.getElementById('downloadBtn');
       document.getElementById('previewControls').hidden = true;
+      document.getElementById('retryPreviewBtn').hidden = true;
       document.getElementById('renderedContent').replaceChildren();
       setPreviewMode(false);
       document.getElementById('modalTitle').textContent = filename;
@@ -1467,6 +1477,7 @@ export function getIndexHtml(nonce?: string): string {
           renderDocument(data.html);
           document.getElementById('previewControls').hidden = false;
           setPreviewMode(true);
+          if (fragment) focusPreviewAnchor(fragment);
         }
         copyBtn.disabled = false;
         downloadBtn.disabled = false;
@@ -1474,6 +1485,7 @@ export function getIndexHtml(nonce?: string): string {
         if (token !== previewToken || controller.signal.aborted) return;
         modalContent.classList.add('load-error');
         modalContent.textContent = "Couldn't load " + filename + ': ' + (err instanceof Error ? err.message : String(err));
+        document.getElementById('retryPreviewBtn').hidden = false;
       } finally {
         if (token === previewToken) previewRequest = null;
       }
@@ -1706,6 +1718,8 @@ export function getIndexHtml(nonce?: string): string {
       ++previewToken;
       if (previewRequest) previewRequest.abort();
       previewRequest = null;
+      previewTarget = null;
+      document.getElementById('retryPreviewBtn').hidden = true;
       currentFile = null;
       const modal = document.getElementById('modal');
       if (!modal.classList.contains('show')) return;
@@ -1752,6 +1766,9 @@ export function getIndexHtml(nonce?: string): string {
     // Modal controls are wired here (not via inline onclick) to comply with the
     // server's Content-Security-Policy, which blocks inline event handlers.
     document.getElementById('copyBtn').addEventListener('click', () => { void copyFile(); });
+    document.getElementById('retryPreviewBtn').addEventListener('click', () => {
+      if (previewTarget) void viewFile(previewTarget.filename, previewTarget.fragment);
+    });
     document.getElementById('renderedBtn').addEventListener('click', () => setPreviewMode(true));
     document.getElementById('sourceBtn').addEventListener('click', () => setPreviewMode(false));
     document.getElementById('downloadBtn').addEventListener('click', downloadFile);
@@ -1775,10 +1792,17 @@ export function getIndexHtml(nonce?: string): string {
       if (focusables.length === 0) return;
       const first = focusables[0];
       const last = focusables[focusables.length - 1];
-      if (event.shiftKey && document.activeElement === first) {
+      const active = document.activeElement;
+      if (!active) return;
+      // Fragment links focus headings outside the tab order. Wrap at the DOM
+      // boundaries too, so Tab from the final heading stays in the dialog.
+      const outsideTabOrder = !focusables.includes(active);
+      const beforeFirst = outsideTabOrder && (first.compareDocumentPosition(active) & Node.DOCUMENT_POSITION_PRECEDING);
+      const afterLast = outsideTabOrder && (last.compareDocumentPosition(active) & Node.DOCUMENT_POSITION_FOLLOWING);
+      if (event.shiftKey && (active === first || beforeFirst)) {
         event.preventDefault();
         last.focus();
-      } else if (!event.shiftKey && document.activeElement === last) {
+      } else if (!event.shiftKey && (active === last || afterLast)) {
         event.preventDefault();
         first.focus();
       }
