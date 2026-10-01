@@ -1317,11 +1317,11 @@ export function getIndexHtml(nonce?: string): string {
           const action = document.createElement('button');
           action.className = 'next-step-action';
           action.type = 'button';
-          const taskNumber = task && Number.isSafeInteger(task.taskNumber) && task.taskNumber > 0
+          const taskNumber = task && Number.isSafeInteger(task.taskNumber) && task.taskNumber > 0 && typeof task.taskHeadingHtml === 'string'
             ? task.taskNumber : null;
           action.textContent = taskNumber ? 'Read instructions' : 'Open FIRST_TASKS.md';
           if (taskNumber) action.setAttribute('aria-label', 'Read instructions for task ' + taskNumber + ': ' + title.textContent);
-          action.addEventListener('click', () => { void viewFile('FIRST_TASKS.md', '', { taskNumber }); });
+          action.addEventListener('click', () => { void viewFile('FIRST_TASKS.md', '', { taskHeadingHtml: taskNumber ? task.taskHeadingHtml : null }); });
           copy.appendChild(action);
         }
         item.appendChild(marker);
@@ -1386,14 +1386,20 @@ export function getIndexHtml(nonce?: string): string {
       }
     }
 
-    function focusPreviewTask(taskNumber) {
-      const heading = Array.from(document.querySelectorAll('#renderedContent h3'))
-        .find(item => item.textContent.startsWith(taskNumber + '. '));
-      if (heading) {
-        heading.focus();
-        heading.scrollIntoView({ block: 'start' });
-        previewTarget.fragment = heading.dataset.anchor;
-      }
+    function focusPreviewTask(headingHtml) {
+      // Read formatted title text from an inert template; never attach it. Match
+      // the full task identity, and fall back when custom content is ambiguous.
+      const template = document.createElement('template');
+      template.innerHTML = headingHtml;
+      const expected = template.content.querySelector('h3');
+      if (!expected) return;
+      const matches = Array.from(document.querySelectorAll('#renderedContent h3'))
+        .filter(item => item.textContent === expected.textContent);
+      if (matches.length !== 1) return;
+      const heading = matches[0];
+      heading.focus();
+      heading.scrollIntoView({ block: 'start' });
+      previewTarget.fragment = heading.dataset.anchor;
     }
 
     // Build a fresh allowlisted DOM from an inert template. Never attach repository
@@ -1509,7 +1515,7 @@ export function getIndexHtml(nonce?: string): string {
       if (previous) void viewFile(previous.filename, previous.fragment, { restore: previous, remember: false });
     }
 
-    async function viewFile(filename, fragment = '', { restore = null, remember = true, taskNumber = null } = {}) {
+    async function viewFile(filename, fragment = '', { restore = null, remember = true, taskHeadingHtml = null } = {}) {
       // Retain only reading metadata, never document contents or DOM nodes. A
       // pending/failed destination does not become a second history entry.
       if (remember && currentFile && previewTarget && currentFile.name !== filename) {
@@ -1521,7 +1527,7 @@ export function getIndexHtml(nonce?: string): string {
       const controller = new AbortController();
       previewRequest = controller;
       const token = ++previewToken;
-      previewTarget = { filename, fragment, restore, taskNumber };
+      previewTarget = { filename, fragment, restore, taskHeadingHtml };
       currentFile = null;
       const modalContent = document.getElementById('modalContent');
       const copyBtn = document.getElementById('copyBtn');
@@ -1552,7 +1558,7 @@ export function getIndexHtml(nonce?: string): string {
           document.getElementById('previewControls').hidden = false;
           setPreviewMode(true);
           if (!restore) {
-            if (taskNumber) focusPreviewTask(taskNumber);
+            if (taskHeadingHtml) focusPreviewTask(taskHeadingHtml);
             else if (fragment) focusPreviewAnchor(fragment);
           }
         }
@@ -1848,7 +1854,7 @@ export function getIndexHtml(nonce?: string): string {
     document.getElementById('copyBtn').addEventListener('click', () => { void copyFile(); });
     document.getElementById('previewBackBtn').addEventListener('click', goBackPreview);
     document.getElementById('retryPreviewBtn').addEventListener('click', () => {
-      if (previewTarget) void viewFile(previewTarget.filename, previewTarget.fragment, { restore: previewTarget.restore, remember: false, taskNumber: previewTarget.taskNumber });
+      if (previewTarget) void viewFile(previewTarget.filename, previewTarget.fragment, { restore: previewTarget.restore, remember: false, taskHeadingHtml: previewTarget.taskHeadingHtml });
     });
     document.getElementById('renderedBtn').addEventListener('click', () => setPreviewMode(true));
     document.getElementById('sourceBtn').addEventListener('click', () => setPreviewMode(false));

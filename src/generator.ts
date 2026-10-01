@@ -5,6 +5,7 @@
 
 import type { RepoFacts, BootcampOptions, RepoInfo } from "./types.js";
 import { getStyleConfig, type StyleConfig } from "./plugins.js";
+import { markdownToHtml } from "./formatter.js";
 
 /** Maximum items shown in summary sections of BOOTCAMP.md */
 const MAX_BOOTCAMP_SUMMARY_ITEMS = 5;
@@ -182,17 +183,21 @@ export function getFirstTaskRecommendations(
   facts: RepoFacts,
   options?: Pick<BootcampOptions, "audience" | "style">,
   styleConfig?: StyleConfig
-): Array<RepoTask & { taskNumber: number }> {
+): Array<RepoTask & { taskNumber: number; taskHeadingHtml: string }> {
   const ranked = getAudienceTasks(facts, options?.audience)
     .slice(0, resolveStyleConfig(options, styleConfig).firstTasksCount)
     .map((task, rank) => ({ task, rank }));
   const displayOrder = ["beginner", "intermediate", "advanced"].flatMap((difficulty) =>
     ranked.filter(({ task }) => task.difficulty === difficulty)
   );
-  return ranked.map(({ task, rank }) => ({
-    ...task,
-    taskNumber: displayOrder.findIndex((entry) => entry.rank === rank) + 1,
-  }));
+  return ranked.map(({ task, rank }) => {
+    const taskNumber = displayOrder.findIndex((entry) => entry.rank === rank) + 1;
+    return {
+      ...task,
+      taskNumber,
+      taskHeadingHtml: markdownToHtml(`### ${taskNumber}. ${task.title}`),
+    };
+  });
 }
 
 function resolveStyleConfig(

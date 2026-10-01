@@ -6,6 +6,13 @@ import { getIndexHtml } from "../../src/web/templates.js";
 import type { RepoFacts } from "../../src/types.js";
 
 type RepoTask = RepoFacts["firstTasks"][number];
+type TaskRecommendation = RepoTask & { taskNumber?: number; taskHeadingHtml?: string };
+
+const recommend = (task: RepoTask, taskNumber: number): TaskRecommendation => ({
+  ...task,
+  taskNumber,
+  taskHeadingHtml: markdownToHtml(`### ${taskNumber}. ${task.title}`),
+});
 
 const facts: RepoFacts = JSON.parse(
   readFileSync(new URL("../../examples/ky/repo_facts.json", import.meta.url), "utf8")
@@ -37,11 +44,11 @@ const tasks: RepoTask[] = [
   },
 ];
 const source = generateFirstTasks({ ...facts, firstTasks: tasks }, { audience: "backend" });
-const recommendations = tasks.map((task, index) => ({ ...task, taskNumber: [3, 1, 2][index] }));
+const recommendations = tasks.map((task, index) => recommend(task, [3, 1, 2][index]));
 
 async function showRecommendations(
   page: Page,
-  picks = recommendations,
+  picks: TaskRecommendation[] = recommendations,
   files = ["FIRST_TASKS.md", "ARCHITECTURE.md"]
 ) {
   await page.evaluate(
@@ -49,7 +56,15 @@ async function showRecommendations(
       (window as unknown as { showResults: (data: unknown) => void }).showResults({
         recommendations,
         files,
-        stats: { securityScore: 85, riskScore: 18, dependencies: 3, durationMs: 12000 },
+        stats: {
+          securityScore: 85,
+          securityGrade: "B",
+          riskScore: 18,
+          riskGrade: "A",
+          dependencies: 3,
+          durationMs: 12000,
+          filesScanned: 12,
+        },
       });
     },
     { recommendations: picks, files }
@@ -112,7 +127,7 @@ test("numbered sections distinguish repeated titles and survive prerequisite nav
     .map((task) => ({ ...task, title: "Fix **request** errors?!", category: "test" as const }));
   await showRecommendations(
     page,
-    repeated.map((task, index) => ({ ...task, taskNumber: index + 1 }))
+    repeated.map((task, index) => recommend(task, index + 1))
   );
   await mockDocuments(page, generateFirstTasks({ ...facts, firstTasks: repeated }));
   const action = page.locator("#nextSteps .next-step-action").nth(1);
@@ -131,6 +146,44 @@ test("numbered sections distinguish repeated titles and survive prerequisite nav
   await page.keyboard.press("Escape");
   await expect(action).toBeFocused();
 });
+
+test("numbered heading collisions inside another task never receive the chosen task focus", async ({
+  page,
+}) => {
+  const firstTasks = [
+    {
+      ...tasks[2],
+      title: "Read request overview",
+      description: "### 2. Create a request fixture\n\nRead this supporting example first.",
+    },
+    { ...tasks[2], title: "Write setup notes" },
+  ];
+  await showRecommendations(
+    page,
+    firstTasks.map((task, index) => recommend(task, index + 1))
+  );
+  await mockDocuments(page, generateFirstTasks({ ...facts, firstTasks }));
+  await page.locator("#nextSteps .next-step-action").nth(1).click();
+  await expect(
+    page.getByRole("heading", { name: "2. Write setup notes", exact: true })
+  ).toBeFocused({ timeout: 1000 });
+});
+
+for (const custom of [
+  "### 2. Before you start",
+  "### 2. Write setup notes\n\n### 2. Write setup notes",
+]) {
+  test(`unrelated or ambiguous custom task headings fall back to the full document: ${custom.split("\n").length}`, async ({
+    page,
+  }) => {
+    await showRecommendations(page, [recommend(tasks[2], 2)]);
+    await mockDocuments(page, `# Custom instructions\n\n${custom}`);
+    await page.locator("#nextSteps .next-step-action").click();
+    await expect(page.locator("#renderedContent h1")).toHaveText("Custom instructions");
+    await expect(page.locator("#closeBtn")).toBeFocused({ timeout: 1000 });
+    expect(await page.locator("#modal").evaluate((el) => el.scrollTop)).toBe(0);
+  });
+}
 
 test("retry preserves the chosen task and Source retains the entire original document", async ({
   page,

@@ -275,10 +275,14 @@ describe("generateFirstTasks", () => {
     const doc = generateFirstTasks(input, { audience: "backend" });
     expect(doc.indexOf("### 1. Request test")).toBeLessThan(doc.indexOf("### 2. Setup notes"));
     expect(doc.indexOf("### 2. Setup notes")).toBeLessThan(doc.indexOf("### 3. Server feature"));
-    expect(input.firstTasks).toEqual(firstTasks);
+    expect(input.firstTasks.map((task) => task.title)).toEqual([
+      "Server feature",
+      "Setup notes",
+      "Request test",
+    ]);
   });
 
-  it("gives repeated task objects separate section numbers and respects custom style limits", () => {
+  it("gives repeated task objects separate section numbers and respects minimal style limits", () => {
     const task = { ...mockFacts.firstTasks[0], title: "Repeated task" };
     const input = { ...mockFacts, firstTasks: [task, task, task, task] };
     const picks = getFirstTaskRecommendations(input, { style: "minimal" });
@@ -290,6 +294,17 @@ describe("generateFirstTasks", () => {
 
   it("does not recommend tasks when no task sections are generated", () => {
     expect(getFirstTaskRecommendations({ ...mockFacts, firstTasks: [] })).toEqual([]);
+  });
+
+  it("retains the complete formatted task heading identity", () => {
+    const input = {
+      ...mockFacts,
+      firstTasks: [{ ...mockFacts.firstTasks[0], title: "Fix **retry** & `timeout` behavior" }],
+    };
+    const [pick] = getFirstTaskRecommendations(input);
+    expect(pick.taskHeadingHtml).toBe(
+      "<h3>1. Fix <strong>retry</strong> &amp; <code>timeout</code> behavior</h3>"
+    );
   });
   it("groups by difficulty", () => {
     const result = generateFirstTasks(mockFacts);
