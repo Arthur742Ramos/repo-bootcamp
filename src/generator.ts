@@ -5,6 +5,7 @@
 
 import type { RepoFacts, BootcampOptions, RepoInfo } from "./types.js";
 import { getStyleConfig, type StyleConfig } from "./plugins.js";
+import { markdownToHtml } from "./formatter.js";
 
 /** Maximum items shown in summary sections of BOOTCAMP.md */
 const MAX_BOOTCAMP_SUMMARY_ITEMS = 5;
@@ -175,6 +176,28 @@ function getAudienceTasks(facts: RepoFacts, audience?: Audience): RepoTask[] {
   return [...facts.firstTasks].sort(
     (a, b) => scoreTaskForAudience(b, audience) - scoreTaskForAudience(a, audience)
   );
+}
+
+/** Audience-ranked picks with the section numbers used in FIRST_TASKS.md. */
+export function getFirstTaskRecommendations(
+  facts: RepoFacts,
+  options?: Pick<BootcampOptions, "audience" | "style">,
+  styleConfig?: StyleConfig
+): Array<RepoTask & { taskNumber: number; taskHeadingHtml: string }> {
+  const ranked = getAudienceTasks(facts, options?.audience)
+    .slice(0, resolveStyleConfig(options, styleConfig).firstTasksCount)
+    .map((task, rank) => ({ task, rank }));
+  const displayOrder = ["beginner", "intermediate", "advanced"].flatMap((difficulty) =>
+    ranked.filter(({ task }) => task.difficulty === difficulty)
+  );
+  return ranked.map(({ task, rank }) => {
+    const taskNumber = displayOrder.findIndex((entry) => entry.rank === rank) + 1;
+    return {
+      ...task,
+      taskNumber,
+      taskHeadingHtml: markdownToHtml(`### ${taskNumber}. ${task.title}`),
+    };
+  });
 }
 
 function resolveStyleConfig(
@@ -760,10 +783,7 @@ export function generateFirstTasks(
 ): string {
   const resolvedStyle = resolveStyleConfig(options, styleConfig);
   const profile = getAudienceProfile(options?.audience);
-  const prioritizedTasks = getAudienceTasks(facts, options?.audience).slice(
-    0,
-    resolvedStyle.firstTasksCount
-  );
+  const prioritizedTasks = getFirstTaskRecommendations(facts, options, resolvedStyle);
   const tasksByCategory = {
     beginner: prioritizedTasks.filter((t) => t.difficulty === "beginner"),
     intermediate: prioritizedTasks.filter((t) => t.difficulty === "intermediate"),
@@ -780,7 +800,7 @@ export function generateFirstTasks(
       : "";
   const includeFullTaskDetails = resolvedStyle.sectionDepth !== "minimal";
 
-  const formatTask = (t: (typeof facts.firstTasks)[0]) => `### ${t.title}
+  const formatTask = (t: RepoTask & { taskNumber: number }) => `### ${t.taskNumber}. ${t.title}
 
 **Difficulty:** ${t.difficulty} | **Category:** ${t.category}
 

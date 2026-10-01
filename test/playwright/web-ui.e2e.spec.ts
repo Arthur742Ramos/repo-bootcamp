@@ -275,6 +275,17 @@ test.describe("web UI", () => {
     await expect(page.locator("#files")).toContainText("BOOTCAMP.md");
     await expect(page.locator("#files")).toContainText("repo_facts.json");
     await expect(page.locator("#nextSteps")).toContainText("Add a health check route");
+    const taskAction = page.getByRole("button", {
+      name: "Read instructions for task 1: Add a health check route",
+      exact: true,
+    });
+    await taskAction.focus();
+    await page.keyboard.press("Enter");
+    await expect(
+      page.getByRole("heading", { name: "1. Add a health check route", exact: true })
+    ).toBeFocused();
+    await page.keyboard.press("Escape");
+    await expect(taskAction).toBeFocused();
     await expect(page.locator("#resultMeta")).toContainText("test/fixture-web-ui-repo");
 
     await page.locator("#fileSearch").fill("security");

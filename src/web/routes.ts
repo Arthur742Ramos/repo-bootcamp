@@ -9,6 +9,7 @@ import { applyOutputFormat, markdownToHtml, type OutputFormat } from "../formatt
 import { parseGitHubUrl } from "../ingest.js";
 import { quickAsk } from "../interactive.js";
 import { generateIssuePreview } from "../issues.js";
+import { getFirstTaskRecommendations } from "../generator.js";
 import { ProgressTracker } from "../progress.js";
 import { getSecurityGrade } from "../security.js";
 import { orchestrateAnalysis, prepareOutputDocuments } from "../services/analysis-orchestration.js";
@@ -383,7 +384,10 @@ async function runAnalysis(job: AnalysisJob, options: Record<string, unknown>): 
         evidenceSources: manifest.analysis.evidenceSources.length,
       },
       manifest,
-      recommendations: (preparedFacts.firstTasks ?? []).slice(0, 3),
+      recommendations: getFirstTaskRecommendations(preparedFacts, fullOptions, styleConfig).slice(
+        0,
+        3
+      ),
       quickstartCommands: (preparedFacts.quickstart?.commands ?? []).slice(0, 6),
       scoreDetails: {
         security: {
