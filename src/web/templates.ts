@@ -641,6 +641,7 @@ export function getIndexHtml(nonce?: string): string {
     let progressStartedAt = null;
     let progressTimer = null;
     let activeRunToken = 0;
+    let analysisInputRevision = 0;
     let pollTimer = null;
     let renderedProgressCount = 0;
 
@@ -739,8 +740,11 @@ export function getIndexHtml(nonce?: string): string {
       try { localStorage.setItem('repo-bootcamp-job-id', jobId); } catch (error) { /* storage is optional */ }
     }
 
-    function forgetJob() {
-      try { localStorage.removeItem('repo-bootcamp-job-id'); } catch (error) { /* storage is optional */ }
+    function forgetJob(expectedJobId) {
+      try {
+        if (expectedJobId !== undefined && localStorage.getItem('repo-bootcamp-job-id') !== expectedJobId) return;
+        localStorage.removeItem('repo-bootcamp-job-id');
+      } catch (error) { /* storage is optional */ }
     }
 
     function cancelStatusRecovery() {
@@ -835,6 +839,7 @@ export function getIndexHtml(nonce?: string): string {
     }
 
     async function analyze() {
+      analysisInputRevision += 1;
       const repoUrl = document.getElementById('repoUrl').value.trim();
       // Loose non-empty check only: parseGitHubUrl accepts owner/repo, SSH, and
       // scheme-less forms server-side, so strict URL validation here would reject
@@ -1785,11 +1790,16 @@ export function getIndexHtml(nonce?: string): string {
       let jobId = null;
       try { jobId = localStorage.getItem('repo-bootcamp-job-id'); } catch (error) { return; }
       if (!jobId) return;
+      const initialRunToken = activeRunToken;
+      const initialInputRevision = analysisInputRevision;
+      const ownsRestore = () => initialRunToken === activeRunToken && initialInputRevision === analysisInputRevision;
       try {
         const response = await fetch('/api/jobs/' + encodeURIComponent(jobId));
-        if (!response.ok) { forgetJob(); return; }
+        if (!ownsRestore()) return;
+        if (!response.ok) { forgetJob(jobId); return; }
         const job = await readJsonResponse(response);
-        if (!job || !job.id) { forgetJob(); return; }
+        if (!ownsRestore()) return;
+        if (!job || !job.id) { forgetJob(jobId); return; }
         const runToken = beginRun();
         currentJobId = job.id;
         if (job.repoUrl) document.getElementById('repoUrl').value = job.repoUrl;
@@ -1803,7 +1813,7 @@ export function getIndexHtml(nonce?: string): string {
         addProgressItem('Reconnected to the previous analysis.', 'warning');
         streamProgress(job.id, runToken);
       } catch (error) {
-        forgetJob();
+        if (ownsRestore()) forgetJob(jobId);
       }
     }
 
@@ -1865,6 +1875,10 @@ export function getIndexHtml(nonce?: string): string {
 
     // Clear the inline validation message as soon as the user edits the field.
     document.getElementById('repoUrl').addEventListener('input', () => setUrlError(''));
+    // User edits supersede pending initial-page restoration, even when reverted.
+    const recordAnalysisInput = () => { analysisInputRevision += 1; };
+    document.getElementById('analyzeForm').addEventListener('input', recordAnalysisInput);
+    document.getElementById('analyzeForm').addEventListener('change', recordAnalysisInput);
     document.getElementById('fileSearch').addEventListener('input', filterFiles);
     document.getElementById('cancelBtn').addEventListener('click', () => { void cancelAnalysis(); });
     document.getElementById('retryBtn').addEventListener('click', () => { void analyze(); });
