@@ -70,6 +70,10 @@ test("Back resumes a three-document reading path and restores the original keybo
   await page.getByRole("link", { name: "Third guide", exact: true }).click();
   await expect(page.locator("#renderedContent h1")).toHaveText("Third guide");
   await expect(backTo(page, "B.md")).toBeVisible({ timeout: 1000 });
+  await page.screenshot({
+    path: `test-results/preview-back-${test.info().project.name}.png`,
+    fullPage: true,
+  });
   await backTo(page, "B.md").focus();
   await page.keyboard.press("Enter");
   await expect(page.getByRole("link", { name: "Third guide", exact: true })).toBeFocused();
@@ -120,6 +124,29 @@ test("Back restores source mode, scroll and the exact copied/downloaded file", a
   const download = await downloadEvent;
   expect(download.suggestedFilename()).toBe("A.md");
   expect(await readFile((await download.path())!, "utf8")).toBe(source);
+});
+
+test("Back restores expanded disclosures before returning to their reading position", async ({
+  page,
+}) => {
+  await mockDocuments(page, {
+    "A.md": `# First guide\n\n<details>\n<summary>Sources</summary>\n\n${paragraphs(25)}\n\n[Read prerequisite](./B.md)\n\n</details>\n\n${paragraphs(20)}`,
+    "B.md": "# Prerequisite guide",
+  });
+  await openFile(page, "A.md");
+  await page.locator("#renderedContent summary").click({ timeout: 1000 });
+  const link = page.getByRole("link", { name: "Read prerequisite", exact: true });
+  await link.focus();
+  const scroll = await page.locator("#modal").evaluate((el) => el.scrollTop);
+  expect(scroll).toBeGreaterThan(100);
+  await link.click();
+  await expect(page.locator("#renderedContent h1")).toHaveText("Prerequisite guide");
+  await backTo(page, "A.md").click();
+  await expect(page.locator("#renderedContent details")).toHaveAttribute("open", "", {
+    timeout: 1000,
+  });
+  await expect(link).toBeFocused();
+  expect(await page.locator("#modal").evaluate((el) => el.scrollTop)).toBeCloseTo(scroll, 0);
 });
 
 test("failed destinations allow Back and retries do not duplicate history", async ({ page }) => {

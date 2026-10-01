@@ -1463,6 +1463,8 @@ export function getIndexHtml(nonce?: string): string {
         filename: currentFile.name,
         fragment: previewTarget.fragment,
         rendered,
+        openDetails: Array.from(document.querySelectorAll('#renderedContent details'))
+          .flatMap((detail, index) => detail.open ? [index] : []),
         scrollTop: document.getElementById('modal').scrollTop,
         contentScrollTop: reader.scrollTop,
         contentScrollLeft: reader.scrollLeft,
@@ -1474,6 +1476,9 @@ export function getIndexHtml(nonce?: string): string {
     function restorePreviewContext(context) {
       const rendered = context.rendered && !document.getElementById('previewControls').hidden;
       setPreviewMode(rendered);
+      document.querySelectorAll('#renderedContent details').forEach((detail, index) => {
+        detail.open = context.openDetails.includes(index);
+      });
       const reader = document.getElementById(rendered ? 'renderedContent' : 'modalContent');
       const heading = rendered && context.focusAnchor
         ? Array.from(reader.querySelectorAll('[data-anchor]')).find(item => item.dataset.anchor === context.focusAnchor)
