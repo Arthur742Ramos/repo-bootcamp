@@ -383,6 +383,7 @@ export function getIndexHtml(nonce?: string): string {
     [hidden] { display: none !important; }
     .preview-controls { display: flex; gap: 0.5rem; margin-bottom: 1rem; }
     .preview-controls [aria-pressed="true"] { border-color: var(--accent); }
+    #retryPreviewBtn { margin-top: 1rem; }
     .markdown-preview { line-height: 1.65; overflow-wrap: anywhere; }
     .markdown-preview > * + * { margin-top: 1rem; }
     .markdown-preview h1 { font-size: 1.75rem; }
