@@ -1317,8 +1317,11 @@ export function getIndexHtml(nonce?: string): string {
           const action = document.createElement('button');
           action.className = 'next-step-action';
           action.type = 'button';
-          action.textContent = 'Open FIRST_TASKS.md';
-          action.addEventListener('click', () => { void viewFile('FIRST_TASKS.md'); });
+          const taskNumber = task && Number.isSafeInteger(task.taskNumber) && task.taskNumber > 0
+            ? task.taskNumber : null;
+          action.textContent = taskNumber ? 'Read instructions' : 'Open FIRST_TASKS.md';
+          if (taskNumber) action.setAttribute('aria-label', 'Read instructions for task ' + taskNumber + ': ' + title.textContent);
+          action.addEventListener('click', () => { void viewFile('FIRST_TASKS.md', '', { taskNumber }); });
           copy.appendChild(action);
         }
         item.appendChild(marker);
@@ -1380,6 +1383,16 @@ export function getIndexHtml(nonce?: string): string {
       if (heading) {
         heading.focus();
         heading.scrollIntoView({ block: 'start' });
+      }
+    }
+
+    function focusPreviewTask(taskNumber) {
+      const heading = Array.from(document.querySelectorAll('#renderedContent h3'))
+        .find(item => item.textContent.startsWith(taskNumber + '. '));
+      if (heading) {
+        heading.focus();
+        heading.scrollIntoView({ block: 'start' });
+        previewTarget.fragment = heading.dataset.anchor;
       }
     }
 
@@ -1496,7 +1509,7 @@ export function getIndexHtml(nonce?: string): string {
       if (previous) void viewFile(previous.filename, previous.fragment, { restore: previous, remember: false });
     }
 
-    async function viewFile(filename, fragment = '', { restore = null, remember = true } = {}) {
+    async function viewFile(filename, fragment = '', { restore = null, remember = true, taskNumber = null } = {}) {
       // Retain only reading metadata, never document contents or DOM nodes. A
       // pending/failed destination does not become a second history entry.
       if (remember && currentFile && previewTarget && currentFile.name !== filename) {
@@ -1508,7 +1521,7 @@ export function getIndexHtml(nonce?: string): string {
       const controller = new AbortController();
       previewRequest = controller;
       const token = ++previewToken;
-      previewTarget = { filename, fragment, restore };
+      previewTarget = { filename, fragment, restore, taskNumber };
       currentFile = null;
       const modalContent = document.getElementById('modalContent');
       const copyBtn = document.getElementById('copyBtn');
@@ -1538,7 +1551,10 @@ export function getIndexHtml(nonce?: string): string {
           renderDocument(data.html);
           document.getElementById('previewControls').hidden = false;
           setPreviewMode(true);
-          if (!restore && fragment) focusPreviewAnchor(fragment);
+          if (!restore) {
+            if (taskNumber) focusPreviewTask(taskNumber);
+            else if (fragment) focusPreviewAnchor(fragment);
+          }
         }
         if (restore) restorePreviewContext(restore);
         copyBtn.disabled = false;
@@ -1832,7 +1848,7 @@ export function getIndexHtml(nonce?: string): string {
     document.getElementById('copyBtn').addEventListener('click', () => { void copyFile(); });
     document.getElementById('previewBackBtn').addEventListener('click', goBackPreview);
     document.getElementById('retryPreviewBtn').addEventListener('click', () => {
-      if (previewTarget) void viewFile(previewTarget.filename, previewTarget.fragment, { restore: previewTarget.restore, remember: false });
+      if (previewTarget) void viewFile(previewTarget.filename, previewTarget.fragment, { restore: previewTarget.restore, remember: false, taskNumber: previewTarget.taskNumber });
     });
     document.getElementById('renderedBtn').addEventListener('click', () => setPreviewMode(true));
     document.getElementById('sourceBtn').addEventListener('click', () => setPreviewMode(false));

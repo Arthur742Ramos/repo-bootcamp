@@ -177,6 +177,24 @@ function getAudienceTasks(facts: RepoFacts, audience?: Audience): RepoTask[] {
   );
 }
 
+/** Audience-ranked picks with the section numbers used in FIRST_TASKS.md. */
+export function getFirstTaskRecommendations(
+  facts: RepoFacts,
+  options?: Pick<BootcampOptions, "audience" | "style">,
+  styleConfig?: StyleConfig
+): Array<RepoTask & { taskNumber: number }> {
+  const ranked = getAudienceTasks(facts, options?.audience)
+    .slice(0, resolveStyleConfig(options, styleConfig).firstTasksCount)
+    .map((task, rank) => ({ task, rank }));
+  const displayOrder = ["beginner", "intermediate", "advanced"].flatMap((difficulty) =>
+    ranked.filter(({ task }) => task.difficulty === difficulty)
+  );
+  return ranked.map(({ task, rank }) => ({
+    ...task,
+    taskNumber: displayOrder.findIndex((entry) => entry.rank === rank) + 1,
+  }));
+}
+
 function resolveStyleConfig(
   options?: Pick<BootcampOptions, "style">,
   styleConfig?: StyleConfig
@@ -760,10 +778,7 @@ export function generateFirstTasks(
 ): string {
   const resolvedStyle = resolveStyleConfig(options, styleConfig);
   const profile = getAudienceProfile(options?.audience);
-  const prioritizedTasks = getAudienceTasks(facts, options?.audience).slice(
-    0,
-    resolvedStyle.firstTasksCount
-  );
+  const prioritizedTasks = getFirstTaskRecommendations(facts, options, resolvedStyle);
   const tasksByCategory = {
     beginner: prioritizedTasks.filter((t) => t.difficulty === "beginner"),
     intermediate: prioritizedTasks.filter((t) => t.difficulty === "intermediate"),
@@ -780,7 +795,7 @@ export function generateFirstTasks(
       : "";
   const includeFullTaskDetails = resolvedStyle.sectionDepth !== "minimal";
 
-  const formatTask = (t: (typeof facts.firstTasks)[0]) => `### ${t.title}
+  const formatTask = (t: RepoTask & { taskNumber: number }) => `### ${t.taskNumber}. ${t.title}
 
 **Difficulty:** ${t.difficulty} | **Category:** ${t.category}
 

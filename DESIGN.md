@@ -222,6 +222,8 @@ The honest readout. `surface` panel, `mono` lines, scroll-pinned to newest. Phas
 
 ### Modal (file preview)
 
+Starter-task recommendations use the same audience/style selection as FIRST_TASKS.md. Each Read instructions action names its task for assistive technology and opens its numbered section with heading focus. Task numbers distinguish repeated or formatted titles. Retry retains the selected section; custom documents without that section and legacy results open the full document normally.
+
 `role="dialog"`, `aria-modal`, `surface` body, 1px `border`, `rounded.md`, on a plain `rgba(0,0,0,0.8)` scrim (no blur). Closes on `×`, backdrop click, and Escape. Must trap focus while open and restore focus to the trigger on close. Markdown opens in a rendered reading view with an explicit Source toggle; Copy and Download always use the original source. Links to a heading in another generated document focus that heading after loading. JSON and other files open as source. Preview requests are cancelled when closed or replaced, and late responses are ignored. Back returns to the previous preview document and restores its section/scroll position, reading mode, expanded disclosures, and in-document focus. History holds at most 20 reading contexts in memory, clears on close or a new analysis, and retains no document content. Back remains available during failed or pending loads; retry preserves the intended return context. Failed loads offer a Retry preview button inside the dialog while Copy and Download stay disabled. Rendered content uses an allowlisted DOM with no active HTML or remote images. Build a semantic z-index scale (scrim → modal → toast → tooltip); never arbitrary `999`/`1000`.
 
 ## 6. Do's and Don'ts

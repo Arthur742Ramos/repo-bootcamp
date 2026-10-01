@@ -9,6 +9,7 @@ import {
   generateArchitecture,
   generateCodemap,
   generateFirstTasks,
+  getFirstTaskRecommendations,
   generateRunbook,
 } from "../src/generator.js";
 import type { RepoFacts, BootcampOptions } from "../src/types.js";
@@ -240,6 +241,56 @@ describe("generateCodemap", () => {
 });
 
 describe("generateFirstTasks", () => {
+  it("numbers sections in display order while recommending by audience priority", () => {
+    const firstTasks = [
+      {
+        ...mockFacts.firstTasks[0],
+        title: "Server feature",
+        difficulty: "advanced" as const,
+        category: "feature" as const,
+        files: ["src/server.ts"],
+      },
+      {
+        ...mockFacts.firstTasks[0],
+        title: "Setup notes",
+        difficulty: "beginner" as const,
+        category: "docs" as const,
+        files: ["README.md"],
+      },
+      {
+        ...mockFacts.firstTasks[0],
+        title: "Request test",
+        difficulty: "beginner" as const,
+        category: "test" as const,
+        files: ["test/request.ts"],
+      },
+    ];
+    const input = { ...mockFacts, firstTasks };
+    const picks = getFirstTaskRecommendations(input, { audience: "backend" });
+    expect(picks.map(({ title, taskNumber }) => [title, taskNumber])).toEqual([
+      ["Server feature", 3],
+      ["Request test", 1],
+      ["Setup notes", 2],
+    ]);
+    const doc = generateFirstTasks(input, { audience: "backend" });
+    expect(doc.indexOf("### 1. Request test")).toBeLessThan(doc.indexOf("### 2. Setup notes"));
+    expect(doc.indexOf("### 2. Setup notes")).toBeLessThan(doc.indexOf("### 3. Server feature"));
+    expect(input.firstTasks).toEqual(firstTasks);
+  });
+
+  it("gives repeated task objects separate section numbers and respects custom style limits", () => {
+    const task = { ...mockFacts.firstTasks[0], title: "Repeated task" };
+    const input = { ...mockFacts, firstTasks: [task, task, task, task] };
+    const picks = getFirstTaskRecommendations(input, { style: "minimal" });
+    expect(picks.map((task) => task.taskNumber)).toEqual([1, 2, 3]);
+    const doc = generateFirstTasks(input, { style: "minimal" });
+    expect(doc).toContain("### 3. Repeated task");
+    expect(doc).not.toContain("### 4.");
+  });
+
+  it("does not recommend tasks when no task sections are generated", () => {
+    expect(getFirstTaskRecommendations({ ...mockFacts, firstTasks: [] })).toEqual([]);
+  });
   it("groups by difficulty", () => {
     const result = generateFirstTasks(mockFacts);
     expect(result).toContain("Beginner Tasks");
