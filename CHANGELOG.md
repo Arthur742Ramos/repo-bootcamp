@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Ignore late cancellation replies and errors after a newer analysis starts or the originating job becomes terminal.
+
 - Preserve newer analysis results and form edits when saved-job restoration finishes late, and keep obsolete restoration failures from clearing the current saved job.
 
 - Clear follow-up questions on a new analysis and ignore obsolete answers, errors, and loading-state updates from the previous repository.
