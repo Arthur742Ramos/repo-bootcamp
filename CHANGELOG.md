@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Return to a previous preview document with Back, restoring its reading position, focus, and rendered/source mode.
 - Retry a failed file preview from the open dialog without restarting the analysis.
 
 ## [1.1.1] - 2026-09-09

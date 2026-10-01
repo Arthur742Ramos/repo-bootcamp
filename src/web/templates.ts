@@ -341,7 +341,7 @@ export function getIndexHtml(nonce?: string): string {
     .modal-content { max-width: 900px; margin: 0 auto; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-md); padding: 1.5rem; }
     .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; gap: 1rem; }
     .modal-header h2 { font-family: var(--font-mono); font-size: 1rem; font-weight: 600; word-break: break-all; }
-    .modal-actions { display: flex; gap: 0.5rem; align-items: center; }
+    .modal-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; }
     .icon-btn {
       padding: 0.45rem 0.85rem;
       border: 1px solid var(--border);
@@ -611,6 +611,7 @@ export function getIndexHtml(nonce?: string): string {
         <div class="modal-actions">
           <button class="icon-btn" type="button" id="copyBtn" disabled>Copy</button>
           <button class="icon-btn" type="button" id="downloadBtn" disabled>Download</button>
+          <button class="icon-btn" type="button" id="previewBackBtn" hidden>Back</button>
           <button class="close" type="button" id="closeBtn" aria-label="Close file preview">&times;</button>
         </div>
       </div>
@@ -630,6 +631,8 @@ export function getIndexHtml(nonce?: string): string {
     let previewRequest = null;
     let previewToken = 0;
     let previewTarget = null;
+    const previewHistory = [];
+    const previewHistoryLimit = 20;
     let lastFocused = null;
     let currentEventSource = null;
     let latestResult = null;
@@ -746,6 +749,7 @@ export function getIndexHtml(nonce?: string): string {
 
     function beginRun() {
       activeRunToken += 1;
+      closeModal();
       cancelStatusRecovery();
       if (currentEventSource) {
         currentEventSource.close();
@@ -1444,12 +1448,62 @@ export function getIndexHtml(nonce?: string): string {
       document.getElementById('sourceBtn').setAttribute('aria-pressed', String(!rendered));
     }
 
-    async function viewFile(filename, fragment = '') {
+    function updatePreviewBack() {
+      const previous = previewHistory[previewHistory.length - 1];
+      const button = document.getElementById('previewBackBtn');
+      button.hidden = !previous;
+      button.setAttribute('aria-label', previous ? 'Back to ' + previous.filename : 'Back');
+    }
+
+    function capturePreviewContext() {
+      const rendered = !document.getElementById('renderedContent').hidden;
+      const reader = document.getElementById(rendered ? 'renderedContent' : 'modalContent');
+      const active = document.activeElement;
+      return {
+        filename: currentFile.name,
+        fragment: previewTarget.fragment,
+        rendered,
+        scrollTop: document.getElementById('modal').scrollTop,
+        contentScrollTop: reader.scrollTop,
+        contentScrollLeft: reader.scrollLeft,
+        focusAnchor: rendered && reader.contains(active) ? active.dataset.anchor : null,
+        focusLink: rendered ? Array.from(reader.querySelectorAll('a[href]')).indexOf(active) : -1,
+      };
+    }
+
+    function restorePreviewContext(context) {
+      const rendered = context.rendered && !document.getElementById('previewControls').hidden;
+      setPreviewMode(rendered);
+      const reader = document.getElementById(rendered ? 'renderedContent' : 'modalContent');
+      const heading = rendered && context.focusAnchor
+        ? Array.from(reader.querySelectorAll('[data-anchor]')).find(item => item.dataset.anchor === context.focusAnchor)
+        : null;
+      const link = rendered && context.focusLink >= 0
+        ? reader.querySelectorAll('a[href]')[context.focusLink] : null;
+      (heading || link || reader).focus({ preventScroll: true });
+      reader.scrollTop = context.contentScrollTop;
+      reader.scrollLeft = context.contentScrollLeft;
+      document.getElementById('modal').scrollTop = context.scrollTop;
+    }
+
+    function goBackPreview() {
+      const previous = previewHistory.pop();
+      if (previous) void viewFile(previous.filename, previous.fragment, { restore: previous, remember: false });
+    }
+
+    async function viewFile(filename, fragment = '', { restore = null, remember = true } = {}) {
+      // Retain only reading metadata, never document contents or DOM nodes. A
+      // pending/failed destination does not become a second history entry.
+      if (remember && currentFile && previewTarget && currentFile.name !== filename) {
+        previewHistory.push(capturePreviewContext());
+        if (previewHistory.length > previewHistoryLimit) previewHistory.shift();
+      }
+      updatePreviewBack();
       if (previewRequest) previewRequest.abort();
       const controller = new AbortController();
       previewRequest = controller;
       const token = ++previewToken;
-      previewTarget = { filename, fragment };
+      previewTarget = { filename, fragment, restore };
       currentFile = null;
       const modalContent = document.getElementById('modalContent');
       const copyBtn = document.getElementById('copyBtn');
@@ -1466,6 +1520,7 @@ export function getIndexHtml(nonce?: string): string {
       copyBtn.disabled = true;
       downloadBtn.disabled = true;
       openModal();
+      document.getElementById('modal').scrollTop = 0;
       try {
         const res = await fetch('/api/jobs/' + currentJobId + '/files/' + encodeURIComponent(filename) + '?view=preview', { signal: controller.signal });
         if (token !== previewToken) return;
@@ -1478,8 +1533,9 @@ export function getIndexHtml(nonce?: string): string {
           renderDocument(data.html);
           document.getElementById('previewControls').hidden = false;
           setPreviewMode(true);
-          if (fragment) focusPreviewAnchor(fragment);
+          if (!restore && fragment) focusPreviewAnchor(fragment);
         }
+        if (restore) restorePreviewContext(restore);
         copyBtn.disabled = false;
         downloadBtn.disabled = false;
       } catch (err) {
@@ -1720,6 +1776,8 @@ export function getIndexHtml(nonce?: string): string {
       if (previewRequest) previewRequest.abort();
       previewRequest = null;
       previewTarget = null;
+      previewHistory.length = 0;
+      updatePreviewBack();
       document.getElementById('retryPreviewBtn').hidden = true;
       currentFile = null;
       const modal = document.getElementById('modal');
@@ -1767,8 +1825,9 @@ export function getIndexHtml(nonce?: string): string {
     // Modal controls are wired here (not via inline onclick) to comply with the
     // server's Content-Security-Policy, which blocks inline event handlers.
     document.getElementById('copyBtn').addEventListener('click', () => { void copyFile(); });
+    document.getElementById('previewBackBtn').addEventListener('click', goBackPreview);
     document.getElementById('retryPreviewBtn').addEventListener('click', () => {
-      if (previewTarget) void viewFile(previewTarget.filename, previewTarget.fragment);
+      if (previewTarget) void viewFile(previewTarget.filename, previewTarget.fragment, { restore: previewTarget.restore, remember: false });
     });
     document.getElementById('renderedBtn').addEventListener('click', () => setPreviewMode(true));
     document.getElementById('sourceBtn').addEventListener('click', () => setPreviewMode(false));
