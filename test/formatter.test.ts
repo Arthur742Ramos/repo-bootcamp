@@ -99,6 +99,21 @@ describe("markdownToHtml", () => {
     );
   });
 
+  it("does not treat backticks inside consumed URLs as later code delimiters", () => {
+    const html = markdownToHtml("[first](./`file) [second](./two) `after`");
+    expect(html).toContain('<a href="./`file">first</a> <a href="./two">second</a>');
+    expect(html).toContain("<code>after</code>");
+    expect(markdownToHtml("[`first`](./`file) [`second`](./two)")).toContain(
+      '<a href="./two"><code>second</code></a>'
+    );
+    expect(markdownToHtml("![first](https://example.com/`file) [second](./two) `after`")).toContain(
+      '<a href="./two">second</a> <code>after</code>'
+    );
+    expect(markdownToHtml("[unmatched [first](./`file) [second](./two) `after`")).toContain(
+      '<a href="./two">second</a> <code>after</code>'
+    );
+  });
+
   it("handles long malformed labels without repeated suffix scans", () => {
     const source = "[[x] ".repeat(32000);
     const start = performance.now();

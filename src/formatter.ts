@@ -60,8 +60,9 @@ function convertInlineFormatting(line: string): string {
     let output = "";
     let index = 0;
 
-    // Index boundaries once: repeatedly scanning unmatched labels would make
-    // bracket-heavy repository text quadratic. Code spans protect brackets.
+    // Index delimiters and memoize labels: unmatched brackets must not rescan
+    // each suffix. Find labels on demand so consumed URLs cannot start code
+    // spans that hide subsequent links.
     const nextBacktick = new Int32Array(source.length);
     const nextParen = new Int32Array(source.length);
     let backtick = -1;
@@ -72,24 +73,37 @@ function convertInlineFormatting(line: string): string {
       if (source[cursor] === "`") backtick = cursor;
       if (source[cursor] === ")") paren = cursor;
     }
-    const labelEnds = new Map<number, number>();
-    const labelStarts: number[] = [];
-    for (let cursor = 0; cursor < source.length; cursor++) {
-      if (source[cursor] === "`" && nextBacktick[cursor] > cursor + 1) {
-        cursor = nextBacktick[cursor];
-      } else if (source[cursor] === "[") {
-        labelStarts.push(cursor);
-      } else if (source[cursor] === "]" && labelStarts.length) {
-        labelEnds.set(labelStarts.pop()!, cursor);
+    const labelEnds = new Map<number, number | null>();
+    const findLabelEnd = (start: number): number | null => {
+      if (source[start] !== "[") return null;
+      if (labelEnds.has(start)) return labelEnds.get(start)!;
+      const labelStarts = [start];
+      for (let cursor = start + 1; cursor < source.length; cursor++) {
+        if (source[cursor] === "`" && nextBacktick[cursor] > cursor + 1) {
+          cursor = nextBacktick[cursor];
+        } else if (source[cursor] === "[") {
+          if (labelEnds.has(cursor)) {
+            const knownEnd = labelEnds.get(cursor);
+            if (knownEnd === null) break;
+            cursor = knownEnd!;
+          } else {
+            labelStarts.push(cursor);
+          }
+        } else if (source[cursor] === "]") {
+          labelEnds.set(labelStarts.pop()!, cursor);
+          if (!labelStarts.length) return cursor;
+        }
       }
-    }
+      for (const unmatched of labelStarts) labelEnds.set(unmatched, null);
+      return null;
+    };
     const readLink = (
       start: number,
       allowEmptyLabel = false
     ): { text: string; url: string; length: number } | null => {
-      const close = labelEnds.get(start);
+      const close = findLabelEnd(start);
       if (
-        close === undefined ||
+        close === null ||
         (!allowEmptyLabel && close === start + 1) ||
         source[close + 1] !== "("
       ) {
