@@ -748,7 +748,7 @@ export async function runMainCommand(repoUrl: string, options: BootcampOptions):
 
     if (!options.keepTemp && shouldCleanupRepo) {
       try {
-        await cleanupRepository(interactiveRepoPath);
+        await cleanupRepository(repoPath);
       } catch {
         // Ignore cleanup errors
       }

@@ -861,62 +861,70 @@ describe("runMainCommand --watch and --interactive", () => {
     }
   });
 
-  it("runs the interactive REPL and skips cleanup for a local repo", async () => {
-    const repoPath = await createLocalFixtureRepo();
-    const outputDir = join(repoPath, "bootcamp-output");
-    const facts = makeFacts();
-    const scanResult = makeScanResult();
+  it.each([true, false])(
+    "runs scoped interactive analysis and preserves checkout cleanup (local=%s)",
+    async (isLocal) => {
+      const repoPath = await createLocalFixtureRepo();
+      const outputDir = join(repoPath, "bootcamp-output");
+      const facts = makeFacts();
+      const scanResult = makeScanResult();
 
-    vi.resetModules();
-    const scanRepositoryFiles = vi.fn().mockResolvedValue(scanResult);
-    const cleanupRepository = vi.fn();
-    const orchestrateAnalysis = vi.fn().mockResolvedValue(makeAnalysis(facts));
-    const prepareOutputDocuments = vi.fn().mockResolvedValue(makePreparedResult(facts));
-    const writeGeneratedOutputs = vi.fn().mockResolvedValue({ documentCount: 1 });
-    const resolveRunConfiguration = vi.fn().mockResolvedValue({
-      config: null,
-      styleConfig: makeStyleConfig(),
-      outputFormat: "markdown",
-    });
-    const runInteractiveMode = vi.fn().mockResolvedValue(undefined);
-
-    vi.doMock("../src/services/clone-service.js", () => ({
-      cloneRepository: vi.fn(),
-      cleanupRepository,
-      scanRepositoryFiles,
-    }));
-    vi.doMock("../src/services/analysis-orchestration.js", () => ({
-      orchestrateAnalysis,
-      prepareOutputDocuments,
-    }));
-    vi.doMock("../src/services/output-writer.js", () => ({ writeGeneratedOutputs }));
-    vi.doMock("../src/services/config-resolution.js", () => ({ resolveRunConfiguration }));
-    vi.doMock("../src/interactive.js", () => ({ runInteractiveMode }));
-
-    const { runMainCommand } = await import("../src/commands/main-command.js");
-    const exitSpy = vi.spyOn(process, "exit").mockImplementation(((code?: number) => {
-      throw new Error(`EXIT_${code ?? 0}`);
-    }) as (code?: number) => never);
-    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
-
-    try {
-      // Interactive mode with a local repo returns normally (no process.exit).
-      await runMainCommand(repoPath, {
-        ...BASE_OPTIONS,
-        jsonOnly: false,
-        interactive: true,
-        subdir: "src",
-        output: outputDir,
+      vi.resetModules();
+      const scanRepositoryFiles = vi.fn().mockResolvedValue(scanResult);
+      const cleanupRepository = vi.fn();
+      const orchestrateAnalysis = vi.fn().mockResolvedValue(makeAnalysis(facts));
+      const prepareOutputDocuments = vi.fn().mockResolvedValue(makePreparedResult(facts));
+      const writeGeneratedOutputs = vi.fn().mockResolvedValue({ documentCount: 1 });
+      const resolveRunConfiguration = vi.fn().mockResolvedValue({
+        config: null,
+        styleConfig: makeStyleConfig(),
+        outputFormat: "markdown",
       });
+      const runInteractiveMode = vi.fn().mockResolvedValue(undefined);
 
-      expect(runInteractiveMode).toHaveBeenCalledTimes(1);
-      expect(runInteractiveMode.mock.calls[0][0]).toBe(join(repoPath, "src"));
-      // Local repos are never deleted, even after interactive mode ends.
-      expect(cleanupRepository).not.toHaveBeenCalled();
-    } finally {
-      exitSpy.mockRestore();
-      logSpy.mockRestore();
-      await rm(repoPath, { recursive: true, force: true });
+      vi.doMock("../src/services/clone-service.js", () => ({
+        cloneRepository: vi.fn().mockResolvedValue(repoPath),
+        cleanupRepository,
+        scanRepositoryFiles,
+      }));
+      vi.doMock("../src/services/analysis-orchestration.js", () => ({
+        orchestrateAnalysis,
+        prepareOutputDocuments,
+      }));
+      vi.doMock("../src/services/output-writer.js", () => ({ writeGeneratedOutputs }));
+      vi.doMock("../src/services/config-resolution.js", () => ({ resolveRunConfiguration }));
+      vi.doMock("../src/interactive.js", () => ({ runInteractiveMode }));
+
+      const { runMainCommand } = await import("../src/commands/main-command.js");
+      const exitSpy = vi.spyOn(process, "exit").mockImplementation(((code?: number) => {
+        throw new Error(`EXIT_${code ?? 0}`);
+      }) as (code?: number) => never);
+      const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+
+      try {
+        // Interactive mode with a local repo returns normally (no process.exit).
+        await runMainCommand(isLocal ? repoPath : "https://github.com/test/repo", {
+          ...BASE_OPTIONS,
+          noClone: isLocal,
+          jsonOnly: false,
+          interactive: true,
+          subdir: "src",
+          output: outputDir,
+        });
+
+        expect(runInteractiveMode).toHaveBeenCalledTimes(1);
+        expect(runInteractiveMode.mock.calls[0][0]).toBe(join(repoPath, "src"));
+        if (isLocal) {
+          expect(cleanupRepository).not.toHaveBeenCalled();
+        } else {
+          expect(cleanupRepository).toHaveBeenCalledExactlyOnceWith(repoPath);
+          expect(cleanupRepository).not.toHaveBeenCalledWith(join(repoPath, "src"));
+        }
+      } finally {
+        exitSpy.mockRestore();
+        logSpy.mockRestore();
+        await rm(repoPath, { recursive: true, force: true });
+      }
     }
-  });
+  );
 });
