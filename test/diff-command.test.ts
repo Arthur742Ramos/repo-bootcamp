@@ -137,18 +137,57 @@ describe("runPullRequestDiff error branches", () => {
     const { fetchPullRequestRefs } = await import("../src/diff.js");
     (fetchPullRequestRefs as any).mockRejectedValueOnce(new Error("diff boom"));
     await expect(runPullRequestDiff("test/repo#42", {})).rejects.toThrow("process.exit");
+    expect(mockCleanup).toHaveBeenCalledOnce();
+    expect(mockCleanup.mock.invocationCallOrder[0]).toBeLessThan(
+      mockExit.mock.invocationCallOrder[0]
+    );
   });
 
   it("exits on mkdir failure", async () => {
     const { mkdir } = await import("fs/promises");
     (mkdir as any).mockRejectedValueOnce(new Error("mkdir fail"));
     await expect(runPullRequestDiff("test/repo#42", {})).rejects.toThrow("process.exit");
+    expect(mockCleanup).toHaveBeenCalledOnce();
+    expect(mockCleanup.mock.invocationCallOrder[0]).toBeLessThan(
+      mockExit.mock.invocationCallOrder[0]
+    );
   });
 
   it("exits on writeFile failure", async () => {
     const { writeFile } = await import("fs/promises");
     (writeFile as any).mockRejectedValueOnce(new Error("write fail"));
     await expect(runPullRequestDiff("test/repo#42", {})).rejects.toThrow("process.exit");
+    expect(mockCleanup).toHaveBeenCalledOnce();
+    expect(mockCleanup.mock.invocationCallOrder[0]).toBeLessThan(
+      mockExit.mock.invocationCallOrder[0]
+    );
+  });
+
+  it("retains and reports a requested temporary clone on failure", async () => {
+    const { fetchPullRequestRefs } = await import("../src/diff.js");
+    (fetchPullRequestRefs as any).mockRejectedValueOnce(new Error("diff boom"));
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+    try {
+      await expect(runPullRequestDiff("test/repo#42", { keepTemp: true })).rejects.toThrow(
+        "process.exit"
+      );
+      expect(mockCleanup).not.toHaveBeenCalled();
+      expect(logSpy.mock.calls.flat().join("\n")).toContain(
+        "Temporary clone kept at: /tmp/fake-repo"
+      );
+      expect(mockExit).toHaveBeenCalledWith(1);
+    } finally {
+      logSpy.mockRestore();
+    }
+  });
+
+  it("retains a failed exit if cleanup also fails", async () => {
+    const { fetchPullRequestRefs } = await import("../src/diff.js");
+    (fetchPullRequestRefs as any).mockRejectedValueOnce(new Error("diff boom"));
+    mockCleanup.mockRejectedValueOnce(new Error("cleanup boom"));
+    await expect(runPullRequestDiff("test/repo#42", {})).rejects.toThrow("process.exit");
+    expect(mockCleanup).toHaveBeenCalledOnce();
+    expect(mockExit).toHaveBeenCalledWith(1);
   });
 
   it("warns on cleanup failure", async () => {

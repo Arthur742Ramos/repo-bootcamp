@@ -102,6 +102,43 @@ describe("runAskCommand", () => {
   it("exits on scan failure", async () => {
     mockScan.mockRejectedValueOnce(new Error("scan failed"));
     await expect(runAskCommand("https://github.com/test/repo", {})).rejects.toThrow("process.exit");
+    expect(mockCleanup).toHaveBeenCalledOnce();
+    expect(mockCleanup.mock.invocationCallOrder[0]).toBeLessThan(
+      mockExit.mock.invocationCallOrder[0]
+    );
+  });
+
+  it("cleans up before an interactive failure exits", async () => {
+    mockInteractive.mockRejectedValueOnce(new Error("interactive failed"));
+    await expect(runAskCommand("https://github.com/test/repo", {})).rejects.toThrow("process.exit");
+    expect(mockCleanup).toHaveBeenCalledOnce();
+    expect(mockCleanup.mock.invocationCallOrder[0]).toBeLessThan(
+      mockExit.mock.invocationCallOrder[0]
+    );
+  });
+
+  it.each(["scan", "interactive", "question"])(
+    "preserves a local repository after a %s failure",
+    async (phase) => {
+      if (phase === "scan") mockScan.mockRejectedValueOnce(new Error("scan failed"));
+      if (phase === "interactive")
+        mockInteractive.mockRejectedValueOnce(new Error("interactive failed"));
+      if (phase === "question") mockQuickAsk.mockRejectedValueOnce(new Error("question failed"));
+      await expect(
+        runAskCommand("/tmp/local-repo", { question: phase === "question" ? "Help?" : undefined })
+      ).rejects.toThrow("process.exit");
+      expect(mockCleanup).not.toHaveBeenCalled();
+      expect(mockClone).not.toHaveBeenCalled();
+      expect(mockExit).toHaveBeenCalledWith(1);
+    }
+  );
+
+  it("retains the failure exit when best-effort cleanup also fails", async () => {
+    mockScan.mockRejectedValueOnce(new Error("scan failed"));
+    mockCleanup.mockRejectedValueOnce(new Error("cleanup failed"));
+    await expect(runAskCommand("https://github.com/test/repo", {})).rejects.toThrow("process.exit");
+    expect(mockExit).toHaveBeenCalledWith(1);
+    expect(mockCleanup).toHaveBeenCalledOnce();
   });
 
   it("ignores cleanup errors", async () => {
@@ -164,6 +201,10 @@ describe("runAskCommand", () => {
         runAskCommand("https://github.com/test/repo", { question: "boom?" })
       ).rejects.toThrow("process.exit");
       expect(mockExit).toHaveBeenCalledWith(1);
+      expect(mockCleanup).toHaveBeenCalledOnce();
+      expect(mockCleanup.mock.invocationCallOrder[0]).toBeLessThan(
+        mockExit.mock.invocationCallOrder[0]
+      );
     });
   });
 });

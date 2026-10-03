@@ -77,15 +77,6 @@ export async function runAskCommand(
     }
   }
 
-  status(chalk.gray("Scanning files..."));
-  let scanResult: ScanResult;
-  try {
-    scanResult = await scanRepositoryFiles(repoPath, 200);
-  } catch (error: unknown) {
-    console.error(chalk.red(`Scan failed: ${(error as Error).message}`));
-    process.exit(1);
-  }
-
   const cleanupIfCloned = async (): Promise<void> => {
     if (!repoSource?.isLocal) {
       try {
@@ -96,22 +87,30 @@ export async function runAskCommand(
     }
   };
 
-  if (oneShot) {
-    try {
+  let exitCode = 0;
+  let failureLabel = "Scan failed";
+  try {
+    status(chalk.gray("Scanning files..."));
+    const scanResult: ScanResult = await scanRepositoryFiles(repoPath, 200);
+    failureLabel = oneShot ? "Ask failed" : "Interactive mode failed";
+    if (oneShot) {
       // quickAsk streams the answer to stdout and returns it — no REPL, no transcript.
       await quickAsk(repoPath, repoInfo, scanResult, question!, options.verbose, options.model);
-    } catch (error: unknown) {
-      console.error(chalk.red(`Ask failed: ${(error as Error).message}`));
-      await cleanupIfCloned();
-      process.exit(1);
+    } else {
+      await runInteractiveMode(repoPath, repoInfo, scanResult, process.cwd(), undefined, {
+        verbose: options.verbose,
+        saveTranscript: true,
+        model: options.model,
+      });
     }
-  } else {
-    await runInteractiveMode(repoPath, repoInfo, scanResult, process.cwd(), undefined, {
-      verbose: options.verbose,
-      saveTranscript: true,
-      model: options.model,
-    });
+  } catch (error: unknown) {
+    console.error(
+      chalk.red(`${failureLabel}: ${error instanceof Error ? error.message : String(error)}`)
+    );
+    exitCode = 1;
+  } finally {
+    await cleanupIfCloned();
   }
 
-  await cleanupIfCloned();
+  if (exitCode !== 0) process.exit(exitCode);
 }

@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - Resolve TypeScript path aliases by exact match or longest matching prefix, preserve JSONC path strings and wildcard suffixes, normalize relative targets, and avoid misleading impact/cycle graphs from broader alias matches.
+- Clean up owned temporary clones before Ask and PR-diff failure exits; preserve local repositories and explicit `--keep-temp`, reporting retained PR-diff clone paths even on failures.
 
 - Recheck repaired documentation before the combined `docs --fix --check` gate, retain failures for unresolved issues, and clean up temporary clones before check/error exits.
 
