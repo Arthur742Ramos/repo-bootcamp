@@ -695,6 +695,16 @@ export function generateDependencyDiagram(deps: DependencyAnalysis, projectName:
     lines.push("  end");
     lines.push(`  APP --> ${collectionId}`);
   } else {
+    // Shared legacy IDs can occur across runtime/dev/build declarations. Adding
+    // ordering links to those records creates layout cycles and overlapping
+    // groups, so retain their existing unlinked layout without renaming nodes.
+    const displayedIds = [
+      ...deps.runtime.slice(0, 10).map((dep) => dep.name.replace(/[^a-zA-Z0-9]/g, "_")),
+      ...(deps.runtime.length > 10 ? ["runtime_more"] : []),
+      ...deps.dev.slice(0, 8).map((dep) => dep.name.replace(/[^a-zA-Z0-9]/g, "_")),
+      ...(deps.dev.length > 8 ? ["dev_more"] : []),
+    ];
+    const canOrderFallback = new Set(displayedIds).size === displayedIds.length;
     // Fallback: show top runtime dependencies
     lines.push('  subgraph Runtime["Runtime Dependencies"]', "    direction TB");
     const runtimeIds: string[] = [];
@@ -707,7 +717,7 @@ export function generateDependencyDiagram(deps: DependencyAnalysis, projectName:
       lines.push(`    runtime_more["+${deps.runtime.length - 10} more"]`);
       runtimeIds.push("runtime_more");
     }
-    orderNodes(runtimeIds);
+    if (canOrderFallback) orderNodes(runtimeIds);
     lines.push("  end");
     lines.push("  APP --> Runtime");
     lines.push("");
@@ -724,7 +734,7 @@ export function generateDependencyDiagram(deps: DependencyAnalysis, projectName:
         lines.push(`    dev_more["+${deps.dev.length - 8} more"]`);
         devIds.push("dev_more");
       }
-      orderNodes(devIds);
+      if (canOrderFallback) orderNodes(devIds);
       lines.push("  end");
       lines.push("  APP -.-> Dev");
       lines.push("  Runtime ~~~ Dev");

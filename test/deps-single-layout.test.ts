@@ -97,6 +97,45 @@ describe("single-ecosystem dependency diagram layout", () => {
     expect(graph).toContain("Runtime ~~~ Dev");
   });
 
+  it("retains unlinked fallback layout when runtime/dev/build declarations share IDs", () => {
+    const deps = analysis({
+      packageManager: "Cargo",
+      runtime: [
+        { name: "serde", version: "1" },
+        { name: "tokio", version: "1" },
+      ],
+      dev: [
+        { name: "serde", version: "1" },
+        { name: "proptest", version: "1" },
+        { name: "serde", version: "1" },
+      ],
+      totalCount: 5,
+    });
+    const graph = generateDependencyDiagram(deps, "Shared Cargo");
+    expect(graph).not.toContain("~~~");
+    expect(visibleEdges(graph)).toEqual(["APP --> Runtime", "APP -.-> Dev"]);
+    expect(graph.match(/serde\["serde"\]/g)).toHaveLength(3);
+    expect(graph).toContain('tokio["tokio"]');
+    expect(graph).toContain('proptest["proptest"]');
+    const docs = generateDependencyDocs(deps, "Shared Cargo");
+    expect(docs).toContain("proptest");
+    expect(docs).toContain("tokio");
+  });
+  it("does not add fallback ordering cycles for repeated optional dependency IDs", () => {
+    const graph = generateDependencyDiagram(
+      analysis({
+        runtime: [
+          { name: "uncategorized", version: "1" },
+          { name: "uncategorized", version: "2" },
+        ],
+        totalCount: 2,
+      }),
+      "Optional"
+    );
+    expect(graph).not.toContain("~~~");
+    expect(graph.match(/uncategorized\["uncategorized"\]/g)).toHaveLength(2);
+    expect(visibleEdges(graph)).toEqual(["APP --> Runtime"]);
+  });
   it("keeps long library labels whole and uses no visible library dependency edges", () => {
     const name = "@typescript-eslint/eslint-plugin-with-a-long-literal-package-name";
     const other = "github.com/organization-with-a-long-name/dependency-with-a-long-module-path";
