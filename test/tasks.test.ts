@@ -615,6 +615,115 @@ services:
 });
 
 describe("parsePyproject", () => {
+  it("preserves literal quoted names and decodes quoted table components and keys", () => {
+    const tasks = parsePyproject(String.raw`["pr\u006Fject" . 'scripts'] # installed
+"tool\u002Ename" = "pkg:main"
+'quoted-tool' = 'pkg:main'
+plain_name = "pkg:main"
+"-dash" = "pkg:main"
+["tool" . poetry . "scripts"]
+"serve\U0000002Dtool" = "pkg:main"
+`);
+    expect(tasks.map((task) => task.command)).toEqual([
+      "tool.name",
+      "quoted-tool",
+      "plain_name",
+      "-dash",
+      "poetry run serve-tool",
+    ]);
+  });
+
+  it.each([
+    '"""\n[project.scripts]\ndev = "pkg:main"\n"""',
+    "'''\n[tool.poetry.scripts]\ntest = 'pkg:main'\n'''",
+    '"""\n# sample\n\\"\\"\\"\n[project.scripts]\ndev = "pkg:main"\n"""',
+    "'''\n[project.scripts]\ntest = 'pkg:main'\n''''",
+    '"""\n[project.scripts]\ndev = "pkg:main"\n"""""',
+    '[\n"""\n[project.scripts]\ndev = "pkg:main"\n""",\n"text # not comment"\n]',
+    String.raw`"""\
+      [project.scripts]
+      dev = "pkg:main"
+      """`,
+  ])("shields declarations inside multiline data (%#)", (example) => {
+    const content = `[tool.fixture]\nexample = ${example}\n[project.scripts]\nreal = "pkg:main"\n`;
+    expect(parsePyproject(content).map((task) => task.command)).toEqual(["real"]);
+    expect(parsePyproject(content.replaceAll("\n", "\r\n")).map((task) => task.command)).toEqual([
+      "real",
+    ]);
+  });
+
+  it("does not flatten nested keys or accept non-string PEP 621 script values", () => {
+    const tasks = parsePyproject(`[project.scripts]
+tool.name = "pkg:main"
+bad = false
+number = 1
+array = ["pkg:main"]
+object = { reference = "pkg:main", type = "console" }
+'tool.name' = "pkg:main"
+[project.scripts.nested]
+dev = "pkg:main"
+`);
+    expect(tasks.map((task) => task.command)).toEqual(["tool.name"]);
+  });
+
+  it("preserves documented Poetry string, console-table and file-table scripts", () => {
+    const tasks = parsePyproject(`[tool.poetry.scripts]
+serve = { reference = "pkg:main", type = "console" }
+legacy = { type = 'file', reference = 'some_binary.exe' }
+normal = "pkg:main"
+bad = false
+wrong = { reference = "pkg:main", type = "other" }
+missing = { reference = "pkg:main" }
+`);
+    expect(tasks.map((task) => task.command)).toEqual([
+      "poetry run serve",
+      "poetry run legacy",
+      "poetry run normal",
+    ]);
+  });
+
+  it("reads multiline script strings and leaves comments inside strings intact", () => {
+    const tasks = parsePyproject(`[project.scripts] # actual section
+"tool.name" = """pkg:main""" # entry point
+real = '''pkg:main'''
+[tool.fixture]
+example = "[project.scripts] # text"
+`);
+    expect(tasks.map((task) => task.command)).toEqual(["tool.name", "real"]);
+  });
+
+  it("preserves schema-supported Poetry extras and legacy callable tables", () => {
+    const tasks = parsePyproject(`[tool.poetry.scripts]
+serve = { reference = "pkg:main", type = "console", extras = ["feature", 'second',] }
+legacy = { callable = "pkg:main", extras = [] }
+old = { callable = "pkg:main" }
+bad = { reference = "pkg:main", type = "console", extras = [false] }
+scalar = { callable = "pkg:main", extras = "feature" }
+mixed = { callable = "pkg:main", reference = "pkg:main", type = "console" }
+unknown = { reference = "pkg:main", type = "console", unrelated = "value" }
+`);
+    expect(tasks.map((task) => task.command)).toEqual([
+      "poetry run serve",
+      "poetry run legacy",
+      "poetry run old",
+    ]);
+  });
+
+  it("ignores unsafe names and does not expose declarations after incomplete strings", () => {
+    expect(
+      parsePyproject('[project.scripts]\n"bad name" = "pkg:main"\n"$(test)" = "pkg:main"\n')
+    ).toEqual([]);
+    expect(
+      parsePyproject('[tool.fixture]\nexample = """\n[project.scripts]\ndev = "pkg:main"\n')
+    ).toEqual([]);
+  });
+
+  it("handles large multiline examples and many declaration boundaries", () => {
+    const sample = '[project.scripts]\ndev = "pkg:main"\n'.repeat(16_000);
+    const content = `[tool.fixture]\nexample = '''${sample}'''\n[project.scripts]\nreal = "pkg:main"\n`;
+    expect(parsePyproject(content).map((task) => task.command)).toEqual(["real"]);
+  });
+
   it("emits `poetry run <name>` for poetry scripts and bare names for PEP 621", () => {
     const toml = [
       "[tool.poetry.scripts]",

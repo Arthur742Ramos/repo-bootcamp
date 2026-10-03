@@ -21,6 +21,7 @@ import type { Command } from "./types.js";
 import { lstat, realpath, stat } from "fs/promises";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "path";
 import { isPathInsideDir } from "./utils.js";
+import { pythonScriptDeclarations } from "./python-script-declarations.js";
 
 /** Coarse grouping used for report sections and getting-started ordering. */
 export type TaskCategory =
@@ -640,31 +641,12 @@ export function parseDockerCompose(content: string): DiscoveredTask[] {
  * (`[project.scripts]`) install as bare `<name>` executables.
  */
 export function parsePyproject(content: string): DiscoveredTask[] {
-  const lines = content.split(/\r?\n/);
-  const tasks: DiscoveredTask[] = [];
-  let section = "";
-  for (const raw of lines) {
-    const line = raw.trim();
-    if (line.startsWith("#") || line === "") continue;
-    const header = line.match(/^\[([^\]]+)\]\s*(?:#.*)?$/);
-    if (header) {
-      section = header[1].trim();
-      continue;
-    }
-    const isPoetry = section === "tool.poetry.scripts";
-    const isPep621 = section === "project.scripts";
-    if (!isPoetry && !isPep621) continue;
-    const kv = line.match(/^["']?([A-Za-z0-9_.-]+)["']?\s*=/);
-    if (!kv) continue;
-    const name = kv[1];
-    tasks.push({
-      name,
-      command: isPoetry ? `poetry run ${name}` : name,
-      source: "pyproject.toml",
-      category: categorizeTask(name),
-    });
-  }
-  return tasks;
+  return pythonScriptDeclarations(content).map(({ name, poetry }) => ({
+    name,
+    command: poetry ? `poetry run ${name}` : name,
+    source: "pyproject.toml",
+    category: categorizeTask(name),
+  }));
 }
 
 /** Parse Composer `scripts` into `composer run <name>` tasks. */
