@@ -117,10 +117,131 @@ describe("buildImportGraph import resolution", () => {
     expect(graph.get("src/lib/db.ts")?.importedBy).toContain("src/index.ts");
   });
 
+  it("selects exact and longest-prefix mappings regardless of broad alias order", async () => {
+    const { repoPath, fileInfos } = await makeRepo({
+      "tsconfig.json": JSON.stringify({
+        compilerOptions: {
+          paths: {
+            "*": ["src/fallback.ts"],
+            "@app/*": ["src/broad/*"],
+            "@app/features/*": ["src/features/*"],
+            "@app/core": ["src/core.ts"],
+          },
+        },
+      }),
+      "main.ts": 'import "@app/core"; import "@app/features/one";',
+      "src/fallback.ts": "export {};",
+      "src/core.ts": "export {};",
+      "src/features/one.ts": "export {};",
+      "src/broad/core.ts": "export {};",
+      "src/broad/features/one.ts": "export {};",
+    });
+    const graph = await buildImportGraph(repoPath, fileInfos);
+    expect(graph.get("main.ts")?.imports).toEqual(["src/core.ts", "src/features/one.ts"]);
+    expect(graph.get("src/core.ts")?.importedBy).toEqual(["main.ts"]);
+    expect(graph.get("src/fallback.ts")?.importedBy).toEqual([]);
+  });
+
+  it("captures only the wildcard between a matching prefix and suffix", async () => {
+    const { repoPath, fileInfos } = await makeRepo({
+      "tsconfig.json": JSON.stringify({
+        compilerOptions: { paths: { "@/*/test": ["src/*.test.ts"] } },
+      }),
+      "main.ts": 'import "@/widgets/test"; import "@/widgets/dev"; import "@/test";',
+      "src/widgets.test.ts": "export {};",
+      "src/widgets/test.test.ts": "export {};",
+      "src/widgets/dev.test.ts": "export {};",
+      "src/test.test.ts": "export {};",
+    });
+    const graph = await buildImportGraph(repoPath, fileInfos);
+    expect(graph.get("main.ts")?.imports).toEqual(["src/widgets.test.ts"]);
+  });
+
+  it("tries only the selected mapping's ordered targets without falling through to baseUrl", async () => {
+    const { repoPath, fileInfos } = await makeRepo({
+      "tsconfig.json": JSON.stringify({
+        compilerOptions: {
+          baseUrl: "src",
+          paths: {
+            "*": ["fallback.ts"],
+            "@app/missing": ["missing.ts"],
+            "@app/target": ["missing-first.ts", "target.ts", "fallback.ts"],
+            "base-target": ["missing.ts"],
+          },
+        },
+      }),
+      "main.ts": 'import "@app/missing"; import "@app/target"; import "base-target";',
+      "src/fallback.ts": "export {};",
+      "src/target.ts": "export {};",
+      "src/base-target.ts": "export {};",
+    });
+    const graph = await buildImportGraph(repoPath, fileInfos);
+    expect(graph.get("main.ts")?.imports).toEqual(["src/target.ts"]);
+  });
+
+  it("normalizes parent segments in mapped targets relative to baseUrl", async () => {
+    const { repoPath, fileInfos } = await makeRepo({
+      "tsconfig.json": JSON.stringify({
+        compilerOptions: { baseUrl: "src", paths: { "@/*": ["../shared/*"] } },
+      }),
+      "src/main.ts": 'import "@/value";',
+      "shared/value.ts": "export {};",
+    });
+    const graph = await buildImportGraph(repoPath, fileInfos);
+    expect(graph.get("src/main.ts")?.imports).toEqual(["shared/value.ts"]);
+  });
+
+  it("does not invent a baseUrl fallback when only paths are configured", async () => {
+    const { repoPath, fileInfos } = await makeRepo({
+      "tsconfig.json": JSON.stringify({
+        compilerOptions: { paths: { "@app/missing": ["missing.ts"] } },
+      }),
+      "main.ts": 'import "root-util"; import "@app/missing";',
+      "root-util.ts": "export {};",
+      "@app/missing.ts": "export {};",
+    });
+    const graph = await buildImportGraph(repoPath, fileInfos);
+    expect(graph.get("main.ts")?.imports).toEqual([]);
+  });
+
+  it.each(["// comment\n", "// comment\r", "/* comment */"])(
+    "preserves wildcard suffixes in JSONC with %s",
+    async (comment) => {
+      const config = JSON.stringify({
+        compilerOptions: { paths: { "@/*/test": ["src/*/foo"] } },
+        note: 'Quoted \\"text\\" with // /* and ,}',
+      });
+      const { repoPath, fileInfos } = await makeRepo({
+        "tsconfig.json": `${comment}\n${config}\n// end`,
+        "main.ts": 'import "@/thing/test";',
+        "src/thing/foo.ts": "export {};",
+      });
+      const graph = await buildImportGraph(repoPath, fileInfos);
+      expect(graph.get("main.ts")?.imports).toEqual(["src/thing/foo.ts"]);
+    }
+  );
+
+  it("keeps literal slash and comma/brace sequences in JSONC paths with trailing commas", async () => {
+    const { repoPath, fileInfos } = await makeRepo({
+      "tsconfig.json": `{
+        // Paths contain characters that resemble comments and trailing commas.
+        "compilerOptions": {
+          "paths": { "@/*": ["src//lib/*",], "comma": ["src/comma,}.ts",], },
+        },
+      }`,
+      "main.ts": 'import "@/value"; import "comma";',
+      "src/lib/value.ts": "export {};",
+      "src/comma,}.ts": "export {};",
+    });
+    const graph = await buildImportGraph(repoPath, fileInfos);
+    expect(graph.get("main.ts")?.imports).toEqual(["src/lib/value.ts", "src/comma,}.ts"]);
+  });
+
   it("resolves bare specifiers against tsconfig `baseUrl` (JSONC tolerated)", async () => {
     const { repoPath, fileInfos } = await makeRepo({
       // Includes a `//` comment and trailing comma to exercise JSONC parsing.
-      "tsconfig.json": '{\n  // paths root\n  "compilerOptions": { "baseUrl": "src", },\n}',
+      "tsconfig.json":
+        '{\n  // paths root\n  "compilerOptions": { "baseUrl": "src", "paths": { "@app/*": ["missing/*"] }, },\n}',
       "src/helpers.ts": "export const u = 2;\n",
       "src/app.ts": 'import { u } from "helpers";\n',
     });
