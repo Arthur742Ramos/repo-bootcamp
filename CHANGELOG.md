@@ -22,6 +22,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Arrange single-ecosystem dependency diagrams vertically with full library names, retaining category and runtime/dev records, limits, and counters; connect categorized dependencies through one collection relationship so mobile labels remain readable.
+
 - Retain dependencies from every recognized ecosystem at the selected root, including Python runtime packages alongside Node tooling; distinguish mixed records in reports and diagrams, preserve single-ecosystem output, and invalidate only the previous dependency cache projection.
 
 - Preserve literal Git changed-file paths in comparison reports, including Unicode and rename/copy destinations, so environment and export changes are inspected correctly and control characters/backticks remain safe display labels.

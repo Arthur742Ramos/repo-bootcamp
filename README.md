@@ -691,7 +691,11 @@ root. When multiple ecosystems have dependencies, reports combine their runtime,
 development, optional, and peer records without merging equal names across
 languages. Mixed JSON retains the primary `packageManager` and flat lists, adding
 `packageManagers`, `ecosystem`, and `sourceFile` provenance; mixed documentation
-and diagrams distinguish those records. Single-ecosystem output stays unchanged.
+and diagrams distinguish those records. Single-ecosystem JSON and tables retain
+their existing records. Dependency diagrams arrange libraries vertically while
+keeping full names and existing display limits. Categorized diagrams connect the
+app to a Dependency Categories collection containing every displayed category;
+invisible ordering links control layout without implying library dependencies.
 For example, a Python app with a Node formatter reports both the Python runtime
 packages and Node development tooling. No dependency installation is performed.
 
