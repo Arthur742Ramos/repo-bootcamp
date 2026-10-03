@@ -16,6 +16,56 @@ async function repoWith(files: Record<string, string>): Promise<string> {
 }
 
 describe("task discovery commands", () => {
+  it("discovers quoted Python declarations without advertising example text or nested metadata", async () => {
+    const dir = await repoWith({
+      "pyproject.toml": String.raw`[tool.fixture]
+example = """
+[project.scripts]
+dev = "fixture:main"
+"""
+["project" . 'scripts'] # console scripts
+"tool\u002Ename" = "fixture:main"
+test = "fixture:main"
+bad = false
+nested.name = "fixture:main"
+`,
+    });
+    const result = await runCli(["tasks", dir, "--json"]);
+    expect(result.exitCode).toBe(0);
+    const payload = JSON.parse(result.stdout);
+    expect(payload.tasks.map((task: { command: string }) => task.command)).toEqual([
+      "tool.name",
+      "test",
+    ]);
+    expect(payload.gettingStarted).toEqual(["test"]);
+  }, 60_000);
+
+  it("retains documented Poetry console and file declarations while shielding literal examples", async () => {
+    const dir = await repoWith({
+      "pyproject.toml": `[tool.fixture]
+example = '''
+[tool.poetry.scripts]
+test = 'fixture:main'
+'''
+['tool' . "poetry" . scripts]
+serve = { reference = "fixture:main", type = "console" }
+legacy = { reference = "some_binary.exe", type = "file" }
+optional = { reference = "fixture:main", type = "console", extras = ["feature"] }
+old = { callable = "fixture:main", extras = [] }
+`,
+    });
+    const result = await runCli(["tasks", dir, "--json"]);
+    expect(result.exitCode).toBe(0);
+    const payload = JSON.parse(result.stdout);
+    expect(payload.tasks.map((task: { command: string }) => task.command)).toEqual([
+      "poetry run serve",
+      "poetry run legacy",
+      "poetry run optional",
+      "poetry run old",
+    ]);
+    expect(payload.gettingStarted).toEqual(["poetry run serve"]);
+  }, 60_000);
+
   afterEach(async () => {
     await Promise.all(dirs.map((dir) => rm(dir, { recursive: true, force: true })));
     dirs.length = 0;

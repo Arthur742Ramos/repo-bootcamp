@@ -854,6 +854,12 @@ Contained Taskfile content participates in scan cache identity, including recipe
 edits that leave command names unchanged; ignored includes and files outside the
 selected scan root do not contribute to that identity.
 
+Python task discovery reads literal console-script declarations, including quoted
+table components and escaped quoted names. Multiline TOML examples stay data;
+bare dotted keys remain nested metadata. PEP 621 values must be strings, while
+Poetry's string, reference/type and legacy callable tables retain literal extras arrays. This
+bounded discovery does not validate or execute the full project configuration.
+
 ### Auto-Create GitHub Issues
 
 ```bash
