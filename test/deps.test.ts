@@ -3,6 +3,7 @@
  */
 
 import { describe, it, expect } from "vitest";
+import { markdownToHtml } from "../src/formatter.js";
 import {
   generateDependencyDiagram,
   generateDependencyDocs,
@@ -72,6 +73,21 @@ describe("generateDependencyDocs", () => {
 
     expect(docs).toContain("# Dependency Overview");
     expect(docs).toContain("my-api");
+  });
+
+  it("preserves version alternatives and literal backslashes through dependency tables", () => {
+    const docs = generateDependencyDocs(
+      {
+        ...mockDeps,
+        runtime: [{ name: "runtime-package", version: "^1.0.0 || ^2.0.0", type: "runtime" }],
+        dev: [{ name: "dev-package", version: String.raw`file:..\local\|notes`, type: "dev" }],
+      },
+      "Project"
+    );
+    expect(docs).toContain(String.raw`| runtime-package | ^1.0.0 \|\| ^2.0.0 |`);
+    const html = markdownToHtml(docs);
+    expect(html).toContain("<tr><td>runtime-package</td><td>^1.0.0 || ^2.0.0</td></tr>");
+    expect(html).toContain(String.raw`<tr><td>dev-package</td><td>file:..\local\|notes</td></tr>`);
   });
 
   it("should include summary table", () => {

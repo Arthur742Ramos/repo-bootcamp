@@ -178,6 +178,41 @@ function convertInlineFormatting(line: string): string {
   return render(line);
 }
 
+/** Split table cells without treating escaped pipes as column separators. */
+function readTableCells(line: string): string[] {
+  const cells: string[] = [];
+  let cell = "";
+  let codeEnd = -1;
+  let endedWithSeparator = true;
+  for (let index = 1; index < line.length; index++) {
+    const character = line[index];
+    if (character === "`" && index >= codeEnd) {
+      if (index === codeEnd) codeEnd = -1;
+      else {
+        const close = line.indexOf("`", index + 1);
+        if (close > index + 1) codeEnd = close;
+      }
+    }
+    if (character === "\\" && (line[index + 1] === "|" || line[index + 1] === "\\")) {
+      const escaped = line[++index];
+      // Code spans preserve literal doubled backslashes; plain Markdown cells
+      // use a pair to encode one. Escaped pipes remain literal in either form.
+      cell += escaped === "\\" && index < codeEnd ? "\\\\" : escaped;
+      endedWithSeparator = false;
+    } else if (character === "|") {
+      cells.push(cell.trim());
+      cell = "";
+      codeEnd = -1;
+      endedWithSeparator = true;
+    } else {
+      cell += character;
+      endedWithSeparator = false;
+    }
+  }
+  if (!endedWithSeparator || cells.length === 0) cells.push(cell.trim());
+  return cells;
+}
+
 /**
  * Convert a simple markdown string to HTML.
  *
@@ -328,10 +363,7 @@ export function markdownToHtml(md: string): string {
       // Skip separator rows (e.g. |---|---|)
       if (/^\|[\s-:|]+\|$/.test(line)) continue;
 
-      const cells = line
-        .split("|")
-        .slice(1, -1)
-        .map((c) => c.trim());
+      const cells = readTableCells(line);
       if (!inTable) {
         html.push(
           '<div class="table-scroll" tabindex="0" role="region" aria-label="Scrollable table"><table>'

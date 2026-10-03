@@ -215,6 +215,26 @@ describe("markdownToHtml", () => {
     expect(html).toContain("</table>");
   });
 
+  it("keeps escaped pipes in table text and inline code and accepts omitted trailing bars", () => {
+    const html = markdownToHtml(
+      String.raw`| Range | File |
+|---|---|
+| ^1.0.0 \|\| ^2.0.0 | \`a\|b.ts\` |
+| plain\\folder | \`raw\\folder\``.replaceAll("\\`", "`")
+    );
+    expect(html).toContain("<tr><td>^1.0.0 || ^2.0.0</td><td><code>a|b.ts</code></td></tr>");
+    expect(html).toContain(
+      String.raw`<tr><td>plain\folder</td><td><code>raw\\folder</code></td></tr>`
+    );
+  });
+
+  it("distinguishes escaped backslashes from escaped column separators", () => {
+    const html = markdownToHtml(String.raw`| A | B |
+|---|---|
+| a\\ | b\\\|c |`);
+    expect(html).toContain(String.raw`<tr><td>a\</td><td>b\|c</td></tr>`);
+  });
+
   it("passes through HTML tags", () => {
     const md = "<details>\n<summary>Click</summary>\n\nContent\n\n</details>";
     const html = markdownToHtml(md);
