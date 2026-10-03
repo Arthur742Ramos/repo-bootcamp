@@ -4,7 +4,7 @@
  * a failed `gh issue list` must degrade gracefully (create everything).
  */
 
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { FirstTask, RepoInfo } from "../src/types.js";
 
 const execFileMock = vi.hoisted(() => vi.fn());
@@ -18,7 +18,7 @@ vi.mock("chalk", () => {
   return { default: p };
 });
 
-import { createIssuesFromTasks } from "../src/issues.js";
+import { createIssuesFromTasks, generateIssuePreview, taskToIssuePayload } from "../src/issues.js";
 
 const repoInfo: RepoInfo = {
   owner: "octo",
@@ -50,7 +50,7 @@ const tasks: FirstTask[] = [
 ];
 
 /** Route promisified execFile calls; callback is always the last argument. */
-function route(existingListStdout: string | Error) {
+function route(existingListStdout: string | Error, failures: boolean[] = []) {
   return (file: string, args: string[], opt3: unknown, opt4: unknown) => {
     const callback = (typeof opt4 === "function" ? opt4 : opt3) as (
       err: Error | null,
@@ -68,6 +68,7 @@ function route(existingListStdout: string | Error) {
       return callback(null, { stdout: existingListStdout, stderr: "" });
     }
     if (file === "gh" && args[0] === "issue" && args[1] === "create") {
+      if (failures.shift()) return callback(new Error("Owned creation failure"));
       return callback(null, { stdout: "https://github.com/octo/demo/issues/9", stderr: "" });
     }
     return callback(new Error(`unexpected exec: ${file} ${args.join(" ")}`));
@@ -128,5 +129,114 @@ describe("createIssuesFromTasks idempotency", () => {
     expect(results).toHaveLength(2);
     expect(results.every((r) => r.success && !r.skipped)).toBe(true);
     expect(execFileMock).not.toHaveBeenCalled();
+  });
+});
+
+afterEach(() => vi.unstubAllEnvs());
+
+describe("GitHub issue destination and batch results", () => {
+  it.each([
+    { provider: "gitlab", host: "gitlab.com", url: "https://gitlab.com/octo/demo" },
+    { provider: "bitbucket", host: "bitbucket.org", url: "https://bitbucket.org/octo/demo" },
+    {
+      provider: undefined,
+      host: undefined,
+      url: "file:///owned/demo",
+      owner: "local",
+      fullName: "local/demo",
+    },
+    { provider: "gitlab" },
+    { host: "gitlab.com" },
+    { url: "https://gitlab.com/octo/demo" },
+    { url: "https://github.com/other/demo" },
+    { url: "https://github.com/octo/other" },
+    { fullName: "other/demo" },
+    { owner: "other" },
+    { repo: "other" },
+    { url: "https://github.example/octo/demo" },
+    { url: "" },
+  ])("rejects unsupported or contradictory metadata before invoking gh: %j", async (overrides) => {
+    const info = { ...repoInfo, ...overrides } as RepoInfo;
+    await expect(createIssuesFromTasks(tasks, info)).rejects.toThrow(
+      "matching GitHub repository metadata"
+    );
+    expect(execFileMock).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    { url: "https://github.com/octo/demo", provider: undefined, host: undefined },
+    { url: "git@github.com:octo/demo.git", provider: undefined, host: undefined },
+    { url: "octo/demo", provider: undefined, host: undefined },
+    { url: "https://github.com/Octo/Demo", host: "GITHUB.COM" },
+  ])("qualifies matching GitHub destinations independently of GH_HOST: %j", async (overrides) => {
+    vi.stubEnv("GH_HOST", "gitlab.example");
+    execFileMock.mockImplementation(route("[]") as any);
+    const info = { ...repoInfo, ...overrides } as RepoInfo;
+    const results = await createIssuesFromTasks([tasks[0]], info);
+    expect(results[0].success).toBe(true);
+    const commands = execFileMock.mock.calls.filter(
+      (call) => call[0] === "gh" && call[1][0] === "issue"
+    );
+    expect(commands).toHaveLength(2);
+    for (const [, args] of commands) {
+      expect(args[args.indexOf("--repo") + 1].toLowerCase()).toBe("github.com/octo/demo");
+    }
+  });
+
+  it("reserves a successful title within the batch", async () => {
+    execFileMock.mockImplementation(route("[]") as any);
+    const results = await createIssuesFromTasks([tasks[0], tasks[0]], repoInfo);
+    expect(createCalls()).toHaveLength(1);
+    expect(results.map((result) => [result.success, !!result.skipped])).toEqual([
+      [true, false],
+      [true, true],
+    ]);
+  });
+
+  it("retries a duplicate after failure and reserves only the later success", async () => {
+    execFileMock.mockImplementation(route("[]", [true, false]) as any);
+    const results = await createIssuesFromTasks([tasks[0], tasks[0], tasks[0]], repoInfo);
+    expect(createCalls()).toHaveLength(2);
+    expect(results.map((result) => [result.success, !!result.skipped])).toEqual([
+      [false, false],
+      [true, false],
+      [true, true],
+    ]);
+  });
+
+  it.each(["gitlab", "bitbucket", "local"])(
+    "keeps %s manual previews offline and package-aware",
+    async (provider) => {
+      const info: RepoInfo =
+        provider === "local"
+          ? {
+              ...repoInfo,
+              owner: "local",
+              fullName: "local/demo",
+              provider: undefined,
+              host: undefined,
+              url: "file:///owned/demo",
+            }
+          : {
+              ...repoInfo,
+              provider: provider as "gitlab" | "bitbucket",
+              host: provider === "gitlab" ? "gitlab.com" : "bitbucket.org",
+              url: `https://${provider === "gitlab" ? "gitlab.com" : "bitbucket.org"}/octo/demo`,
+              sourcePathPrefix: "packages/app",
+            };
+      const results = await createIssuesFromTasks([tasks[0]], info, { dryRun: true });
+      const preview = generateIssuePreview([tasks[0]], info);
+      expect(results[0].success).toBe(true);
+      expect(execFileMock).not.toHaveBeenCalled();
+      expect(preview).toContain("manual issue creation");
+      expect(preview).not.toContain("To create these issues, run:");
+      expect(preview).toContain("--create-issues --dry-run");
+      if (provider !== "local") expect(preview).toContain("/packages/app/docs/a.md");
+    }
+  );
+
+  it("preserves scoped GitHub issue source links", () => {
+    const payload = taskToIssuePayload(tasks[0], { ...repoInfo, sourcePathPrefix: "packages/app" });
+    expect(payload.body).toContain("https://github.com/octo/demo/blob/main/packages/app/docs/a.md");
   });
 });

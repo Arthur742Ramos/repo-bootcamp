@@ -8,8 +8,41 @@ import { promisify } from "util";
 import chalk from "chalk";
 import type { FirstTask, RepoInfo } from "./types.js";
 import { buildBlobUrl } from "./source-links.js";
+import { parseGitHubUrl } from "./ingest.js";
 
 const execFileAsync = promisify(execFile);
+
+/** Validate the analyzed repository before invoking any GitHub CLI command. */
+function githubIssueTarget(repoInfo: RepoInfo): string {
+  try {
+    const parsed = parseGitHubUrl(repoInfo.url);
+    if (
+      parsed.provider !== "github" ||
+      (repoInfo.provider !== undefined && repoInfo.provider !== "github") ||
+      (repoInfo.host !== undefined && repoInfo.host.toLowerCase() !== "github.com") ||
+      parsed.owner.toLowerCase() !== repoInfo.owner.toLowerCase() ||
+      parsed.repo.toLowerCase() !== repoInfo.repo.toLowerCase() ||
+      parsed.fullName.toLowerCase() !== repoInfo.fullName.toLowerCase()
+    ) {
+      throw new Error("Repository metadata does not identify the same GitHub repository");
+    }
+    // Explicitly qualify the host so GH_HOST cannot redirect these operations.
+    return `github.com/${parsed.fullName}`;
+  } catch {
+    throw new Error(
+      "Automatic issue creation requires matching GitHub repository metadata. Use --create-issues --dry-run to export tasks for manual issue creation."
+    );
+  }
+}
+
+function supportsAutomaticIssues(repoInfo: RepoInfo): boolean {
+  try {
+    githubIssueTarget(repoInfo);
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 /** Render a file path as a clickable remote link when possible, else bare code. */
 function fileLink(filePath: string, repoInfo: RepoInfo): string {
@@ -33,8 +66,8 @@ export interface IssueResult {
   success: boolean;
   url?: string;
   error?: string;
-  /** True when an existing issue with the same title already existed and this
-   *  task was skipped rather than re-created (idempotent re-runs). */
+  /** True when an issue with the same title already exists, including one
+   *  successfully created earlier in this batch. */
   skipped?: boolean;
   payload: IssuePayload;
 }
@@ -138,14 +171,14 @@ ${task.files.map((f) => `- ${fileLink(f, repoInfo)}`).join("\n")}
 /**
  * Create a single GitHub issue
  */
-async function createIssue(payload: IssuePayload, repoInfo: RepoInfo): Promise<IssueResult> {
+async function createIssue(payload: IssuePayload, repoTarget: string): Promise<IssueResult> {
   try {
     // Build arguments array (safe from shell injection)
     const args = [
       "issue",
       "create",
       "--repo",
-      repoInfo.fullName,
+      repoTarget,
       "--title",
       payload.title,
       "--body",
@@ -228,6 +261,7 @@ export async function createIssuesFromTasks(
   options: { dryRun?: boolean; verbose?: boolean } = {}
 ): Promise<IssueResult[]> {
   const results: IssueResult[] = [];
+  const repoTarget = options.dryRun ? "" : githubIssueTarget(repoInfo);
 
   // Check gh CLI availability
   if (!options.dryRun) {
@@ -249,7 +283,7 @@ export async function createIssuesFromTasks(
   // the network — they just preview every task.
   const existingTitles = options.dryRun
     ? new Set<string>()
-    : await fetchExistingIssueTitles(repoInfo.fullName);
+    : await fetchExistingIssueTitles(repoTarget);
 
   console.log(
     chalk.cyan(`\n${options.dryRun ? "[DRY RUN] " : ""}Creating ${tasks.length} issues...\n`)
@@ -279,10 +313,11 @@ export async function createIssuesFromTasks(
       });
       console.log(chalk.yellow("  [DRY RUN] Would create issue"));
     } else {
-      const result = await createIssue(payload, repoInfo);
+      const result = await createIssue(payload, repoTarget);
       results.push(result);
 
       if (result.success) {
+        existingTitles.add(payload.title);
         console.log(chalk.green(`  Created: ${result.url}`));
       } else {
         console.log(chalk.red(`  Failed: ${result.error}`));
@@ -301,7 +336,13 @@ export async function createIssuesFromTasks(
   console.log();
   if (options.dryRun) {
     console.log(chalk.yellow(`[DRY RUN] Would create ${successful} issues`));
-    console.log(chalk.gray("Run without --dry-run to actually create issues."));
+    console.log(
+      chalk.gray(
+        supportsAutomaticIssues(repoInfo)
+          ? "Run without --dry-run to actually create issues."
+          : "Use the exported preview to create issues manually in your repository's tracker."
+      )
+    );
   } else {
     console.log(chalk.green(`Created: ${successful} issues`));
     if (skipped > 0) {
@@ -320,10 +361,15 @@ export async function createIssuesFromTasks(
  */
 export function generateIssuePreview(tasks: FirstTask[], repoInfo: RepoInfo): string {
   const lines: string[] = [];
+  const automatic = supportsAutomaticIssues(repoInfo);
 
   lines.push("# Issue Preview");
   lines.push("");
-  lines.push(`The following ${tasks.length} issues would be created in **${repoInfo.fullName}**:`);
+  lines.push(
+    automatic
+      ? `The following ${tasks.length} issues would be created in **${repoInfo.fullName}**:`
+      : `The following ${tasks.length} tasks are ready for manual issue creation in **${repoInfo.fullName}**:`
+  );
   lines.push("");
 
   for (let i = 0; i < tasks.length; i++) {
@@ -347,11 +393,18 @@ export function generateIssuePreview(tasks: FirstTask[], repoInfo: RepoInfo): st
 
   lines.push("## Commands");
   lines.push("");
-  lines.push("To create these issues, run:");
-  lines.push("```bash");
-  lines.push("bootcamp <repo-url> --create-issues");
-  lines.push("```");
-  lines.push("");
+  if (automatic) {
+    lines.push("To create these issues, run:");
+    lines.push("```bash");
+    lines.push("bootcamp <repo-url> --create-issues");
+    lines.push("```");
+    lines.push("");
+  } else {
+    lines.push(
+      "Copy the titles and bodies above into your repository's issue tracker. Automatic issue creation supports GitHub repositories only."
+    );
+    lines.push("");
+  }
   lines.push("To preview without creating:");
   lines.push("```bash");
   lines.push("bootcamp <repo-url> --create-issues --dry-run");

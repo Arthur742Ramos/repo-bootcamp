@@ -19,7 +19,7 @@ vi.mock("../src/formatter.js", () => ({
 }));
 
 vi.mock("../src/issues.js", () => ({
-  createIssuesFromTasks: vi.fn().mockResolvedValue(undefined),
+  createIssuesFromTasks: vi.fn().mockResolvedValue([]),
   generateIssuePreview: vi.fn().mockReturnValue("# Preview"),
 }));
 
@@ -136,5 +136,45 @@ describe("writeGeneratedOutputs", () => {
       })
     );
     expect(createIssuesFromTasks).not.toHaveBeenCalled();
+  });
+});
+
+describe("issue result propagation", () => {
+  it.each([
+    [{ success: false }],
+    [{ success: true }, { success: false }, { success: true, skipped: true }],
+  ])(
+    "fails after preserving generated documents when any creation fails: %j",
+    async (...results) => {
+      const { createIssuesFromTasks } = await import("../src/issues.js");
+      vi.clearAllMocks();
+      vi.mocked(createIssuesFromTasks).mockResolvedValueOnce(results as any);
+      await expect(
+        writeGeneratedOutputs(
+          makeParams({
+            options: { createIssues: true },
+            facts: { firstTasks: [{ title: "task" }] },
+          })
+        )
+      ).rejects.toThrow("1 starter issue could not be created");
+      expect(writeFile).toHaveBeenCalledWith("/tmp/out/BOOTCAMP.md", "# Boot", "utf-8");
+      expect(writeFile).toHaveBeenCalledWith("/tmp/out/repo_facts.json", '{"a":1}', "utf-8");
+      expect(vi.mocked(writeFile).mock.invocationCallOrder[1]).toBeLessThan(
+        vi.mocked(createIssuesFromTasks).mock.invocationCallOrder[0]
+      );
+    }
+  );
+
+  it("accepts successes and skipped existing issues", async () => {
+    const { createIssuesFromTasks } = await import("../src/issues.js");
+    vi.mocked(createIssuesFromTasks).mockResolvedValueOnce([
+      { success: true },
+      { success: true, skipped: true },
+    ] as any);
+    await expect(
+      writeGeneratedOutputs(
+        makeParams({ options: { createIssues: true }, facts: { firstTasks: [{ title: "task" }] } })
+      )
+    ).resolves.toEqual({ documentCount: 2 });
   });
 });
