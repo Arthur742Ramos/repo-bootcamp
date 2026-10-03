@@ -18,6 +18,7 @@ const SETUP_TOKENS = new Set([
   "add",
   "update",
 ]);
+const DOTTED_TASK_TOKENS = new Set([...Object.values(ROLE_TOKENS).flat(), ...SETUP_TOKENS, "prod"]);
 
 function roleFromName(name: string): CommandRole | null {
   const tokens = name
@@ -133,6 +134,32 @@ function roleFromInvocation(tokens: string[]): CommandRole | null {
   return null;
 }
 
+// Dots carry role meaning only in proven named-task runners, never in general
+// labels or filename invocations. Unknown leaf qualifiers remain conservative.
+function declaredDottedTarget(
+  command: Command,
+  tokens: string[]
+): { target: string; segments: string[] } | null {
+  const tool = executable(tokens[0] ?? "");
+  const target =
+    command.source === "package.json" &&
+    ["npm", "pnpm", "yarn", "bun"].includes(tool) &&
+    (tokens[1] === "run" || (tool === "npm" && tokens[1] === "run-script")) &&
+    tokens.length === 3
+      ? tokens[2]
+      : command.source === "Taskfile" && tool === "task" && tokens.length === 2
+        ? tokens[1]
+        : undefined;
+  if (!target || /[/\\]/.test(target)) return null;
+  const qualified = target.split(":");
+  const leaf = qualified.pop()!;
+  if (qualified.some((namespace) => !/^[A-Za-z0-9_-]+$/.test(namespace))) return null;
+  const segments = leaf.toLowerCase().split(".");
+  if (segments.length < 2 || segments.some((segment) => !DOTTED_TASK_TOKENS.has(segment)))
+    return null;
+  return { target, segments };
+}
+
 /** Select a command using semantic labels or a bounded known invocation grammar. */
 export function findGuidanceCommand(commands: Command[], role: CommandRole): Command | undefined {
   return commands.find((command) => {
@@ -149,7 +176,12 @@ export function findGuidanceCommand(commands: Command[], role: CommandRole): Com
       return false;
     if (tokens && ["run", "run-script"].includes(tokens[1]) && isSetupName(tokens[2] ?? ""))
       return false;
+    const dotted = tokens ? declaredDottedTarget(command, tokens) : null;
+    // A supplied dev/test label cannot promote a declared dotted setup target.
+    if (dotted?.segments.some((segment) => SETUP_TOKENS.has(segment))) return false;
+    const dottedRole =
+      dotted?.target === command.name ? roleFromName(dotted.segments.join(" ")) : null;
     const namedRole = roleFromName(command.name);
-    return ((tokens ? roleFromInvocation(tokens) : null) ?? namedRole) === role;
+    return ((tokens ? roleFromInvocation(tokens) : null) ?? dottedRole ?? namedRole) === role;
   });
 }

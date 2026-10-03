@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Recognize declared dotted build/test tasks in npm-family and Task onboarding guidance while preserving setup, filename, provenance and simple-invocation boundaries.
+
 - Use the same detected build role in library/tool runbooks and onboarding overviews, retaining build variants and compile/bundle aliases while omitting setup and inspection commands.
 
 - Selected pnpm workspace packages now use their proven original repository manager for default install and script commands, while preserving child declarations/locks, selected evidence scope, exclusions and cache identity.

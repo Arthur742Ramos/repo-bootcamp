@@ -299,6 +299,13 @@ simple script, task, and runner invocations. Dependency-group arguments and file
 do not establish a command's role. Unknown or compound shell commands need an explicit
 role name to appear in these steps; this is not a general shell parser.
 
+Declared dotted tasks such as `build.prod` and `test.unit`, including colon namespaces,
+can establish roles for package.json npm-family `run` commands (`run-script` for npm)
+and Taskfile `task` commands when the literal target matches the declared task name.
+Dotted leaf segments must be known role/setup words or `prod`; unknown qualifiers,
+file extensions, paths and extra invocation arguments do not establish new dotted
+roles. Make and Just guidance retains its existing behavior.
+
 ## Example Output
 
 <details>
