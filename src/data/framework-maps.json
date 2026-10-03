@@ -1,6 +1,6 @@
 {
   "langPatterns": {
-    "TypeScript": "\\.tsx?$",
+    "TypeScript": "\\.(?:tsx?|mts|cts)$",
     "JavaScript": "\\.jsx?$",
     "Python": "\\.py$",
     "Go": "\\.go$",

@@ -12,6 +12,23 @@ function graphOf(entries: Record<string, string[]>): Map<string, GraphNode> {
 }
 
 describe("findCycles", () => {
+  it("includes modern TypeScript modules and excludes test-only cycle edges", () => {
+    const summary = detectCyclesInImportGraph(
+      graphOf({
+        "src/a.mts": ["src/b.mts"],
+        "src/b.mts": ["src/a.mts"],
+        "src/c.cts": ["src/d.cts"],
+        "src/d.cts": ["src/c.cts"],
+        "src/a.test.mts": ["src/a.mts", "src/a.test.mts"],
+        "src/c.spec.cts": ["src/c.cts", "src/c.spec.cts"],
+      })
+    );
+    expect(summary.moduleCount).toBe(4);
+    expect(summary.cycles).toEqual([
+      { size: 2, files: ["src/a.mts", "src/b.mts"] },
+      { size: 2, files: ["src/c.cts", "src/d.cts"] },
+    ]);
+  });
   it("returns no cycles for a DAG", () => {
     const g = graphOf({ a: ["b", "c"], b: ["c"], c: [] });
     expect(findCycles(g)).toEqual([]);

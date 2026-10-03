@@ -16,6 +16,13 @@ describe("Change Impact Map", () => {
   ];
 
   describe("getKeyFilesForImpact", () => {
+    it("selects modern TypeScript entry points without nested or directory matches", () => {
+      const paths = ["index.mts", "src/main.cts", "source/index.mts", "lib/helper.cts"];
+      const files = paths.map((path) => ({ path, size: 10, isDirectory: false }));
+      files.push({ path: "src/nested/utility.mts", size: 10, isDirectory: false });
+      files.push({ path: "src/dir.cts", size: 0, isDirectory: true });
+      expect(getKeyFilesForImpact(files).sort()).toEqual(paths.sort());
+    });
     it("should identify key entry points", () => {
       const keyFiles = getKeyFilesForImpact(mockFiles);
 

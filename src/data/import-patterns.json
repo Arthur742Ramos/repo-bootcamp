@@ -21,6 +21,8 @@
   "extToLang": {
     ".ts": "typescript",
     ".tsx": "typescript",
+    ".mts": "typescript",
+    ".cts": "typescript",
     ".js": "javascript",
     ".jsx": "javascript",
     ".mjs": "javascript",

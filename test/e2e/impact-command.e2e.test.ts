@@ -55,6 +55,40 @@ describe("impact command", () => {
     expect(result.stdout).toContain("src/index.ts");
   }, 60_000);
 
+  it("detects modern TypeScript impact, tests, and both module-kind cycle gates", async () => {
+    const tempDir = await mkdtemp(join(tmpdir(), "bootcamp-impact-modules-e2e-"));
+    tempDirs.push(tempDir);
+    const repoPath = await createRepo(tempDir, {
+      "src/index.mts": 'import "./util.mjs";',
+      "src/util.mts": 'export * from "./index.mjs";',
+      "src/main.cts": 'import helper = require("./helper.cjs");',
+      "src/helper.cts": 'import main = require("./main.cjs");',
+      "test/util.test.mts": 'import "../src/util.mjs";',
+    });
+    const impact = await runCli(["impact", repoPath, "src/util.mts", "--json"]);
+    expect(impact.exitCode).toBe(0);
+    const result = JSON.parse(impact.stdout).impacts[0];
+    expect(result.importedBy.sort()).toEqual(["src/index.mts", "test/util.test.mts"]);
+    expect(result.imports).toEqual(["src/index.mts"]);
+    expect(result.affectedTests).toContain("test/util.test.mts");
+    const defaultImpact = await runCli(["impact", repoPath, "--json"]);
+    expect(defaultImpact.exitCode).toBe(0);
+    expect(
+      JSON.parse(defaultImpact.stdout).impacts.map((entry: { file: string }) => entry.file)
+    ).toContain("src/index.mts");
+    const cycles = await runCli(["cycles", repoPath, "--json", "--check"]);
+    expect(cycles.exitCode).toBe(1);
+    const report = JSON.parse(cycles.stdout);
+    expect(report.moduleCount).toBe(4);
+    expect(report.cycleCount).toBe(2);
+    expect(report.cycles.map((cycle: { files: string[] }) => cycle.files.sort()).sort()).toEqual(
+      [
+        ["src/helper.cts", "src/main.cts"],
+        ["src/index.mts", "src/util.mts"],
+      ].sort()
+    );
+  }, 60_000);
+
   it("reports the blast radius for a specific file (human + JSON)", async () => {
     const tempDir = await mkdtemp(join(tmpdir(), "bootcamp-impact-e2e-"));
     tempDirs.push(tempDir);

@@ -40,13 +40,15 @@ describe("buildImportGraph import resolution", () => {
     expect(graph.get("src/util.ts")?.importedBy).toContain("src/index.ts");
   });
 
-  it("resolves `.mjs` specifiers to their `.ts` source", async () => {
+  it("resolves `.mjs` specifiers to their `.mts` source ahead of a `.ts` decoy", async () => {
     const { repoPath, fileInfos } = await makeRepo({
       "src/helper.ts": "export const noop = (): void => {};\n",
+      "src/helper.mts": "export const noop = (): void => {};\n",
       "src/app.ts": 'import { noop } from "./helper.mjs";\n\nnoop();\n',
     });
     const graph = await buildImportGraph(repoPath, fileInfos);
-    expect(graph.get("src/app.ts")?.imports).toContain("src/helper.ts");
+    expect(graph.get("src/app.ts")?.imports).toEqual(["src/helper.mts"]);
+    expect(graph.get("src/helper.ts")?.importedBy).toEqual([]);
   });
 
   it("still resolves extensionless and index imports", async () => {
@@ -56,6 +58,47 @@ describe("buildImportGraph import resolution", () => {
     });
     const graph = await buildImportGraph(repoPath, fileInfos);
     expect(graph.get("src/main.ts")?.imports).toContain("src/lib/index.ts");
+  });
+
+  it.each(["m", "c"])(
+    "resolves .%sjs sources, declarations, and exact files by module kind",
+    async (kind) => {
+      const { repoPath, fileInfos } = await makeRepo({
+        [`src/main.${kind}ts`]: `import "./source.${kind}js"; import "./types.${kind}js"; import "./actual.${kind}js";`,
+        [`src/source.${kind}ts`]: `export * from "./main.${kind}js";`,
+        "src/source.ts": "export {};",
+        [`src/types.d.${kind}ts`]: "export declare const x: number;",
+        "src/types.ts": "export {};",
+        [`src/actual.${kind}js`]: "export const x = 1;",
+        [`src/actual.${kind}ts`]: "export const x = 2;",
+      });
+      const graph = await buildImportGraph(repoPath, fileInfos);
+      expect(graph.get(`src/main.${kind}ts`)?.imports).toEqual([
+        `src/source.${kind}ts`,
+        `src/types.d.${kind}ts`,
+        `src/actual.${kind}js`,
+      ]);
+      expect(graph.get(`src/source.${kind}ts`)?.imports).toEqual([`src/main.${kind}ts`]);
+      expect(graph.get("src/source.ts")?.importedBy).toEqual([]);
+      expect(graph.get("src/types.ts")?.importedBy).toEqual([]);
+      expect(graph.get(`src/actual.${kind}ts`)?.importedBy).toEqual([]);
+    }
+  );
+
+  it("does not guess module-kind sources from extensionless imports or incompatible JS extensions", async () => {
+    const { repoPath, fileInfos } = await makeRepo({
+      "src/main.ts": 'import "./a"; import "./dir"; import "./a.cjs"; import "./b.mjs";',
+      "src/a.mts": "export {};",
+      "src/b.cts": "export {};",
+      "src/dir/index.mts": "export {};",
+      "src/dir/index.cts": "export {};",
+      "src/a.ts": "export {};",
+      "src/b.ts": "export {};",
+    });
+    const graph = await buildImportGraph(repoPath, fileInfos);
+    expect(graph.get("src/main.ts")?.imports).toEqual(["src/a.ts"]);
+    expect(graph.get("src/a.mts")?.importedBy).toEqual([]);
+    expect(graph.get("src/b.cts")?.importedBy).toEqual([]);
   });
 
   it("prefers a real `.js` file over a same-named `.ts` source", async () => {
