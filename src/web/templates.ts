@@ -660,6 +660,10 @@ export function getIndexHtml(nonce?: string): string {
   <script${nonceAttribute}>
     let currentJobId = null;
     let questionRequest = null;
+    const artifactDownloads = {
+      kit: { buttonId: 'downloadAllBtn', route: 'download', label: 'Download kit', success: 'Downloaded!', failure: 'Download failed', request: null, timer: null },
+      issues: { buttonId: 'issuesPreviewBtn', route: 'issues-preview', label: 'Download issue preview', success: 'Preview downloaded!', failure: 'Preview failed', request: null, timer: null },
+    };
     let currentFile = null;
     let previewRequest = null;
     let previewToken = 0;
@@ -801,6 +805,7 @@ export function getIndexHtml(nonce?: string): string {
     function beginRun() {
       activeRunToken += 1;
       resetQuestion();
+      resetArtifactDownloads();
       closeModal();
       cancelStatusRecovery();
       if (currentEventSource) {
@@ -1749,60 +1754,69 @@ export function getIndexHtml(nonce?: string): string {
       return filename || fallback;
     }
 
-    async function downloadAll() {
-      if (!currentJobId) return;
-      const btn = document.getElementById('downloadAllBtn');
+    function resetArtifactDownloads() {
+      for (const state of Object.values(artifactDownloads)) {
+        if (state.request) state.request.abort();
+        if (state.timer !== null) clearTimeout(state.timer);
+        state.request = null;
+        state.timer = null;
+        const btn = document.getElementById(state.buttonId);
+        btn.textContent = state.label;
+        btn.disabled = false;
+      }
+    }
+
+    async function downloadArtifact(state) {
+      if (!currentJobId || state.request) return;
+      const jobId = currentJobId;
+      const runToken = activeRunToken;
+      const controller = new AbortController();
+      state.request = controller;
+      const ownsDownload = () => state.request === controller && isCurrentRun(jobId, runToken);
+      const btn = document.getElementById(state.buttonId);
       btn.disabled = true;
       btn.textContent = 'Preparing…';
       try {
-        const response = await fetch('/api/jobs/' + currentJobId + '/download');
-        if (!response.ok) throw new Error('Download failed (' + response.status + ')');
+        const response = await fetch('/api/jobs/' + jobId + '/' + state.route, { signal: controller.signal });
+        if (!ownsDownload()) return;
+        if (!response.ok) throw new Error((state.route === 'download' ? 'Download failed' : 'Issue preview unavailable') + ' (' + response.status + ')');
         const blob = await response.blob();
+        if (!ownsDownload()) return;
         const url = URL.createObjectURL(blob);
         const anchor = document.createElement('a');
-        anchor.href = url;
-        anchor.download = getDownloadFilename(response, 'repo-bootcamp-kit.zip');
-        document.body.appendChild(anchor);
-        anchor.click();
-        document.body.removeChild(anchor);
-        URL.revokeObjectURL(url);
-        btn.textContent = 'Downloaded!';
+        try {
+          anchor.href = url;
+          anchor.download = state.route === 'download' ? getDownloadFilename(response, 'repo-bootcamp-kit.zip') : 'ISSUES_PREVIEW.md';
+          document.body.appendChild(anchor);
+          anchor.click();
+        } finally {
+          anchor.remove();
+          URL.revokeObjectURL(url);
+        }
+        btn.textContent = state.success;
       } catch (error) {
-        btn.textContent = 'Download failed';
+        if (!ownsDownload()) return;
+        btn.textContent = state.failure;
         addProgressItem(error instanceof Error ? error.message : String(error), 'error');
+      } finally {
+        if (ownsDownload()) {
+          state.timer = setTimeout(() => {
+            if (!ownsDownload()) return;
+            state.timer = null;
+            state.request = null;
+            btn.textContent = state.label;
+            btn.disabled = false;
+          }, 1500);
+        }
       }
-      setTimeout(() => {
-        btn.textContent = 'Download kit';
-        btn.disabled = false;
-      }, 1500);
+    }
+
+    async function downloadAll() {
+      await downloadArtifact(artifactDownloads.kit);
     }
 
     async function downloadIssuePreview() {
-      if (!currentJobId) return;
-      const btn = document.getElementById('issuesPreviewBtn');
-      btn.disabled = true;
-      btn.textContent = 'Preparing…';
-      try {
-        const response = await fetch('/api/jobs/' + currentJobId + '/issues-preview');
-        if (!response.ok) throw new Error('Issue preview unavailable (' + response.status + ')');
-        const blob = await response.blob();
-        const url = URL.createObjectURL(blob);
-        const anchor = document.createElement('a');
-        anchor.href = url;
-        anchor.download = 'ISSUES_PREVIEW.md';
-        document.body.appendChild(anchor);
-        anchor.click();
-        document.body.removeChild(anchor);
-        URL.revokeObjectURL(url);
-        btn.textContent = 'Preview downloaded!';
-      } catch (error) {
-        btn.textContent = 'Preview failed';
-        addProgressItem(error instanceof Error ? error.message : String(error), 'error');
-      }
-      setTimeout(() => {
-        btn.textContent = 'Download issue preview';
-        btn.disabled = false;
-      }, 1500);
+      await downloadArtifact(artifactDownloads.issues);
     }
 
     function quoteCliArgument(value) {
