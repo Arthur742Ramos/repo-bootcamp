@@ -565,6 +565,9 @@ export function registerRoutes(app: Application): void {
           emitter: new EventEmitter(),
         };
 
+        // Reserve admission synchronously; filesystem cleanup must not expose
+        // the evicted slot to another request before this job is inserted.
+        let evictionCleanup: Promise<void> | undefined;
         // Enforce max jobs cap — evict oldest completed jobs first
         if (jobs.size >= MAX_JOBS) {
           let oldestCompletedId: string | null = null;
@@ -578,7 +581,7 @@ export function registerRoutes(app: Application): void {
           if (oldestCompletedId) {
             const oldestCompletedJob = jobs.get(oldestCompletedId);
             if (oldestCompletedJob) {
-              await removeJob(oldestCompletedId, oldestCompletedJob);
+              evictionCleanup = removeJob(oldestCompletedId, oldestCompletedJob);
             }
           } else {
             // All jobs are still running — reject to prevent OOM
@@ -588,6 +591,17 @@ export function registerRoutes(app: Application): void {
         }
 
         jobs.set(job.id, job);
+
+        if (evictionCleanup) {
+          try {
+            await evictionCleanup;
+          } catch (error: unknown) {
+            // Preserve failed-start behavior if cleanup fails before its
+            // normal filesystem-error handling: no unstarted job is retained.
+            jobs.delete(job.id);
+            throw error;
+          }
+        }
 
         // Start analysis in background
         void runAnalysis(job, options);
