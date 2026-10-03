@@ -1016,6 +1016,8 @@ Generated command snippets use delimiters that preserve literal backticks. Multi
 
 PDF-ready exports are HTML files intended for browser printing. They open at the device's normal reading scale; wide tables scroll inside a focusable, labeled region, including with the arrow keys. Printing retains A4 pages, 2 cm margins, 11 pt body text, and automatic table column widths.
 
+Library/tool runbooks select their Build & Release command using the same build role as the onboarding overview, including variants such as `build:prod` and aliases such as `compile` or `bundle`.
+
 ![Web Dashboard](media/screenshot-web-dashboard.png)
 
 The web interface allows you to analyze repositories interactively through your browser.

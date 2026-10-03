@@ -959,22 +959,40 @@ describe("literal generated command presentation", () => {
       runbook: { ...mockFacts.runbook!, applicable: false },
     };
     const before = JSON.stringify(facts);
-    for (const markdown of [
-      generateBootcamp(facts),
-      generateOnboarding(facts),
-      generateRunbook(facts),
+    // A build-only runbook must use a build invocation rather than a test invocation
+    // mislabeled "build". Keep the original literal cases in the other guides.
+    const runbookCommand =
+      new Map([
+        ["npm run test", "npm run build"],
+        ["npm run 'test  unit'", "npm run 'build  unit'"],
+        ["  npm run test  ", "  npm run build  "],
+        ["npm run 'test\tunit'", "npm run 'build\tunit'"],
+      ]).get(command) ?? command;
+    const runbookFacts: RepoFacts = {
+      ...facts,
+      quickstart: {
+        ...facts.quickstart,
+        commands: [{ name: "build", command: runbookCommand, source: "README.md" }],
+      },
+    };
+    const runbookBefore = JSON.stringify(runbookFacts);
+    for (const { markdown, expectedCommand } of [
+      { markdown: generateBootcamp(facts), expectedCommand: command },
+      { markdown: generateOnboarding(facts), expectedCommand: command },
+      { markdown: generateRunbook(runbookFacts), expectedCommand: runbookCommand },
     ]) {
       for (const html of [
         markdownToHtml(markdown),
         convertToHtml(markdown, "Guide"),
         convertToPdf(markdown, "Guide"),
       ]) {
-        expect(codePayloads(html)).toContain(command);
+        expect(codePayloads(html)).toContain(expectedCommand);
         expect(html).not.toContain("<img src=x");
         expect(html).not.toContain('<a href="./ONBOARDING.md">source</a>');
       }
     }
     expect(JSON.stringify(facts)).toBe(before);
+    expect(JSON.stringify(runbookFacts)).toBe(runbookBefore);
   });
 
   it("retains a multiline verification command outside the limited summary", () => {
