@@ -108,6 +108,30 @@ describe("orchestrateAnalysis facts cache wiring", () => {
     expect(result.toolCalls).toBe(1);
   });
 
+  it("includes scan scope in facts cache reads and writes", async () => {
+    const scope = { maxFiles: 17, subdir: "packages/web", exclude: ["**/fixtures/**"] };
+    await orchestrateAnalysis({
+      repoPath: "/repo",
+      repoInfo: makeRepoInfo(),
+      scanResult,
+      options: makeOptions(scope),
+      styleConfig,
+      progress: makeProgress(),
+      analysisStart: Date.now(),
+    });
+    expect(readCacheMock).toHaveBeenCalledWith(
+      "owner/repo",
+      "abc123",
+      expect.objectContaining(scope)
+    );
+    expect(writeCacheMock).toHaveBeenCalledWith(
+      "owner/repo",
+      "abc123",
+      facts,
+      expect.objectContaining(scope)
+    );
+  });
+
   it("returns cached facts without invoking the model on a hit", async () => {
     const cachedFacts = {
       repoName: "owner/repo",

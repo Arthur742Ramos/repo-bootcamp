@@ -98,6 +98,9 @@ export async function orchestrateAnalysis({
     style: options.style,
     model: options.model,
     audience: options.audience,
+    maxFiles: options.maxFiles,
+    subdir: options.subdir,
+    exclude: options.exclude,
   };
   const cacheEligible = !options.noCache && Boolean(repoInfo.commitSha);
 
@@ -209,6 +212,9 @@ export async function prepareOutputDocuments({
         style: options.style,
         model: options.model,
         audience: options.audience,
+        maxFiles: options.maxFiles,
+        subdir: options.subdir,
+        exclude: options.exclude,
       },
     }
   );

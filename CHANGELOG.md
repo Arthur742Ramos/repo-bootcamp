@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Separate all analysis cache phases by scan directory, exclusions, and file limit; regenerate older unscoped entries rather than reuse results from a different scan.
+
 - Preserve namespaced and quoted public Taskfile commands, omit internal helpers, and read YAML task metadata without inventing commands from nested or malformed definitions.
 
 - Read scoped onboarding documentation, CI workflows, source files, and workspace metadata from the selected `--subdir` instead of the outer repository.

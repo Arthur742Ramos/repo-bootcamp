@@ -58,12 +58,12 @@ describe("cache commands", () => {
     const cacheDir = join(homeDir, ".cache", "repo-bootcamp");
     await mkdir(cacheDir, { recursive: true });
 
-    // Seed: one well-formed v2 facts entry and one stray JSON blob.
+    // Seed: one well-formed v3 facts entry and one stray JSON blob.
     // Writing the JSON directly lets us avoid module-load ordering between
     // the test process and the spawned CLI (which read CACHE_DIR from
     // their own respective home dirs).
     const validEntry = {
-      version: 2,
+      version: 3,
       phase: "facts" as const,
       repoFullName: "owner/example",
       commitSha: "facebead123456789012",
@@ -72,6 +72,9 @@ describe("cache commands", () => {
         style: "oss",
         model: "claude-opus-4-5",
         audience: "backend",
+        maxFiles: 200,
+        subdir: "",
+        exclude: [],
       },
       createdAt: new Date().toISOString(),
       value: { repoName: "owner/example" },
@@ -102,7 +105,7 @@ describe("cache commands", () => {
     );
     expect(jsonResult.exitCode).toBe(0);
     const parsed = JSON.parse(jsonResult.stdout);
-    expect(parsed.version).toBe(2);
+    expect(parsed.version).toBe(3);
     expect(parsed.totalEntries).toBe(2);
     expect(parsed.totalBytes).toBeGreaterThan(0);
     expect(Array.isArray(parsed.entries)).toBe(true);

@@ -371,7 +371,12 @@ describe("prepareOutputDocuments", () => {
       repoInfo: mockRepoInfo,
       scanResult: mockScanResult,
       facts: mockFacts,
-      options: defaultOptions,
+      options: {
+        ...defaultOptions,
+        subdir: "packages/api",
+        maxFiles: 13,
+        exclude: ["**/generated/**"],
+      },
       config: null,
       styleConfig: defaultStyleConfig,
       progress,
@@ -384,6 +389,11 @@ describe("prepareOutputDocuments", () => {
       expect.objectContaining({
         repoFullName: "test-owner/test-repo",
         commitSha: "abc123",
+        generationOptions: expect.objectContaining({
+          subdir: "packages/api",
+          maxFiles: 13,
+          exclude: ["**/generated/**"],
+        }),
       })
     );
   });
