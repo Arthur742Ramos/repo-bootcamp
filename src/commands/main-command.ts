@@ -1,6 +1,6 @@
 import chalk from "chalk";
 import { mkdir, writeFile } from "fs/promises";
-import { join } from "path";
+import { join, resolve } from "path";
 
 import { analyzeRepo, type AnalysisStats } from "../agent.js";
 import { formatDocName, type OutputFormat } from "../formatter.js";
@@ -50,6 +50,7 @@ interface GenerationResult {
 
 interface GenerateOutputsParams {
   repoPath: string;
+  repositoryRoot?: string;
   repoInfo: RepoInfo;
   scanResult: ScanResult;
   facts: RepoFacts;
@@ -136,6 +137,7 @@ async function writeRunSummary({
 
 async function generateOutputs({
   repoPath,
+  repositoryRoot,
   repoInfo,
   scanResult,
   facts,
@@ -158,6 +160,7 @@ async function generateOutputs({
     outputTargets,
   } = await prepareOutputDocuments({
     repoPath,
+    repositoryRoot,
     repoInfo,
     scanResult,
     facts,
@@ -336,6 +339,11 @@ export async function runMainCommand(repoUrl: string, options: BootcampOptions):
     console.log();
   }
 
+  // The scanner validated the selected directory before returning relative
+  // paths. Every file-reading consumer must resolve those paths from it.
+  // Keep repoPath as the outer checkout for clone cleanup and Git watching.
+  const analysisRepoPath = options.subdir ? resolve(repoPath, options.subdir) : repoPath;
+
   const analysisStart = Date.now();
   progress.startPhase("analyze");
   let facts!: RepoFacts;
@@ -343,7 +351,7 @@ export async function runMainCommand(repoUrl: string, options: BootcampOptions):
 
   try {
     const analysis = await orchestrateAnalysis({
-      repoPath,
+      repoPath: analysisRepoPath,
       repoInfo,
       scanResult,
       options,
@@ -383,7 +391,8 @@ export async function runMainCommand(repoUrl: string, options: BootcampOptions):
   progress.startPhase("generate", options.jsonOnly ? "JSON only" : "12+ files");
   try {
     const { documentCount, security, radar, deps, metrics, health } = await generateOutputs({
-      repoPath,
+      repoPath: analysisRepoPath,
+      repositoryRoot: repoPath,
       repoInfo,
       scanResult,
       facts,
@@ -476,7 +485,7 @@ export async function runMainCommand(repoUrl: string, options: BootcampOptions):
     process.exit(1);
   }
 
-  const interactiveRepoPath = repoPath;
+  const interactiveRepoPath = analysisRepoPath;
   const interactiveScanResult = scanResult;
   const shouldCleanupRepo = !repoSource?.isLocal;
 
@@ -670,7 +679,7 @@ export async function runMainCommand(repoUrl: string, options: BootcampOptions):
 
         wp.startPhase("analyze");
         const result = await analyzeRepo(
-          repoPath,
+          analysisRepoPath,
           repoInfo,
           newScan,
           options,
@@ -687,7 +696,8 @@ export async function runMainCommand(repoUrl: string, options: BootcampOptions):
 
         wp.startPhase("generate", options.jsonOnly ? "JSON only" : "12+ files");
         const { documentCount } = await generateOutputs({
-          repoPath,
+          repoPath: analysisRepoPath,
+          repositoryRoot: repoPath,
           repoInfo,
           scanResult: newScan,
           facts: styledFacts,
@@ -743,7 +753,7 @@ export async function runMainCommand(repoUrl: string, options: BootcampOptions):
 
     if (!options.keepTemp && shouldCleanupRepo) {
       try {
-        await cleanupRepository(interactiveRepoPath);
+        await cleanupRepository(repoPath);
       } catch {
         // Ignore cleanup errors
       }

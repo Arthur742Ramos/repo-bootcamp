@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - Separate all analysis cache phases by scan directory, exclusions, file limit, and effective scan evidence; regenerate older unscoped entries rather than reuse results from a different scan.
+- Resolve AI tools, extended analysis, plugins, interactive sessions, and watch regeneration from the validated selected scan directory while retaining the outer checkout for cleanup and Git watching.
 
 - Preserve namespaced and quoted public Taskfile commands, omit internal helpers, and read YAML task metadata without inventing commands from nested or malformed definitions.
 

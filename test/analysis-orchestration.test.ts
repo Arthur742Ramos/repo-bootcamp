@@ -78,6 +78,7 @@ import {
   orchestrateAnalysis,
   prepareOutputDocuments,
 } from "../src/services/analysis-orchestration.js";
+import { analyzeDiff } from "../src/diff.js";
 import { ProgressTracker } from "../src/progress.js";
 
 const defaultOptions: BootcampOptions = {
@@ -395,6 +396,28 @@ describe("prepareOutputDocuments", () => {
           exclude: ["**/generated/**"],
         }),
       })
+    );
+  });
+
+  it("keeps Git comparison at the outer checkout while analyzing selected files", async () => {
+    const progress = { update: vi.fn(), succeed: vi.fn(), recordToolCall: vi.fn() } as any;
+    await prepareOutputDocuments({
+      repoPath: "/repo/packages/app",
+      repositoryRoot: "/repo",
+      repoInfo: mockRepoInfo,
+      scanResult: mockScanResult,
+      facts: mockFacts,
+      options: { ...defaultOptions, compare: "HEAD~1", subdir: "packages/app" },
+      config: null,
+      styleConfig: defaultStyleConfig,
+      progress,
+    });
+    expect(analyzeDiff).toHaveBeenCalledWith("/repo", "HEAD~1", "HEAD");
+    expect(runParallelAnalysisMock).toHaveBeenCalledWith(
+      "/repo/packages/app",
+      mockScanResult,
+      progress,
+      expect.any(Object)
     );
   });
 

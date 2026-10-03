@@ -179,6 +179,8 @@ export async function orchestrateAnalysis({
 
 interface PrepareOutputDocumentsParams {
   repoPath: string;
+  /** Outer checkout for Git operations whose paths are repository-relative. */
+  repositoryRoot?: string;
   repoInfo: RepoInfo;
   scanResult: ScanResult;
   facts: RepoFacts;
@@ -201,6 +203,7 @@ export interface PrepareOutputDocumentsResult {
 
 export async function prepareOutputDocuments({
   repoPath,
+  repositoryRoot,
   repoInfo,
   scanResult,
   facts,
@@ -238,7 +241,7 @@ export async function prepareOutputDocuments({
   if (options.compare) {
     try {
       progress.update("Analyzing diff...");
-      diffSummary = await analyzeDiff(repoPath, options.compare, "HEAD");
+      diffSummary = await analyzeDiff(repositoryRoot ?? repoPath, options.compare, "HEAD");
     } catch (error: unknown) {
       console.log(chalk.yellow(`  Warning: Could not generate diff: ${(error as Error).message}`));
     }
