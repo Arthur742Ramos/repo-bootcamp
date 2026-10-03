@@ -605,6 +605,7 @@ export function generateDependencyDiagram(deps: DependencyAnalysis, projectName:
   lines.push("");
 
   if (deps.packageManagers && deps.packageManagers.length > 1) {
+    lines.unshift("---", "config:", "  flowchart:", "    padding: 5", "---");
     // Mixed results use the existing flat-list caps, rather than letting a
     // recognized Node category hide uncategorized records from other languages.
     const label = (value: string): string =>
@@ -614,19 +615,31 @@ export function generateDependencyDiagram(deps: DependencyAnalysis, projectName:
         .replace(/</g, "#lt;")
         .replace(/>/g, "#gt;")
         .replace(/[\r\n]+/g, " ");
+    let previousGroup: string | undefined;
     for (const [group, title, list, cap] of [
       ["Runtime", "Runtime Dependencies", deps.runtime, 10],
       ["Dev", "Dev Dependencies", deps.dev, 8],
       ["Peer", "Peer Dependencies", deps.peer, 8],
     ] as const) {
       if (!list.length) continue;
-      lines.push(`  subgraph ${group}["${title}"]`);
+      lines.push(`  subgraph ${group}["${title}"]`, "    direction TB");
       list.slice(0, cap).forEach((dep, index) => {
         lines.push(`    ${group}_${index}["${label(dep.name)} (${label(dep.ecosystem ?? "")})"]`);
       });
-      if (list.length > cap) lines.push(`    ${group}_more["+${list.length - cap} more"]`);
+      const nodeIds = list.slice(0, cap).map((_, index) => `${group}_${index}`);
+      if (list.length > cap) {
+        lines.push(`    ${group}_more["+${list.length - cap} more"]`);
+        nodeIds.push(`${group}_more`);
+      }
+      // Invisible links constrain layout only; unrelated packages have no
+      // visible dependency edges between them.
+      for (let index = 1; index < nodeIds.length; index++) {
+        lines.push(`    ${nodeIds[index - 1]} ~~~ ${nodeIds[index]}`);
+      }
       lines.push("  end");
-      lines.push(`  APP ${group === "Dev" ? "-.->" : "-->"} ${group}`);
+      if (previousGroup) lines.push(`  ${previousGroup} ~~~ ${group}`);
+      else lines.push(`  APP --> ${group}`);
+      previousGroup = group;
       lines.push("");
     }
     return lines.join("\n");

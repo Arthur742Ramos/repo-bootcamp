@@ -96,6 +96,34 @@ describe("selected-root mixed dependencies", () => {
     expect(generateDependencyDocs(result, "app")).toContain("## Peer Dependencies");
   });
 
+  it("orders mixed groups and their nodes vertically using invisible links only", async () => {
+    const result = (await extractDependencies(
+      await fixture({
+        "package.json": JSON.stringify({
+          dependencies: { first: "1", second: "2" },
+          devDependencies: { devA: "1", devB: "2" },
+          peerDependencies: { peer: "1" },
+        }),
+        "requirements.txt": "python==1",
+      })
+    ))!;
+    const graph = generateDependencyDiagram(result, "app");
+    expect(graph.startsWith("---\nconfig:\n  flowchart:\n    padding: 5\n---\ngraph TD")).toBe(
+      true
+    );
+    for (const group of ["Runtime", "Dev", "Peer"]) {
+      expect(graph).toMatch(new RegExp(`subgraph ${group}\\[.*\\]\\n    direction TB`));
+    }
+    expect(graph).toContain("Runtime_0 ~~~ Runtime_1");
+    expect(graph).toContain("Runtime_1 ~~~ Runtime_2");
+    expect(graph).toContain("Dev_0 ~~~ Dev_1");
+    expect(graph).toContain("Runtime ~~~ Dev");
+    expect(graph).toContain("Dev ~~~ Peer");
+    expect(graph).toContain("APP --> Runtime");
+    expect(graph).not.toMatch(/(?:Runtime|Dev|Peer)_\d+\s*(?:-->|-\.->)/);
+    expect(graph).not.toContain("APP -.-> Dev");
+  });
+
   it("returns exact Python-only objects when an empty or malformed Node manifest contributes nothing", async () => {
     const only = await extractDependencies(await fixture({ "pyproject.toml": python }));
     for (const manifest of ["{}", "invalid JSON"]) {
@@ -168,6 +196,8 @@ describe("selected-root mixed dependencies", () => {
     const diagram = generateDependencyDiagram(result, "app");
     expect(diagram).toContain('Runtime_more["+42 more"]');
     expect(diagram).toContain('Dev_more["+23 more"]');
+    expect(diagram).toContain("Runtime_9 ~~~ Runtime_more");
+    expect(diagram).toContain("Dev_7 ~~~ Dev_more");
     const doc = generateDependencyDocs(result, "app");
     expect(doc).toContain("| ... | +2 more | | |");
     expect(doc).toContain("| ... | +1 more | | |");
