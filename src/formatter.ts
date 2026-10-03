@@ -565,7 +565,16 @@ export function applyOutputFormat(
           } catch {
             return anchor;
           }
-          const converted = convertedPaths.get(target.pathname);
+          let pathname: string;
+          try {
+            pathname = target.pathname
+              .split("/")
+              .map((segment) => encodeURIComponent(decodeURIComponent(segment)))
+              .join("/");
+          } catch {
+            return anchor;
+          }
+          const converted = convertedPaths.get(pathname);
           if (!converted || target.origin !== "https://kit.invalid") return anchor;
           const relative = posix.relative(posix.dirname(documentUrl(doc.name).pathname), converted);
           const path = relative.startsWith(".") ? relative : "./" + relative;

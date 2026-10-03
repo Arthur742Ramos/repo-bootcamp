@@ -484,6 +484,26 @@ describe("applyOutputFormat document navigation", () => {
     expect(docs[0].content).toContain('href="./Space%20%26%20Notes.html"');
   });
 
+  it("matches equivalent encoded path segments without treating encoded slashes as directories", () => {
+    const docs = applyOutputFormat(
+      [
+        {
+          name: "BOOTCAMP.md",
+          content:
+            "[extension](./ONBOARDING%2emd) [letter](./%4FNBOARDING.md) [notes](./guides/Space%20&%20Notes.md) [slash](./guides%2FSpace%20&%20Notes.md) [bad](./ONBOARDING%broken.md)",
+        },
+        { name: "ONBOARDING.md", content: "# Setup" },
+        { name: "guides/Space & Notes.md", content: "# Notes" },
+      ],
+      "html"
+    );
+    expect(docs[0].content).toContain('href="./ONBOARDING.html">extension');
+    expect(docs[0].content).toContain('href="./ONBOARDING.html">letter');
+    expect(docs[0].content).toContain('href="./guides/Space%20%26%20Notes.html">notes');
+    expect(docs[0].content).toContain('href="./guides%2FSpace%20&amp;%20Notes.md">slash');
+    expect(docs[0].content).toContain('href="./ONBOARDING%broken.md">bad');
+  });
+
   it("preserves external links, images, fragments and code examples", () => {
     const content =
       "[external](https://example.com/ONBOARDING.md) [section](#setup) ![image](https://example.com/ONBOARDING.md)\n\n`[setup](./ONBOARDING.md)`\n\n```md\n[setup](./ONBOARDING.md)\n```";
