@@ -17,10 +17,30 @@ describe("satisfiesVersion", () => {
     expect(satisfiesVersion("~3.10", "3.9.9")).toBe(false);
   });
 
-  it("handles bare/exact versions by major(+minor)", () => {
-    expect(satisfiesVersion("1.21", "1.21.5")).toBe(true); // go.mod
+  it("matches every specified component in bare and explicit pins", () => {
+    expect(satisfiesVersion("1.21", "1.21.5")).toBe(true);
     expect(satisfiesVersion("1.21", "1.20.0")).toBe(false);
-    expect(satisfiesVersion("8.6.0", "8.6.2")).toBe(true); // packageManager
+    expect(satisfiesVersion("1.21", "1.22.0")).toBe(false);
+    expect(satisfiesVersion("8.6.0", "8.6.2")).toBe(false);
+  });
+
+  it.each([
+    ["=26.7.1", "26.7.1", true],
+    ["=26.7.1", "26.7.0", false],
+    ["=26.7.1", "26.7.2", false],
+    ["=26.7.1", "26.8.1", false],
+    ["26.7.1", "26.7.1", true],
+    ["26.7.1", "26.7.0", false],
+    ["26.7.1", "26.7.2", false],
+    ["v26.7.1", "26.8.0", false],
+    ["=26.7", "26.7.9", true],
+    ["=26.7", "26.8.0", false],
+    ["=26", "26.9.9", true],
+    ["=26", "27.0.0", false],
+    ["26.7.1 || =26.7.2", "26.7.2", true],
+    ["26.7.1 || =26.7.2", "26.7.3", false],
+  ] as const)("compares pin %s against %s", (required, installed, expected) => {
+    expect(satisfiesVersion(required, installed)).toBe(expected);
   });
 
   it("returns null for non-numeric requirements", () => {

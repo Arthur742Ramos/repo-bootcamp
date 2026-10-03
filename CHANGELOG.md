@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Compare every specified component of preflight tool-version pins, rejecting mismatched patches and minors while retaining minimum-version semantics for the Go module directive.
+
 - Preserve dependency version alternatives and backslashes in Markdown/HTML tables; render escaped pipes within table cells instead of splitting extra columns.
 
 - Keep wide HTML-export tables within the mobile page width and make table/code scroll regions accessible to keyboard users in exports and the web reader.

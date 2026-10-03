@@ -217,6 +217,7 @@ function satisfiesSingleConstraint(required: string, inst: number[]): boolean | 
   if (!opMatch) return null;
   const op = opMatch[1] || "=";
   const hasMinor = opMatch[2].includes(".");
+  const hasPatch = opMatch[2].split(".").length === 3;
   const req = parseVersion(opMatch[2]);
   const c = compare(inst, req);
   switch (op) {
@@ -243,8 +244,10 @@ function satisfiesSingleConstraint(required: string, inst: number[]): boolean | 
       // minor too when the requirement named one, then require >= the floor.
       return inst[0] === req[0] && (!hasMinor || inst[1] === req[1]) && c >= 0;
     default:
-      // Bare/exact: same major (and minor must be at least the requested one).
-      return inst[0] === req[0] && (!hasMinor || (inst[1] ?? 0) >= (req[1] ?? 0));
+      // Complete pins require equality; omitted components remain flexible.
+      return (
+        inst[0] === req[0] && (!hasMinor || inst[1] === req[1]) && (!hasPatch || inst[2] === req[2])
+      );
   }
 }
 
@@ -267,7 +270,10 @@ function evaluate(req: ToolRequirement, installed: string | null): PreflightResu
   let status: CheckStatus;
   if (installed === null) status = "missing";
   else {
-    const sat = req.required === "*" ? true : satisfiesVersion(req.required, installed);
+    // The go.mod go directive declares a minimum, unlike a tool-version pin.
+    const constraint =
+      req.tool === "Go" && req.source === "go.mod" ? `>=${req.required}` : req.required;
+    const sat = constraint === "*" ? true : satisfiesVersion(constraint, installed);
     status = sat === true ? "ok" : sat === false ? "mismatch" : "unknown";
   }
   const remedy =
