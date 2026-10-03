@@ -772,6 +772,11 @@ CODEOWNERS semantics), and lists all **maintainers** plus a best-effort
 **top committers** list from whatever git history is available. Answers the
 classic Day-1 question: _"who do I ask when I'm stuck?"_
 
+Each area lists the union of owners assigned to its scanned files, including
+extension rules and nested overrides. Ownerless rules clear earlier assignments;
+an area is shown as unowned when none of its scanned files has an owner. Results
+are limited to the files included by `--max-files`.
+
 ### What Can I Run? (Task Discovery)
 
 ```bash

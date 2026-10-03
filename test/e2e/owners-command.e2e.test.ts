@@ -61,4 +61,34 @@ describe("owners command", () => {
     const docs = parsed.areas.find((a: { dir: string }) => a.dir === "docs");
     expect(docs.owners).toEqual(["@carol"]);
   }, 60_000);
+
+  it("reports actual file ownership unions and retains ownerless overrides", async () => {
+    const repoPath = await createRepo({
+      ".github/CODEOWNERS":
+        "* @global\n*.ts @typescript\n/src/web/ @web\n/docs/\n**/logs @logs\ndocs/* @docs\n",
+      "src/a.ts": "export {};",
+      "src/web/page.ts": "export {};",
+      "docs/nested/guide.md": "# Unowned guide",
+      "packages/docs/guide.md": "# Global guide",
+      "logs/output.txt": "log",
+      "deep/logs/output.txt": "log",
+    });
+    const result = await runCli(["owners", repoPath, "--json"]);
+    expect(result.exitCode).toBe(0);
+    const parsed = JSON.parse(result.stdout);
+    expect(parsed.defaultOwners).toEqual(["@global"]);
+    expect(parsed.rules).toContainEqual({ pattern: "/docs/", owners: [] });
+    expect(parsed.areas).toEqual([
+      { dir: ".github", owners: ["@global"] },
+      { dir: "deep", owners: ["@logs"] },
+      { dir: "docs", owners: [] },
+      { dir: "logs", owners: ["@logs"] },
+      { dir: "packages", owners: ["@global"] },
+      { dir: "src", owners: ["@typescript", "@web"] },
+    ]);
+    const human = await runCli(["owners", repoPath]);
+    expect(human.exitCode).toBe(0);
+    expect(human.stdout).toMatch(/docs\s+\(unowned\)/);
+    expect(human.stdout).toMatch(/src\s+@typescript @web/);
+  }, 60_000);
 });
