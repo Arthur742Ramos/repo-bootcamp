@@ -1,8 +1,9 @@
-import { mkdtemp, mkdir, rm, writeFile } from "fs/promises";
+import { mkdtemp, mkdir, rm, symlink, truncate, writeFile } from "fs/promises";
 import { tmpdir } from "os";
 import { join } from "path";
 
 import { afterEach, describe, expect, it } from "vitest";
+import { MAX_CONTAINED_FILE_BYTES, readContainedFile } from "../src/fs-safe.js";
 
 import {
   categorizeTask,
@@ -307,6 +308,38 @@ describe("detectPackageManager", () => {
   it("falls back to lockfiles", async () => {
     const yarnDir = await repoWith({ "yarn.lock": "" });
     expect(await detectPackageManager(yarnDir)).toBe("yarn");
+  });
+
+  it.each(["bun.lock", "bun.lockb"])("detects Bun from %s", async (lockfile) => {
+    expect(await detectPackageManager(await repoWith({ [lockfile]: "lockfile" }))).toBe("bun");
+  });
+
+  it("does not mistake a package-manager name prefix for a supported manager", async () => {
+    const dir = await repoWith({
+      "package.json": JSON.stringify({ packageManager: "pnpm-other@1.0.0" }),
+      "yarn.lock": "",
+    });
+    expect(await detectPackageManager(dir)).toBe("yarn");
+  });
+
+  it("detects an oversized lockfile without reading it or relaxing the content-read cap", async () => {
+    const dir = await repoWith({ "pnpm-lock.yaml": "" });
+    await truncate(join(dir, "pnpm-lock.yaml"), MAX_CONTAINED_FILE_BYTES + 1);
+    expect(await detectPackageManager(dir)).toBe("pnpm");
+    await expect(readContainedFile(dir, "pnpm-lock.yaml")).rejects.toThrow("exceeds cap");
+  });
+
+  it("ignores directories masquerading as lockfiles", async () => {
+    const dir = await repoWith({ "yarn.lock": "" });
+    await mkdir(join(dir, "pnpm-lock.yaml"));
+    expect(await detectPackageManager(dir)).toBe("yarn");
+  });
+
+  it("ignores lockfile symlinks that escape the repository", async () => {
+    const external = await repoWith({ "pnpm-lock.yaml": "outside repository" });
+    const dir = await repoWith({ "yarn.lock": "" });
+    await symlink(external, join(dir, "pnpm-lock.yaml"), "junction");
+    expect(await detectPackageManager(dir)).toBe("yarn");
   });
 
   it("defaults to npm when nothing indicates otherwise", async () => {

@@ -37,6 +37,64 @@ describe("ingest parsers", () => {
     expect(names).not.toContain("PREFIX");
   });
 
+  it.each([
+    ["pnpm@9.12.0", "pnpm"],
+    ["yarn@4.5.0", "yarn"],
+    ["bun@1.4.0", "bun"],
+    ["npm@10.0.0", "npm"],
+  ])(
+    "uses declared package manager %s consistently in scan metadata and commands",
+    async (declared, expected) => {
+      const dir = await repoWith({
+        "package.json": JSON.stringify({
+          name: "fixture",
+          packageManager: declared,
+          scripts: { build: "tsc", test: "vitest" },
+        }),
+        "pnpm-lock.yaml": "stale lockfile",
+        "yarn.lock": "stale lockfile",
+      });
+      const scan = await scanRepo(dir, 100);
+      expect(scan.stack.packageManager).toBe(expected);
+      expect(scan.commands.map((command) => command.command)).toEqual([
+        `${expected} run build`,
+        `${expected} run test`,
+      ]);
+    }
+  );
+
+  it.each([
+    ["pnpm-lock.yaml", "pnpm"],
+    ["yarn.lock", "yarn"],
+    ["bun.lock", "bun"],
+    ["bun.lockb", "bun"],
+    ["package-lock.json", "npm"],
+  ])(
+    "uses %s as onboarding package-manager evidence without a manifest pin",
+    async (lockfile, expected) => {
+      const dir = await repoWith({
+        "package.json": JSON.stringify({ scripts: { test: "vitest" } }),
+        [lockfile]: "lockfile",
+      });
+      const scan = await scanRepo(dir, 100);
+      expect(scan.stack.packageManager).toBe(expected);
+      expect(scan.commands[0].command).toBe(`${expected} run test`);
+    }
+  );
+
+  it("detects the text Bun lockfile even without a root JavaScript manifest", async () => {
+    const dir = await repoWith({ "bun.lock": "lockfile" });
+    expect((await scanRepo(dir, 100)).stack.packageManager).toBe("bun");
+  });
+
+  it("keeps Poetry package-manager evidence when no JavaScript manifest exists", async () => {
+    const dir = await repoWith({
+      "pyproject.toml": "[tool.poetry]\nname = 'fixture'\n",
+      "app.py": "print('hi')\n",
+    });
+    expect((await scanRepo(dir, 100)).stack.packageManager).toBe("poetry");
+  });
+
   it("workflow `on:` block form yields top-level triggers (not nested keys)", async () => {
     const dir = await repoWith({
       ".github/workflows/ci.yml":

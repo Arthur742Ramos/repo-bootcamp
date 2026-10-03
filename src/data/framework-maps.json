@@ -41,6 +41,7 @@
     "yarn": { "file": "yarn.lock", "type": "pm" },
     "pnpm": { "file": "pnpm-lock.yaml", "type": "pm" },
     "bun": { "file": "bun.lockb", "type": "pm" },
+    "bun (text)": { "file": "bun.lock", "type": "pm" },
     "pip": { "file": "requirements.txt", "type": "pm" },
     "poetry": { "file": "pyproject.toml", "type": "pm" },
     "cargo": { "file": "Cargo.toml", "type": "build" },

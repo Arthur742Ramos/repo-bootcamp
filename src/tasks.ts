@@ -15,7 +15,7 @@
  * historical command strings the ingest pipeline emits).
  */
 
-import { readContainedFile } from "./fs-safe.js";
+import { hasContainedFile, readContainedFile } from "./fs-safe.js";
 import type { Command } from "./types.js";
 
 /** Coarse grouping used for report sections and getting-started ordering. */
@@ -43,9 +43,8 @@ export interface DiscoveredTask {
 export interface DiscoverTasksOptions {
   /**
    * Force the package manager used to render package.json script commands
-   * instead of detecting it from lockfiles. The ingest pipeline pins this to
-   * `"npm"` so the generated onboarding kit keeps emitting byte-identical
-   * `npm run <name>` strings across releases.
+   * instead of detecting it from the manifest or lockfiles. The ingest pipeline
+   * passes its resolved manager so stack metadata and task commands agree.
    */
   packageManager?: PackageManager;
 }
@@ -364,24 +363,15 @@ export async function detectPackageManager(repoPath: string): Promise<PackageMan
       packageManager?: unknown;
     };
     const field = typeof pkg.packageManager === "string" ? pkg.packageManager : "";
-    if (field.startsWith("pnpm")) return "pnpm";
-    if (field.startsWith("yarn")) return "yarn";
-    if (field.startsWith("bun")) return "bun";
-    if (field.startsWith("npm")) return "npm";
+    const manager = field.match(/^(npm|pnpm|yarn|bun)(?:@|$)/)?.[1];
+    if (manager) return manager as PackageManager;
   } catch {
     // No package.json, or unparseable — fall through to lockfile detection.
   }
-  const exists = async (rel: string): Promise<boolean> => {
-    try {
-      await readContainedFile(repoPath, rel);
-      return true;
-    } catch {
-      return false;
-    }
-  };
-  if (await exists("pnpm-lock.yaml")) return "pnpm";
-  if (await exists("yarn.lock")) return "yarn";
-  if (await exists("bun.lockb")) return "bun";
+  if (await hasContainedFile(repoPath, "pnpm-lock.yaml")) return "pnpm";
+  if (await hasContainedFile(repoPath, "yarn.lock")) return "yarn";
+  if (await hasContainedFile(repoPath, "bun.lock")) return "bun";
+  if (await hasContainedFile(repoPath, "bun.lockb")) return "bun";
   return "npm";
 }
 
