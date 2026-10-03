@@ -21,6 +21,7 @@ import { updateSourcePathPrefix } from "../services/scan-scope.js";
 import { resolveRunConfiguration } from "../services/config-resolution.js";
 import { orchestrateAnalysis, prepareOutputDocuments } from "../services/analysis-orchestration.js";
 import { writeGeneratedOutputs } from "../services/output-writer.js";
+import { emittedFileName } from "../services/output-inventory.js";
 import type { BootcampOptions, RepoFacts, RepoInfo, ScanResult } from "../types.js";
 import type { StyleConfig } from "../plugins.js";
 import { startWatch } from "../watch.js";
@@ -192,15 +193,15 @@ async function finalizeOutputs(
     JSON.stringify(manifest, null, 2),
     "utf8"
   );
-  const emittedFiles = [
-    ...new Set(
-      [...generation.emittedFiles, "ANALYSIS_MANIFEST.json", "summary.json"].map((name) =>
-        relative(outputDir, join(outputDir, name)).split(sep).join("/")
-      )
-    ),
-  ];
-  await writeRunSummary({ outputDir, repoInfo, ...generation, emittedFiles });
-  return emittedFiles;
+  const emittedFiles = new Set(generation.emittedFiles);
+  emittedFiles.add(await emittedFileName(outputDir, join(outputDir, "ANALYSIS_MANIFEST.json")));
+  await writeRunSummary({ outputDir, repoInfo, ...generation, emittedFiles: [...emittedFiles] });
+  const summaryName = await emittedFileName(outputDir, join(outputDir, "summary.json"));
+  if (!emittedFiles.has(summaryName)) {
+    emittedFiles.add(summaryName);
+    await writeRunSummary({ outputDir, repoInfo, ...generation, emittedFiles: [...emittedFiles] });
+  }
+  return [...emittedFiles];
 }
 
 const DOCUMENT_DESCRIPTIONS: [string, string][] = [

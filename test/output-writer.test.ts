@@ -1,6 +1,6 @@
 import { join } from "path";
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { join } from "path";
+import { join, resolve } from "path";
 
 vi.mock("chalk", () => {
   const makeChalk = (): any =>
@@ -13,7 +13,11 @@ vi.mock("chalk", () => {
 
 vi.mock("fs/promises", async () => {
   const actual = await vi.importActual<typeof import("fs/promises")>("fs/promises");
-  return { ...actual, writeFile: vi.fn().mockResolvedValue(undefined) };
+  return {
+    ...actual,
+    writeFile: vi.fn().mockResolvedValue(undefined),
+    realpath: vi.fn(async (path: string) => resolve(path)),
+  };
 });
 
 vi.mock("../src/formatter.js", () => ({
@@ -229,6 +233,17 @@ describe("writeGeneratedOutputs", () => {
     expect(result.emittedFiles).toEqual(
       process.platform === "win32" ? ["notes/GUIDE.html"] : ["notes\\GUIDE.html"]
     );
+  });
+
+  it("preserves separate inventory entries when resolved case spellings remain distinct", async () => {
+    const { applyOutputFormat } = await import("../src/formatter.js");
+    vi.mocked(applyOutputFormat).mockReturnValueOnce([
+      { name: "BOOTCAMP.html", content: "first" },
+      { name: "bootcamp.html", content: "second" },
+    ]);
+    const result = await writeGeneratedOutputs(makeParams());
+    expect(result.emittedFiles).toEqual(["BOOTCAMP.html", "bootcamp.html"]);
+    expect(result.documentCount).toBe(2);
   });
 });
 

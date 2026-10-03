@@ -1,7 +1,7 @@
 import { execFileSync } from "child_process";
 import { once } from "events";
 import { pathToFileURL } from "url";
-import { mkdtemp, mkdir, readFile, readdir, realpath, rm, writeFile } from "fs/promises";
+import { mkdtemp, mkdir, readFile, readdir, realpath, rm, symlink, writeFile } from "fs/promises";
 import { tmpdir } from "os";
 import { basename, join } from "path";
 
@@ -321,13 +321,19 @@ test *FILES:
     ["quiet-json", "html"],
     ["preview", "html"],
     ["aliases", "html"],
+    ["case", "html"],
+    ["case-output-alias", "html"],
   ])("reports only emitted files for %s (%s)", async (mode, format) => {
     const tempDir = await mkdtemp(join(tmpdir(), "bootcamp-output-summary-"));
     tempDirs.push(tempDir);
     const repo = join(tempDir, "repo");
     const output = join(tempDir, "out");
     await mkdir(repo);
-    await mkdir(output);
+    if (mode === "case-output-alias") {
+      const actual = join(tempDir, "OwnedOutput");
+      await mkdir(actual);
+      await symlink(actual, output, "junction");
+    } else await mkdir(output);
     await writeFile(join(repo, "README.md"), "# Output summary fixture\n");
     await writeFile(join(output, "UNRELATED.txt"), "Keep this pre-existing file");
     const response = join(tempDir, "response.json");
@@ -340,13 +346,15 @@ test *FILES:
         })
       );
     }
-    if (mode === "plugin" || mode === "aliases") {
+    if (["plugin", "aliases", "case", "case-output-alias"].includes(mode)) {
       const plugin = join(tempDir, "formatter.mjs");
       await writeFile(
         plugin,
-        mode === "aliases"
-          ? "export default {type:'formatter',name:'summary-aliases',formatDocuments(docs){return docs.filter(d=>d.name==='BOOTCAMP.md').flatMap(d=>[d,{...d,name:'./BOOTCAMP.md'}]).concat({name:'./summary.json',content:'plugin metadata'},{name:'./ANALYSIS_MANIFEST.json',content:'plugin metadata'});}};"
-          : "export default {type:'formatter',name:'summary-fixture',formatDocuments(docs){return docs.filter(d=>d.name!=='SECURITY.md').map(d=>d.name==='BOOTCAMP.md'?{...d,name:'WELCOME.md'}:d).concat({name:'PLUGIN_GUIDE.md',content:'# Plugin guide'},{name:'summary.json',content:'plugin metadata'},{name:'ANALYSIS_MANIFEST.json',content:'plugin metadata'});}};"
+        mode === "case" || mode === "case-output-alias"
+          ? "export default {type:'formatter',name:'summary-case',formatDocuments(docs){return docs.filter(d=>d.name==='BOOTCAMP.md').flatMap(d=>[d,{...d,name:'bootcamp.md'}]).concat({name:'SUMMARY.json',content:'plugin metadata'},{name:'analysis_manifest.json',content:'plugin metadata'});}};"
+          : mode === "aliases"
+            ? "export default {type:'formatter',name:'summary-aliases',formatDocuments(docs){return docs.filter(d=>d.name==='BOOTCAMP.md').flatMap(d=>[d,{...d,name:'./BOOTCAMP.md'}]).concat({name:'./summary.json',content:'plugin metadata'},{name:'./ANALYSIS_MANIFEST.json',content:'plugin metadata'});}};"
+            : "export default {type:'formatter',name:'summary-fixture',formatDocuments(docs){return docs.filter(d=>d.name!=='SECURITY.md').map(d=>d.name==='BOOTCAMP.md'?{...d,name:'WELCOME.md'}:d).concat({name:'PLUGIN_GUIDE.md',content:'# Plugin guide'},{name:'summary.json',content:'plugin metadata'},{name:'ANALYSIS_MANIFEST.json',content:'plugin metadata'});}};"
       );
       await writeFile(join(tempDir, ".bootcamprc.json"), JSON.stringify({ plugins: [plugin] }));
     }

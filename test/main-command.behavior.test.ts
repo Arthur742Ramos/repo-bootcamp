@@ -478,7 +478,7 @@ describe("runMainCommand --no-clone behavior", () => {
     expect(cleanupRepository).toHaveBeenCalledWith("/tmp/remote-mkdir-failure");
   });
 
-  it.each(["documents", "manifest", "summary"])(
+  it.each(["documents", "manifest", "summary", "summary-final"])(
     "cleans up a remote clone when %s generation fails",
     async (stage) => {
       const outputDir = join(tmpdir(), "bootcamp-generation-failure");
@@ -502,7 +502,11 @@ describe("runMainCommand --no-clone behavior", () => {
           const target = String(args[0]);
           if (
             (stage === "manifest" && target.endsWith("ANALYSIS_MANIFEST.json")) ||
-            (stage === "summary" && target.endsWith("summary.json"))
+            (stage === "summary" && target.endsWith("summary.json")) ||
+            (stage === "summary-final" &&
+              target.endsWith("summary.json") &&
+              metadataWrite.mock.calls.filter((call) => String(call[0]).endsWith("summary.json"))
+                .length === 2)
           )
             throw new Error("metadata failed");
           return actual.writeFile(...args);
