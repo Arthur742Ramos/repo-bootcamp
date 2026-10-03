@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Reveal collapsed disclosures before focusing linked preview headings.
+
 - Ignore late cancellation replies and errors after a newer analysis starts or the originating job becomes terminal.
 
 - Preserve newer analysis results and form edits when saved-job restoration finishes late, and keep obsolete restoration failures from clearing the current saved job.
@@ -18,6 +20,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Keep keyboard focus inside the preview dialog when tabbing from a linked heading.
 
 ### Added
+
+- Jump directly to a section in a rendered document using an accessible heading picker, with the selection restored by Back.
 
 - Open a recommended starter task at its numbered instructions with keyboard focus, preserving the selected task when retrying a failed preview.
 - Return to a previous preview document with Back, restoring its reading position, focus, and rendered/source mode.

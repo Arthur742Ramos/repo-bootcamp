@@ -383,6 +383,10 @@ export function getIndexHtml(nonce?: string): string {
     [hidden] { display: none !important; }
     .preview-controls { display: flex; gap: 0.5rem; margin-bottom: 1rem; }
     .preview-controls [aria-pressed="true"] { border-color: var(--accent); }
+    .preview-outline { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem 0.75rem; margin-bottom: 1rem; }
+    .preview-outline label { color: var(--ink-muted); font-size: 0.8125rem; font-weight: 600; }
+    .preview-outline select { flex: 1 1 180px; min-width: 0; max-width: 100%; padding: 0.65rem 0.75rem; border: 1px solid var(--border); border-radius: var(--r-sm); background: var(--canvas); color: var(--ink); font: 0.875rem var(--font-sans); }
+    .preview-outline select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
     #retryPreviewBtn { margin-top: 1rem; }
     .markdown-preview { line-height: 1.65; overflow-wrap: anywhere; }
     .markdown-preview > * + * { margin-top: 1rem; }
@@ -618,6 +622,10 @@ export function getIndexHtml(nonce?: string): string {
       <div class="preview-controls" role="group" aria-label="File view" hidden id="previewControls">
         <button class="icon-btn" type="button" id="renderedBtn" aria-pressed="true">Rendered</button>
         <button class="icon-btn" type="button" id="sourceBtn" aria-pressed="false">Source</button>
+      </div>
+      <div class="preview-outline" id="previewOutline" hidden>
+        <label for="previewSection">Jump to section</label>
+        <select id="previewSection"><option value="">Choose a section…</option></select>
       </div>
       <article id="renderedContent" class="markdown-preview" tabindex="0" aria-label="Rendered document" hidden></article>
       <pre id="modalContent" tabindex="0"></pre>
@@ -1382,15 +1390,49 @@ export function getIndexHtml(nonce?: string): string {
       document.getElementById('emptyFilter').hidden = visible !== 0 || fileButtons.length === 0;
     }
 
+    function previewHeadings() {
+      return Array.from(document.querySelectorAll('#renderedContent [data-anchor]'));
+    }
+
+    function focusPreviewHeading(heading) {
+      if (!heading) return;
+      // A heading inside a closed disclosure cannot receive focus. Reveal all
+      // ancestor disclosures before scrolling, including nested details.
+      for (let parent = heading.parentElement; parent && parent.id !== 'renderedContent'; parent = parent.parentElement) {
+        if (parent.tagName === 'DETAILS') parent.open = true;
+      }
+      heading.focus();
+      heading.scrollIntoView({ block: 'start' });
+      if (previewTarget) previewTarget.fragment = heading.dataset.anchor;
+      document.getElementById('previewSection').value = String(previewHeadings().indexOf(heading));
+    }
+
+    function resetPreviewOutline() {
+      document.getElementById('previewOutline').hidden = true;
+      const placeholder = document.createElement('option');
+      placeholder.value = '';
+      placeholder.textContent = 'Choose a section…';
+      document.getElementById('previewSection').replaceChildren(placeholder);
+    }
+
+    function buildPreviewOutline() {
+      resetPreviewOutline();
+      const select = document.getElementById('previewSection');
+      // Read titles only from the sanitized document and use numeric values.
+      // Duplicate labels and punctuation never become selectors or HTML.
+      previewHeadings().forEach((heading, index) => {
+        const option = document.createElement('option');
+        option.value = String(index);
+        option.textContent = heading.textContent.trim() || 'Untitled section';
+        select.append(option);
+      });
+    }
+
     function focusPreviewAnchor(fragment) {
       let anchor;
       try { anchor = decodeURIComponent(fragment); } catch { return; }
-      const heading = Array.from(document.querySelectorAll('#renderedContent [data-anchor]'))
-        .find(item => item.dataset.anchor === anchor);
-      if (heading) {
-        heading.focus();
-        heading.scrollIntoView({ block: 'start' });
-      }
+      const heading = previewHeadings().find(item => item.dataset.anchor === anchor);
+      focusPreviewHeading(heading);
     }
 
     function focusPreviewTask(headingHtml) {
@@ -1404,9 +1446,7 @@ export function getIndexHtml(nonce?: string): string {
         .filter(item => item.textContent === expected.textContent);
       if (matches.length !== 1) return;
       const heading = matches[0];
-      heading.focus();
-      heading.scrollIntoView({ block: 'start' });
-      previewTarget.fragment = heading.dataset.anchor;
+      focusPreviewHeading(heading);
     }
 
     // Build a fresh allowlisted DOM from an inert template. Never attach repository
@@ -1465,6 +1505,7 @@ export function getIndexHtml(nonce?: string): string {
       }
       const target = document.getElementById('renderedContent');
       target.replaceChildren(...Array.from(template.content.childNodes, copy));
+      buildPreviewOutline();
     }
 
     function setPreviewMode(rendered) {
@@ -1472,6 +1513,7 @@ export function getIndexHtml(nonce?: string): string {
       document.getElementById('renderedContent').hidden = !rendered;
       document.getElementById('renderedBtn').setAttribute('aria-pressed', String(rendered));
       document.getElementById('sourceBtn').setAttribute('aria-pressed', String(!rendered));
+      document.getElementById('previewOutline').hidden = !rendered || previewHeadings().length < 2;
     }
 
     function updatePreviewBack() {
@@ -1489,6 +1531,7 @@ export function getIndexHtml(nonce?: string): string {
         filename: currentFile.name,
         fragment: previewTarget.fragment,
         rendered,
+        section: document.getElementById('previewSection').value,
         openDetails: Array.from(document.querySelectorAll('#renderedContent details'))
           .flatMap((detail, index) => detail.open ? [index] : []),
         scrollTop: document.getElementById('modal').scrollTop,
@@ -1502,6 +1545,7 @@ export function getIndexHtml(nonce?: string): string {
     function restorePreviewContext(context) {
       const rendered = context.rendered && !document.getElementById('previewControls').hidden;
       setPreviewMode(rendered);
+      document.getElementById('previewSection').value = context.section;
       document.querySelectorAll('#renderedContent details').forEach((detail, index) => {
         detail.open = context.openDetails.includes(index);
       });
@@ -1542,6 +1586,7 @@ export function getIndexHtml(nonce?: string): string {
       document.getElementById('previewControls').hidden = true;
       document.getElementById('retryPreviewBtn').hidden = true;
       document.getElementById('renderedContent').replaceChildren();
+      resetPreviewOutline();
       setPreviewMode(false);
       document.getElementById('modalTitle').textContent = filename;
       modalContent.classList.remove('load-error');
@@ -1847,6 +1892,7 @@ export function getIndexHtml(nonce?: string): string {
       previewRequest = null;
       previewTarget = null;
       previewHistory.length = 0;
+      resetPreviewOutline();
       updatePreviewBack();
       document.getElementById('retryPreviewBtn').hidden = true;
       currentFile = null;
@@ -1902,6 +1948,10 @@ export function getIndexHtml(nonce?: string): string {
     document.getElementById('previewBackBtn').addEventListener('click', goBackPreview);
     document.getElementById('retryPreviewBtn').addEventListener('click', () => {
       if (previewTarget) void viewFile(previewTarget.filename, previewTarget.fragment, { restore: previewTarget.restore, remember: false, taskHeadingHtml: previewTarget.taskHeadingHtml });
+    });
+    document.getElementById('previewSection').addEventListener('change', event => {
+      if (event.target.value === '') return;
+      focusPreviewHeading(previewHeadings()[Number(event.target.value)]);
     });
     document.getElementById('renderedBtn').addEventListener('click', () => setPreviewMode(true));
     document.getElementById('sourceBtn').addEventListener('click', () => setPreviewMode(false));
