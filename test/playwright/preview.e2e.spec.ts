@@ -160,6 +160,8 @@ test("table of contents links focus headings and diagrams retain readable source
   await expect(page.locator("#renderedContent h2")).toBeFocused();
   await expect(page.locator("#renderedContent pre")).toContainText("flowchart TD\n  A --> B");
   await page.keyboard.press("Tab");
+  await expect(page.getByRole("region", { name: "Code block" })).toBeFocused();
+  await page.keyboard.press("Tab");
   await expect(page.locator("#copyBtn")).toBeFocused();
 });
 

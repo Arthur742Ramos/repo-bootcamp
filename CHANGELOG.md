@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Keep wide HTML-export tables within the mobile page width and make table/code scroll regions accessible to keyboard users in exports and the web reader.
+
 - Assign stable unique heading anchors in HTML exports and the web reader so section links reach their targets, including duplicate suffixes and Unicode titles.
 
 - Rewrite links between generated kit documents to their exported HTML filenames, including PDF-ready HTML, while preserving links to repository files and code examples.
