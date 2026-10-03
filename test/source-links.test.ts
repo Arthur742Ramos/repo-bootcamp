@@ -63,6 +63,35 @@ describe("selected-directory source links", () => {
     );
     expect(markdownToHtml(`- [source](${url})`)).toContain(`href="${url}"`);
   });
+  it.each([
+    ["github", "github.com", "blob"],
+    ["gitlab", "gitlab.com", "-/blob"],
+    ["bitbucket", "bitbucket.org", "src"],
+  ] as const)(
+    "preserves reserved characters in detected %s default refs",
+    (provider, host, route) => {
+      for (const [branch, encodedRef] of [
+        ["release/v2#candidate", "release/v2%23candidate"],
+        ["release/v2(candidate)", "release/v2%28candidate%29"],
+        ["release/v2%complete", "release/v2%25complete"],
+        ["release/v2%25encoded", "release/v2%2525encoded"],
+        ["release/v2+candidate", "release/v2%2Bcandidate"],
+        ["release/v2'candidate", "release/v2%27candidate"],
+        ["release/v2!candidate", "release/v2%21candidate"],
+        ["release/v2&candidate", "release/v2%26candidate"],
+      ]) {
+        const url = buildBlobUrl(
+          { ...repo, provider, host, branch, sourcePathPrefix: "packages/ref app" },
+          "src/a(b).ts"
+        );
+        const expected = `https://${host}/owner/project/${route}/${encodedRef}/packages/ref%20app/src/a%28b%29.ts`;
+        expect(url).toBe(expected);
+        expect(new URL(url!).hash).toBe("");
+        expect(new URL(url!).search).toBe("");
+        expect(markdownToHtml(`- [source](${url})`)).toContain(`href="${expected}"`);
+      }
+    }
+  );
   it("keeps local or unknown remotes as bare paths", () => {
     expect(buildBlobUrl(undefined, "src/index.ts")).toBeNull();
     expect(
