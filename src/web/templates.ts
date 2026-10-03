@@ -665,6 +665,10 @@ export function getIndexHtml(nonce?: string): string {
       kit: { buttonId: 'downloadAllBtn', route: 'download', label: 'Download kit', success: 'Downloaded!', failure: 'Download failed', request: null, timer: null },
       issues: { buttonId: 'issuesPreviewBtn', route: 'issues-preview', label: 'Download issue preview', success: 'Preview downloaded!', failure: 'Preview failed', request: null, timer: null },
     };
+    const clipboardCopies = {
+      cli: { buttonId: 'copyCommandBtn', request: null, timer: null },
+      file: { buttonId: 'copyBtn', request: null, timer: null },
+    };
     let currentFile = null;
     let previewRequest = null;
     let previewToken = 0;
@@ -826,6 +830,7 @@ export function getIndexHtml(nonce?: string): string {
       activeRunToken += 1;
       resetQuestion();
       resetArtifactDownloads();
+      resetCopyFeedback(clipboardCopies.cli);
       closeModal();
       cancelStatusRecovery();
       if (currentEventSource) {
@@ -1257,19 +1262,57 @@ export function getIndexHtml(nonce?: string): string {
       }
     }
 
-    async function copyText(text) {
+    async function copyText(text, ownsCopy = () => true) {
+      let timeout = null;
       try {
+        if (!ownsCopy()) return false;
         if (navigator.clipboard && navigator.clipboard.writeText) {
+          // Submitted native clipboard writes cannot be aborted. Only current
+          // owners may report their result or start a delayed legacy fallback.
           await Promise.race([
             navigator.clipboard.writeText(text),
-            new Promise((_, reject) => setTimeout(() => reject(new Error('clipboard timeout')), 1000)),
+            new Promise((_, reject) => { timeout = setTimeout(() => reject(new Error('clipboard timeout')), 1000); }),
           ]);
-          return true;
+          return ownsCopy();
         }
       } catch (error) {
         // Fall through to the legacy path for denied or unavailable clipboard APIs.
+      } finally {
+        clearTimeout(timeout);
       }
-      return legacyCopy(text);
+      return ownsCopy() ? legacyCopy(text) : false;
+    }
+
+    function copyButton(state) {
+      return state.button || document.getElementById(state.buttonId);
+    }
+
+    function resetCopyFeedback(state, disabled = false) {
+      state.request = null;
+      clearTimeout(state.timer);
+      state.timer = null;
+      const button = copyButton(state);
+      button.textContent = 'Copy';
+      button.classList.remove('copied');
+      button.disabled = disabled;
+    }
+
+    async function copyWithFeedback(state, text, ownsContext) {
+      if (state.request || !ownsContext()) return;
+      const request = {};
+      state.request = request;
+      const button = copyButton(state);
+      const ownsCopy = () => state.request === request && ownsContext();
+      button.disabled = true;
+      button.textContent = 'Copying…';
+      const copied = await copyText(text, ownsCopy);
+      if (!ownsCopy()) return;
+      button.textContent = copied ? 'Copied!' : 'Copy failed';
+      if (state.buttonId) button.classList.toggle('copied', copied);
+      state.timer = setTimeout(() => {
+        if (!ownsCopy()) return;
+        resetCopyFeedback(state);
+      }, 1500);
     }
 
     function renderQuickstartCommands(commands) {
@@ -1303,15 +1346,12 @@ export function getIndexHtml(nonce?: string): string {
         button.type = 'button';
         button.textContent = 'Copy';
         button.setAttribute('aria-label', 'Copy ' + name.textContent + ' command');
-        button.addEventListener('click', async () => {
-          button.disabled = true;
-          button.textContent = 'Copying…';
-          const copied = await copyText(commandText);
-          button.textContent = copied ? 'Copied!' : 'Copy failed';
-          setTimeout(() => {
-            button.textContent = 'Copy';
-            button.disabled = false;
-          }, 1500);
+        const state = { button, request: null, timer: null };
+        const result = latestResult;
+        const jobId = currentJobId;
+        const runToken = activeRunToken;
+        button.addEventListener('click', () => {
+          void copyWithFeedback(state, commandText, () => button.isConnected && latestResult === result && isCurrentRun(jobId, runToken));
         });
         item.appendChild(copy);
         item.appendChild(button);
@@ -1352,6 +1392,7 @@ export function getIndexHtml(nonce?: string): string {
         document.getElementById('retryBtn').hidden = false;
         return;
       }
+      resetCopyFeedback(clipboardCopies.cli);
       latestResult = data;
       document.getElementById('emptyState').hidden = true;
       const issuePreviewButton = document.getElementById('issuesPreviewBtn');
@@ -1679,6 +1720,7 @@ export function getIndexHtml(nonce?: string): string {
       const token = ++previewToken;
       previewTarget = { filename, fragment, restore, taskHeadingHtml };
       currentFile = null;
+      resetCopyFeedback(clipboardCopies.file, true);
       const modalContent = document.getElementById('modalContent');
       const copyBtn = document.getElementById('copyBtn');
       const downloadBtn = document.getElementById('downloadBtn');
@@ -1690,9 +1732,6 @@ export function getIndexHtml(nonce?: string): string {
       document.getElementById('modalTitle').textContent = filename;
       modalContent.classList.remove('load-error');
       modalContent.textContent = 'Loading…';
-      copyBtn.textContent = 'Copy';
-      copyBtn.classList.remove('copied');
-      copyBtn.disabled = true;
       downloadBtn.disabled = true;
       openModal();
       document.getElementById('modal').scrollTop = 0;
@@ -1739,19 +1778,11 @@ export function getIndexHtml(nonce?: string): string {
     }
 
     async function copyFile() {
-      if (!currentFile) return;
-      const btn = document.getElementById('copyBtn');
-      btn.disabled = true;
-      btn.textContent = 'Copying…';
-      const copied = await copyText(currentFile.content);
-
-      btn.textContent = copied ? 'Copied!' : 'Copy failed';
-      btn.classList.toggle('copied', copied);
-      setTimeout(() => {
-        btn.textContent = 'Copy';
-        btn.classList.remove('copied');
-        btn.disabled = currentFile === null;
-      }, 1500);
+      const file = currentFile;
+      if (!file) return;
+      const token = previewToken;
+      await copyWithFeedback(clipboardCopies.file, file.content,
+        () => currentFile === file && previewToken === token);
     }
 
     function downloadFile() {
@@ -1855,18 +1886,14 @@ export function getIndexHtml(nonce?: string): string {
     }
 
     async function copyCliCommand() {
-      const btn = document.getElementById('copyCommandBtn');
-      const command = buildCliCommand();
-      btn.disabled = true;
-      btn.textContent = 'Copying…';
-      const copied = await copyText(command);
-      btn.textContent = copied ? 'Copied!' : 'Copy failed';
-      btn.classList.toggle('copied', copied);
-      setTimeout(() => {
-        btn.textContent = 'Copy';
-        btn.classList.remove('copied');
-        btn.disabled = false;
-      }, 1500);
+      const result = latestResult;
+      const runToken = activeRunToken;
+      const jobId = currentJobId;
+      // Copy the shown result, even when the form is an edited future draft.
+      const command = document.getElementById('cliCommand').textContent;
+      if (!result || !command) return;
+      await copyWithFeedback(clipboardCopies.cli, command,
+        () => latestResult === result && isCurrentRun(jobId, runToken));
     }
 
     function resetQuestion() {
@@ -2002,6 +2029,7 @@ export function getIndexHtml(nonce?: string): string {
     }
 
     function closeModal() {
+      resetCopyFeedback(clipboardCopies.file, true);
       ++previewToken;
       if (previewRequest) previewRequest.abort();
       previewRequest = null;
