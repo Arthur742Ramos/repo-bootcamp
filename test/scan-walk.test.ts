@@ -272,9 +272,9 @@ describe("exclude syntax compatibility", () => {
     expect(await walkRepositoryFiles(root, 100, ["file-{1..10000}.ts"])).toEqual([]);
   });
 
-  it("preserves empty alternatives and leading literal braces", async () => {
-    const root = await fixture(["src/main.ts", "{}a/main.ts", "keep.ts"]);
-    const files = await walkRepositoryFiles(root, 100, ["src{,s}/**", "{}a/**"]);
+  it("preserves empty alternatives and leading literal escapes", async () => {
+    const root = await fixture(["src/main.ts", "{}a/main.ts", "[1].ts", "keep.ts"]);
+    const files = await walkRepositoryFiles(root, 100, ["src{,s}/**", "{}a/**", "\\[1\\].ts"]);
     expect(files.map((file) => file.path)).toEqual(["keep.ts"]);
   });
 

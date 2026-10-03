@@ -1,5 +1,5 @@
 import { lstat, opendir } from "fs/promises";
-import { isAbsolute, join, posix, sep } from "path";
+import { join, posix, sep } from "path";
 import { expand } from "brace-expansion";
 import picomatch from "picomatch";
 import type { FileInfo } from "./types.js";
@@ -69,7 +69,9 @@ function compileIgnores(patterns: readonly string[]) {
           windows: false,
           strictSlashes: false,
         }),
-        absolute: isAbsolute(normalized),
+        // Patterns and subjects use forward slashes. On Windows a leading
+        // glob escape is otherwise mistaken for a root-relative absolute path.
+        absolute: posix.isAbsolute(normalized) || (sep === "\\" && /^[A-Za-z]:\//.test(normalized)),
         subtree: normalized.endsWith("/**"),
         prune: normalized.endsWith("/**") || staticBasename(normalized),
       };
