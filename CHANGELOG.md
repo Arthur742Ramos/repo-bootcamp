@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Include `.mts` and `.cts` modules in TypeScript stack detection, impact reports, and cycle checks; resolve compiled `.mjs`/`.cjs` imports to matching module-kind sources instead of unrelated `.ts` files.
 - Generate onboarding setup instructions from the actual repository provider, checkout, and selected package directory; use existing local paths instead of fabricating GitHub clone URLs.
+- Bind owned HTTP test fixtures explicitly to loopback, await listener readiness and teardown, and reuse listeners across request loops to avoid host-dependent wildcard transport failures.
 
 - Resolve TypeScript path aliases by exact match or longest matching prefix, preserve JSONC path strings and wildcard suffixes, normalize relative targets, and avoid misleading impact/cycle graphs from broader alias matches.
 - Clean up owned temporary clones before Ask and PR-diff failure exits; preserve local repositories and explicit `--keep-temp`, reporting retained PR-diff clone paths even on failures.

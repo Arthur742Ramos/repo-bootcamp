@@ -1,6 +1,7 @@
 import type { AddressInfo } from "net";
 
 import request from "supertest";
+import { closeLoopbackServers, listenLoopback } from "./helpers/loopback-server.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { createApp, startServer } from "../src/web/server.js";
@@ -8,6 +9,7 @@ import { createApp, startServer } from "../src/web/server.js";
 let server: ReturnType<typeof startServer> | undefined;
 
 afterEach(async () => {
+  await closeLoopbackServers();
   if (!server) return;
   await new Promise<void>((resolve) => server?.close(() => resolve()));
   server = undefined;
@@ -22,30 +24,30 @@ describe("createApp", () => {
   });
 
   it("serves index HTML at root path", async () => {
-    const res = await request(createApp()).get("/");
+    const res = await request(await listenLoopback(createApp())).get("/");
     expect(res.status).toBe(200);
     expect(res.text).toContain("<!DOCTYPE html>");
     expect(res.text).toContain("<title>Repo Bootcamp</title>");
   });
 
   it("responds cleanly to the browser favicon request", async () => {
-    const res = await request(createApp()).get("/favicon.ico");
+    const res = await request(await listenLoopback(createApp())).get("/favicon.ico");
     expect(res.status).toBe(204);
     expect(res.text).toBe("");
   });
 
   it("sets X-Content-Type-Options nosniff header", async () => {
-    const res = await request(createApp()).get("/");
+    const res = await request(await listenLoopback(createApp())).get("/");
     expect(res.headers["x-content-type-options"]).toBe("nosniff");
   });
 
   it("sets X-Frame-Options DENY header", async () => {
-    const res = await request(createApp()).get("/");
+    const res = await request(await listenLoopback(createApp())).get("/");
     expect(res.headers["x-frame-options"]).toBe("DENY");
   });
 
   it("sets Content-Security-Policy header with expected directives", async () => {
-    const res = await request(createApp()).get("/");
+    const res = await request(await listenLoopback(createApp())).get("/");
     const csp = res.headers["content-security-policy"];
     const scriptNonce = res.text.match(/<script nonce="([^"]+)">/)?.[1];
     const styleNonce = res.text.match(/<style nonce="([^"]+)">/)?.[1];
@@ -62,8 +64,8 @@ describe("createApp", () => {
 
   it("uses a fresh CSP nonce and prevents index caching", async () => {
     const app = createApp();
-    const first = await request(app).get("/");
-    const second = await request(app).get("/");
+    const first = await request(await listenLoopback(app)).get("/");
+    const second = await request(await listenLoopback(app)).get("/");
     const firstNonce = first.text.match(/<script nonce="([^"]+)">/)?.[1];
     const secondNonce = second.text.match(/<script nonce="([^"]+)">/)?.[1];
 
@@ -74,36 +76,44 @@ describe("createApp", () => {
   });
 
   it("allows CORS for http://localhost origins", async () => {
-    const res = await request(createApp()).get("/").set("Origin", "http://localhost:8080");
+    const res = await request(await listenLoopback(createApp()))
+      .get("/")
+      .set("Origin", "http://localhost:8080");
     expect(res.headers["access-control-allow-origin"]).toBe("http://localhost:8080");
     expect(res.headers["access-control-allow-headers"]).toBe("Content-Type");
     expect(res.headers["access-control-allow-methods"]).toBe("GET, POST, OPTIONS");
   });
 
   it("allows CORS for http://127.0.0.1 origins", async () => {
-    const res = await request(createApp()).get("/").set("Origin", "http://127.0.0.1:3000");
+    const res = await request(await listenLoopback(createApp()))
+      .get("/")
+      .set("Origin", "http://127.0.0.1:3000");
     expect(res.headers["access-control-allow-origin"]).toBe("http://127.0.0.1:3000");
   });
 
   it("blocks CORS for non-localhost origins", async () => {
-    const res = await request(createApp()).get("/").set("Origin", "https://attacker.com");
+    const res = await request(await listenLoopback(createApp()))
+      .get("/")
+      .set("Origin", "https://attacker.com");
     expect(res.headers["access-control-allow-origin"]).toBeUndefined();
   });
 
   it("blocks CORS for origins that merely contain localhost", async () => {
-    const res = await request(createApp()).get("/").set("Origin", "https://notlocalhost.evil.com");
+    const res = await request(await listenLoopback(createApp()))
+      .get("/")
+      .set("Origin", "https://notlocalhost.evil.com");
     expect(res.headers["access-control-allow-origin"]).toBeUndefined();
   });
 
   it("responds 200 to OPTIONS preflight requests from localhost", async () => {
-    const res = await request(createApp())
+    const res = await request(await listenLoopback(createApp()))
       .options("/api/analyze")
       .set("Origin", "http://localhost:3000");
     expect(res.status).toBe(200);
   });
 
   it("parses JSON request bodies", async () => {
-    const res = await request(createApp())
+    const res = await request(await listenLoopback(createApp()))
       .post("/api/analyze")
       .set("Content-Type", "application/json")
       .send({ repoUrl: "https://github.com/test/repo" });

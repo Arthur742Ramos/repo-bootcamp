@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import request from "supertest";
+import { closeLoopbackServers, listenLoopback } from "./helpers/loopback-server.js";
 
 vi.mock("chalk", () => {
   const makeChalk = (): any =>
@@ -99,14 +100,15 @@ function createTestApp() {
 }
 
 describe("web routes", () => {
-  afterEach(() => {
+  afterEach(async () => {
+    await closeLoopbackServers();
     stopJobPruner();
   });
 
   describe("POST /api/analyze", () => {
     it("returns jobId for valid request", async () => {
       const app = createTestApp();
-      const res = await request(app)
+      const res = await request(await listenLoopback(app))
         .post("/api/analyze")
         .send({ repoUrl: "https://github.com/test/repo" });
       expect(res.status).toBe(200);
@@ -115,19 +117,23 @@ describe("web routes", () => {
 
     it("rejects missing repoUrl", async () => {
       const app = createTestApp();
-      const res = await request(app).post("/api/analyze").send({});
+      const res = await request(await listenLoopback(app))
+        .post("/api/analyze")
+        .send({});
       expect(res.status).toBe(400);
     });
 
     it("rejects non-string repoUrl", async () => {
       const app = createTestApp();
-      const res = await request(app).post("/api/analyze").send({ repoUrl: 123 });
+      const res = await request(await listenLoopback(app))
+        .post("/api/analyze")
+        .send({ repoUrl: 123 });
       expect(res.status).toBe(400);
     });
 
     it("rejects too-long repoUrl", async () => {
       const app = createTestApp();
-      const res = await request(app)
+      const res = await request(await listenLoopback(app))
         .post("/api/analyze")
         .send({ repoUrl: "x".repeat(501) });
       expect(res.status).toBe(400);
@@ -135,13 +141,15 @@ describe("web routes", () => {
 
     it("rejects invalid GitHub URL", async () => {
       const app = createTestApp();
-      const res = await request(app).post("/api/analyze").send({ repoUrl: "invalid-url" });
+      const res = await request(await listenLoopback(app))
+        .post("/api/analyze")
+        .send({ repoUrl: "invalid-url" });
       expect(res.status).toBe(400);
     });
 
     it("rejects non-object body", async () => {
       const app = createTestApp();
-      const res = await request(app)
+      const res = await request(await listenLoopback(app))
         .post("/api/analyze")
         .send("not json")
         .set("Content-Type", "application/json");
@@ -150,7 +158,7 @@ describe("web routes", () => {
 
     it("rejects non-object options", async () => {
       const app = createTestApp();
-      const res = await request(app)
+      const res = await request(await listenLoopback(app))
         .post("/api/analyze")
         .send({ repoUrl: "https://github.com/test/repo", options: "bad" });
       expect(res.status).toBe(400);
@@ -158,7 +166,7 @@ describe("web routes", () => {
 
     it("accepts valid options object", async () => {
       const app = createTestApp();
-      const res = await request(app)
+      const res = await request(await listenLoopback(app))
         .post("/api/analyze")
         .send({ repoUrl: "https://github.com/test/repo", options: { branch: "dev" } });
       expect(res.status).toBe(200);
@@ -168,17 +176,17 @@ describe("web routes", () => {
   describe("GET /api/jobs/:jobId", () => {
     it("returns 404 for unknown job", async () => {
       const app = createTestApp();
-      const res = await request(app).get("/api/jobs/nonexistent");
+      const res = await request(await listenLoopback(app)).get("/api/jobs/nonexistent");
       expect(res.status).toBe(404);
     });
 
     it("returns job status after creation", async () => {
       const app = createTestApp();
-      const createRes = await request(app)
+      const createRes = await request(await listenLoopback(app))
         .post("/api/analyze")
         .send({ repoUrl: "https://github.com/test/repo" });
       const jobId = createRes.body.jobId;
-      const res = await request(app).get(`/api/jobs/${jobId}`);
+      const res = await request(await listenLoopback(app)).get(`/api/jobs/${jobId}`);
       expect(res.status).toBe(200);
       expect(res.body.id).toBe(jobId);
     });
@@ -187,13 +195,17 @@ describe("web routes", () => {
   describe("GET /api/jobs/:jobId/files/:filename", () => {
     it("rejects path traversal", async () => {
       const app = createTestApp();
-      const res = await request(app).get("/api/jobs/somejob/files/..%2F..%2Fetc%2Fpasswd");
+      const res = await request(await listenLoopback(app)).get(
+        "/api/jobs/somejob/files/..%2F..%2Fetc%2Fpasswd"
+      );
       expect(res.status).toBe(400);
     });
 
     it("returns 404 for unknown job", async () => {
       const app = createTestApp();
-      const res = await request(app).get("/api/jobs/nonexistent/files/test.md");
+      const res = await request(await listenLoopback(app)).get(
+        "/api/jobs/nonexistent/files/test.md"
+      );
       expect(res.status).toBe(404);
     });
   });
@@ -201,7 +213,7 @@ describe("web routes", () => {
   describe("GET /api/jobs/:jobId/stream", () => {
     it("returns 404 for unknown job", async () => {
       const app = createTestApp();
-      const res = await request(app).get("/api/jobs/nonexistent/stream");
+      const res = await request(await listenLoopback(app)).get("/api/jobs/nonexistent/stream");
       expect(res.status).toBe(404);
     });
   });
