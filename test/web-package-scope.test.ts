@@ -130,6 +130,81 @@ afterEach(async () => {
 });
 
 describe("web selected package using contained scans and saved SDK responses", () => {
+  for (const branch of ["feature/app", "release/v2.0"]) {
+    it(`retains the normalized requested ${branch} options while running and after completion`, async () => {
+      let release!: () => void;
+      const gate = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      holdClone = () => gate;
+      const started = await start(" ./packages/app/ ", {
+        branch,
+        focus: "architecture",
+        audience: "frontend",
+        maxFiles: "37.9",
+        model: "not-exposed",
+        fullClone: true,
+        format: "html",
+      });
+      const expected = {
+        branch,
+        subdir: "packages/app",
+        focus: "architecture",
+        audience: "frontend",
+        maxFiles: 37,
+      };
+      try {
+        await expect.poll(() => clones.length).toBe(1);
+        const pending = await request(server).get(`/api/jobs/${started.body.jobId}`);
+        expect(pending.body.status).toBe("running");
+        expect(pending.body.options).toEqual(expected);
+      } finally {
+        release();
+      }
+      const job = await settle(started.body.jobId);
+      expect(job.status).toBe("complete");
+      expect(job.options).toEqual(expected);
+      expect(clone.mock.calls[0].slice(1)).toEqual([branch, false]);
+    });
+  }
+
+  it("exposes only safe normalized form options for invalid and unsupported inputs", async () => {
+    const job = await settle(
+      (
+        await start(undefined, {
+          branch: 42,
+          focus: "invalid",
+          audience: { name: "backend" },
+          maxFiles: 5_000_000,
+          model: "not-exposed",
+          verbose: true,
+          jsonOnly: true,
+          fullClone: true,
+        })
+      ).body.jobId
+    );
+    expect(job.status).toBe("complete");
+    expect(job.options).toEqual({
+      branch: "",
+      subdir: "",
+      focus: "all",
+      audience: "all",
+      maxFiles: 1000,
+    });
+  });
+
+  it("retains the default root options without synthesizing a detected branch selection", async () => {
+    const job = await settle((await start()).body.jobId);
+    expect(job.options).toEqual({
+      branch: "",
+      subdir: "",
+      focus: "all",
+      audience: "all",
+      maxFiles: 200,
+    });
+    expect(job.result.manifest.repository.branch).toBe("main");
+  });
+
   it("scopes analysis, generated source links, follow-up, cache identity and restored metadata, while owning the entire checkout", async () => {
     const started = await start(" ./packages/app/ ", {
       branch: "feature/app",

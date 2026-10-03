@@ -226,7 +226,7 @@ Cancellation responses belong to the job and run that requested them. Only an ac
 
 ### Saved analysis restoration
 
-Restore a saved job only while the initial page still owns the analysis form. A newer submission or an edit to the repository URL or run options supersedes pending restoration, even if the edit is reverted. Late fetch/JSON results and failures must leave the current input, result, loading controls, and saved job intact. An untouched page still reconnects normally. Failed restoration may remove only the saved ID that it looked up.
+Restore a saved job only while the initial page still owns the analysis form. A newer submission or an edit to the repository URL or run options supersedes pending restoration, even if the edit is reverted. Late fetch/JSON results and failures must leave the current input, result, loading controls, and saved job intact. An untouched page reconnects with its original requested branch or tag, package directory, focus, audience, and scan limit. The displayed and copied terminal command belongs to that analyzed run; an unsent repository draft remains available for the next Analyze. Failed restoration may remove only the saved ID that it looked up.
 
 ### Follow-up questions
 

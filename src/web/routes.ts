@@ -43,6 +43,9 @@ interface AnalysisJob {
   id: string;
   repoUrl: string;
   subdir?: string;
+  options: Pick<BootcampOptions, "branch" | "focus" | "audience" | "maxFiles"> & {
+    subdir: string;
+  };
   status: "pending" | "running" | "complete" | "error" | "cancelled";
   progress: ProgressEvent[];
   result?: {
@@ -549,6 +552,13 @@ export function registerRoutes(app: Application): void {
           id: generateJobId(),
           repoUrl,
           subdir: options.subdir,
+          options: {
+            branch: options.branch,
+            subdir: options.subdir ?? "",
+            focus: options.focus,
+            audience: options.audience,
+            maxFiles: options.maxFiles,
+          },
           status: "pending",
           progress: [],
           abortController: new AbortController(),
@@ -660,6 +670,7 @@ export function registerRoutes(app: Application): void {
       id: job.id,
       repoUrl: job.repoUrl,
       subdir: job.subdir ?? "",
+      options: job.options,
       status: job.status,
       result: job.result,
       error: job.error,
