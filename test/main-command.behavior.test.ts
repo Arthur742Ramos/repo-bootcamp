@@ -974,4 +974,87 @@ describe("runMainCommand --watch and --interactive", () => {
       }
     }
   );
+  it.each([
+    { isLocal: false, keepTemp: false, cleanupFails: false },
+    { isLocal: false, keepTemp: true, cleanupFails: false },
+    { isLocal: true, keepTemp: false, cleanupFails: false },
+    { isLocal: false, keepTemp: false, cleanupFails: true },
+  ])(
+    "cleans up after interactive failure without removing retained checkouts ($isLocal/$keepTemp/$cleanupFails)",
+    async ({ isLocal, keepTemp, cleanupFails }) => {
+      const repoPath = await createLocalFixtureRepo();
+      const outputDir = join(repoPath, "bootcamp-output");
+      const facts = makeFacts();
+      const scanResult = makeScanResult();
+
+      vi.resetModules();
+      const scanRepositoryFiles = vi.fn().mockResolvedValue(scanResult);
+      const cleanupRepository = cleanupFails
+        ? vi.fn().mockRejectedValue(new Error("cleanup unavailable"))
+        : vi.fn().mockResolvedValue(undefined);
+      const orchestrateAnalysis = vi.fn().mockResolvedValue(makeAnalysis(facts));
+      const prepareOutputDocuments = vi.fn().mockResolvedValue(makePreparedResult(facts));
+      const writeGeneratedOutputs = vi.fn().mockResolvedValue({ documentCount: 1 });
+      const resolveRunConfiguration = vi.fn().mockResolvedValue({
+        config: null,
+        styleConfig: makeStyleConfig(),
+        outputFormat: "markdown",
+      });
+      const interactiveError = new Error("interactive session unavailable");
+      const runInteractiveMode = vi.fn().mockRejectedValue(interactiveError);
+
+      vi.doMock("../src/services/clone-service.js", () => ({
+        cloneRepository: vi.fn().mockResolvedValue(repoPath),
+        cleanupRepository,
+        scanRepositoryFiles,
+      }));
+      vi.doMock("../src/services/analysis-orchestration.js", () => ({
+        orchestrateAnalysis,
+        prepareOutputDocuments,
+      }));
+      vi.doMock("../src/services/output-writer.js", () => ({ writeGeneratedOutputs }));
+      vi.doMock("../src/services/config-resolution.js", () => ({ resolveRunConfiguration }));
+      vi.doMock("../src/interactive.js", () => ({ runInteractiveMode }));
+
+      const { runMainCommand } = await import("../src/commands/main-command.js");
+      const exitSpy = vi.spyOn(process, "exit").mockImplementation(((code?: number) => {
+        throw new Error(`EXIT_${code ?? 0}`);
+      }) as (code?: number) => never);
+      const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+
+      try {
+        await expect(
+          runMainCommand(isLocal ? repoPath : "https://github.com/test/repo", {
+            ...BASE_OPTIONS,
+            noClone: isLocal,
+            jsonOnly: false,
+            interactive: true,
+            keepTemp,
+            subdir: "src",
+            output: outputDir,
+          })
+        ).rejects.toBe(interactiveError);
+
+        expect(exitSpy).not.toHaveBeenCalled();
+        expect(await readFile(join(repoPath, "src", "index.ts"), "utf8")).toContain("fixture");
+        expect(
+          JSON.parse(await readFile(join(outputDir, "ANALYSIS_MANIFEST.json"), "utf8"))
+        ).toBeTruthy();
+
+        expect(runInteractiveMode).toHaveBeenCalledTimes(1);
+        expect(runInteractiveMode.mock.calls[0][0]).toBe(join(repoPath, "src"));
+        expect(runInteractiveMode.mock.calls[0][1].sourcePathPrefix).toBe("src");
+        if (isLocal || keepTemp) {
+          expect(cleanupRepository).not.toHaveBeenCalled();
+        } else {
+          expect(cleanupRepository).toHaveBeenCalledExactlyOnceWith(repoPath);
+          expect(cleanupRepository).not.toHaveBeenCalledWith(join(repoPath, "src"));
+        }
+      } finally {
+        exitSpy.mockRestore();
+        logSpy.mockRestore();
+        await rm(repoPath, { recursive: true, force: true });
+      }
+    }
+  );
 });
