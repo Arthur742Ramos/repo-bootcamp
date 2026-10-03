@@ -46,6 +46,15 @@ async function fixture(remote = false) {
   const outside = join(root, "outside");
   await mkdir(outside);
   await writeFile(join(outside, "Makefile"), "outside-build:\n\t@echo outside\n");
+  await mkdir(join(repo, "packages", "second app"));
+  await writeFile(
+    join(repo, "packages", "second app", "Makefile"),
+    "second-build:\n\t@echo owned\n"
+  );
+  for (const name of ["--keep-temp", "--verbose", "--branch", "--category"]) {
+    await mkdir(join(repo, name));
+    await writeFile(join(repo, name, "Makefile"), "flag-build:\n\t@echo owned\n");
+  }
   await symlink(app, join(repo, "alias"), process.platform === "win32" ? "junction" : "dir");
   await symlink(
     outside,
@@ -61,6 +70,7 @@ async function fixture(remote = false) {
     git(["config", "user.name", "Owned Task Scope"]);
     // Do not commit junctions: contained-alias controls are local only.
     git(["add", "package.json", "Makefile", "Taskfile.yml", "README.md", "file.txt", "packages"]);
+    git(["add", "--", "--keep-temp", "--verbose", "--branch", "--category"]);
     git(["commit", "--no-gpg-sign", "-m", "Owned scope fixture"]);
     git(["checkout", "-b", "release/scope"]);
     await writeFile(join(app, "Makefile"), "child-release-build:\n\t@echo owned\n");
@@ -177,14 +187,77 @@ describe("standalone task scope in the actual CLI", () => {
     }
   });
 
+  it.each(["packages/second app", "", ".", "missing", "file.txt", "../outside", "outside-alias"])(
+    "uses the final parsed repeated scope %j",
+    async (scope) => {
+      const f = await fixture();
+      const result = await runCli(
+        ["--subdir", "packages/my app", "tasks", f.repo, "--subdir=" + scope, "--json"],
+        {},
+        60_000,
+        f.caller
+      );
+      if (["missing", "file.txt", "../outside", "outside-alias"].includes(scope)) {
+        expect(result.exitCode).toBe(1);
+        expect(result.stdout).toBe("");
+        expect(result.stderr).toContain("Task discovery failed:");
+      } else {
+        expect(result.exitCode).toBe(0);
+        const data = JSON.parse(result.stdout);
+        expect(data.tasks[0].command).toBe(
+          scope === "packages/second app" ? "make second-build" : "npm run root-test"
+        );
+        if (scope === "") expect(data).not.toHaveProperty("subdir");
+        else expect(data.subdir).toBe(scope);
+      }
+      expect(await readFile(join(f.app, "Makefile"), "utf8")).toContain("child-build");
+    }
+  );
+
+  it.each(["--keep-temp", "--verbose", "--branch", "--category"])(
+    "does not interpret required scope value %s as a separate option",
+    async (scope) => {
+      const f = await fixture(true);
+      const result = await runCli(
+        ["tasks", f.url, "--subdir", scope, "--json"],
+        f.env,
+        60_000,
+        f.caller
+      );
+      expect(result.exitCode).toBe(0);
+      const data = JSON.parse(result.stdout);
+      expect(data.subdir).toBe(scope);
+      expect(data.category).toBeNull();
+      expect(data.tasks[0].command).toBe("make flag-build");
+      expect(result.stderr).not.toContain("Temporary clone kept at:");
+      expect(await readdir(join(f.caller, ".tmp"))).toEqual([]);
+    }
+  );
+
+  it("keeps an operand-named package only when a separate keep-temp flag is parsed", async () => {
+    const f = await fixture(true);
+    const result = await runCli(
+      ["tasks", f.url, "--subdir", "--keep-temp", "--keep-temp", "--json"],
+      f.env,
+      60_000,
+      f.caller
+    );
+    expect(result.exitCode).toBe(0);
+    expect(JSON.parse(result.stdout).tasks[0].command).toBe("make flag-build");
+    expect(result.stderr).toContain("Temporary clone kept at:");
+    expect(await readdir(join(f.caller, ".tmp"))).toHaveLength(1);
+  });
+
   it("selects an owned remote branch and cleans the outer clone", async () => {
     const f = await fixture(true);
     const result = await runCli(
       [
         "--branch",
-        "release/scope",
+        "main",
         "tasks",
         f.url,
+        "--branch",
+        "release/scope",
         "--subdir",
         "packages/my app",
         "--category",

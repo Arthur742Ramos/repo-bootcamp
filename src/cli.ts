@@ -794,16 +794,17 @@ program
   )
   .option("--keep-temp", "Keep temporary clone directory")
   .option("-v, --verbose", "Show detailed output")
-  .action(async (repoUrl: string, rawOpts) => {
-    const opts = getActionOptions<TasksActionOptions>(rawOpts as Command | TasksActionOptions);
-    const branch = opts.branch || getCliFlagValue(["--branch", "-b"]) || "";
+  .action(async (repoUrl: string, _rawOpts, command: Command) => {
+    // Commander owns repeated-option precedence and distinguishes required
+    // values from flags, including options captured by the parent command.
+    const opts = command.optsWithGlobals() as TasksActionOptions;
     await runTasksCommand(repoUrl, {
-      branch,
-      subdir: opts.subdir || getCliFlagValue(["--subdir"]) || undefined,
-      json: opts.json || false,
-      category: opts.category || getCliFlagValue(["--category", "-c"]) || undefined,
-      keepTemp: opts.keepTemp || hasCliFlag(["--keep-temp"]),
-      verbose: opts.verbose || hasCliFlag(["--verbose", "-v"]),
+      branch: opts.branch ?? "",
+      subdir: opts.subdir,
+      json: opts.json ?? false,
+      category: opts.category,
+      keepTemp: opts.keepTemp ?? false,
+      verbose: opts.verbose ?? false,
     });
   });
 
