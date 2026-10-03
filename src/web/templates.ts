@@ -399,7 +399,8 @@ export function getIndexHtml(nonce?: string): string {
     .markdown-preview ul, .markdown-preview ol { padding-left: 1.5rem; }
     .markdown-preview code { font-family: var(--font-mono); font-size: 0.875em; }
     .markdown-preview a[href] { color: var(--accent); text-decoration: underline; }
-    .markdown-preview table { display: block; max-width: 100%; overflow-x: auto; border-collapse: collapse; }
+    .markdown-preview .table-scroll { max-width: 100%; overflow-x: auto; }
+    .markdown-preview table { width: 100%; overflow-wrap: normal; border-collapse: collapse; }
     .markdown-preview th, .markdown-preview td { border: 1px solid var(--border); padding: 0.5rem; }
     .markdown-preview blockquote { padding: 1rem; background: var(--canvas); }
     .markdown-preview summary { cursor: pointer; }
@@ -1469,6 +1470,8 @@ export function getIndexHtml(nonce?: string): string {
         if (node.nodeType !== Node.ELEMENT_NODE || blocked.has(node.tagName)) return document.createDocumentFragment();
         const element = node.tagName === 'DIV' && node.classList.contains('mermaid')
           ? document.createElement('pre')
+          : node.tagName === 'DIV' && node.classList.contains('table-scroll')
+            ? document.createElement('div')
           : allowed.has(node.tagName)
             ? document.createElement(node.tagName.toLowerCase()) : document.createDocumentFragment();
         if (node.tagName === 'A') {
@@ -1499,6 +1502,16 @@ export function getIndexHtml(nonce?: string): string {
           }
         }
         for (const child of node.childNodes) element.append(copy(child));
+        if (node.tagName === 'DIV' && node.classList.contains('table-scroll')) {
+          element.className = 'table-scroll';
+          element.tabIndex = 0;
+          element.setAttribute('role', 'region');
+          element.setAttribute('aria-label', 'Scrollable table');
+        } else if (element.tagName === 'PRE') {
+          element.tabIndex = 0;
+          element.setAttribute('role', 'region');
+          element.setAttribute('aria-label', 'Code block');
+        }
         if (/^H[1-6]$/.test(node.tagName)) {
           element.dataset.anchor = getHeadingAnchor(element.textContent, headingCounts, headingAnchors);
           element.tabIndex = -1;

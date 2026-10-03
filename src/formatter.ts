@@ -33,7 +33,7 @@ function convertCodeBlocks(match: string): string {
       return `<div class="mermaid">\n${escapeHtml(code.trimEnd())}\n</div>`;
     }
     const cls = lang ? ` class="language-${lang}"` : "";
-    return `<pre><code${cls}>${escapeHtml(code.trimEnd())}</code></pre>`;
+    return `<pre tabindex="0" role="region" aria-label="Code block"><code${cls}>${escapeHtml(code.trimEnd())}</code></pre>`;
   });
 }
 
@@ -220,7 +220,7 @@ export function markdownToHtml(md: string): string {
           inOrderedList = false;
         }
         if (inTable) {
-          html.push("</table>");
+          html.push("</table></div>");
           inTable = false;
         }
         html.push(codeBlockPlaceholders[parseInt(indexText, 10)]);
@@ -241,7 +241,7 @@ export function markdownToHtml(md: string): string {
         inOrderedList = false;
       }
       if (inTable) {
-        html.push("</table>");
+        html.push("</table></div>");
         inTable = false;
       }
       const trimmedLine = line.trim();
@@ -268,7 +268,7 @@ export function markdownToHtml(md: string): string {
         inOrderedList = false;
       }
       if (inTable) {
-        html.push("</table>");
+        html.push("</table></div>");
         inTable = false;
       }
       const level = headingMatch[1].length;
@@ -297,7 +297,7 @@ export function markdownToHtml(md: string): string {
         inOrderedList = false;
       }
       if (inTable) {
-        html.push("</table>");
+        html.push("</table></div>");
         inTable = false;
       }
       html.push("<hr />");
@@ -315,7 +315,7 @@ export function markdownToHtml(md: string): string {
         inOrderedList = false;
       }
       if (inTable) {
-        html.push("</table>");
+        html.push("</table></div>");
         inTable = false;
       }
       const text = line.replace(/^>\s*/, "");
@@ -333,7 +333,9 @@ export function markdownToHtml(md: string): string {
         .slice(1, -1)
         .map((c) => c.trim());
       if (!inTable) {
-        html.push("<table>");
+        html.push(
+          '<div class="table-scroll" tabindex="0" role="region" aria-label="Scrollable table"><table>'
+        );
         inTable = true;
         html.push(
           "<tr>" + cells.map((c) => `<th>${convertInlineFormatting(c)}</th>`).join("") + "</tr>"
@@ -345,7 +347,7 @@ export function markdownToHtml(md: string): string {
       }
       continue;
     } else if (inTable) {
-      html.push("</table>");
+      html.push("</table></div>");
       inTable = false;
     }
 
@@ -401,7 +403,7 @@ export function markdownToHtml(md: string): string {
   // Close any open lists/tables
   if (inList) html.push("</ul>");
   if (inOrderedList) html.push("</ol>");
-  if (inTable) html.push("</table>");
+  if (inTable) html.push("</table></div>");
 
   return html.join("\n");
 }
@@ -418,12 +420,14 @@ export function wrapHtmlPage(body: string, title: string): string {
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>${escapeHtml(title)}</title>
 <style>
-  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; max-width: 900px; margin: 2rem auto; padding: 0 1rem; color: #24292f; line-height: 1.6; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; max-width: 900px; margin: 2rem auto; padding: 0 1rem; color: #24292f; line-height: 1.6; overflow-wrap: anywhere; }
   h1, h2, h3, h4 { margin-top: 1.5em; }
   pre { background: #f6f8fa; padding: 1em; border-radius: 6px; overflow-x: auto; }
   code { font-family: "SFMono-Regular", Consolas, monospace; font-size: 0.9em; }
   :not(pre) > code { background: #f6f8fa; padding: 0.2em 0.4em; border-radius: 3px; }
-  table { border-collapse: collapse; width: 100%; margin: 1em 0; }
+  .table-scroll { max-width: 100%; overflow-x: auto; margin: 1em 0; }
+  table { border-collapse: collapse; width: 100%; overflow-wrap: normal; }
+  pre:focus-visible, .table-scroll:focus-visible { outline: 2px solid #0969da; outline-offset: 2px; }
   th, td { border: 1px solid #d0d7de; padding: 0.5em 1em; text-align: left; }
   th { background: #f6f8fa; }
   blockquote { border-left: 4px solid #d0d7de; margin: 1em 0; padding: 0.5em 1em; color: #57606a; }
