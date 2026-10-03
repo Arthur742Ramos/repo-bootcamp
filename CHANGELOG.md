@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Read scoped onboarding documentation, CI workflows, source files, and workspace metadata from the selected `--subdir` instead of the outer repository.
+
 - Use the declared/detected npm, pnpm, Yarn, or Bun manager consistently in full-scan stack metadata and onboarding commands; recognize `bun.lock` and detect lockfiles without buffering their contents.
 
 - Replace the vulnerable `fast-glob`/`micromatch`/`braces` production chain with bounded native directory iteration and maintained glob matching; preserve scan exclusions and stop filesystem work at the entry limit.

@@ -108,6 +108,62 @@ describe("ingest parsers", () => {
     expect((await scanRepo(dir, 100)).stack.packageManager).toBe("bun");
   });
 
+  it("reads documentation, workflows, and source evidence from the selected package", async () => {
+    const dir = await repoWith({
+      "package.json": JSON.stringify({ name: "outer", workspaces: ["packages/*"] }),
+      "README.md": "# Outer repository\n",
+      "CONTRIBUTING.md": "Outer contribution rules.\n",
+      "src/index.ts": "export const identity = 'outer';\n",
+      ".github/workflows/ci.yml": "name: Outer CI\non: [push]\njobs: {}\n",
+      "packages/app/package.json": JSON.stringify({ name: "app" }),
+      "packages/app/README.md": "# App setup\n",
+      "packages/app/CONTRIBUTING.md": "App contribution rules.\n",
+      "packages/app/src/index.ts": "export const identity = 'app';\n",
+      "packages/app/.github/workflows/ci.yml": "name: App CI\non: [pull_request]\njobs: {}\n",
+    });
+    const scan = await scanRepo(dir, 100, { subdir: "packages/app" });
+    expect(scan.readme).toBe("# App setup\n");
+    expect(scan.contributing).toBe("App contribution rules.\n");
+    expect(scan.keySourceFiles.get("src/index.ts")).toBe("export const identity = 'app';\n");
+    expect(JSON.parse(scan.keySourceFiles.get("package.json")!)).toEqual({ name: "app" });
+    expect(scan.ciWorkflows).toEqual([
+      {
+        name: "App CI",
+        file: ".github/workflows/ci.yml",
+        triggers: ["pull_request"],
+        mainSteps: [],
+      },
+    ]);
+    expect(scan.monorepo).toBeNull();
+  });
+
+  it("does not borrow root documents when the selected package has none", async () => {
+    const dir = await repoWith({
+      "README.md": "# Outer setup\n",
+      "CONTRIBUTING.md": "Outer rules.\n",
+      "packages/app/index.ts": "export const app = 1;\n",
+    });
+    const scan = await scanRepo(dir, 100, { subdir: "packages/app" });
+    expect(scan.readme).toBeNull();
+    expect(scan.contributing).toBeNull();
+    expect(scan.keySourceFiles.get("index.ts")).toBe("export const app = 1;\n");
+  });
+
+  it("resolves nested workspace metadata against the selected package", async () => {
+    const dir = await repoWith({
+      "package.json": JSON.stringify({ name: "outer", workspaces: ["packages/*"] }),
+      "packages/app/package.json": JSON.stringify({ workspaces: ["modules/*"] }),
+      "packages/app/modules/core/package.json": JSON.stringify({ name: "@app/core" }),
+    });
+    const scan = await scanRepo(dir, 100, { subdir: "packages/app" });
+    expect(scan.monorepo).toEqual({
+      isMonorepo: true,
+      managers: ["npm-workspaces"],
+      workspaceGlobs: ["modules/*"],
+      workspacePackages: [{ name: "@app/core", path: "modules/core" }],
+    });
+  });
+
   it("keeps Poetry package-manager evidence when no JavaScript manifest exists", async () => {
     const dir = await repoWith({
       "pyproject.toml": "[tool.poetry]\nname = 'fixture'\n",
