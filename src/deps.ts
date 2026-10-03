@@ -737,7 +737,7 @@ export function generateDependencyDiagram(deps: DependencyAnalysis, projectName:
       if (canOrderFallback) orderNodes(devIds);
       lines.push("  end");
       lines.push("  APP -.-> Dev");
-      lines.push("  Runtime ~~~ Dev");
+      if (canOrderFallback) lines.push("  Runtime ~~~ Dev");
     }
   }
 
