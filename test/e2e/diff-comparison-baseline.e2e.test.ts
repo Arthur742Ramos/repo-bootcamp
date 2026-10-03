@@ -5,7 +5,7 @@ import { join } from "path";
 import { pathToFileURL } from "url";
 import { promisify } from "util";
 import { afterEach, describe, expect, it } from "vitest";
-import { createDiffHistory, fixtureGit } from "../helpers/diff-history.js";
+import { createDiffHistory, createMergedDiffHistory, fixtureGit } from "../helpers/diff-history.js";
 import { packageFacts } from "../helpers/package-scope.js";
 
 const exec = promisify(execFile),
@@ -14,10 +14,12 @@ afterEach(async () => {
   await Promise.all(dirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })));
 });
 
-async function fixture(extraMainCommits = 0) {
+async function fixture(extraMainCommits = 0, merged?: { crossed: boolean; count: number }) {
   const base = await mkdtemp(join(tmpdir(), "diff-baseline-cli-"));
   dirs.push(base);
-  const history = await createDiffHistory(base, extraMainCommits),
+  const history = merged
+      ? await createMergedDiffHistory(base, merged.crossed, merged.count)
+      : await createDiffHistory(base, extraMainCommits),
     home = join(base, "owned-home");
   await mkdir(home);
   const response = join(base, "response.json"),
@@ -182,6 +184,68 @@ describe("actual Diff comparison baseline", () => {
     const doc = await readFile(join(output, "DIFF.md"), "utf8");
     expect(doc).toContain("Major version bump: 1.0.0 → 2.0.0");
     expect(doc).not.toContain("main-only");
+  });
+
+  it.each([false, true])(
+    "certifies the native full-history ancestor across unequal merge parents (crossed merges: %s)",
+    async (crossed) => {
+      const f = await fixture(0, { crossed, count: 80 }),
+        output = join(f.base, "output");
+      const nativeBase = fixtureGit(f.repo, ["merge-base", "main", "feature/readme"]);
+      expect(nativeBase).not.toBe(f.ancestor);
+      const result = await f.run(
+        ["diff", "owned/diff-fixture#1", "--output", output, "--keep-temp"],
+        1
+      );
+      expect(result.exitCode, result.stderr).toBe(0);
+      expect(
+        deepens(result.git).map((args) => args.find((arg) => arg.startsWith("--deepen=")))
+      ).toEqual(["--deepen=32", "--deepen=128"]);
+      expect(
+        result.git.some(
+          (args) =>
+            args[0] === "rev-list" &&
+            args.includes("--max-parents=0") &&
+            args.includes(`^${f.ancestor}`)
+        )
+      ).toBe(true);
+      const clones = await readdir(join(f.base, ".tmp"));
+      expect(clones).toHaveLength(1);
+      const clone = join(f.base, ".tmp", clones[0]);
+      expect(fixtureGit(clone, ["merge-base", "pr-1-base", "pr-1-head"])).toBe(nativeBase);
+      expect(fixtureGit(clone, ["diff", "--name-status", `${nativeBase}...pr-1-head`])).toBe(
+        fixtureGit(f.repo, ["diff", "--name-status", `${nativeBase}...feature/readme`])
+      );
+      const doc = await readFile(join(output, "DIFF.md"), "utf8");
+      expect(doc).toContain("No significant onboarding changes detected.");
+      expect(doc).toContain("- `README.md`");
+      expect(doc).not.toContain("already-merged");
+      expect(doc).not.toContain("package.json");
+      expect(doc).not.toContain("Major version bump");
+    }
+  );
+
+  it("fails closed when a known shallow ancestor remains ambiguous after the history budget", async () => {
+    const f = await fixture(0, { crossed: false, count: 800 }),
+      output = join(f.base, "output");
+    const result = await f.run(["diff", "owned/diff-fixture#1", "--output", output], 1);
+    expect(result.exitCode).toBe(1);
+    expect(result.stderr).toContain("bounded history limit");
+    expect(result.stderr).toContain("--full-clone");
+    expect(deepens(result.git)).toHaveLength(3);
+    expect(
+      result.git.some((args) => args[0] === "rev-list" && args.includes(`^${f.ancestor}`))
+    ).toBe(true);
+    expect(await readdir(join(f.base, ".tmp"))).toEqual([]);
+    expect(await readdir(output).catch(() => [])).toEqual([]);
+    const full = await f.run(
+      ["diff", "owned/diff-fixture#1", "--output", output, "--full-clone"],
+      1
+    );
+    expect(full.exitCode, full.stderr).toBe(0);
+    expect(await readFile(join(output, "DIFF.md"), "utf8")).toContain(
+      "No significant onboarding changes detected."
+    );
   });
 
   it.each([80, 200])(

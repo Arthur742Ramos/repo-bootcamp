@@ -90,3 +90,86 @@ export async function createDiffHistory(base: string, extraMainCommits = 0) {
     fixtureGit(remote, ["update-ref", `refs/pull/${number}/head`, sha]);
   return { repo, remote, ancestor, main, readme, feature, unrelated };
 }
+
+/** A short first-parent route can expose an older base before a long merge route. */
+export async function createMergedDiffHistory(base: string, crossed = false, topicCommits = 80) {
+  const repo = join(base, "repo"),
+    remote = join(base, "remote.git");
+  await mkdir(repo, { recursive: true });
+  fixtureGit(repo, ["init", "-b", "main"]);
+  fixtureGit(repo, ["config", "user.email", "owned@example.invalid"]);
+  fixtureGit(repo, ["config", "user.name", "Owned merged Diff fixture"]);
+  await writeFile(
+    join(repo, "package.json"),
+    JSON.stringify({ version: "1.0.0", dependencies: { shared: "1" } })
+  );
+  await writeFile(join(repo, "README.md"), "# Owned repo\n");
+  fixtureGit(repo, ["add", "."]);
+  fixtureGit(repo, ["commit", "--no-gpg-sign", "-m", "A"]);
+  const ancestor = fixtureGit(repo, ["rev-parse", "HEAD"]);
+  fixtureGit(repo, ["checkout", "-b", "topic"]);
+  const packageContent = JSON.stringify({
+    version: "2.0.0",
+    dependencies: { shared: "1", "already-merged": "1" },
+  });
+  await writeFile(join(repo, "package.json"), packageContent);
+  fixtureGit(repo, ["commit", "--no-gpg-sign", "-am", "B"]);
+  const newerBase = fixtureGit(repo, ["rev-parse", "HEAD"]);
+  let topicBase = newerBase,
+    featureBase = newerBase;
+  if (crossed) {
+    fixtureGit(repo, ["checkout", "-b", "other-topic", ancestor]);
+    await writeFile(join(repo, "package.json"), packageContent);
+    fixtureGit(repo, ["commit", "--no-gpg-sign", "-am", "C"]);
+    const otherBase = fixtureGit(repo, ["rev-parse", "HEAD"]),
+      tree = fixtureGit(repo, ["rev-parse", `${newerBase}^{tree}`]);
+    topicBase = fixtureGit(repo, [
+      "-c",
+      "commit.gpgSign=false",
+      "commit-tree",
+      tree,
+      "-p",
+      newerBase,
+      "-p",
+      otherBase,
+      "-m",
+      "left crossed merge",
+    ]);
+    featureBase = fixtureGit(repo, [
+      "-c",
+      "commit.gpgSign=false",
+      "commit-tree",
+      tree,
+      "-p",
+      otherBase,
+      "-p",
+      newerBase,
+      "-m",
+      "right crossed merge",
+    ]);
+    fixtureGit(repo, ["update-ref", "refs/heads/topic", topicBase]);
+  }
+  const stream: string[] = [],
+    timestamp = Math.floor(Date.now() / 1000);
+  for (let index = 1; index <= topicCommits; index++) {
+    const message = `Owned topic metadata ${index}`;
+    stream.push(
+      `commit refs/heads/topic\nmark :${index}\nauthor Owned <owned@example.invalid> ${timestamp + index} +0000\ncommitter Owned <owned@example.invalid> ${timestamp + index} +0000\ndata ${Buffer.byteLength(message)}\n${message}\nfrom ${index === 1 ? topicBase : `:${index - 1}`}\n\n`
+    );
+  }
+  fixtureGit(repo, ["fast-import", "--quiet"], stream.join(""));
+  fixtureGit(repo, ["checkout", "main"]);
+  await writeFile(join(repo, "main.txt"), "Main-only changes\n");
+  fixtureGit(repo, ["add", "."]);
+  fixtureGit(repo, ["commit", "--no-gpg-sign", "-m", "main changes"]);
+  fixtureGit(repo, ["merge", "--no-ff", "--no-gpg-sign", "topic", "-m", "merge long topic"]);
+  const main = fixtureGit(repo, ["rev-parse", "HEAD"]);
+  fixtureGit(repo, ["checkout", "-b", "feature/readme", featureBase]);
+  await writeFile(join(repo, "README.md"), "# Owned repo\n\nFeature documentation.\n");
+  fixtureGit(repo, ["commit", "--no-gpg-sign", "-am", "feature docs"]);
+  const feature = fixtureGit(repo, ["rev-parse", "HEAD"]);
+  fixtureGit(repo, ["checkout", "main"]);
+  fixtureGit(base, ["clone", "--bare", repo, remote]);
+  fixtureGit(remote, ["update-ref", "refs/pull/1/head", feature]);
+  return { repo, remote, ancestor, newerBase, main, readme: feature, feature, unrelated: feature };
+}

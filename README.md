@@ -495,7 +495,10 @@ Diff guidance compares the common ancestor of the requested refs with the head, 
 dependencies, scripts, and version changes describe the same feature history. Public ref labels
 remain in the report. PR mode starts with the usual shallow clone and deepens only its base/head
 histories when needed, with three bounded increases (32, 128, then 512 ancestry levels).
-If that budget is exhausted, retry with `--full-clone`; unrelated histories fail with a clear error.
+A shallow candidate is accepted only when reachable cutoffs cannot hide a nearer ancestor.
+This conservative check can require more history when an incomparable root is reachable.
+If ancestry remains incomplete within that budget, retry with `--full-clone`; unrelated histories
+fail with a clear error.
 Local `--compare` uses available checkout history without fetching it.
 
 ```bash

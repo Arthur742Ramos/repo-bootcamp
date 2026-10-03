@@ -45,6 +45,31 @@ async function findMergeBase(
   }
 }
 
+/** A shallow cutoff above or alongside a candidate can hide a nearer ancestor. */
+async function findCompleteMergeBase(
+  repoPath: string,
+  baseRef: string,
+  headRef: string
+): Promise<string | null> {
+  const candidate = await findMergeBase(repoPath, baseRef, headRef);
+  if (!candidate) return null;
+  const { stdout: shallow } = await execFileAsync("git", ["rev-parse", "--is-shallow-repository"], {
+    cwd: repoPath,
+    maxBuffer: FILE_DIFF_MAX_BUFFER,
+  });
+  if (shallow.trim() === "false") return candidate;
+  if (shallow.trim() !== "true") throw new Error("Could not verify Git history completeness.");
+  // Shallow commits pretend to be roots. Excluding the candidate's known
+  // ancestors leaves any cutoffs that could conceal another comparison base.
+  // A genuine incomparable root is also conservative uncertainty while shallow.
+  const { stdout: roots } = await execFileAsync(
+    "git",
+    ["rev-list", "--max-parents=0", "--max-count=1", baseRef, headRef, `^${candidate}`],
+    { cwd: repoPath, maxBuffer: FILE_DIFF_MAX_BUFFER }
+  );
+  return roots.trim() ? null : candidate;
+}
+
 /** Recover only the two fetched PR histories, with a fixed depth budget. */
 async function ensurePullRequestMergeBase(
   repoPath: string,
@@ -54,7 +79,7 @@ async function ensurePullRequestMergeBase(
   headSource: string,
   env?: NodeJS.ProcessEnv
 ): Promise<void> {
-  if (await findMergeBase(repoPath, baseRef, headRef)) return;
+  if (await findCompleteMergeBase(repoPath, baseRef, headRef)) return;
   for (const depth of PR_HISTORY_DEEPEN_STEPS) {
     const { stdout } = await execFileAsync("git", ["rev-parse", "--is-shallow-repository"], {
       cwd: repoPath,
@@ -84,7 +109,7 @@ async function ensurePullRequestMergeBase(
         { cause: error }
       );
     }
-    if (await findMergeBase(repoPath, baseRef, headRef)) return;
+    if (await findCompleteMergeBase(repoPath, baseRef, headRef)) return;
   }
   throw new Error(
     "Cannot compare PR refs within the bounded history limit (672 additional ancestry levels). Retry with --full-clone; the refs may have unrelated histories."
@@ -591,10 +616,10 @@ export async function analyzeDiff(
 ): Promise<DiffSummary> {
   // Use the same merge-base snapshot for files, manifests, environment and exports.
   // Keep public ref labels in the returned summary instead of exposing the internal SHA.
-  const comparisonBase = await findMergeBase(repoPath, baseRef, headRef);
+  const comparisonBase = await findCompleteMergeBase(repoPath, baseRef, headRef);
   if (!comparisonBase) {
     throw new Error(
-      "Cannot compare refs: no common ancestor available. Verify the refs and fetch their history (or retry with --full-clone)."
+      "Cannot compare refs: no common ancestor available with sufficiently complete history. Verify the refs and fetch their history (or retry with --full-clone)."
     );
   }
   const { added, removed, modified } = await getChangedFiles(repoPath, comparisonBase, headRef);

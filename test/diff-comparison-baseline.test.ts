@@ -2,8 +2,10 @@ import { execFileSync } from "child_process";
 import { mkdtemp, mkdir, rm, writeFile } from "fs/promises";
 import { tmpdir } from "os";
 import { join } from "path";
+import { pathToFileURL } from "url";
 import { afterEach, describe, expect, it } from "vitest";
 import { analyzeDiff, getChangedFiles } from "../src/diff.js";
+import { createMergedDiffHistory, fixtureGit } from "./helpers/diff-history.js";
 
 const dirs: string[] = [];
 const git = (dir: string, args: string[]) =>
@@ -103,6 +105,47 @@ describe("shared Diff comparison baseline", () => {
     expect(diff.onboardingDeltas.newDependencies).toEqual(["main-only"]);
     expect(diff.onboardingDeltas.breakingChanges).toContain("Major version bump: 1.0.0 → 3.0.0");
     expect((await analyzeDiff(dir, "main", "main")).filesChanged).toBe(0);
+  });
+
+  it("refuses an uncertified local shallow base until the relevant merge ancestry is available", async () => {
+    const base = await mkdtemp(join(tmpdir(), "diff-local-shallow-"));
+    dirs.push(base);
+    const f = await createMergedDiffHistory(base),
+      clone = join(base, "clone");
+    fixtureGit(base, ["clone", "--depth", "1", pathToFileURL(f.remote).href, clone]);
+    fixtureGit(clone, [
+      "fetch",
+      "--quiet",
+      "origin",
+      `${f.main}:owned-base`,
+      "pull/1/head:owned-head",
+    ]);
+    fixtureGit(clone, [
+      "fetch",
+      "--quiet",
+      "--deepen=32",
+      "origin",
+      `${f.main}:owned-base`,
+      "pull/1/head:owned-head",
+    ]);
+    expect(fixtureGit(clone, ["merge-base", "owned-base", "owned-head"])).toBe(f.ancestor);
+    expect(fixtureGit(f.repo, ["merge-base", "main", "feature/readme"])).toBe(f.newerBase);
+    await expect(analyzeDiff(clone, "owned-base", "owned-head")).rejects.toThrow(
+      "sufficiently complete history"
+    );
+    expect((await analyzeDiff(clone, "owned-head", "owned-head")).filesChanged).toBe(0);
+    fixtureGit(clone, [
+      "fetch",
+      "--quiet",
+      "--deepen=128",
+      "origin",
+      `${f.main}:owned-base`,
+      "pull/1/head:owned-head",
+    ]);
+    const diff = await analyzeDiff(clone, "owned-base", "owned-head");
+    expect(diff.filesModified).toEqual(["README.md"]);
+    expect(diff.onboardingDeltas.newDependencies).toEqual([]);
+    expect(diff.onboardingDeltas.breakingChanges).toEqual([]);
   });
 
   it("fails clearly for unrelated histories and missing comparison refs", async () => {
