@@ -75,4 +75,30 @@ describe("docs command", () => {
     expect(readme).toContain("## Tech Stack");
     expect(readme).toContain("Express");
   }, 90_000);
+
+  it("checks the repaired documentation when --fix and --check are combined", async () => {
+    const tempDir = await mkdtemp(join(tmpdir(), "bootcamp-docs-e2e-"));
+    tempDirs.push(tempDir);
+    const repoPath = await createStaleDocsFixture(tempDir);
+    const result = await runCli(["docs", repoPath, "--fix", "--check"]);
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain("up to date after fixes");
+    expect(result.stdout).not.toContain("Documentation is stale. Run with --fix");
+    const checked = await runCli(["docs", repoPath, "--check"]);
+    expect(checked.exitCode).toBe(0);
+    expect(await readFile(join(repoPath, "README.md"), "utf-8")).toContain("Node.js 20");
+  }, 90_000);
+
+  it("still fails the repaired gate when an issue needs manual attention", async () => {
+    const tempDir = await mkdtemp(join(tmpdir(), "bootcamp-docs-e2e-"));
+    tempDirs.push(tempDir);
+    const repoPath = await createStaleDocsFixture(tempDir);
+    await writeFile(join(repoPath, ".env.example"), "NEEDS_DOCUMENTATION=placeholder\n");
+    const result = await runCli(["docs", repoPath, "--fix", "--check"]);
+    expect(result.exitCode).toBe(1);
+    expect(result.stdout).toContain("Documentation remains stale after automatic fixes");
+    expect(result.stdout).toContain("NEEDS_DOCUMENTATION");
+    expect(result.stdout).toContain("Remaining issues:");
+    expect(await readFile(join(repoPath, "README.md"), "utf-8")).toContain("Node.js 20");
+  }, 90_000);
 });

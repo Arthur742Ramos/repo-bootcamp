@@ -2,7 +2,8 @@ import chalk from "chalk";
 
 import { analyzeDocumentation } from "../docs-analyzer.js";
 import { fixDocumentation } from "../docs-fixer.js";
-import { isLocalPath, resolveRepo, type RepoSource } from "../repo-resolver.js";
+import { isLocalPath } from "../repo-resolver.js";
+import { withResolvedRepo } from "./_shared.js";
 
 /**
  * Run the docs analysis/fix command
@@ -13,28 +14,16 @@ export async function runDocsCommand(
 ) {
   console.log(chalk.bold("\n📚 Docs Analyzer\n"));
 
-  let repoSource: RepoSource;
-  try {
-    if (isLocalPath(repoUrl)) {
-      console.log(chalk.dim("Using local repository..."));
-    } else {
-      console.log(chalk.dim("Cloning repository..."));
-    }
-    repoSource = await resolveRepo(repoUrl, process.cwd(), opts.branch || undefined);
-    console.log(chalk.dim(`Analyzing: ${repoSource.repoInfo.fullName}`));
-  } catch (error: unknown) {
-    console.error(
-      chalk.red(
-        `❌ Failed to resolve repository: ${error instanceof Error ? error.message : String(error)}`
-      )
-    );
-    process.exit(1);
+  if (isLocalPath(repoUrl)) {
+    console.log(chalk.dim("Using local repository..."));
+  } else {
+    console.log(chalk.dim("Cloning repository..."));
   }
 
-  const repoPath = repoSource.path;
-
-  try {
-    const analysis = await analyzeDocumentation(repoPath);
+  await withResolvedRepo(repoUrl, opts, "Documentation analysis failed", async (repoSource) => {
+    console.log(chalk.dim(`Analyzing: ${repoSource.repoInfo.fullName}`));
+    const repoPath = repoSource.path;
+    let analysis = await analyzeDocumentation(repoPath);
 
     console.log(chalk.bold("\n📋 Analysis Results\n"));
 
@@ -131,15 +120,33 @@ export async function runDocsCommand(
       } else {
         console.log(chalk.dim("   No automatic fixes available for detected issues."));
       }
+
+      if (fixResult.changesApplied > 0) {
+        analysis = await analyzeDocumentation(repoPath);
+        if (!analysis.isStale) {
+          console.log(chalk.green("   ✅ Documentation is up to date after fixes!"));
+        } else {
+          console.log(
+            chalk.yellow(
+              `   Remaining issues: ${analysis.summary.errors} error(s), ${analysis.summary.warnings} warning(s)`
+            )
+          );
+        }
+      }
     }
 
     if (opts.check && analysis.isStale) {
-      console.log(chalk.red("\n❌ Documentation is stale. Run with --fix to auto-repair.\n"));
-      process.exit(1);
+      console.log(
+        chalk.red(
+          opts.fix
+            ? "\n❌ Documentation remains stale after automatic fixes. Review the remaining issues.\n"
+            : "\n❌ Documentation is stale. Run with --fix to auto-repair.\n"
+        )
+      );
+      return 1;
     }
 
     console.log();
-  } finally {
-    await repoSource.cleanup();
-  }
+    return 0;
+  });
 }

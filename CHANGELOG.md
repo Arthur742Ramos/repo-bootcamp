@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Recheck repaired documentation before the combined `docs --fix --check` gate, retain failures for unresolved issues, and clean up temporary clones before check/error exits.
+
 - Compare every specified component of preflight tool-version pins, rejecting mismatched patches and minors while retaining minimum-version semantics for the Go module directive.
 
 - Preserve dependency version alternatives and backslashes in Markdown/HTML tables; render escaped pipes within table cells instead of splitting extra columns.

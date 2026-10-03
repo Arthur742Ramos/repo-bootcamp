@@ -526,13 +526,16 @@ bootcamp docs ./my-repo
 # Auto-fix the stale sections it can repair
 bootcamp docs ./my-repo --fix
 
+# Apply available repairs and gate on the remaining issues
+bootcamp docs ./my-repo --fix --check
+
 # CI gate: exit non-zero when docs are stale
 bootcamp docs ./my-repo --check
 ```
 
 Flags version mismatches, undocumented frameworks/prerequisites, CLI drift, and
-broken badges. Pair `--check` with `--fix` in CI to fail the build and propose
-repairs in one pass.
+broken badges. Pair `--check` with `--fix` to apply available repairs, then fail
+the gate only if issues remain.
 
 ### Combined Scan
 
