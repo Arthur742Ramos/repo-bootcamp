@@ -163,7 +163,9 @@ describe("runMainCommand --no-clone behavior", () => {
         radar: { onboardingRisk: { score: 10, grade: "A", factors: [] } },
         deps: null,
       });
-      const writeGeneratedOutputs = vi.fn().mockResolvedValue({ documentCount: 1 });
+      const writeGeneratedOutputs = vi
+        .fn()
+        .mockResolvedValue({ documentCount: 1, emittedFiles: ["repo_facts.json"] });
       const resolveRunConfiguration = vi.fn().mockResolvedValue({
         config: null,
         styleConfig: {
@@ -476,61 +478,91 @@ describe("runMainCommand --no-clone behavior", () => {
     expect(cleanupRepository).toHaveBeenCalledWith("/tmp/remote-mkdir-failure");
   });
 
-  it("cleans up a remote clone when document generation fails", async () => {
-    const outputDir = join(tmpdir(), "bootcamp-generation-failure");
-    await rm(outputDir, { recursive: true, force: true });
-
-    vi.resetModules();
-    const cloneRepository = vi.fn().mockResolvedValue("/tmp/remote-generation-failure");
-    const cleanupRepository = vi.fn().mockResolvedValue(undefined);
-    const scanRepositoryFiles = vi.fn().mockResolvedValue(makeScanResult());
-    const facts = makeFacts();
-    const orchestrateAnalysis = vi.fn().mockResolvedValue(makeAnalysis(facts));
-    const prepareOutputDocuments = vi.fn().mockResolvedValue(makePreparedResult(facts));
-    const writeGeneratedOutputs = vi.fn().mockRejectedValue(new Error("generation failed"));
-    const resolveRunConfiguration = vi.fn().mockResolvedValue({
-      config: null,
-      styleConfig: makeStyleConfig(),
-      outputFormat: "markdown",
-    });
-
-    vi.doMock("../src/services/clone-service.js", () => ({
-      cloneRepository,
-      cleanupRepository,
-      scanRepositoryFiles,
-    }));
-    vi.doMock("../src/services/analysis-orchestration.js", () => ({
-      orchestrateAnalysis,
-      prepareOutputDocuments,
-    }));
-    vi.doMock("../src/services/output-writer.js", () => ({ writeGeneratedOutputs }));
-    vi.doMock("../src/services/config-resolution.js", () => ({ resolveRunConfiguration }));
-
-    const { runMainCommand } = await import("../src/commands/main-command.js");
-    const exitSpy = vi.spyOn(process, "exit").mockImplementation(((code?: number) => {
-      throw new Error(`EXIT_${code ?? 0}`);
-    }) as (code?: number) => never);
-    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
-    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
-
-    try {
-      await expect(
-        runMainCommand("https://github.com/test/repo", {
-          ...BASE_OPTIONS,
-          noClone: false,
-          output: outputDir,
-        })
-      ).rejects.toThrow("EXIT_1");
-    } finally {
-      exitSpy.mockRestore();
-      logSpy.mockRestore();
-      errorSpy.mockRestore();
+  it.each(["documents", "manifest", "summary", "summary-final"])(
+    "cleans up a remote clone when %s generation fails",
+    async (stage) => {
+      const outputDir = join(tmpdir(), "bootcamp-generation-failure");
       await rm(outputDir, { recursive: true, force: true });
-    }
 
-    expect(writeGeneratedOutputs).toHaveBeenCalled();
-    expect(cleanupRepository).toHaveBeenCalledWith("/tmp/remote-generation-failure");
-  });
+      vi.resetModules();
+      const cloneRepository = vi.fn().mockResolvedValue("/tmp/remote-generation-failure");
+      const cleanupRepository = vi.fn().mockResolvedValue(undefined);
+      const scanRepositoryFiles = vi.fn().mockResolvedValue(makeScanResult());
+      const facts = makeFacts();
+      const orchestrateAnalysis = vi.fn().mockResolvedValue(makeAnalysis(facts));
+      const prepareOutputDocuments = vi.fn().mockResolvedValue(makePreparedResult(facts));
+      const writeGeneratedOutputs =
+        stage === "documents"
+          ? vi.fn().mockRejectedValue(new Error("generation failed"))
+          : vi.fn().mockResolvedValue({ documentCount: 1, emittedFiles: ["repo_facts.json"] });
+      const metadataWrite = vi.fn();
+      vi.doMock("fs/promises", async () => {
+        const actual = await vi.importActual<typeof import("fs/promises")>("fs/promises");
+        metadataWrite.mockImplementation(async (...args: Parameters<typeof actual.writeFile>) => {
+          const target = String(args[0]);
+          if (
+            (stage === "manifest" && target.endsWith("ANALYSIS_MANIFEST.json")) ||
+            (stage === "summary" && target.endsWith("summary.json")) ||
+            (stage === "summary-final" &&
+              target.endsWith("summary.json") &&
+              metadataWrite.mock.calls.filter((call) => String(call[0]).endsWith("summary.json"))
+                .length === 2)
+          )
+            throw new Error("metadata failed");
+          return actual.writeFile(...args);
+        });
+        return { ...actual, writeFile: metadataWrite };
+      });
+      const resolveRunConfiguration = vi.fn().mockResolvedValue({
+        config: null,
+        styleConfig: makeStyleConfig(),
+        outputFormat: "markdown",
+      });
+
+      vi.doMock("../src/services/clone-service.js", () => ({
+        cloneRepository,
+        cleanupRepository,
+        scanRepositoryFiles,
+      }));
+      vi.doMock("../src/services/analysis-orchestration.js", () => ({
+        orchestrateAnalysis,
+        prepareOutputDocuments,
+      }));
+      vi.doMock("../src/services/output-writer.js", () => ({ writeGeneratedOutputs }));
+      vi.doMock("../src/services/config-resolution.js", () => ({ resolveRunConfiguration }));
+
+      const { runMainCommand } = await import("../src/commands/main-command.js");
+      const exitSpy = vi.spyOn(process, "exit").mockImplementation(((code?: number) => {
+        throw new Error(`EXIT_${code ?? 0}`);
+      }) as (code?: number) => never);
+      const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+      const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+      try {
+        await expect(
+          runMainCommand("https://github.com/test/repo", {
+            ...BASE_OPTIONS,
+            noClone: false,
+            output: outputDir,
+          })
+        ).rejects.toThrow("EXIT_1");
+      } finally {
+        exitSpy.mockRestore();
+        logSpy.mockRestore();
+        errorSpy.mockRestore();
+        await rm(outputDir, { recursive: true, force: true });
+        vi.doUnmock("fs/promises");
+      }
+
+      expect(writeGeneratedOutputs).toHaveBeenCalled();
+      expect(cleanupRepository).toHaveBeenCalledWith("/tmp/remote-generation-failure");
+      expect(logSpy.mock.calls.flat().join("\n")).not.toContain("Bootcamp Generated Successfully");
+      if (stage === "manifest")
+        expect(metadataWrite.mock.calls.map((call) => String(call[0]))).not.toContain(
+          join(outputDir, "summary.json")
+        );
+    }
+  );
 
   it("suppresses banner and decorative output in quiet mode, printing the output dir", async () => {
     const repoPath = await createLocalFixtureRepo();
@@ -563,7 +595,9 @@ describe("runMainCommand --no-clone behavior", () => {
       metrics: { approachability: { score: 90, grade: "A" }, totalFiles: 1, sourceFiles: 1 },
       health: { score: 90, grade: "A", passCount: 1, warnCount: 0, failCount: 0 },
     });
-    const writeGeneratedOutputs = vi.fn().mockResolvedValue({ documentCount: 1 });
+    const writeGeneratedOutputs = vi
+      .fn()
+      .mockResolvedValue({ documentCount: 1, emittedFiles: ["repo_facts.json"] });
     const resolveRunConfiguration = vi.fn().mockResolvedValue({
       config: null,
       styleConfig: {
@@ -699,7 +733,9 @@ describe("runMainCommand summary.json", () => {
     const scanRepositoryFiles = vi.fn().mockResolvedValue(scanResult);
     const orchestrateAnalysis = vi.fn().mockResolvedValue(makeAnalysis(facts));
     const prepareOutputDocuments = vi.fn().mockResolvedValue(makePreparedResult(facts));
-    const writeGeneratedOutputs = vi.fn().mockResolvedValue({ documentCount: 1 });
+    const writeGeneratedOutputs = vi
+      .fn()
+      .mockResolvedValue({ documentCount: 1, emittedFiles: ["repo_facts.json"] });
     const resolveRunConfiguration = vi.fn().mockResolvedValue({
       config: null,
       styleConfig: makeStyleConfig(),
@@ -752,6 +788,7 @@ describe("runMainCommand summary.json", () => {
       failCount: 0,
     });
     expect(summary.deps).toEqual({ total: 3, runtime: 2, dev: 1 });
+    expect(summary.files).toEqual(["repo_facts.json", "ANALYSIS_MANIFEST.json", "summary.json"]);
   });
 });
 
@@ -779,7 +816,10 @@ describe("runMainCommand --watch and --interactive", () => {
       },
     });
     const prepareOutputDocuments = vi.fn().mockResolvedValue(makePreparedResult(facts));
-    const writeGeneratedOutputs = vi.fn().mockResolvedValue({ documentCount: 1 });
+    const writeGeneratedOutputs = vi
+      .fn()
+      .mockResolvedValueOnce({ documentCount: 1, emittedFiles: ["INITIAL.md"] })
+      .mockResolvedValue({ documentCount: 1, emittedFiles: ["UPDATED.html"] });
     const resolveRunConfiguration = vi.fn().mockResolvedValue({
       config: null,
       styleConfig: makeStyleConfig(),
@@ -869,6 +909,12 @@ describe("runMainCommand --watch and --interactive", () => {
         await readFile(join(outputDir, "ANALYSIS_MANIFEST.json"), "utf-8")
       );
       expect(regeneratedSummary.commitSha).toBe(updatedCommitSha);
+      expect(regeneratedSummary.files).toEqual([
+        "UPDATED.html",
+        "ANALYSIS_MANIFEST.json",
+        "summary.json",
+      ]);
+      expect(regeneratedSummary.files).toHaveLength(3);
       expect(regeneratedManifest.repository.commitSha).toBe(updatedCommitSha);
 
       expect(scanRepositoryFiles.mock.calls.length).toBe(scansBefore + 1);
@@ -920,7 +966,9 @@ describe("runMainCommand --watch and --interactive", () => {
       const cleanupRepository = vi.fn();
       const orchestrateAnalysis = vi.fn().mockResolvedValue(makeAnalysis(facts));
       const prepareOutputDocuments = vi.fn().mockResolvedValue(makePreparedResult(facts));
-      const writeGeneratedOutputs = vi.fn().mockResolvedValue({ documentCount: 1 });
+      const writeGeneratedOutputs = vi
+        .fn()
+        .mockResolvedValue({ documentCount: 1, emittedFiles: ["repo_facts.json"] });
       const resolveRunConfiguration = vi.fn().mockResolvedValue({
         config: null,
         styleConfig: makeStyleConfig(),
@@ -994,7 +1042,9 @@ describe("runMainCommand --watch and --interactive", () => {
         : vi.fn().mockResolvedValue(undefined);
       const orchestrateAnalysis = vi.fn().mockResolvedValue(makeAnalysis(facts));
       const prepareOutputDocuments = vi.fn().mockResolvedValue(makePreparedResult(facts));
-      const writeGeneratedOutputs = vi.fn().mockResolvedValue({ documentCount: 1 });
+      const writeGeneratedOutputs = vi
+        .fn()
+        .mockResolvedValue({ documentCount: 1, emittedFiles: ["repo_facts.json"] });
       const resolveRunConfiguration = vi.fn().mockResolvedValue({
         config: null,
         styleConfig: makeStyleConfig(),
