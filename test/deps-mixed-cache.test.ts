@@ -24,6 +24,64 @@ afterAll(async () => {
 });
 
 describe("mixed dependency projection cache identity", () => {
+  it("misses pre-literal-fix deps entries and keeps decoded counts on a warm run", async () => {
+    const repo = "literals/cache";
+    const sha = "unchanged-literal-commit";
+    const dir = await mkdtemp(join(tmpdir(), "bootcamp-literal-cache-repo-"));
+    const hash = (seed: string) => createHash("sha256").update(seed).digest("hex").slice(0, 16);
+    try {
+      await writeFile(
+        join(dir, "pyproject.toml"),
+        String.raw`[project]
+dependencies = ["requests>=2.28; python_version >= \"3.10\" and platform_system == \"Windows\"", "flask>=2.0"]`
+      );
+      const oldValue = {
+        packageManager: "pip",
+        totalCount: 3,
+        runtime: [
+          { name: "requests", version: ">=2.28", type: "runtime" },
+          { name: "and", version: "platform_system == \\", type: "runtime" },
+          { name: "flask", version: ">=2.0", type: "runtime" },
+        ],
+        dev: [],
+        peer: [],
+        categories: [],
+      };
+      await writePhaseCache("deps", repo, sha, oldValue);
+      const entry = (await listCacheEntries()).find(
+        (entry) => entry.entry?.phase === "deps" && entry.entry.repoFullName === repo
+      )!;
+      const oldPath = join(
+        getCacheDir(),
+        `literals-cache-deps-${hash(`${repo}@${sha}|phase=deps|projection=mixed-ecosystems-v2-comments`)}.json`
+      );
+      const oldBytes = await readFile(entry.path);
+      await writeFile(oldPath, oldBytes);
+      if (entry.path !== oldPath) await rm(entry.path);
+      expect((await readPhaseCache("deps", repo, sha)).hit).toBe(false);
+      const spy = vi.spyOn(depsModule, "extractDependencies");
+      try {
+        const cold = await runParallelAnalysis(dir, await scanRepo(dir, 100), undefined, {
+          repoFullName: repo,
+          commitSha: sha,
+        });
+        expect(cold.deps?.totalCount).toBe(2);
+        expect(cold.deps?.runtime.map((dep) => dep.name)).toEqual(["requests", "flask"]);
+        const warm = await runParallelAnalysis(dir, await scanRepo(dir, 100), undefined, {
+          repoFullName: repo,
+          commitSha: sha,
+        });
+        expect(warm.deps).toEqual(cold.deps);
+        expect(spy).toHaveBeenCalledTimes(1);
+        expect(await readFile(oldPath)).toEqual(oldBytes);
+      } finally {
+        spy.mockRestore();
+      }
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
   it("misses pre-comment-fix deps entries and keeps corrected counts on a warm run", async () => {
     const repo = "comments/cache";
     const sha = "unchanged-comment-commit";

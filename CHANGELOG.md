@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Decode complete Python TOML requirement literals before projecting dependencies, retaining escaped markers, quoted brackets, Unicode names and multiline continuations without phantom packages or stale cached counts.
+
 - Ignore quoted package examples and delimiters in Python manifest comments when analyzing dependency arrays, while retaining literal URL fragments and requirement values.
 
 - Preserve URL and Markdown source links for detected default branches containing reserved characters, without changing explicit clone-ref restrictions or recorded Git refs.

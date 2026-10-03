@@ -5,6 +5,7 @@
 
 import { readFile } from "fs/promises";
 import { join } from "path";
+import { tomlArrayBodies, tomlArrayStrings } from "./toml-string-scan.js";
 import categoryPatternsJson from "./data/category-patterns.json" with { type: "json" };
 
 /**
@@ -401,17 +402,16 @@ async function extractPythonDependencies(
       };
 
       // PEP 508 array-of-strings (`["flask>=2.0", "requests[security]>=2.28"]`).
-      // Each requirement is its own quoted string, so we extract the quoted
-      // literals directly rather than splitting on commas — a comma can appear
-      // inside an environment marker (e.g. `sys_platform in ("win32", "cygwin")`).
+      // Decode complete TOML literals before stripping PEP 508 markers. Quotes,
+      // commas and brackets inside a marker are string content, not boundaries.
       // Strips extras and environment markers, mirroring requirements.txt.
       const parseRequirementArray = (
         body: string,
         type: "runtime" | "dev",
         target: Dependency[]
       ): void => {
-        for (const quoted of body.matchAll(/"([^"]*)"|'([^']*)'/g)) {
-          const item = (quoted[1] ?? quoted[2] ?? "").trim();
+        for (const quoted of tomlArrayStrings(body)) {
+          const item = quoted.trim();
           if (!item || item.startsWith("#")) continue;
           const cleaned = item.split(";")[0].trim();
           const match = cleaned.match(/^([A-Za-z0-9._-]+)(?:\[[^\]]*\])?\s*(.*)$/);
@@ -421,25 +421,6 @@ async function extractPythonDependencies(
             target.push({ name: match[1], version: version || "*", type });
           }
         }
-      };
-
-      // Return each top-level `[ ... ]` array body in a section, bracket-balanced
-      // so nested brackets (PEP 508 extras like `requests[security]`) don't
-      // terminate extraction early.
-      const arrayBodies = (body: string): string[] => {
-        const out: string[] = [];
-        for (let i = 0; i < body.length; i++) {
-          if (body[i] !== "[") continue;
-          let depth = 1;
-          let j = i + 1;
-          for (; j < body.length && depth > 0; j++) {
-            if (body[j] === "[") depth++;
-            else if (body[j] === "]") depth--;
-          }
-          out.push(body.slice(i + 1, j - 1));
-          i = j - 1;
-        }
-        return out;
       };
 
       // Legacy Poetry (`[tool.poetry.dependencies]` / `dev-dependencies`).
@@ -461,28 +442,28 @@ async function extractPythonDependencies(
       }
 
       // PEP 621 `[project]` (uv, hatch, pdm, setuptools, modern Poetry): the
-      // `dependencies = [...]` array. The first balanced array in the section
-      // body is the dependencies list.
+      // `dependencies = [...]` array, ignoring quoted metadata and brackets
+      // inside complete string literals.
       if (sections.has("project")) {
         const projectBody = sections.get("project")!;
-        const depsArray = projectBody.match(/dependencies\s*=\s*\[/);
-        if (depsArray) {
-          const tail = projectBody.slice(depsArray.index! + depsArray[0].length - 1);
-          parseRequirementArray(arrayBodies(tail)[0] ?? "", "runtime", runtime);
-        }
+        parseRequirementArray(
+          tomlArrayBodies(projectBody, "dependencies")[0] ?? "",
+          "runtime",
+          runtime
+        );
       }
 
       // PEP 621 optional dependencies: each extra is its own array. Treated as
       // runtime (installable features, not dev tooling).
       if (sections.has("project.optional-dependencies")) {
-        for (const arr of arrayBodies(sections.get("project.optional-dependencies")!)) {
+        for (const arr of tomlArrayBodies(sections.get("project.optional-dependencies")!)) {
           parseRequirementArray(arr, "runtime", runtime);
         }
       }
 
       // PEP 735 dependency groups: `[dependency-groups]` (dev tooling).
       if (sections.has("dependency-groups")) {
-        for (const arr of arrayBodies(sections.get("dependency-groups")!)) {
+        for (const arr of tomlArrayBodies(sections.get("dependency-groups")!)) {
           parseRequirementArray(arr, "dev", dev);
         }
       }
