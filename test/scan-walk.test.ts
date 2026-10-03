@@ -11,6 +11,7 @@ const io = vi.hoisted(() => ({
   failOpen: new Set<string>(),
   failRead: new Set<string>(),
   failStat: new Set<string>(),
+  directoryLinks: new Set<string>(),
 }));
 vi.mock("fs/promises", async (importOriginal) => {
   const original = await importOriginal<typeof import("fs/promises")>();
@@ -28,6 +29,19 @@ vi.mock("fs/promises", async (importOriginal) => {
               throw Object.assign(new Error("read failed"), { code: "EIO" });
             } finally {
               await handle.close();
+            }
+          },
+        };
+      }
+      if (io.directoryLinks.size) {
+        return {
+          async *[Symbol.asyncIterator]() {
+            for await (const entry of handle) {
+              if (io.directoryLinks.has(join(path, entry.name))) {
+                yield { name: entry.name, isDirectory: () => true, isSymbolicLink: () => false };
+              } else {
+                yield entry;
+              }
             }
           },
         };
@@ -67,6 +81,7 @@ afterEach(async () => {
   io.failOpen.clear();
   io.failRead.clear();
   io.failStat.clear();
+  io.directoryLinks.clear();
 });
 
 describe("bounded repository walk", () => {
@@ -76,7 +91,7 @@ describe("bounded repository walk", () => {
     expect(files).toHaveLength(1);
     expect(files[0].isDirectory).toBe(true);
     expect(io.opened).toEqual([root]);
-    expect(io.stated).toEqual([]);
+    expect(io.stated).toEqual([join(root, files[0].path)]);
   });
 
   it("does not stat remaining files after the limit", async () => {
@@ -96,6 +111,17 @@ describe("bounded repository walk", () => {
     const files = await walkRepositoryFiles(root, 100, []);
     expect(files.map((file) => file.path).sort()).toEqual(["src", "src/main.ts"]);
     expect(io.opened.some((path) => path.endsWith("link-dir"))).toBe(false);
+  });
+
+  it("rejects directory links even when a Dirent reports them as directories", async () => {
+    const root = await fixture(["src/main.ts"]);
+    const link = join(root, "link-dir");
+    await symlink(join(root, "src"), link, "junction");
+    io.directoryLinks.add(link);
+    const files = await walkRepositoryFiles(root, 100, []);
+    expect(files.map((file) => file.path).sort()).toEqual(["src", "src/main.ts"]);
+    expect(io.opened).not.toContain(link);
+    expect(io.stated).toContain(link);
   });
 
   it("continues past unreadable directories and deleted files", async () => {

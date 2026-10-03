@@ -66,6 +66,7 @@ function compileIgnores(patterns: readonly string[]) {
           nonegate: true,
           nobrace: true,
           posix: true,
+          windows: false,
           strictSlashes: false,
         }),
         absolute: isAbsolute(normalized),
@@ -115,7 +116,16 @@ export async function walkRepositoryFiles(
             const subject = absolute ? absolutePath : path;
             return prune && (matcher(subject) || (subtree && matcher(`${subject}/`)));
           });
-        if (isDirectory && !pruned) pending.push(path);
+        if (isDirectory && !pruned) {
+          try {
+            // Older Windows Dirents can report junctions as directories. Validate
+            // before retaining an entry as well as before opening queued trees.
+            if (!(await lstat(join(scanRoot, path))).isDirectory()) continue;
+          } catch {
+            continue;
+          }
+          pending.push(path);
+        }
         if (excluded) continue;
         let size = 0;
         if (!isDirectory) {
