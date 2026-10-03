@@ -14,11 +14,47 @@ async function repoWith(files: Record<string, string>): Promise<string> {
   return dir;
 }
 
-describe("task discovery package managers", () => {
+describe("task discovery commands", () => {
   afterEach(async () => {
     await Promise.all(dirs.map((dir) => rm(dir, { recursive: true, force: true })));
     dirs.length = 0;
   });
+
+  it("reports commands from the selected Make and Compose files and commented Python headers", async () => {
+    const dir = await repoWith({
+      Makefile: "build:\n\t@echo wrong-file\n",
+      GNUmakefile: "test:\n\t@echo selected-file\n",
+      "docker-compose.yml": "services: {legacy: {image: nginx}}",
+      "compose.yaml":
+        'services: # local services\n  "web-app": {image: nginx, init: !!bool true, scale: !!int 2, command: !!binary ZWNobyBvaw==, x-date: !!timestamp 2026-01-01}\n',
+      "pyproject.toml": '[project.scripts] # installed entry points\nserve = "app:main"\n',
+    });
+    const result = await runCli(["tasks", dir, "--json"]);
+    expect(result.exitCode).toBe(0);
+    const payload = JSON.parse(result.stdout);
+    expect(payload.tasks.map((task: { command: string }) => task.command)).toEqual([
+      "make test",
+      "docker compose up web-app",
+      "serve",
+    ]);
+    expect(payload.gettingStarted).toEqual(["make test", "serve"]);
+    const report = await runCli(["tasks", dir]);
+    expect(report.exitCode).toBe(0);
+    expect(report.stdout).toContain("make test");
+    expect(report.stdout).toContain("docker compose up web-app");
+    expect(report.stdout).not.toContain("make build");
+    expect(report.stdout).not.toContain("docker compose up legacy");
+  }, 60_000);
+
+  it("does not suggest fallback services when the selected Compose document is invalid", async () => {
+    const dir = await repoWith({
+      "compose.yaml": "services: [",
+      "docker-compose.yml": "services: {legacy: {image: nginx}}",
+    });
+    const result = await runCli(["tasks", dir, "--json"]);
+    expect(result.exitCode).toBe(0);
+    expect(JSON.parse(result.stdout)).toMatchObject({ tasks: [], gettingStarted: [] });
+  }, 60_000);
 
   it.each(["npm", "pnpm", "yarn", "bun"])(
     "uses declared %s for runnable and getting-started commands",

@@ -366,6 +366,31 @@ vars:
 });
 
 describe("parseDockerCompose", () => {
+  it("accepts standard explicit data tags without changing implicit service names", () => {
+    const tasks = parseDockerCompose(`services:
+  on:
+    image: nginx
+    init: !!bool true
+    scale: !!int 2
+    cpus: !!float 1.5
+    command: !!binary ZWNobyBvaw==
+    entrypoint: !!null null
+    x-date: !!timestamp 2026-01-01
+    x-tags: !!set {development: null}
+    x-pairs: !!pairs [{key: value}]
+    x-ordered: !!omap [{key: value}]
+  absent: !!null null
+  scalar: !!bool true
+  binary: !!binary aGVsbG8=
+  date: !!timestamp 2026-01-01
+  pairs: !!pairs [{image: nginx}]
+  ordered: !!omap [{image: nginx}]
+`);
+    expect(tasks.map((task) => task.command)).toEqual(["docker compose up on"]);
+    // This Compose compatibility extension does not expand Taskfile's tag set.
+    expect(parseTaskfile("tasks: {helper: {internal: !!bool true}}")).toEqual([]);
+  });
+
   it("maps services to `docker compose up <service>` run tasks", () => {
     const yaml = [
       "services:",
@@ -380,6 +405,89 @@ describe("parseDockerCompose", () => {
       { name: "web", command: "docker compose up web", source: "docker-compose", category: "run" },
       { name: "db", command: "docker compose up db", source: "docker-compose", category: "run" },
     ]);
+  });
+
+  it("reads commented and quoted services without exposing nested properties", () => {
+    const tasks = parseDockerCompose(`"services": # local development
+  'web-app':
+    image: nginx
+    environment:
+      nested: value
+  "db.v2": {image: postgres}
+volumes:
+  data: {}
+`);
+    expect(tasks.map((task) => task.command)).toEqual([
+      "docker compose up web-app",
+      "docker compose up db.v2",
+    ]);
+  });
+
+  it("supports flow mappings, aliases and standard YAML merges", () => {
+    const tasks = parseDockerCompose(`x-services: &services
+  db: {image: postgres}
+x-web: &web {image: nginx}
+services:
+  <<: *services
+  web:
+    <<: *web
+    ports: ["8080:80"]
+`);
+    expect(tasks.map((task) => task.command)).toEqual([
+      "docker compose up db",
+      "docker compose up web",
+    ]);
+    expect(parseDockerCompose("services: {web: {image: nginx}}")[0].name).toBe("web");
+  });
+
+  it("preserves scalar-looking service names and terminates options for leading hyphens", () => {
+    const tasks = parseDockerCompose(`services:
+  on: {image: nginx}
+  123: {image: nginx}
+  _worker: {image: nginx}
+  .worker: {image: nginx}
+  "--build": {image: nginx}
+`);
+    expect(tasks.map((task) => task.command)).toEqual([
+      "docker compose up 123",
+      "docker compose up on",
+      "docker compose up _worker",
+      "docker compose up .worker",
+      "docker compose up -- --build",
+    ]);
+  });
+
+  it("returns no tasks for malformed, duplicate, tagged or non-mapping YAML", () => {
+    for (const content of [
+      "services: [",
+      "[]",
+      "services: []",
+      "services: null",
+      "services: nginx",
+      "services:\n  web: {}\n  web: {}\n",
+      "services: !!js/function 'function () {}'",
+      "services: {web: !custom {image: nginx}}",
+      "services: {web: {init: !!bool invalid}}",
+      "services: {web: !!int {image: nginx}}",
+      "services: !!timestamp 2026-01-01",
+      "services: !!binary aGVsbG8=",
+      "services: !!omap [{web: {image: nginx}}]",
+    ]) {
+      expect(parseDockerCompose(content)).toEqual([]);
+    }
+  });
+
+  it("omits invalid service definitions and names without losing valid siblings", () => {
+    const tasks = parseDockerCompose(`services:
+  web: {image: nginx}
+  absent:
+  scalar: nginx
+  list: [nginx]
+  "web; echo unintended": {image: nginx}
+  "web app": {image: nginx}
+  "$(echo unintended)": {image: nginx}
+`);
+    expect(tasks.map((task) => task.command)).toEqual(["docker compose up web"]);
   });
 });
 
@@ -402,6 +510,19 @@ describe("parsePyproject", () => {
 
   it("ignores keys outside a scripts section", () => {
     expect(parsePyproject("[tool.black]\nline-length = 88\n")).toEqual([]);
+  });
+
+  it("accepts trailing comments on supported headers and later section boundaries", () => {
+    const tasks = parsePyproject(`[tool.poetry.scripts] # development tools
+serve = "app:main" # entry point
+[tool.poetry.dependencies] # not commands
+python = "^3.12"
+[project.scripts]# installed console scripts
+mycli = "pkg.cli:run"
+[tool.black] # not commands
+line-length = 88
+`);
+    expect(tasks.map((task) => task.command)).toEqual(["poetry run serve", "mycli"]);
   });
 });
 
@@ -485,6 +606,45 @@ describe("detectPackageManager", () => {
 });
 
 describe("discoverTasks", () => {
+  it.each(["Makefile", "makefile"])("prefers GNUmakefile over %s like GNU Make", async (name) => {
+    const dir = await repoWith({
+      [name]: "build:\n\t@echo wrong-file\n",
+      GNUmakefile: "test:\n\t@echo selected-file\n",
+    });
+    expect((await discoverTasks(dir)).map((task) => task.command)).toEqual(["make test"]);
+  });
+
+  it("does not fall back when the preferred Makefile is empty", async () => {
+    const dir = await repoWith({ GNUmakefile: "", Makefile: "build:\n\t@echo ignored\n" });
+    expect(await discoverTasks(dir)).toEqual([]);
+  });
+
+  it("uses Compose's default filename order, including its legacy fallbacks", async () => {
+    const names = ["compose.yaml", "compose.yml", "docker-compose.yml", "docker-compose.yaml"];
+    const dir = await repoWith(
+      Object.fromEntries(
+        names.map((name, index) => [name, `services: {service${index}: {image: nginx}}`])
+      )
+    );
+    for (let index = 0; index < names.length; index++) {
+      expect((await discoverTasks(dir)).map((task) => task.command)).toEqual([
+        `docker compose up service${index}`,
+      ]);
+      await rm(join(dir, names[index]));
+    }
+  });
+
+  it.each(["", "services: ["])(
+    "does not invent legacy Compose services when the canonical file is empty or malformed (%j)",
+    async (canonical) => {
+      const dir = await repoWith({
+        "compose.yaml": canonical,
+        "docker-compose.yml": "services: {ignored: {image: nginx}}",
+      });
+      expect(await discoverTasks(dir)).toEqual([]);
+    }
+  );
+
   it("aggregates tasks across ecosystems in a stable order", async () => {
     const dir = await repoWith({
       "package.json": JSON.stringify({ scripts: { build: "tsc" } }),
