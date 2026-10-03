@@ -9,6 +9,7 @@ import { fileURLToPath } from "node:url";
 import { getStyleConfig, type StyleConfig } from "./plugins.js";
 import { markdownToHtml } from "./formatter.js";
 import { buildBlobUrl } from "./source-links.js";
+import { findGuidanceCommand } from "./command-guidance.js";
 
 /** Maximum items shown in summary sections of BOOTCAMP.md */
 const MAX_BOOTCAMP_SUMMARY_ITEMS = 5;
@@ -311,10 +312,10 @@ export function generateBootcamp(
   // Only promise "Run the dev server" when a dev/start/serve command actually
   // exists. Libraries (no dev script) fall back to a neutral build/verify label
   // instead of telling a newcomer to "Run the dev server: npm install".
-  const devCommand = facts.quickstart.commands.find(
-    (c) => /dev|start|serve/i.test(c.name) || /dev|start|serve/i.test(c.command)
-  );
-  const fallbackCommand = facts.quickstart.commands[0]?.command;
+  const devCommand = findGuidanceCommand(facts.quickstart.commands, "dev");
+  const fallbackCommand =
+    findGuidanceCommand(facts.quickstart.commands, "build")?.command ??
+    findGuidanceCommand(facts.quickstart.commands, "test")?.command;
   const runVerifyStep = devCommand
     ? `Run the dev server: \`${devCommand.command}\``
     : fallbackCommand
@@ -415,9 +416,7 @@ export function generateOnboarding(
     "_No common errors documented_";
 
   const testDirs = facts.structure.testDirs.map((d) => `- \`${d}\``).join("\n");
-  const testCmd = facts.quickstart.commands.find(
-    (c) => c.name.includes("test") || c.command.includes("test")
-  );
+  const testCmd = findGuidanceCommand(facts.quickstart.commands, "test");
   const audienceFiles = getAudienceFiles(facts, options?.audience)
     .map((file) => `- \`${file}\``)
     .join("\n");
@@ -431,9 +430,7 @@ export function generateOnboarding(
 
   // Mirror the BOOTCAMP fix: only tell newcomers to start a dev server when one
   // exists; libraries get a build/verify loop instead.
-  const devCommand = facts.quickstart.commands.find(
-    (c) => /dev|start|serve|watch/i.test(c.name) || /dev|start|serve|watch/i.test(c.command)
-  );
+  const devCommand = findGuidanceCommand(facts.quickstart.commands, "dev");
   const devLoopStep = devCommand
     ? `Start the dev server/watch mode (\`${devCommand.command}\`)`
     : "Build the project and run it to verify your setup";

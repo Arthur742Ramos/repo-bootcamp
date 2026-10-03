@@ -350,6 +350,118 @@ describe("bootcamp CLI", () => {
     90_000
   );
 
+  it.each([
+    [
+      "install",
+      [{ name: "install", command: "uv sync --frozen --group dev", source: "README.md" }],
+      false,
+      null,
+    ],
+    [
+      "paths",
+      [{ name: "latest", command: "node ./scripts/server-test.js", source: "README.md" }],
+      false,
+      null,
+    ],
+    [
+      "node-dev",
+      [
+        { name: "install", command: "npm install --save-dev", source: "README.md" },
+        { name: "launch", command: "npm run app:dev", source: "README.md" },
+      ],
+      true,
+      null,
+    ],
+    [
+      "python-tests",
+      [
+        { name: "install", command: "uv sync --group dev", source: "README.md" },
+        { name: "verify", command: "uv run --group dev pytest", source: "README.md" },
+      ],
+      false,
+      "uv run --group dev pytest",
+    ],
+    [
+      "test-watch",
+      [{ name: "verify", command: "npm run test:watch", source: "README.md" }],
+      false,
+      "npm run test:watch",
+    ],
+    [
+      "mixed-test-watch-build",
+      [{ name: "unit tests", command: "npm run watch:test-build", source: "README.md" }],
+      false,
+      "npm run watch:test-build",
+    ],
+    ["named-server", [{ name: "server", command: "node app.js", source: "README.md" }], true, null],
+    [
+      "script-server",
+      [{ name: "launch", command: "npm run server", source: "README.md" }],
+      true,
+      null,
+    ],
+    [
+      "uv-filename",
+      [{ name: "inspect", command: "uv run dev-tools.py --self-test", source: "README.md" }],
+      false,
+      null,
+    ],
+    [
+      "poetry-filename",
+      [{ name: "inspect", command: "poetry run build-tools.py", source: "README.md" }],
+      false,
+      null,
+    ],
+  ] as const)(
+    "uses accurate command roles in real CLI guidance for %s",
+    async (_name, commands, hasDev, testCommand) => {
+      const tempDir = await mkdtemp(join(tmpdir(), "bootcamp-command-cli-"));
+      tempDirs.push(tempDir);
+      const repoPath = join(tempDir, "repo");
+      await mkdir(repoPath);
+      await writeFile(
+        join(repoPath, "package.json"),
+        JSON.stringify({ name: "fixture", version: "1.0.0" })
+      );
+      await writeFile(join(repoPath, "index.js"), "export const sample = 1;\n");
+      await writeFile(
+        join(repoPath, "README.md"),
+        `# Commands\n${commands.map((c) => c.command).join("\n")}\n`
+      );
+      const facts = buildMockFacts("local/repo");
+      facts.quickstart.commands = commands.map((command) => ({ ...command }));
+      const responseFile = join(tempDir, "response.json");
+      await writeFile(responseFile, JSON.stringify(facts));
+      const outputDir = join(tempDir, "generated");
+      const result = await runCli(
+        [repoPath, "--no-clone", "--no-cache", "--output", outputDir, "--style", "oss"],
+        {
+          NODE_ENV: "test",
+          REPO_BOOTCAMP_TEST_LLM_RESPONSE_FILE: responseFile,
+        }
+      );
+      expect(result.exitCode).toBe(0);
+      const onboarding = await readFile(join(outputDir, "ONBOARDING.md"), "utf-8");
+      const bootcamp = await readFile(join(outputDir, "BOOTCAMP.md"), "utf-8");
+      expect(onboarding.includes("Start the dev server/watch mode")).toBe(hasDev);
+      expect(bootcamp.includes("Run the dev server:")).toBe(hasDev);
+      if (_name.endsWith("-filename")) {
+        expect(bootcamp).not.toContain(`Build/verify: \`${commands[0].command}\``);
+      }
+      if (testCommand) {
+        expect(onboarding).toContain(`## Running Tests\n\n\`\`\`bash\n${testCommand}\n\`\`\``);
+      } else {
+        expect(onboarding).toContain("_No test command detected_");
+      }
+      const install = commands.find((command) => command.name === "install");
+      if (install) {
+        expect(onboarding).toContain(`# Install dependencies\n${install.command}`);
+        expect(bootcamp).not.toContain(`Build/verify: \`${install.command}\``);
+      }
+    },
+    90_000
+  );
+
   it.each(["html", "pdf"] as const)(
     "generates a navigable %s kit through the real CLI",
     async (format) => {
