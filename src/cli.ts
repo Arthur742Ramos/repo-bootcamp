@@ -484,11 +484,11 @@ program
     "Ask a single question non-interactively and print the answer to stdout"
   )
   .option("-v, --verbose", "Show detailed output")
-  .action(async (repoUrl: string, question: string | undefined, rawOpts) => {
-    const opts = getActionOptions<AskActionOptions>(rawOpts as Command | AskActionOptions);
+  .action(async (repoUrl: string, question: string | undefined, _rawOpts, command: Command) => {
+    const opts = command.optsWithGlobals() as AskActionOptions;
     await runAskCommand(repoUrl, {
-      branch: opts.branch || getCliFlagValue(["--branch", "-b"]),
-      model: opts.model || getCliFlagValue(["--model"]),
+      branch: opts.branch,
+      model: opts.model,
       noClone: isNegativeOptionEnabled(opts, "noClone", "clone"),
       verbose: opts.verbose,
       // Positional wins over the -q/--question flag when both are given.
@@ -507,14 +507,14 @@ program
   )
   .option("--keep-temp", "Keep temporary clone directory")
   .option("-v, --verbose", "Show detailed output")
-  .action(async (repoPr: string, rawOpts) => {
-    const opts = getActionOptions<DiffActionOptions>(rawOpts as Command | DiffActionOptions);
+  .action(async (repoPr: string, _rawOpts, command: Command) => {
+    const opts = command.optsWithGlobals() as DiffActionOptions;
     await runPullRequestDiff(repoPr, {
-      output: opts.output || getCliFlagValue(["--output", "-o"]),
-      format: opts.format || getCliFlagValue(["--format"]),
-      fullClone: opts.fullClone || hasCliFlag(["--full-clone"]),
-      keepTemp: opts.keepTemp || hasCliFlag(["--keep-temp"]),
-      verbose: opts.verbose || hasCliFlag(["--verbose", "-v"]),
+      output: opts.output,
+      format: command.getOptionValueSourceWithGlobals("format") === "cli" ? opts.format : undefined,
+      fullClone: opts.fullClone ?? false,
+      keepTemp: opts.keepTemp ?? false,
+      verbose: opts.verbose ?? false,
     });
   });
 
@@ -562,13 +562,13 @@ program
   .option("--fix", "Auto-fix stale documentation sections")
   .option("-b, --branch <branch>", "Branch to analyze", "")
   .option("-v, --verbose", "Show detailed output")
-  .action(async (repoUrl: string, rawOpts) => {
-    const opts = getActionOptions<DocsActionOptions>(rawOpts as Command | DocsActionOptions);
+  .action(async (repoUrl: string, _rawOpts, command: Command) => {
+    const opts = command.optsWithGlobals() as DocsActionOptions;
     await runDocsCommand(repoUrl, {
       check: opts.check,
       fix: opts.fix,
-      branch: opts.branch || getCliFlagValue(["--branch", "-b"]),
-      verbose: opts.verbose || hasCliFlag(["--verbose", "-v"]),
+      branch: opts.branch,
+      verbose: opts.verbose ?? false,
     });
   });
 

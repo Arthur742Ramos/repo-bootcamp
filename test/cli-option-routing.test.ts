@@ -22,7 +22,7 @@ vi.mock("../src/web/server.js", () => ({
   startServer: (...args: any[]) => startServer(...args),
 }));
 
-import { program } from "../src/cli.js";
+let program: import("commander").Command;
 
 async function runArgv(argv: string[]): Promise<void> {
   const saved = process.argv;
@@ -35,8 +35,10 @@ async function runArgv(argv: string[]): Promise<void> {
 }
 
 describe("CLI option routing past root-command flag collisions", () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.clearAllMocks();
+    vi.resetModules();
+    ({ program } = await import("../src/cli.js"));
   });
 
   it("routes ask --branch and --model to the ask command", async () => {
@@ -125,5 +127,73 @@ describe("CLI option routing past root-command flag collisions", () => {
     expect(opts.format).toBeUndefined();
     expect(opts.fullClone).toBe(false);
     expect(opts.keepTemp).toBe(false);
+  });
+
+  it.each(["ask", "docs"])("uses the final repeated branch for %s", async (action) => {
+    await runArgv(["--branch", "main", action, "./repo", "--branch", "release"]);
+    const run = action === "ask" ? runAskCommand : runDocsCommand;
+    expect(run.mock.calls[0][1].branch).toBe("release");
+  });
+
+  it.each(["ask", "docs"])("preserves an explicit blank branch reset for %s", async (action) => {
+    await runArgv([action, "./repo", "--branch", "main", "--branch", ""]);
+    const run = action === "ask" ? runAskCommand : runDocsCommand;
+    expect(run.mock.calls[0][1].branch).toBe("");
+  });
+
+  it("preserves final Ask model and positional question precedence", async () => {
+    await runArgv([
+      "ask",
+      "./repo",
+      "positional",
+      "--model",
+      "first",
+      "--model",
+      "--verbose",
+      "--question",
+      "flag",
+    ]);
+    expect(runAskCommand.mock.calls[0][1]).toMatchObject({
+      model: "--verbose",
+      question: "positional",
+    });
+    expect(runAskCommand.mock.calls[0][1].verbose).not.toBe(true);
+  });
+
+  it("routes final Diff output and format, including blank resets", async () => {
+    await runArgv([
+      "diff",
+      "owner/repo#1",
+      "--output",
+      "first",
+      "--output",
+      "",
+      "--format",
+      "html",
+      "--format",
+      "",
+    ]);
+    expect(runPullRequestDiff.mock.calls[0][1]).toMatchObject({
+      output: "",
+      format: "",
+      keepTemp: false,
+    });
+  });
+
+  it.each(["--keep-temp", "--full-clone", "--verbose"])(
+    "keeps Diff output operand %s separate from booleans",
+    async (operand) => {
+      await runArgv(["diff", "owner/repo#1", "--output", operand]);
+      expect(runPullRequestDiff.mock.calls[0][1]).toMatchObject({
+        output: operand,
+        keepTemp: false,
+        fullClone: false,
+        verbose: false,
+      });
+    }
+  );
+  it("preserves short branch/output aliases around the command boundary", async () => {
+    await runArgv(["-o", "before", "diff", "owner/repo#1", "-o", "after"]);
+    expect(runPullRequestDiff.mock.calls[0][1].output).toBe("after");
   });
 });
