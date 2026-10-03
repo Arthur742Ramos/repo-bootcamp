@@ -51,7 +51,9 @@ function validateRunOptions(options: BootcampOptions): void {
  * subdir that would escape the repository root (absolute or containing `..`).
  * Mutates `options` so the normalized values flow through to the scan call.
  */
-export function normalizeScanScope(options: BootcampOptions): void {
+export function normalizeScanScope(
+  options: BootcampOptions | Pick<BootcampOptions, "exclude" | "subdir">
+): void {
   if (options.exclude) {
     const cleaned = options.exclude.map((glob) => glob.trim()).filter((glob) => glob.length > 0);
     options.exclude = cleaned.length > 0 ? cleaned : undefined;

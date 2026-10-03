@@ -194,6 +194,7 @@ interface OwnersActionOptions {
 interface TasksActionOptions {
   [key: string]: unknown;
   branch?: string;
+  subdir?: string;
   json?: boolean;
   category?: string;
   keepTemp?: boolean;
@@ -785,6 +786,7 @@ program
     'Answer "what can I run?": discover commands from package.json, Makefile, justfile, Taskfile, docker-compose, pyproject, composer & qualifying Cargo manifests (supports local paths)'
   )
   .option("-b, --branch <branch>", "Branch to analyze", "")
+  .option("--subdir <path>", "Discover tasks in a repository directory")
   .option("--json", "Output the discovered tasks as JSON for machine consumption")
   .option(
     "-c, --category <category>",
@@ -797,10 +799,11 @@ program
     const branch = opts.branch || getCliFlagValue(["--branch", "-b"]) || "";
     await runTasksCommand(repoUrl, {
       branch,
+      subdir: opts.subdir || getCliFlagValue(["--subdir"]) || undefined,
       json: opts.json || false,
       category: opts.category || getCliFlagValue(["--category", "-c"]) || undefined,
-      keepTemp: opts.keepTemp || false,
-      verbose: opts.verbose || false,
+      keepTemp: opts.keepTemp || hasCliFlag(["--keep-temp"]),
+      verbose: opts.verbose || hasCliFlag(["--verbose", "-v"]),
     });
   });
 

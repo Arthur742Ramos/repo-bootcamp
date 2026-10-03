@@ -8,10 +8,14 @@ import {
   type TaskCategory,
 } from "../tasks.js";
 import { withResolvedRepo } from "./_shared.js";
+import { normalizeScanScope } from "../services/config-resolution.js";
+import { resolveScanRoot } from "../services/scan-scope.js";
 
 /** Options accepted by the `bootcamp tasks` command. */
 export interface TasksCommandOptions {
   branch?: string;
+  /** Discover tasks only inside this contained repository directory. */
+  subdir?: string;
   /** Emit the discovered tasks as JSON for machine consumption. */
   json?: boolean;
   /** Only show tasks in this category (install, build, test, lint, dev, run, release, other). */
@@ -33,9 +37,15 @@ const CATEGORY_LABELS: Record<TaskCategory, string> = {
   other: "📋 Other",
 };
 
-function printReport(repoName: string, tasks: DiscoveredTask[], category?: TaskCategory): void {
+function printReport(
+  repoName: string,
+  tasks: DiscoveredTask[],
+  category?: TaskCategory,
+  subdir?: string
+): void {
   console.log(chalk.bold("\n🛠️  What Can I Run?"));
   console.log(chalk.dim(`Repository: ${repoName}\n`));
+  if (subdir) console.log(chalk.dim(`Run these commands from: ${subdir}\n`));
 
   if (tasks.length === 0) {
     if (category) {
@@ -86,6 +96,16 @@ function printReport(repoName: string, tasks: DiscoveredTask[], category?: TaskC
  * `--json`. Deterministic; never invokes the LLM.
  */
 export async function runTasksCommand(repoUrl: string, opts: TasksCommandOptions): Promise<void> {
+  const scope = { subdir: opts.subdir };
+  try {
+    normalizeScanScope(scope);
+  } catch (error: unknown) {
+    console.error(
+      chalk.red(`Task discovery failed: ${error instanceof Error ? error.message : String(error)}`)
+    );
+    process.exit(1);
+    return;
+  }
   // Validate --category up front: it is repo-independent, so a typo should fail
   // fast instead of cloning a remote repo before we ever look at the flag.
   let category: TaskCategory | undefined;
@@ -103,7 +123,10 @@ export async function runTasksCommand(repoUrl: string, opts: TasksCommandOptions
   }
 
   await withResolvedRepo(repoUrl, opts, "Task discovery failed", async (repoSource) => {
-    const all = await discoverTasks(repoSource.path);
+    const taskRoot = scope.subdir
+      ? await resolveScanRoot(repoSource.path, scope.subdir)
+      : repoSource.path;
+    const all = await discoverTasks(taskRoot);
     const tasks = category ? all.filter((t) => t.category === category) : all;
 
     if (opts.json) {
@@ -112,6 +135,7 @@ export async function runTasksCommand(repoUrl: string, opts: TasksCommandOptions
           {
             repo: repoSource.repoInfo.fullName,
             category: category ?? null,
+            ...(scope.subdir ? { subdir: scope.subdir } : {}),
             gettingStarted: suggestGettingStarted(all).map((t) => t.command),
             tasks,
           },
@@ -120,7 +144,7 @@ export async function runTasksCommand(repoUrl: string, opts: TasksCommandOptions
         )
       );
     } else {
-      printReport(repoSource.repoInfo.fullName, tasks, category);
+      printReport(repoSource.repoInfo.fullName, tasks, category, scope.subdir);
     }
     return;
   });

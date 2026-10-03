@@ -812,6 +812,9 @@ bootcamp tasks https://github.com/owner/repo
 # Works on local paths too
 bootcamp tasks ./my-repo
 
+# Select a monorepo package (commands run from that directory)
+bootcamp tasks ./my-repo --subdir packages/app
+
 # Only show one category (install, build, test, lint, dev, run, release, other)
 bootcamp tasks ./my-repo --category test
 
@@ -823,7 +826,12 @@ Deterministically parses the task-definition files a repo already ships —
 `package.json` scripts (package-manager aware), `Makefile`, `justfile`,
 go-task `Taskfile`, `docker-compose`, `pyproject.toml` (poetry / PEP 621), and
 `composer.json`, plus qualifying `Cargo.toml` build/test conventions — then groups the results by category and suggests a
-first-session sequence (install → build → test → dev/run). Never invokes the
+first-session sequence (install → build → test → dev/run). `--subdir` uses the same
+contained directory selection as onboarding; invalid or missing selections fail.
+Scoped JSON includes the selected `subdir`, while unscoped output retains its shape.
+Standalone discovery reads supported task-definition files directly and retains its
+own parser limits; onboarding `--exclude` and `--max-files` do not filter this report.
+Never invokes the
 LLM, so non-npm repos (Rust, Go, Python, PHP) finally surface runnable
 commands. Full onboarding scans use the same declared package manager and script
 commands as task discovery; `package.json` declarations take precedence over
