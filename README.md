@@ -877,12 +877,36 @@ npm install -g @mermaid-js/mermaid-cli
 # Print a completion script for your shell (bash, zsh, or fish)
 bootcamp completion zsh
 
-# Install it (zsh example)
+# Install the Zsh autoload file
+mkdir -p ~/.zsh/completions
 bootcamp completion zsh > ~/.zsh/completions/_bootcamp
 ```
 
-The script is generated from the live command tree, so it always matches the
-installed version. Supported shells: `bash`, `zsh`, `fish`.
+Add these lines to `~/.zshrc`, placing the `fpath` line before your existing
+`compinit` call (or use the call below if you do not have one), then start a new
+shell:
+
+```zsh
+fpath=(~/.zsh/completions $fpath)
+autoload -Uz compinit
+compinit
+```
+
+For the current Zsh session, you can instead run
+`source <(bootcamp completion zsh)`; the script initializes completion if needed
+and registers itself. In Bash, use `source <(bootcamp completion bash)` in your
+current session or `~/.bashrc`. For Fish:
+
+```fish
+mkdir -p ~/.config/fish/completions
+bootcamp completion fish > ~/.config/fish/completions/bootcamp.fish
+```
+
+Regenerate installed files after upgrading Bootcamp. Scripts derive nested
+commands, aliases, and option values from the installed command tree, so
+`bootcamp cache list --j` offers `--json` and `bootcamp --branch main scan`
+uses the scan options. Paths and arbitrary option values use shell file
+completion rather than command suggestions.
 
 ### Cache Management
 

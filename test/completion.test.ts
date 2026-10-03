@@ -109,10 +109,10 @@ describe("renderBash", () => {
   });
 
   it("lists subcommands and routes per-command options via a case statement", () => {
-    expect(script).toContain('local commands="a ask serve web"');
+    expect(script).toContain("candidates+=('a' 'ask' 'serve' 'web')");
     // ask|a share a case arm; options sorted.
-    expect(script).toContain("ask|a)");
-    expect(script).toContain("--model --verbose");
+    expect(script).toContain("'0:ask'|'0:a')");
+    expect(script).toContain("'--model' '--no-clone' '--verbose'");
   });
 });
 
@@ -143,8 +143,8 @@ describe("renderFish", () => {
     expect(script).toContain("-a 'web'");
   });
 
-  it("guards per-command options with __fish_seen_subcommand_from", () => {
-    expect(script).toContain("__fish_seen_subcommand_from ask");
+  it("guards per-command options with the parsed command state", () => {
+    expect(script).toContain("__fish_bootcamp_at 1 option");
     expect(script).toContain("-l 'model'");
   });
 });
