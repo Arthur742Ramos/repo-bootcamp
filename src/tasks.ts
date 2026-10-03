@@ -150,22 +150,87 @@ export function parsePackageJsonScripts(
   return tasks;
 }
 
+/** Locate a literal Make delimiter, respecting backslash quoting. */
+function makeDelimiter(line: string, delimiter: string): number {
+  let escaped = false;
+  for (let index = 0; index < line.length; index++) {
+    if (line[index] === "\\") {
+      escaped = !escaped;
+      continue;
+    }
+    if (line[index] === delimiter && !escaped) return index;
+    escaped = false;
+  }
+  return -1;
+}
+
+function makeWithoutComment(line: string): string {
+  const comment = makeDelimiter(line, "#");
+  return comment < 0 ? line : line.slice(0, comment);
+}
+
+function makeContinues(line: string): boolean {
+  let backslashes = 0;
+  for (let index = line.length - 1; index >= 0 && line[index] === "\\"; index--) backslashes++;
+  return backslashes % 2 === 1;
+}
+
 /**
- * Parse Makefile targets. Matches `name:` at column 0 while rejecting `name :=`
- * variable assignments (the `(?!=)` guard) and indented recipe bodies.
+ * Discover literal public Make targets without evaluating Makefile expressions.
+ * Rule names retain file order; assignments and multiline variable bodies do
+ * not declare rules. Special targets, patterns, and indented recipes are omitted.
  */
 export function parseMakefile(content: string): DiscoveredTask[] {
-  const re = /^([a-zA-Z_][a-zA-Z0-9_-]*)\s*:(?!=)/gm;
   const tasks: DiscoveredTask[] = [];
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(content)) !== null) {
-    const name = m[1];
-    tasks.push({
-      name,
-      command: `make ${name}`,
-      source: "Makefile",
-      category: categorizeTask(name),
-    });
+  const lines = content.split(/\r?\n/);
+  let defineDepth = 0;
+  for (let index = 0; index < lines.length; index++) {
+    let line = lines[index];
+    const isRecipe = line.startsWith("\t");
+    const fragments: string[] = [];
+    // Consume continuations before classifying a line, including recipe and
+    // comment payloads. Only literal rule syntax is inspected, never executed.
+    while (index + 1 < lines.length && makeContinues(line)) {
+      const fragment = line.slice(0, -1).trimEnd();
+      if (!fragments.length || fragment) fragments.push(fragment);
+      line = lines[++index].trimStart();
+    }
+    if (fragments.length) {
+      fragments.push(line);
+      line = fragments.join(" ");
+    }
+    // Tabs identify recipes, including literal define/endef strings in a recipe.
+    if (isRecipe) continue;
+    if (defineDepth) {
+      const directive = makeWithoutComment(line);
+      if (/^\s*(?:(?:override|export)\s+)*define(?:\s|$)/.test(directive)) defineDepth++;
+      else if (/^\s*endef\s*$/.test(directive)) defineDepth--;
+      continue;
+    }
+    line = makeWithoutComment(line);
+    if (/^\s*(?:(?:override|export)\s+)*define(?:\s|$)/.test(line)) {
+      defineDepth++;
+      continue;
+    }
+    const rule = line.match(
+      /^([a-zA-Z_][a-zA-Z0-9_.-]*(?:[ \t]+[a-zA-Z_][a-zA-Z0-9_.-]*)*)[ \t]*::?(.*)$/
+    );
+    if (!rule) continue;
+    const recipe = makeDelimiter(rule[2], ";");
+    const remainder = (recipe < 0 ? rule[2] : rule[2].slice(0, recipe)).trimStart();
+    // :=/::=/:::= global assignments and target-specific assignments are data,
+    // even when their left side happens to resemble a public task name.
+    if (/^[:?!+]*=/.test(remainder)) continue;
+    if (/^(?:(?:override|export|unexport|private)\s+)*[^\s:=?!+]+\s*(?::+|[?!+])?=/.test(remainder))
+      continue;
+    for (const name of rule[1].split(/[ \t]+/)) {
+      tasks.push({
+        name,
+        command: `make ${name}`,
+        source: "Makefile",
+        category: categorizeTask(name),
+      });
+    }
   }
   return tasks;
 }
