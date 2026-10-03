@@ -183,7 +183,9 @@ for (const mixed of [false, true]) {
           for (const [name, version] of rows) {
             const nameCell = table.getByRole("cell", { name, exact: true });
             await expect(nameCell).toBeVisible();
-            const row = table.getByRole("row").filter({ has: nameCell });
+            const row = table.getByRole("row").filter({
+              has: page.getByRole("cell", { name, exact: true }),
+            });
             await expect(row.getByRole("cell")).toHaveText(
               mixed
                 ? [
