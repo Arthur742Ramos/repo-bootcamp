@@ -275,6 +275,67 @@ describe("bootcamp CLI", () => {
   });
 
   it.each(["standard", "fast"])(
+    "preserves literal command text in saved %s Markdown, HTML and PDF-ready exports",
+    async (mode) => {
+      const tempDir = await mkdtemp(join(tmpdir(), "bootcamp-command-markdown-"));
+      tempDirs.push(tempDir);
+      const repo = await createFixtureRepo(tempDir);
+      const facts = buildMockFacts(`local/${basename(repo)}`);
+      const commands = [
+        { name: "install", command: "echo 'install```literal```'", source: "README.md" },
+        { name: "test literal", command: "npm run 'test`literal`'", source: "package.json" },
+        { name: "dev literal", command: "npm run 'dev```literal```'", source: "package.json" },
+        { name: "build", command: "printf 'first\n```\nlast'  ", source: "README.md" },
+      ];
+      facts.quickstart.commands = commands;
+      const response = join(tempDir, "response.json");
+      await writeFile(response, JSON.stringify(facts));
+      for (const format of ["markdown", "html", "pdf"]) {
+        const output = join(tempDir, format);
+        const result = await runCli(
+          [
+            repo,
+            "--no-clone",
+            "--no-cache",
+            ...(mode === "fast" ? ["--fast"] : []),
+            "--format",
+            format,
+            "--output",
+            output,
+          ],
+          {
+            NODE_ENV: "test",
+            REPO_BOOTCAMP_TEST_LLM_RESPONSE_FILE: response,
+          }
+        );
+        expect(result.exitCode, result.stderr).toBe(0);
+        const actual = JSON.parse(await readFile(join(output, "repo_facts.json"), "utf8"));
+        expect(actual.quickstart.commands).toEqual(commands);
+        const extension = format === "markdown" ? ".md" : ".html";
+        for (const name of ["BOOTCAMP", "ONBOARDING"]) {
+          const document = await readFile(join(output, name + extension), "utf8");
+          if (format === "markdown") {
+            for (const command of commands) expect(document).toContain(command.command);
+            expect(document).toContain("````bash");
+          } else {
+            const code = [...document.matchAll(/<code(?: [^>]*)?>([\s\S]*?)<\/code>/g)].map(
+              (match) =>
+                match[1]
+                  .replaceAll("&quot;", '"')
+                  .replaceAll("&lt;", "<")
+                  .replaceAll("&gt;", ">")
+                  .replaceAll("&amp;", "&")
+            );
+            for (const command of commands) expect(code).toContain(command.command);
+            expect(document).toContain('tabindex="0" role="region" aria-label="Code block"');
+          }
+        }
+      }
+    },
+    60_000
+  );
+
+  it.each(["standard", "fast"])(
     "uses only public zero-argument Just commands in saved %s onboarding guidance",
     async (mode) => {
       const tempDir = await mkdtemp(join(tmpdir(), "bootcamp-just-kit-"));

@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { generateDiffDocs, parsePullRequestTarget } from "../src/diff.js";
 import type { DiffSummary } from "../src/types.js";
+import { markdownToHtml } from "../src/formatter.js";
 
 describe("Diff/Compare Mode", () => {
   describe("parsePullRequestTarget", () => {
@@ -53,6 +54,23 @@ describe("Diff/Compare Mode", () => {
         breakingChanges: ["Major version bump: 1.0.0 → 2.0.0"],
       },
     };
+
+    it("preserves literal added commands as complete code payloads", () => {
+      const commands = [
+        "npm run 'test`literal`'",
+        "npm run 'dev```literal```'",
+        "printf 'first\n```\nlast'",
+      ];
+      const markdown = generateDiffDocs(
+        { ...mockDiff, onboardingDeltas: { ...mockDiff.onboardingDeltas, newCommands: commands } },
+        "owned-fixture"
+      );
+      const html = markdownToHtml(markdown);
+      const payloads = [...html.matchAll(/<code(?: [^>]*)?>([\s\S]*?)<\/code>/g)].map(
+        (match) => match[1]
+      );
+      for (const command of commands) expect(payloads).toContain(command);
+    });
 
     it("should generate valid markdown", () => {
       const docs = generateDiffDocs(mockDiff, "test-repo");

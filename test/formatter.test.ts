@@ -15,6 +15,78 @@ import {
 } from "../src/formatter.js";
 
 describe("markdownToHtml", () => {
+  it("keeps command-line backticks inside a line-delimited code block", () => {
+    const command = "npm run 'dev```literal```'\necho AFTER";
+    const html = markdownToHtml("```bash\n" + command + "\n```\n[Next](./ONBOARDING.md)");
+    expect(html).toContain(`<code class="language-bash">${command}</code>`);
+    expect(html).toContain('<a href="./ONBOARDING.md">Next</a>');
+    expect(html.match(/<pre /g)).toHaveLength(1);
+    expect(html).toContain('tabindex="0" role="region" aria-label="Code block"');
+  });
+
+  it("matches fence type, minimum length and closing-line whitespace", () => {
+    const content = "first\n```\n~~~~\n````literal\nlast  ";
+    const html = markdownToHtml("````bash\n" + content + "\n````` \t\n# After");
+    expect(html).toContain(`<code class="language-bash">${content}</code>`);
+    expect(html).toContain('<h1 id="after">After</h1>');
+    expect(markdownToHtml("~~~bash\necho `literal`\n~~~")).toContain(
+      '<code class="language-bash">echo `literal`</code>'
+    );
+    expect(markdownToHtml("  ```bash\n  echo first\n echo second\n  ```")).toContain(
+      '<code class="language-bash">echo first\necho second</code>'
+    );
+    expect(markdownToHtml("```bash\necho unfinished")).toContain(
+      '<code class="language-bash">echo unfinished</code>'
+    );
+  });
+
+  it("renders equal-length maximal spans and leaves mismatched runs literal", () => {
+    expect(markdownToHtml("``npm run 'test`literal`'``")).toContain(
+      "<code>npm run 'test`literal`'</code>"
+    );
+    expect(markdownToHtml("`` `literal` ``")).toContain("<code>`literal`</code>");
+    expect(markdownToHtml("``  npm run test  ``")).toContain("<code> npm run test </code>");
+    expect(markdownToHtml("`   `")).toContain("<code>   </code>");
+    expect(markdownToHtml("```unmatched `` still literal `")).toBe(
+      "<p>```unmatched `` still literal `</p>"
+    );
+  });
+
+  it("protects variable spans in source links and escaped table cells", () => {
+    expect(
+      markdownToHtml("[``src/routes/[`id`]/page.ts``](./route.html) [next](./next.html)")
+    ).toContain(
+      '<a href="./route.html"><code>src/routes/[`id`]/page.ts</code></a> <a href="./next.html">next</a>'
+    );
+    const html = markdownToHtml(
+      String.raw`| Command | Next |
+|---|---|
+| \`\`echo 'a\`b\\c\|d'\`\` | [next](./next.html) |`.replaceAll("\\`", "`")
+    );
+    expect(html).toContain("<code>echo 'a`b\\\\c|d'</code>");
+    expect(html.match(/<td>/g)).toHaveLength(2);
+    expect(html).toContain('<a href="./next.html">next</a>');
+  });
+
+  it("keeps literal block-placeholder-shaped text separate from real code", () => {
+    const literal = "\x00CODEBLOCK_0\x00";
+    const html = markdownToHtml(literal + "\n\n```bash\necho literal\n```");
+    expect(html).toContain(`<p>${literal}</p>`);
+    expect(html).toContain('<code class="language-bash">echo literal</code>');
+    expect(html.match(/<pre /g)).toHaveLength(1);
+  });
+
+  it("keeps HTML-shaped payloads escaped inside variable spans and fenced blocks", () => {
+    const html = markdownToHtml(
+      "``<img src=x>`literal` &``\n\n````bash\n<script>literal</script>\n```\n````\n[bad](javascript:alert)"
+    );
+    expect(html).toContain("<code>&lt;img src=x&gt;`literal` &amp;</code>");
+    expect(html).toContain("&lt;script&gt;literal&lt;/script&gt;\n```</code>");
+    expect(html).not.toContain("<img");
+    expect(html).not.toContain("<script>");
+    expect(html).not.toContain('href="javascript:');
+  });
+
   it("converts headings", () => {
     expect(markdownToHtml("# Title")).toContain('<h1 id="title">Title</h1>');
     expect(markdownToHtml("## Sub")).toContain('<h2 id="sub">Sub</h2>');

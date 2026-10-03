@@ -15,7 +15,8 @@ import {
   getFirstTaskRecommendations,
   generateRunbook,
 } from "../src/generator.js";
-import { markdownToHtml } from "../src/formatter.js";
+import { convertToHtml, convertToPdf, markdownToHtml } from "../src/formatter.js";
+import { parsePackageJsonScripts } from "../src/tasks.js";
 import { parseGitHubUrl } from "../src/ingest.js";
 import type { RepoFacts, BootcampOptions } from "../src/types.js";
 
@@ -873,5 +874,128 @@ describe("generated HTML source links", () => {
     expect(html).toContain(
       '<a href="https://github.com/owner/project/blob/main/packages/app/src/routes/%5Bid%5D/page.ts"><code>src/routes/[id]/page.ts</code></a>'
     );
+  });
+});
+
+describe("literal generated command presentation", () => {
+  const commands = [
+    "npm run test",
+    "npm run 'test`literal`'",
+    "npm run 'dev```literal```'",
+    "npm run 'test  unit'",
+    "printf '%s\\n' 'first\n```\nlast'",
+    "printf '%s' '<img src=x onerror=alert(1)>&'",
+    "echo '[source](./ONBOARDING.md)'",
+    "echo 'left|right'",
+    "  npm run test  ",
+    "printf 'literal'  ",
+    "`literal`",
+    "printf 'first\r\nsecond'",
+    "printf 'first\rsecond'",
+    "npm run 'test\tunit'",
+  ];
+  const codePayloads = (html: string) =>
+    [...html.matchAll(/<code(?: [^>]*)?>([\s\S]*?)<\/code>/g)].map((match) =>
+      match[1]
+        .replaceAll("&#13;", "\r")
+        .replaceAll("&quot;", '"')
+        .replaceAll("&lt;", "<")
+        .replaceAll("&gt;", ">")
+        .replaceAll("&amp;", "&")
+    );
+
+  it.each(["npm", "pnpm", "yarn", "bun"] as const)(
+    "keeps detected %s script labels from swallowing their own and following commands",
+    (manager) => {
+      const names = [
+        "test\n```\nunit",
+        "test`literal`",
+        "dev```literal```",
+        "test\r\nunit",
+        "test\runit",
+        "test\tunit",
+        "test  unit",
+        "--test",
+        "test",
+      ];
+      const detected = parsePackageJsonScripts(
+        JSON.stringify({ scripts: Object.fromEntries(names.map((name) => [name, "echo marker"])) }),
+        manager
+      );
+      const facts: RepoFacts = {
+        ...mockFacts,
+        quickstart: { ...mockFacts.quickstart, commands: detected },
+      };
+      const original = JSON.stringify(facts.quickstart.commands);
+      const markdown = generateOnboarding(facts);
+      for (const html of [
+        markdownToHtml(markdown),
+        convertToHtml(markdown, "Guide"),
+        convertToPdf(markdown, "Guide"),
+      ]) {
+        for (const task of detected) expect(codePayloads(html)).toContain(task.command);
+        for (const name of names.filter((name) => /[\r\n]/.test(name))) {
+          expect(codePayloads(html)).toContain(JSON.stringify(name));
+        }
+        expect(codePayloads(html)).toContain("test`literal`");
+        expect(codePayloads(html)).toContain("dev```literal```");
+        expect(html).toContain('id="development-loop"');
+        expect(html).toContain('id="running-tests"');
+        expect(html).toContain('id="getting-help"');
+      }
+      expect(JSON.stringify(facts.quickstart.commands)).toBe(original);
+      expect(detected.map((task) => task.name)).toEqual(names);
+      expect(markdown).toContain("### test\n");
+    }
+  );
+
+  it.each(commands)("preserves original command %j in every affected guide format", (command) => {
+    const facts: RepoFacts = {
+      ...mockFacts,
+      quickstart: {
+        ...mockFacts.quickstart,
+        commands: ["build", "test", "dev"].map((name) => ({ name, command, source: "README.md" })),
+      },
+      runbook: { ...mockFacts.runbook!, applicable: false },
+    };
+    const before = JSON.stringify(facts);
+    for (const markdown of [
+      generateBootcamp(facts),
+      generateOnboarding(facts),
+      generateRunbook(facts),
+    ]) {
+      for (const html of [
+        markdownToHtml(markdown),
+        convertToHtml(markdown, "Guide"),
+        convertToPdf(markdown, "Guide"),
+      ]) {
+        expect(codePayloads(html)).toContain(command);
+        expect(html).not.toContain("<img src=x");
+        expect(html).not.toContain('<a href="./ONBOARDING.md">source</a>');
+      }
+    }
+    expect(JSON.stringify(facts)).toBe(before);
+  });
+
+  it("retains a multiline verification command outside the limited summary", () => {
+    const command = "printf 'first\n```\nlast'";
+    const facts: RepoFacts = {
+      ...mockFacts,
+      quickstart: {
+        ...mockFacts.quickstart,
+        commands: [
+          ...Array.from({ length: 5 }, (_, i) => ({
+            name: "unrelated" + i,
+            command: "echo literal" + i,
+            source: "README.md",
+          })),
+          { name: "dev", command, source: "README.md" },
+        ],
+      },
+    };
+    const markdown = generateBootcamp(facts);
+    expect(markdown).toContain("Run the dev server using the command below");
+    expect(markdown).toContain("**Command for step 2:**");
+    expect(codePayloads(markdownToHtml(markdown))).toContain(command);
   });
 });
