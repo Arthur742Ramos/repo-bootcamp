@@ -80,6 +80,43 @@ function parseTomlVersion(value: string): string {
   return token || "*";
 }
 
+/** Drop TOML line comments without changing hashes inside quoted strings. */
+function stripTomlComments(content: string): string {
+  const chunks: string[] = [];
+  let start = 0;
+  let quote = "";
+  for (let index = 0; index < content.length; index++) {
+    const character = content[index];
+    if (quote) {
+      // Basic strings escape quotes/backslashes; literal strings do not.
+      if (quote[0] === '"' && character === "\\") {
+        index++;
+      } else if (content.startsWith(quote, index)) {
+        const delimiter = quote[0];
+        index += quote.length - 1;
+        // Multiline strings can end with an extra one or two literal quotes.
+        if (quote.length === 3) {
+          for (let extra = 0; extra < 2 && content[index + 1] === delimiter; extra++) index++;
+        }
+        quote = "";
+      }
+      continue;
+    }
+    if (character === '"' || character === "'") {
+      quote = content.startsWith(character.repeat(3), index) ? character.repeat(3) : character;
+      index += quote.length - 1;
+    } else if (character === "#") {
+      let end = index + 1;
+      while (end < content.length && content[end] !== "\r" && content[end] !== "\n") end++;
+      chunks.push(content.slice(start, index), " ");
+      start = end;
+      index = end - 1;
+    }
+  }
+  chunks.push(content.slice(start));
+  return chunks.join("");
+}
+
 /**
  * Extract dependencies from package.json
  */
@@ -332,7 +369,10 @@ async function extractPythonDependencies(
       const flush = (): void => {
         if (currentHeader) sections.set(currentHeader, currentLines.join("\n"));
       };
-      for (const line of content.split("\n")) {
+      // Comments may contain quoted examples, brackets, or entire dependency
+      // declarations. Remove them before section/array parsing, keeping hashes
+      // in strings such as direct-reference URL fragments untouched.
+      for (const line of stripTomlComments(content).split("\n")) {
         // Allow a trailing inline comment after the table header
         // (e.g. `[project]  # metadata`), which TOML permits.
         const header = line.trim().match(/^\[\[?([^\]]+)\]\]?\s*(?:#.*)?$/);
