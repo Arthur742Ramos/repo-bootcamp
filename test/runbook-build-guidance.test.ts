@@ -57,6 +57,14 @@ describe("library/tool runbook build guidance", () => {
     }
   });
 
+  it("omits an empty declared build invocation", () => {
+    const facts = runbookFacts();
+    facts.quickstart.commands = [{ name: "build", command: "", source: "README.md" }];
+    const runbook = generateRunbook(facts);
+    expect(runbook).toContain("_No build command detected_");
+    expect(runbook).not.toContain("```bash");
+  });
+
   it("uses the first qualifying build while skipping setup and test commands", () => {
     const facts = runbookFacts();
     facts.quickstart.commands = [

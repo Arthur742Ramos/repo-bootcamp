@@ -904,7 +904,7 @@ For usage instructions, see [ONBOARDING.md](./ONBOARDING.md).
 
 ## Build & Release
 
-${buildCommand ? markdownCodeBlock(buildCommand.command, "bash") : "_No build command detected_"}
+${buildCommand?.command ? markdownCodeBlock(buildCommand.command, "bash") : "_No build command detected_"}
 
 ## Publishing (if applicable)
 
