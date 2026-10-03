@@ -1,4 +1,4 @@
-import { createHash } from "crypto";
+import { createHash, randomUUID } from "crypto";
 import { analyzeRepo, type AnalysisStats } from "../agent.js";
 import { runParallelAnalysis } from "../analysis.js";
 import { readCache, writeCache, type CacheGenerationOptions } from "../cache.js";
@@ -14,6 +14,7 @@ import {
   generateRunbook,
 } from "../generator.js";
 import { generateImpactDocs } from "../impact.js";
+import { formatDocName, markdownToHtml } from "../formatter.js";
 import { computeCodebaseMetrics, generateMetricsDocs, type CodebaseMetrics } from "../metrics.js";
 import { computeRepoHealth, generateHealthDocs, type RepoHealth } from "../health.js";
 import { loadPlugins, runPlugins, type BootcampConfig, type StyleConfig } from "../plugins.js";
@@ -282,8 +283,9 @@ export async function prepareOutputDocuments({
   const metrics = computeCodebaseMetrics(scanResult);
   const health = computeRepoHealth(scanResult);
 
+  const overview: GeneratedDoc = { name: "BOOTCAMP.md", content: "" };
   const documents: GeneratedDoc[] = [
-    { name: "BOOTCAMP.md", content: generateBootcamp(finalFacts, options, styleConfig) },
+    overview,
     {
       name: "ONBOARDING.md",
       content: generateOnboarding(finalFacts, options, {
@@ -369,6 +371,65 @@ export async function prepareOutputDocuments({
   let includedDocuments =
     excludedDocs.size > 0 ? documents.filter((doc) => !excludedDocs.has(doc.name)) : documents;
 
+  // A formatter may drop or rename documents, but it may also explicitly edit
+  // the overview. Mark only our generated navigation while it runs, then refresh
+  // that region if untouched. Facts/plugin prose is never searched for links.
+  const navigationId = randomUUID();
+  const navigationMarkers = [
+    `<!-- bootcamp-navigation:${navigationId}:start -->`,
+    `<!-- bootcamp-navigation:${navigationId}:end -->`,
+  ] as const;
+  const renderOverview = (docs: GeneratedDoc[]) =>
+    generateBootcamp(finalFacts, options, styleConfig, {
+      availableDocuments: new Set(
+        docs.flatMap((doc) =>
+          doc.name.endsWith(".html") ? [doc.name, doc.name.slice(0, -5) + ".md"] : [doc.name]
+        )
+      ),
+      navigationMarkers,
+    });
+  overview.content = renderOverview(includedDocuments);
+  const escapedMarkers = navigationMarkers.map((marker) =>
+    marker.replaceAll("<", "&lt;").replaceAll(">", "&gt;")
+  );
+  const region = (content: string, markers: readonly string[] = navigationMarkers) => {
+    const start = content.indexOf(markers[0]);
+    const end = content.indexOf(markers[1], start + markers[0].length);
+    return start < 0 || end < 0
+      ? null
+      : {
+          start,
+          end: end + markers[1].length,
+          body: content.slice(start + markers[0].length, end),
+        };
+  };
+  const originalNavigation = region(overview.content);
+  // Only these generated links are rewritten. An arbitrary formatter rename
+  // cannot establish a new target; the canonical HTML name can, because our
+  // own output formatter uses it for both HTML and PDF-ready exports.
+  const destination = (name: string, docs: GeneratedDoc[]) => {
+    const actual = docs.some((doc) => doc.name === name)
+      ? name
+      : docs.some((doc) => doc.name === name.replace(/\.md$/, ".html"))
+        ? name.replace(/\.md$/, ".html")
+        : name;
+    return formatDocName(actual, options.format ?? "markdown");
+  };
+  const markdownNavigation = (body: string, docs: GeneratedDoc[]) =>
+    body.replace(
+      /\]\(\.\/([A-Z_]+\.md)\)/g,
+      (_, name: string) => `](./${destination(name, docs)})`
+    );
+  const htmlBody = (body: string) => {
+    const rendered = markdownToHtml(body.trim());
+    return rendered ? `\n${rendered}\n` : "\n";
+  };
+  const htmlNavigation = (body: string, docs: GeneratedDoc[]) =>
+    htmlBody(markdownNavigation(body, docs));
+  const originalHtmlNavigation = originalNavigation ? htmlBody(originalNavigation.body) : null;
+  const canonicalHtmlNavigation = (body: string) =>
+    body.replace(/href="\.\/([A-Z_]+)\.html"/g, 'href="./$1.md"');
+
   for (const formatter of pluginFormatters) {
     try {
       includedDocuments = await formatter.formatDocuments(includedDocuments, {
@@ -382,6 +443,32 @@ export async function prepareOutputDocuments({
       console.warn(`Formatter plugin ${formatter.name} failed: ${(error as Error).message}`);
     }
   }
+
+  const finalNavigation = originalNavigation ? region(renderOverview(includedDocuments)) : null;
+  includedDocuments = includedDocuments.map((doc) => {
+    const rawRegion = region(doc.content);
+    const htmlRegion = region(doc.content, escapedMarkers);
+    const current = rawRegion ?? htmlRegion;
+    let content = doc.content;
+    if (
+      current &&
+      originalNavigation &&
+      finalNavigation &&
+      (rawRegion ? current.body : canonicalHtmlNavigation(current.body)) ===
+        (rawRegion ? originalNavigation.body : originalHtmlNavigation)
+    ) {
+      content =
+        content.slice(0, current.start) +
+        (rawRegion
+          ? markdownNavigation(finalNavigation.body, includedDocuments).slice(1, -1)
+          : htmlNavigation(finalNavigation.body, includedDocuments).slice(1, -1)) +
+        content.slice(current.end);
+    }
+    // Markers never reach written documents, including formatter-owned regions.
+    for (const marker of [...navigationMarkers, ...escapedMarkers])
+      content = content.replaceAll(marker, "");
+    return content === doc.content ? doc : { ...doc, content };
+  });
 
   return {
     documents: includedDocuments,

@@ -404,6 +404,11 @@ Request → Options Merge → Hooks (before) → Fetch → Retry? → Hooks (aft
 | `repo_facts.json`        | Structured data for automation                                       |
 | `ANALYSIS_MANIFEST.json` | Reproducibility metadata, scan coverage, and evidence sources        |
 
+Optional reports depend on the selected style and available analysis. BOOTCAMP's
+generated Next Steps links include only documents in the assembled kit, including
+output exclusions and formatter removals. Explicit repository or formatter text
+is preserved; a formatter that replaces the navigation owns its links.
+
 ## Quick Start
 
 ```bash
