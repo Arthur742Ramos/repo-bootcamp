@@ -2,6 +2,7 @@ import { spawnSync } from "node:child_process";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { pathToFileURL } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
 import { dottedGuidanceFacts } from "../helpers/dotted-guidance-facts.js";
 
@@ -37,7 +38,7 @@ async function generate(owned: Awaited<ReturnType<typeof fixture>>, format: "mar
     process.execPath,
     [
       "--import",
-      join(process.cwd(), "node_modules", "tsx", "dist", "loader.mjs"),
+      pathToFileURL(join(process.cwd(), "node_modules", "tsx", "dist", "loader.mjs")).href,
       owned.wrapper,
       owned.repo,
       "--no-clone",
