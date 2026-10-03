@@ -6,7 +6,8 @@
  * the onboarding kit, this module performs no AI inference: it parses the task
  * definition files that projects already ship (package.json scripts, Makefile,
  * justfile, go-task Taskfile, docker-compose, pyproject, composer.json) and maps
- * each declared task to the exact shell command that invokes it.
+ * each declared task to the exact shell command that invokes it. Qualifying
+ * Cargo manifests additionally expose native build/test conventions.
  *
  * Every parser is a pure `string -> DiscoveredTask[]` function so it can be unit
  * tested in isolation. `discoverTasks` is the only IO boundary; it reads the
@@ -24,6 +25,7 @@ import { lstat, realpath, stat } from "fs/promises";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "path";
 import { isPathInsideDir } from "./utils.js";
 import { pythonScriptDeclarations } from "./python-script-declarations.js";
+import { hasCargoTasks } from "./cargo-tasks.js";
 
 /** Coarse grouping used for report sections and getting-started ordering. */
 export type TaskCategory =
@@ -58,6 +60,10 @@ export interface DiscoverTasksOptions {
   taskfileFiles?: ReadonlySet<string>;
   /** Successful contained Taskfile reads, for effective scan fingerprints. */
   onTaskfileRead?: (path: string, content: string) => void;
+  /** Selected scan inventory; restricts Cargo manifests and implicit source targets. */
+  cargoFiles?: ReadonlySet<string>;
+  /** Contained Cargo manifests loaded during qualification, for cache evidence. */
+  onCargoRead?: (path: string, content: string) => void;
 }
 
 /**
@@ -706,7 +712,7 @@ function dedupeTasks(tasks: DiscoveredTask[]): DiscoveredTask[] {
  * files it ships. Reads are symlink-safe and best-effort: an unreadable or
  * malformed file contributes no tasks rather than throwing. Results are ordered
  * package.json → Makefile → justfile → Taskfile → docker-compose → pyproject →
- * composer.json so the ingest pipeline keeps emitting stable command lists.
+ * composer.json → Cargo.toml so the ingest pipeline keeps emitting stable command lists.
  */
 export async function discoverTasks(
   repoPath: string,
@@ -759,6 +765,13 @@ export async function discoverTasks(
 
   const composer = await read("composer.json");
   if (composer) tasks.push(...parseComposer(composer));
+
+  if (await hasCargoTasks(repoPath, { files: opts.cargoFiles, onRead: opts.onCargoRead })) {
+    tasks.push(
+      { name: "build", command: "cargo build", source: "Cargo.toml", category: "build" },
+      { name: "test", command: "cargo test", source: "Cargo.toml", category: "test" }
+    );
+  }
 
   return dedupeTasks(tasks);
 }

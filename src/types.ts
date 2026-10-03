@@ -321,6 +321,8 @@ export interface ScanResult {
   commands: Command[];
   /** Content identity of contained Taskfiles read during deterministic discovery. */
   taskfileFingerprint?: string;
+  /** Loaded Cargo manifest evidence used to qualify build/test conventions. */
+  cargoFingerprint?: string;
   ciWorkflows: CIWorkflow[];
   readme: string | null;
   contributing: string | null;

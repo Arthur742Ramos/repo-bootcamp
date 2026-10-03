@@ -276,7 +276,7 @@ The Copilot SDK transforms what would be a simple template-filler into an intell
 - **Circular Dependency Detection** - `bootcamp cycles` finds circular import groups (Tarjan SCC) on the import graph, with a `--check` CI gate
 - **Machine Preflight** - `bootcamp preflight` checks your machine against the target repo's declared toolchain (Node, package manager, Python, Go) with a per-row remedy
 - **Ownership Map** - `bootcamp owners` parses `CODEOWNERS` to answer "who do I ask?" with default owners, per-area maintainers, and top committers
-- **Task Discovery** - `bootcamp tasks` answers "how do I build/test/run this?" deterministically across ecosystems (package.json scripts, Makefile, justfile, go-task Taskfile, docker-compose, pyproject/poetry, composer.json), grouped by category with a suggested getting-started sequence (`--json`, `--category`)
+- **Task Discovery** - `bootcamp tasks` answers "how do I build/test/run this?" deterministically across ecosystems (package.json scripts, Makefile, justfile, go-task Taskfile, docker-compose, pyproject/poetry, composer.json, qualifying Cargo manifests), grouped by category with a suggested getting-started sequence (`--json`, `--category`)
 - **Style Pack Explorer** - `bootcamp styles` lists the built-in style packs and the doc sections each one enables
 - **Version & PR Comparison** - Compare refs with `--compare` or analyze pull requests with `bootcamp diff`
 - **Auto-Issue Creator** - Generate GitHub issues from starter tasks
@@ -822,7 +822,7 @@ bootcamp tasks ./my-repo --json
 Deterministically parses the task-definition files a repo already ships —
 `package.json` scripts (package-manager aware), `Makefile`, `justfile`,
 go-task `Taskfile`, `docker-compose`, `pyproject.toml` (poetry / PEP 621), and
-`composer.json` — then groups the results by category and suggests a
+`composer.json`, plus qualifying `Cargo.toml` build/test conventions — then groups the results by category and suggests a
 first-session sequence (install → build → test → dev/run). Never invokes the
 LLM, so non-npm repos (Rust, Go, Python, PHP) finally surface runnable
 commands. Full onboarding scans use the same declared package manager and script
@@ -875,6 +875,24 @@ table components and escaped quoted names. Multiline TOML examples stay data;
 bare dotted keys remain nested metadata. PEP 621 values must be strings, while
 Poetry's string, reference/type and legacy callable tables retain literal extras arrays. This
 bounded discovery does not validate or execute the full project configuration.
+
+Cargo discovery emits only `cargo build` and `cargo test`, leaving package and
+workspace selection to Cargo's native defaults. It recognizes selected-root
+literal `[package]`/`[workspace]` tables, ASCII package names, implicit
+`src/lib.rs`, `src/main.rs`, and simple `src/bin/<name>.rs` or
+`src/bin/<name>/main.rs` targets, including literal `autolib`/`autobins` flags.
+Workspaces may contain up to 64 distinct literal relative member paths with
+qualifying contained package manifests/targets and literal `default-members`
+subsets. All qualifying evidence must be included in the selected scan;
+exclusions and file limits can therefore leave Cargo commands unknown.
+
+This is conservative static qualification, not full TOML/Cargo validation.
+Explicit target tables, member globs/excludes, `package.workspace` indirection,
+empty virtual workspaces, and unknown discovery fields contribute no Cargo
+commands. Unrelated manifest metadata is not interpreted. Manifest evidence is
+capped at 2 MiB in total; standalone implicit-bin enumeration is capped at 512
+entries. Discovery never invokes Cargo, expands aliases/config, or guesses
+run/install/watch commands, features, binaries, or package-selection flags.
 
 ### Auto-Create GitHub Issues
 

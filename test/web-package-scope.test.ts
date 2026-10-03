@@ -180,6 +180,8 @@ describe("web selected package using contained scans and saved SDK responses", (
     expect(ask.mock.calls[0][2].readme).toContain("APP ONLY");
     expect(clone.mock.calls[1].slice(1)).toEqual(["feature/app", false]);
     expect(cleanup.mock.calls.map((call) => call[0])).toEqual(clones);
+    // The answer is sent before the handler's finally block removes its checkout.
+    await expect.poll(() => exists(clones[1])).toBe(false);
   });
 
   it("keeps blank scope at the checkout root and separates root and package cache identities", async () => {

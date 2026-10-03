@@ -215,6 +215,31 @@ beforeEach(() => {
 });
 
 describe("orchestrateAnalysis", () => {
+  it.each([false, true])(
+    "hydrates Cargo defaults without mutating raw facts for cached=%s",
+    async (cached) => {
+      const facts = structuredClone(mockFacts);
+      const original = structuredClone(facts);
+      const commands = [
+        { name: "build", command: "cargo build", source: "Cargo.toml" },
+        { name: "test", command: "cargo test", source: "Cargo.toml" },
+      ];
+      if (cached) vi.mocked(readCache).mockResolvedValue(facts);
+      else analyzeRepoMock.mockResolvedValue({ facts, stats: { toolCalls: [], model: "fixture" } });
+      const result = await orchestrateAnalysis({
+        repoPath: "/repo",
+        repoInfo: mockRepoInfo,
+        scanResult: { ...mockScanResult, commands, cargoFingerprint: "a".repeat(64) },
+        options: defaultOptions,
+        styleConfig: defaultStyleConfig,
+        progress: { update: vi.fn(), succeed: vi.fn(), recordToolCall: vi.fn() } as any,
+        analysisStart: Date.now(),
+      });
+      expect(result.facts.quickstart.commands).toEqual(commands);
+      expect(facts).toEqual(original);
+      if (!cached) expect(vi.mocked(writeCache).mock.calls[0][2]).toBe(facts);
+    }
+  );
   const detected = [
     { name: "app:test", command: "task app:test", source: "Taskfile", description: "App tests" },
   ];
