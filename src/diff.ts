@@ -6,6 +6,7 @@
 import { execFile } from "child_process";
 import { promisify } from "util";
 import type { DiffSummary, RepoInfo } from "./types.js";
+import { packageScriptCommand } from "./package-script-command.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -251,7 +252,7 @@ function extractCommandChanges(
 
     for (const name of Object.keys(headScripts)) {
       if (!baseScripts[name]) {
-        newCommands.push(`npm run ${name}`);
+        newCommands.push(packageScriptCommand(name));
       }
     }
   } catch (err: unknown) {

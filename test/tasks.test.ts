@@ -19,6 +19,7 @@ import {
   suggestGettingStarted,
   toCommands,
   type DiscoveredTask,
+  type PackageManager,
 } from "../src/tasks.js";
 
 const dirs: string[] = [];
@@ -88,6 +89,51 @@ describe("categorizeTask", () => {
 });
 
 describe("parsePackageJsonScripts", () => {
+  it.each<PackageManager>(["npm", "pnpm", "yarn", "bun"])(
+    "preserves exact literal script arguments for %s",
+    (manager) => {
+      const argumentsByName = {
+        "test:e2e": "test:e2e",
+        "test unit": "'test unit'",
+        "test'quoted": `'test'"'"'quoted'`,
+        'test"quoted': `'test"quoted'`,
+        "test;literal": "'test;literal'",
+        test$HOME: "'test$HOME'",
+        "test`literal`": "'test`literal`'",
+        "test|literal": "'test|literal'",
+        "test&literal": "'test&literal'",
+        "test\\literal": "'test\\literal'",
+        "test*literal": "'test*literal'",
+        "test(literal)": "'test(literal)'",
+        "test#literal": "'test#literal'",
+        "--test": "-- --test",
+        "-t": "-- -t",
+      };
+      const tasks = parsePackageJsonScripts(
+        JSON.stringify({
+          scripts: Object.fromEntries(
+            Object.keys(argumentsByName).map((name) => [name, "literal body"])
+          ),
+        }),
+        manager
+      );
+      expect(tasks.map((task) => task.name)).toEqual(Object.keys(argumentsByName));
+      expect(tasks.map((task) => task.command)).toEqual(
+        Object.values(argumentsByName).map((argument) => `${manager} run ${argument}`)
+      );
+      expect(
+        tasks.every((task) => task.source === "package.json" && task.description === "literal body")
+      ).toBe(true);
+      expect(tasks[1].category).toBe("test");
+      expect(toCommands(tasks).map((task) => task.command)).toEqual(
+        tasks.map((task) => task.command)
+      );
+      expect(suggestGettingStarted(tasks).map((task) => task.command)).toContain(
+        `${manager} run test:e2e`
+      );
+    }
+  );
+
   it("emits `npm run <name>` strings by default (byte-compatible)", () => {
     const tasks = parsePackageJsonScripts(
       JSON.stringify({ scripts: { build: "tsc", test: "vitest run" } })

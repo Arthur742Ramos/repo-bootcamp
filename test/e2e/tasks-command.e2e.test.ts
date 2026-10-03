@@ -16,6 +16,44 @@ async function repoWith(files: Record<string, string>): Promise<string> {
 }
 
 describe("task discovery commands", () => {
+  it.each(["npm", "pnpm", "yarn", "bun"])(
+    "renders exact package script names for %s",
+    async (manager) => {
+      const dir = await repoWith({
+        "package.json": JSON.stringify({
+          packageManager: `${manager}@1.0.0`,
+          scripts: {
+            "build app": "echo build",
+            "test'unit": "echo test",
+            "dev;literal": "echo dev",
+            "--test": "echo option",
+          },
+        }),
+      });
+      const result = await runCli(["tasks", dir, "--json"]);
+      expect(result.exitCode).toBe(0);
+      const payload = JSON.parse(result.stdout);
+      const commands = [
+        `${manager} run 'build app'`,
+        `${manager} run 'test'"'"'unit'`,
+        `${manager} run 'dev;literal'`,
+        `${manager} run -- --test`,
+      ];
+      expect(payload.tasks.map((task: { command: string }) => task.command)).toEqual(commands);
+      expect(payload.tasks.map((task: { name: string }) => task.name)).toEqual([
+        "build app",
+        "test'unit",
+        "dev;literal",
+        "--test",
+      ]);
+      expect(payload.gettingStarted).toEqual(commands.slice(0, 3));
+      const report = await runCli(["tasks", dir]);
+      expect(report.exitCode).toBe(0);
+      for (const command of commands) expect(report.stdout).toContain(command);
+    },
+    60_000
+  );
+
   it.each(["src/lib.rs", "src/main.rs", "src/bin/one.rs"])(
     "reports native Cargo build/test defaults for ordinary target %s",
     async (target) => {

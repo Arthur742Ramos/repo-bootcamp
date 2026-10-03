@@ -26,6 +26,7 @@ import { dirname, isAbsolute, join, relative, resolve, sep } from "path";
 import { isPathInsideDir } from "./utils.js";
 import { pythonScriptDeclarations } from "./python-script-declarations.js";
 import { hasCargoTasks } from "./cargo-tasks.js";
+import { packageScriptCommand } from "./package-script-command.js";
 
 /** Coarse grouping used for report sections and getting-started ordering. */
 export type TaskCategory =
@@ -157,7 +158,7 @@ export function parsePackageJsonScripts(
   for (const [name, body] of Object.entries(scripts as Record<string, unknown>)) {
     tasks.push({
       name,
-      command: `${pm} run ${name}`,
+      command: packageScriptCommand(name, pm),
       source: "package.json",
       category: categorizeTask(name),
       description: typeof body === "string" ? body : undefined,

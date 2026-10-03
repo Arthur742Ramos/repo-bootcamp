@@ -5,8 +5,9 @@ import { join } from "path";
 
 import { afterEach, describe, expect, it } from "vitest";
 
-import { getChangedFiles } from "../src/diff.js";
+import { analyzeDiff, getChangedFiles } from "../src/diff.js";
 import { markdownToHtml } from "../src/formatter.js";
+import { parsePackageJsonScripts } from "../src/tasks.js";
 
 const dirs: string[] = [];
 
@@ -26,6 +27,42 @@ describe("diff getChangedFiles", () => {
   afterEach(async () => {
     await Promise.all(dirs.map((dir) => rm(dir, { recursive: true, force: true })));
     dirs.length = 0;
+  });
+
+  it("keeps new npm script commands aligned with exact task arguments", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "bootcamp-diff-script-names-"));
+    dirs.push(dir);
+    git(["init", "-b", "main"], dir);
+    git(["config", "user.email", "t@example.com"], dir);
+    git(["config", "user.name", "T"], dir);
+    await writeFile(
+      join(dir, "package.json"),
+      JSON.stringify({ scripts: { build: "echo build" } })
+    );
+    git(["add", "-A"], dir);
+    git(["commit", "-m", "base", "--no-gpg-sign"], dir);
+    const base = git(["rev-parse", "HEAD"], dir);
+    const scripts = {
+      "test unit": "echo unit",
+      "test'quoted": "echo quote",
+      "dev;literal": "echo dev",
+      "--test": "echo option",
+      "test`literal`": "echo backtick",
+    };
+    const content = JSON.stringify({ scripts: { build: "echo build", ...scripts } });
+    await writeFile(join(dir, "package.json"), content);
+    git(["commit", "-am", "head", "--no-gpg-sign"], dir);
+    const summary = await analyzeDiff(dir, base);
+    expect(summary.onboardingDeltas.newCommands).toEqual([
+      "npm run 'test unit'",
+      `npm run 'test'"'"'quoted'`,
+      "npm run 'dev;literal'",
+      "npm run -- --test",
+      "npm run 'test`literal`'",
+    ]);
+    expect(summary.onboardingDeltas.newCommands).toEqual(
+      parsePackageJsonScripts(JSON.stringify({ scripts })).map((task) => task.command)
+    );
   });
 
   it("records the new path for a rename (not a tab-joined old\\tnew string)", async () => {
