@@ -16,7 +16,16 @@ export function buildBlobUrl(repoInfo: RepoInfo | undefined, filePath: string): 
   const segments = [prefix, cleanPath].filter(Boolean).join("/").split("/");
   // A model-provided path must not navigate out of the selected package.
   if (segments.includes("..")) return null;
-  const encoded = segments.map(encodeURIComponent).join("/");
+  // encodeURIComponent leaves parentheses unescaped, which can terminate
+  // Markdown destinations. Encode those along with other reserved symbols.
+  const encoded = segments
+    .map((segment) =>
+      encodeURIComponent(segment).replace(
+        /[!'()*]/g,
+        (character) => `%${character.charCodeAt(0).toString(16).toUpperCase()}`
+      )
+    )
+    .join("/");
   const base = `https://${repoInfo.host}/${repoInfo.owner}/${repoInfo.repo}`;
   switch (repoInfo.provider) {
     case "gitlab":

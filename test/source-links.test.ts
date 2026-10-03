@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { markdownToHtml } from "../src/formatter.js";
 import { buildBlobUrl } from "../src/source-links.js";
 import type { RepoInfo } from "../src/types.js";
 const repo: RepoInfo = {
@@ -29,6 +30,13 @@ describe("selected-directory source links", () => {
     expect(buildBlobUrl({ ...repo, sourcePathPrefix: "./packages/app/" }, "./src/index.ts")).toBe(
       "https://github.com/owner/project/blob/main/packages/app/src/index.ts"
     );
+  });
+  it("keeps parentheses in directory and file names intact through HTML conversion", () => {
+    const url = buildBlobUrl({ ...repo, sourcePathPrefix: "packages/app(test)" }, "src/a(b).ts");
+    expect(url).toBe(
+      "https://github.com/owner/project/blob/main/packages/app%28test%29/src/a%28b%29.ts"
+    );
+    expect(markdownToHtml(`- [source](${url})`)).toContain(`href="${url}"`);
   });
   it("keeps local or unknown remotes as bare paths", () => {
     expect(buildBlobUrl(undefined, "src/index.ts")).toBeNull();
