@@ -410,6 +410,7 @@ const CONFIG_PATTERNS: Record<
  */
 function detectStack(files: FileInfo[]): StackInfo {
   const filePaths = files.map((f) => f.path);
+  const filePathSet = new Set(files.filter((f) => !f.isDirectory).map((f) => f.path));
   const fileNames = filePaths.map((p) => basename(p));
   const fileNameSet = new Set(fileNames);
 
@@ -435,7 +436,9 @@ function detectStack(files: FileInfo[]): StackInfo {
   // Only config files that definitively indicate framework usage are listed here.
   for (const [name, { file, type }] of Object.entries(CONFIG_PATTERNS)) {
     const matches =
-      typeof file === "string" ? fileNameSet.has(file) : filePaths.some((p) => file.test(p));
+      typeof file === "string"
+        ? (type === "pm" ? filePathSet : fileNameSet).has(file)
+        : filePaths.some((p) => file.test(p));
 
     if (matches) {
       // Normalize framework names by removing variant suffixes like (mjs), (ts), etc.
@@ -468,13 +471,14 @@ function detectStack(files: FileInfo[]): StackInfo {
   }
 
   // Infer package manager from package.json if not detected from lock files
-  if (!stack.packageManager && fileNameSet.has("package.json")) {
+  if (!stack.packageManager && filePathSet.has("package.json")) {
     stack.packageManager = "npm";
   }
-  if (!stack.packageManager && fileNameSet.has("pyproject.toml")) {
+  // A generic Python manifest identifies an installer convention, not a Poetry/uv workflow.
+  if (!stack.packageManager && filePathSet.has("pyproject.toml")) {
     stack.packageManager = "pip";
   }
-  if (!stack.packageManager && fileNameSet.has("Cargo.toml")) {
+  if (!stack.packageManager && filePathSet.has("Cargo.toml")) {
     stack.packageManager = "cargo";
   }
 

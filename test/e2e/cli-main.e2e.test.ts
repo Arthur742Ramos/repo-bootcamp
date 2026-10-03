@@ -234,6 +234,122 @@ describe("bootcamp CLI", () => {
     const dependencies = await readFile(join(outputDir, "DEPENDENCIES.md"), "utf-8");
     expect(dependencies).toContain(String.raw`| express | ^4.0.0 \|\| ^5.0.0 |`);
   }, 90_000);
+  it.each([
+    [
+      "requirements",
+      { "requirements.txt": "# Empty requirements\n", "app.py": "pass\n" },
+      "pip",
+      null,
+    ],
+    [
+      "setuptools",
+      {
+        "pyproject.toml":
+          '[build-system]\nrequires = ["setuptools"]\nbuild-backend = "setuptools.build_meta"\n[project]\nname = "fixture"\nversion = "0.1.0"\n',
+        "app.py": "pass\n",
+      },
+      "pip",
+      null,
+    ],
+    [
+      "uv",
+      {
+        "pyproject.toml": '[project]\nname = "fixture"\nversion = "0.1.0"\n',
+        "uv.lock": "version = 1\n",
+        "app.py": "pass\n",
+      },
+      "uv",
+      null,
+    ],
+    [
+      "poetry",
+      {
+        "pyproject.toml": '[project]\nname = "fixture"\nversion = "0.1.0"\n',
+        "poetry.lock": "# Poetry lockfile\n",
+        "app.py": "pass\n",
+      },
+      "poetry",
+      "poetry install --with dev",
+    ],
+    [
+      "rust",
+      {
+        "Cargo.toml": '[package]\nname = "fixture"\nversion = "0.1.0"\n[lib]\npath = "lib.rs"\n',
+        "lib.rs": "pub fn sample() {}\n",
+      },
+      "cargo",
+      null,
+    ],
+    [
+      "documented-python",
+      { "requirements.txt": "# Empty requirements\n", "app.py": "pass\n" },
+      "pip",
+      "python3 -m pip install -r requirements.txt",
+    ],
+    [
+      "documented-uv",
+      {
+        "pyproject.toml": '[project]\nname = "fixture"\nversion = "0.1.0"\n',
+        "uv.lock": "version = 1\n",
+        "app.py": "pass\n",
+      },
+      "uv",
+      "uv sync --frozen --group dev",
+    ],
+  ] as const)(
+    "generates evidence-based installation guidance for %s through the real CLI",
+    async (_name, files, manager, installCommand) => {
+      const tempDir = await mkdtemp(join(tmpdir(), "bootcamp-install-cli-"));
+      tempDirs.push(tempDir);
+      const repoPath = join(tempDir, "repo");
+      await mkdir(repoPath);
+      for (const [path, contents] of Object.entries(files)) {
+        await writeFile(join(repoPath, path), contents);
+      }
+      await writeFile(
+        join(repoPath, "README.md"),
+        `# Setup\n${installCommand || "See CONTRIBUTING.md for setup."}\n`
+      );
+      const facts = buildMockFacts("local/repo");
+      facts.stack = {
+        languages: [manager === "cargo" ? "Rust" : "Python"],
+        frameworks: [],
+        buildSystem: "",
+        packageManager: null,
+        hasDocker: false,
+        hasCi: false,
+      };
+      facts.quickstart.commands = installCommand
+        ? [{ name: "install", command: installCommand, source: "README.md" }]
+        : [];
+      const responseFile = join(tempDir, "response.json");
+      await writeFile(responseFile, JSON.stringify(facts));
+      const outputDir = join(tempDir, "generated");
+      const result = await runCli(
+        [repoPath, "--no-clone", "--no-cache", "--output", outputDir, "--style", "oss"],
+        {
+          NODE_ENV: "test",
+          REPO_BOOTCAMP_TEST_LLM_RESPONSE_FILE: responseFile,
+        }
+      );
+      expect(result.exitCode).toBe(0);
+      const generatedFacts = JSON.parse(
+        await readFile(join(outputDir, "repo_facts.json"), "utf-8")
+      );
+      expect(generatedFacts.stack.packageManager).toBe(manager);
+      const onboarding = await readFile(join(outputDir, "ONBOARDING.md"), "utf-8");
+      if (installCommand) {
+        expect(onboarding).toContain(`# Install dependencies\n${installCommand}\n\`\`\``);
+      } else {
+        expect(onboarding).toContain("Follow the repository's README or contribution guide");
+        expect(onboarding).not.toContain("# Install dependencies");
+        expect(onboarding).not.toContain(`${manager} install`);
+        expect(onboarding).not.toContain("npm install");
+      }
+    },
+    90_000
+  );
+
   it.each(["html", "pdf"] as const)(
     "generates a navigable %s kit through the real CLI",
     async (format) => {

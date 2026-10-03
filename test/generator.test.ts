@@ -238,6 +238,47 @@ describe("generateOnboarding", () => {
     expect(result).toContain("npm run dev");
   });
 
+  it.each(["npm", "pnpm", "yarn", "bun"])(
+    "retains the known %s installation convention without a documented install command",
+    (packageManager) => {
+      const facts = structuredClone(mockFacts);
+      facts.stack.packageManager = packageManager;
+      facts.quickstart.commands = facts.quickstart.commands.filter((c) => c.name !== "install");
+      expect(generateOnboarding(facts)).toContain(
+        `# Install dependencies\n${packageManager} install`
+      );
+    }
+  );
+
+  it.each(["pip", "cargo", "poetry", "uv", "custom-tool", null])(
+    "uses setup documentation instead of inventing an install command for %s",
+    (packageManager) => {
+      const facts = structuredClone(mockFacts);
+      facts.stack.packageManager = packageManager;
+      facts.quickstart.commands = [{ name: "test", command: "make test", source: "README.md" }];
+      const result = generateOnboarding(facts);
+      expect(result).toContain(
+        "cd repo\n```\n\nFollow the repository's README or contribution guide"
+      );
+      expect(result).not.toContain("# Install dependencies");
+      expect(result).not.toContain(`${packageManager || "npm"} install`);
+      expect(result).toContain("make test");
+      const html = markdownToHtml(result);
+      expect(html).toContain("<p>Follow the repository's README or contribution guide");
+    }
+  );
+
+  it.each(["pip", "cargo", "poetry", "uv", null])(
+    "preserves documented installation commands verbatim for %s",
+    (packageManager) => {
+      const facts = structuredClone(mockFacts);
+      facts.stack.packageManager = packageManager;
+      const command = "python3 -m venv '.venv'\npython3 -m pip install -r 'requirements dev.txt'";
+      facts.quickstart.commands = [{ name: "install", command, source: "README.md" }];
+      expect(generateOnboarding(facts)).toContain(`# Install dependencies\n${command}\n\`\`\``);
+    }
+  );
+
   it("includes common errors", () => {
     const result = generateOnboarding(mockFacts);
     expect(result).toContain("Port already in use");
