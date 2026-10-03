@@ -232,7 +232,10 @@ describe("runMainCommand --no-clone behavior", () => {
       }
       const selectedRoot = subdir ? join(repoPath, subdir) : repoPath;
       expect(orchestrateAnalysis).toHaveBeenCalledWith(
-        expect.objectContaining({ repoPath: selectedRoot })
+        expect.objectContaining({
+          repoPath: selectedRoot,
+          repoInfo: expect.objectContaining({ ...(subdir ? { sourcePathPrefix: subdir } : {}) }),
+        })
       );
       expect(prepareOutputDocuments).toHaveBeenCalledWith(
         expect.objectContaining({ repoPath: selectedRoot })
@@ -915,6 +918,7 @@ describe("runMainCommand --watch and --interactive", () => {
 
         expect(runInteractiveMode).toHaveBeenCalledTimes(1);
         expect(runInteractiveMode.mock.calls[0][0]).toBe(join(repoPath, "src"));
+        expect(runInteractiveMode.mock.calls[0][1].sourcePathPrefix).toBe("src");
         if (isLocal) {
           expect(cleanupRepository).not.toHaveBeenCalled();
         } else {
