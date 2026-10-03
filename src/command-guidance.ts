@@ -150,7 +150,7 @@ function declaredDottedTarget(
       : command.source === "Taskfile" && tool === "task" && tokens.length === 2
         ? tokens[1]
         : undefined;
-  if (!target || /[/\\]/.test(target)) return null;
+  if (!target || target.startsWith("-") || /[/\\]/.test(target)) return null;
   const qualified = target.split(":");
   const leaf = qualified.pop()!;
   if (qualified.some((namespace) => !/^[A-Za-z0-9_-]+$/.test(namespace))) return null;

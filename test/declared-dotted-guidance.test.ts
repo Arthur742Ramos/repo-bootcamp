@@ -98,6 +98,14 @@ describe("declared dotted named-task guidance", () => {
     }
   );
 
+  it.each(["-app:build.prod", "--app:build.prod"])(
+    "does not infer dotted roles from runner option target %s",
+    (name) => {
+      expect(selection({ name, command: `npm run ${name}`, source: "package.json" })).toEqual([]);
+      expect(selection({ name, command: `task ${name}`, source: "Taskfile" })).toEqual([]);
+    }
+  );
+
   it.each([
     "build.js",
     "test.py",
