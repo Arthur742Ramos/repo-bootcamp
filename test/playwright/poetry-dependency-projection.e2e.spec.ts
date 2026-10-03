@@ -357,7 +357,9 @@ for (const mixed of [false, true]) {
           await expect(table.locator("tbody a, tbody img, tbody script, tbody iframe")).toHaveCount(
             0
           );
-          const rows = table.locator("tbody tr");
+          // The formatter emits header/data rows without thead; Chromium puts
+          // both inside an implicit tbody. Count data cells explicitly.
+          const rows = table.locator("tr").filter({ has: page.locator("td") });
           await expect(rows).toHaveCount(expected[kind].length);
           for (const [rowIndex, cells] of expected[kind].entries()) {
             const row = rows.nth(rowIndex);
@@ -381,7 +383,7 @@ for (const mixed of [false, true]) {
             ? ["Dependency", "Kind", "Declaration", "Ecosystem", "Manifest"]
             : ["Dependency", "Kind", "Declaration"]
         );
-        const metadataRows = metadata.locator("tbody tr");
+        const metadataRows = metadata.locator("tr").filter({ has: page.locator("td") });
         await expect(metadataRows).toHaveCount(expected.metadata.length);
         for (const [rowIndex, cells] of expected.metadata.entries()) {
           const row = metadataRows.nth(rowIndex);
