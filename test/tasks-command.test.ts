@@ -1,4 +1,4 @@
-import { mkdtemp, mkdir, rm, writeFile } from "fs/promises";
+import { mkdtemp, mkdir, rm, symlink, writeFile } from "fs/promises";
 import { tmpdir } from "os";
 import { join } from "path";
 
@@ -149,6 +149,106 @@ describe("runTasksCommand", () => {
 
     const out = logSpy.mock.calls.map((c) => String(c[0])).join("\n");
     expect(out).toContain("No release tasks found");
+  });
+
+  it("discovers only selected package tasks across Node, Make, and local Task includes", async () => {
+    const dir = await repoWith({
+      "package.json": JSON.stringify({ scripts: { "root-test": "echo root" } }),
+      Makefile: "root-build:\n\t@echo root\n",
+      "Taskfile.yml": "version: '3'\ntasks:\n  root-task:\n    cmds: []\n",
+      "packages/app/package.json": JSON.stringify({ scripts: { "child-test": "echo child" } }),
+      "packages/app/Makefile": "child-build:\n\t@echo child\n",
+      "packages/app/Taskfile.yml": "version: '3'\nincludes:\n  tools: ./taskfiles/tools.yml\n",
+      "packages/app/taskfiles/tools.yml": "version: '3'\ntasks:\n  verify:\n    cmds: []\n",
+    });
+    resolveRepoMock.mockResolvedValue(localSource(dir));
+    await runTasksCommand(dir, { json: true, subdir: " ./packages/app/ " });
+    const parsed = JSON.parse(logSpy.mock.calls.map((c) => String(c[0])).join("\n"));
+    expect(parsed.repo).toBe("local/repo");
+    expect(parsed.subdir).toBe("packages/app");
+    expect(parsed.tasks.map((t: { command: string }) => t.command)).toEqual([
+      "npm run child-test",
+      "make child-build",
+      "task tools:verify",
+    ]);
+    expect(parsed.gettingStarted).toContain("make child-build");
+    expect(mockCleanup).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows the selected working directory in human output", async () => {
+    const dir = await repoWith({ "packages/app/Makefile": "child-build:\n\t@echo child\n" });
+    resolveRepoMock.mockResolvedValue(localSource(dir));
+    await runTasksCommand(dir, { subdir: "packages/app" });
+    const out = logSpy.mock.calls.map((c) => String(c[0])).join("\n");
+    expect(out).toContain("Run these commands from: packages/app");
+    expect(out).toContain("make child-build");
+  });
+
+  it.each(["../outside", "/outside"])(
+    "rejects invalid scope %s before repository resolution",
+    async (subdir) => {
+      await expect(
+        runTasksCommand("https://github.com/test/repo", { subdir, json: true })
+      ).rejects.toThrow("process.exit");
+      expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining("Invalid subdir"));
+      expect(resolveRepoMock).not.toHaveBeenCalled();
+      expect(mockCleanup).not.toHaveBeenCalled();
+      expect(logSpy).not.toHaveBeenCalled();
+    }
+  );
+
+  it.each(["missing", "file.txt"])(
+    "cleans the outer checkout after rejecting selected %s",
+    async (subdir) => {
+      const dir = await repoWith({ "file.txt": "owned" });
+      resolveRepoMock.mockResolvedValue({ ...localSource(dir), isLocal: false });
+      await expect(
+        runTasksCommand("https://github.com/test/repo", { subdir, json: true })
+      ).rejects.toThrow("process.exit");
+      expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining(subdir));
+      expect(mockCleanup).toHaveBeenCalledTimes(1);
+      expect(logSpy).not.toHaveBeenCalled();
+    }
+  );
+
+  it("honors keep-temp on a scoped failure and keeps JSON stdout empty", async () => {
+    const dir = await repoWith({ "README.md": "owned" });
+    resolveRepoMock.mockResolvedValue({ ...localSource(dir), isLocal: false });
+    await expect(
+      runTasksCommand("https://github.com/test/repo", {
+        subdir: "missing",
+        json: true,
+        keepTemp: true,
+      })
+    ).rejects.toThrow("process.exit");
+    expect(mockCleanup).not.toHaveBeenCalled();
+    expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining("Temporary clone kept at:"));
+    expect(logSpy).not.toHaveBeenCalled();
+  });
+
+  it("accepts a contained alias and rejects an alias outside the selected repository", async () => {
+    const dir = await repoWith({ "packages/app/Makefile": "child-build:\n\t@echo child\n" });
+    const outside = await repoWith({ Makefile: "outside-build:\n\t@echo outside\n" });
+    await symlink(
+      join(dir, "packages/app"),
+      join(dir, "alias"),
+      process.platform === "win32" ? "junction" : "dir"
+    );
+    await symlink(
+      outside,
+      join(dir, "outside-alias"),
+      process.platform === "win32" ? "junction" : "dir"
+    );
+    resolveRepoMock.mockResolvedValue(localSource(dir));
+    await runTasksCommand(dir, { subdir: "alias", json: true });
+    expect(JSON.parse(String(logSpy.mock.calls[0][0])).tasks[0].command).toBe("make child-build");
+    logSpy.mockClear();
+    await expect(runTasksCommand(dir, { subdir: "outside-alias", json: true })).rejects.toThrow(
+      "process.exit"
+    );
+    expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining("escapes repository root"));
+    expect(logSpy).not.toHaveBeenCalled();
+    expect(mockCleanup).toHaveBeenCalledTimes(2);
   });
 
   it("keeps the temporary clone with --keep-temp for remote repos", async () => {

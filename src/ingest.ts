@@ -6,7 +6,7 @@
 import { execFile } from "child_process";
 import { promisify } from "util";
 import { createHash } from "crypto";
-import { mkdir, readFile, rm, realpath, stat, mkdtemp } from "fs/promises";
+import { mkdir, readFile, rm, realpath, mkdtemp } from "fs/promises";
 import { join, basename, resolve, relative, isAbsolute, dirname } from "path";
 import type {
   RepoInfo,
@@ -22,6 +22,7 @@ import { SKIP_DIRS, isPathInsideDir } from "./utils.js";
 import { readContainedFile } from "./fs-safe.js";
 import { detectPackageManager, discoverTasks, toCommands } from "./tasks.js";
 import { walkRepositoryFiles } from "./scan-walk.js";
+import { resolveScanRoot } from "./services/scan-scope.js";
 import frameworkMaps from "./data/framework-maps.json" with { type: "json" };
 
 const execFileAsync = promisify(execFile);
@@ -350,24 +351,7 @@ async function scanDirectory(
   // `subdir` scopes the walk to a sub-path of the repo (e.g. a monorepo
   // package); `exclude` drops additional trees (generated/vendored fixtures).
   // Both default to a no-op for scans of the full repository.
-  const realBasePath = await realpath(basePath);
-  const requestedScanRoot = subdir ? resolve(basePath, subdir) : basePath;
-  let scanRoot: string;
-  try {
-    scanRoot = await realpath(requestedScanRoot);
-  } catch (error: unknown) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT" && subdir) {
-      throw new Error(`Scan subdir does not exist: ${subdir}`, { cause: error });
-    }
-    throw error;
-  }
-  if (!isPathInsideDir(realBasePath, scanRoot)) {
-    throw new Error(`Scan subdir escapes repository root: ${subdir}`);
-  }
-  const scanRootStats = await stat(scanRoot);
-  if (!scanRootStats.isDirectory()) {
-    throw new Error(`Scan subdir is not a directory: ${subdir}`);
-  }
+  const scanRoot = await resolveScanRoot(basePath, subdir);
   const ignorePatterns = [
     ...Array.from(SKIP_DIRS).flatMap((dir) => [`**/${dir}`, `**/${dir}/**`]),
     ...exclude,
