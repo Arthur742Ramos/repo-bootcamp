@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Stop elapsed analysis progress on failed starts, malformed streams, and exhausted status recovery; clear the active step marker on terminal outcomes while keeping time running during reconnection.
+
 - Include `.mts` and `.cts` modules in TypeScript stack detection, impact reports, and cycle checks; resolve compiled `.mjs`/`.cjs` imports to matching module-kind sources instead of unrelated `.ts` files.
 - Generate onboarding setup instructions from the actual repository provider, checkout, and selected package directory; use existing local paths instead of fabricating GitHub clone URLs.
 - Bind owned HTTP test fixtures explicitly to loopback, await listener readiness and teardown, and reuse listeners across request loops to avoid host-dependent wildcard transport failures.
