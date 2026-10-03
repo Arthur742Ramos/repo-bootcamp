@@ -343,6 +343,9 @@ export async function runMainCommand(repoUrl: string, options: BootcampOptions):
   // paths. Every file-reading consumer must resolve those paths from it.
   // Keep repoPath as the outer checkout for clone cleanup and Git watching.
   const analysisRepoPath = options.subdir ? resolve(repoPath, options.subdir) : repoPath;
+  // Source paths remain relative to the selected directory; remote links
+  // need its repository-relative prefix to resolve the original files.
+  if (options.subdir) repoInfo.sourcePathPrefix = options.subdir;
 
   const analysisStart = Date.now();
   progress.startPhase("analyze");

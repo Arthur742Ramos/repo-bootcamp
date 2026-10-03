@@ -6,6 +6,7 @@
 import type { RepoFacts, BootcampOptions, RepoInfo } from "./types.js";
 import { getStyleConfig, type StyleConfig } from "./plugins.js";
 import { markdownToHtml } from "./formatter.js";
+import { buildBlobUrl } from "./source-links.js";
 
 /** Maximum items shown in summary sections of BOOTCAMP.md */
 const MAX_BOOTCAMP_SUMMARY_ITEMS = 5;
@@ -256,43 +257,6 @@ ${sources.map((s) => `- \`${s}\``).join("\n")}
 
 </details>
 `;
-}
-
-/**
- * Whether repoInfo points at a real remote we can build blob links against.
- * Local/--no-clone runs (owner/branch "local", or no detected host) fall back
- * to bare paths so we never emit a dead link.
- */
-function hasRemoteBlobTarget(repoInfo?: RepoInfo): repoInfo is RepoInfo & { host: string } {
-  return Boolean(
-    repoInfo &&
-    repoInfo.host &&
-    repoInfo.owner &&
-    repoInfo.owner !== "local" &&
-    repoInfo.branch &&
-    repoInfo.branch !== "local"
-  );
-}
-
-/**
- * Build a provider-aware remote blob URL for a repo-relative file path, or null
- * when repoInfo has no usable remote. Supports GitHub (`/blob/`), GitLab
- * (`/-/blob/`), and Bitbucket (`/src/`) rather than hardcoding github.com.
- */
-function buildBlobUrl(repoInfo: RepoInfo | undefined, filePath: string): string | null {
-  if (!hasRemoteBlobTarget(repoInfo)) return null;
-  const cleanPath = filePath.replace(/^\.?\/+/, "");
-  if (!cleanPath) return null;
-  const encoded = cleanPath.split("/").map(encodeURIComponent).join("/");
-  const base = `https://${repoInfo.host}/${repoInfo.owner}/${repoInfo.repo}`;
-  switch (repoInfo.provider) {
-    case "gitlab":
-      return `${base}/-/blob/${repoInfo.branch}/${encoded}`;
-    case "bitbucket":
-      return `${base}/src/${repoInfo.branch}/${encoded}`;
-    default:
-      return `${base}/blob/${repoInfo.branch}/${encoded}`;
-  }
 }
 
 /**
