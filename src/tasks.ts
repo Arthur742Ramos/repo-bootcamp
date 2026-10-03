@@ -16,7 +16,7 @@
  */
 
 import { hasContainedFile, readContainedFile } from "./fs-safe.js";
-import { FAILSAFE_SCHEMA, load, Type } from "js-yaml";
+import yaml, { FAILSAFE_SCHEMA, load, Type } from "js-yaml";
 import type { Command } from "./types.js";
 
 /** Coarse grouping used for report sections and getting-started ordering. */
@@ -214,48 +214,9 @@ export function parseJustfile(content: string): DiscoveredTask[] {
   return tasks;
 }
 
-/**
- * Return the immediate children of a top-level YAML `blockKey:` mapping, in file
- * order. Only keys at the block's first indentation level are returned; nested
- * properties and comments are skipped. Used for go-task `tasks:` and
- * docker-compose `services:` blocks.
- */
-function yamlBlockKeys(
-  content: string,
-  blockKey: string
-): Array<{ key: string; startLine: number }> {
-  const lines = content.split(/\r?\n/);
-  const blockRe = new RegExp(`^${blockKey}:\\s*$`);
-  const out: Array<{ key: string; startLine: number }> = [];
-  let inBlock = false;
-  let baseIndent = -1;
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
-    if (!inBlock) {
-      if (blockRe.test(line)) {
-        inBlock = true;
-        baseIndent = -1;
-      }
-      continue;
-    }
-    if (line.trim() === "" || line.trim().startsWith("#")) continue;
-    const indent = line.length - line.trimStart().length;
-    if (baseIndent === -1) {
-      if (indent === 0) break; // block ended immediately (no children)
-      baseIndent = indent;
-    }
-    if (indent < baseIndent) break; // dedent → end of block
-    if (indent === baseIndent) {
-      const km = line.slice(indent).match(/^([A-Za-z0-9_.-]+):/);
-      if (km) out.push({ key: km[1], startLine: i });
-    }
-  }
-  return out;
-}
-
-// Keep scalar task names/descriptions as strings while supporting standard YAML
+// Keep scalar names/descriptions as strings while supporting standard YAML
 // merge keys. Broader YAML tags (including executable/custom types) are rejected.
-const TASKFILE_SCHEMA = FAILSAFE_SCHEMA.extend({
+const TASK_YAML_SCHEMA = FAILSAFE_SCHEMA.extend({
   implicit: [
     new Type("tag:yaml.org,2002:merge", {
       kind: "scalar",
@@ -263,6 +224,31 @@ const TASKFILE_SCHEMA = FAILSAFE_SCHEMA.extend({
     }),
   ],
 });
+// js-yaml exposes its built-in types, but @types/js-yaml omits that public export.
+const yamlTypes = (yaml as typeof yaml & { types: Record<string, Type> }).types;
+// A standard set contains null values. The string-preserving schema leaves
+// spelled nulls as strings, so accept those spellings within this tag only.
+const composeSetType = new Type("tag:yaml.org,2002:set", {
+  kind: "mapping",
+  resolve: (value) =>
+    value === null ||
+    (isMapping(value) &&
+      Object.values(value).every(
+        (entry) => entry === null || (typeof entry === "string" && /^(?:~|null)?$/i.test(entry))
+      )),
+  construct: (value) => value ?? {},
+});
+// Standard explicit data tags are valid Compose YAML. Keep implicit names as
+// strings and leave Taskfile's schema unchanged; custom tags remain rejected.
+const COMPOSE_YAML_SCHEMA = TASK_YAML_SCHEMA.extend({
+  explicit: [...Object.values(yamlTypes), composeSetType],
+});
+function isMapping(value: unknown): value is Record<string, unknown> {
+  if (value === null || typeof value !== "object") return false;
+  const prototype = Object.getPrototypeOf(value);
+  return prototype === Object.prototype || prototype === null;
+}
+
 const TASK_INTERNAL_TRUE = new Set([
   "y",
   "Y",
@@ -281,12 +267,10 @@ const TASK_INTERNAL_TRUE = new Set([
 export function parseTaskfile(content: string): DiscoveredTask[] {
   let document: unknown;
   try {
-    document = load(content, { schema: TASKFILE_SCHEMA });
+    document = load(content, { schema: TASK_YAML_SCHEMA });
   } catch {
     return [];
   }
-  const isMapping = (value: unknown): value is Record<string, unknown> =>
-    value !== null && typeof value === "object" && !Array.isArray(value);
   if (!isMapping(document) || !isMapping(document.tasks)) return [];
   const tasks: DiscoveredTask[] = [];
   for (const [name, definition] of Object.entries(document.tasks)) {
@@ -326,12 +310,25 @@ export function parseTaskfile(content: string): DiscoveredTask[] {
 
 /** Parse docker-compose services into `docker compose up <service>` run tasks. */
 export function parseDockerCompose(content: string): DiscoveredTask[] {
-  return yamlBlockKeys(content, "services").map(({ key }) => ({
-    name: key,
-    command: `docker compose up ${key}`,
-    source: "docker-compose",
-    category: "run" as TaskCategory,
-  }));
+  let document: unknown;
+  try {
+    document = load(content, { schema: COMPOSE_YAML_SCHEMA });
+  } catch {
+    return [];
+  }
+  if (!isMapping(document) || !isMapping(document.services)) return [];
+  const tasks: DiscoveredTask[] = [];
+  for (const [name, definition] of Object.entries(document.services)) {
+    if (!/^[A-Za-z0-9_.-]+$/.test(name) || !isMapping(definition)) continue;
+    tasks.push({
+      name,
+      // Compose allows leading hyphens in service names; stop option parsing.
+      command: `docker compose up ${name.startsWith("-") ? "-- " : ""}${name}`,
+      source: "docker-compose",
+      category: "run",
+    });
+  }
+  return tasks;
 }
 
 /**
@@ -346,7 +343,7 @@ export function parsePyproject(content: string): DiscoveredTask[] {
   for (const raw of lines) {
     const line = raw.trim();
     if (line.startsWith("#") || line === "") continue;
-    const header = line.match(/^\[([^\]]+)\]$/);
+    const header = line.match(/^\[([^\]]+)\]\s*(?:#.*)?$/);
     if (header) {
       section = header[1].trim();
       continue;
@@ -420,10 +417,10 @@ export async function detectPackageManager(repoPath: string): Promise<PackageMan
 }
 
 /** File candidates for each ecosystem, tried in order (first hit wins). */
-const MAKEFILE_NAMES = ["Makefile", "makefile", "GNUmakefile"];
+const MAKEFILE_NAMES = ["GNUmakefile", "makefile", "Makefile"];
 const JUSTFILE_NAMES = ["justfile", "Justfile", ".justfile"];
 const TASKFILE_NAMES = ["Taskfile.yml", "Taskfile.yaml", "taskfile.yml", "taskfile.yaml"];
-const COMPOSE_NAMES = ["docker-compose.yml", "docker-compose.yaml", "compose.yml", "compose.yaml"];
+const COMPOSE_NAMES = ["compose.yaml", "compose.yml", "docker-compose.yml", "docker-compose.yaml"];
 
 /** Drop duplicate tasks that share both a source and a name (stable, keeps first). */
 function dedupeTasks(tasks: DiscoveredTask[]): DiscoveredTask[] {

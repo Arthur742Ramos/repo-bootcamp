@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Clean up owned temporary clones after main-command interactive failures, including transcript write errors; preserve local checkouts, explicit `--keep-temp`, generated output, and the original failure.
 - Honor ownerless CODEOWNERS overrides, root and globstar matching, and wildcard depth; report each area's owners from actual scanned-file assignments.
 - Generate recursive shell completions with option-value awareness, nested command aliases, and working Zsh source/autoload registration; document complete shell setup.
+- Discover commands from GNU Make and Docker Compose's preferred default files, preserve valid commented/quoted Compose services, and recognize trailing comments on Python script-section headers.
 
 - Include `.mts` and `.cts` modules in TypeScript stack detection, impact reports, and cycle checks; resolve compiled `.mjs`/`.cjs` imports to matching module-kind sources instead of unrelated `.ts` files.
 - Generate onboarding setup instructions from the actual repository provider, checkout, and selected package directory; use existing local paths instead of fabricating GitHub clone URLs.
