@@ -946,6 +946,7 @@ export async function scanRepo(
   let hasTaskfiles = false;
   const cargoHash = createHash("sha256");
   let hasCargoEvidence = false;
+  let cargoWorkspaceFingerprint: string | undefined;
   const selectedFiles = new Set(files.filter((file) => !file.isDirectory).map((file) => file.path));
   let goModFingerprint: string | undefined;
   const goPackageHash = createHash("sha256");
@@ -962,6 +963,11 @@ export async function scanRepo(
       onCargoRead: (path, content) => {
         hasCargoEvidence = true;
         cargoHash.update(JSON.stringify([path, content]));
+      },
+      onCargoWorkspaceEvidence: (path, evidence) => {
+        cargoWorkspaceFingerprint = createHash("sha256")
+          .update(JSON.stringify([path, evidence]))
+          .digest("hex");
       },
       onGoModRead: (path, content) => {
         goModFingerprint = createHash("sha256")
@@ -994,6 +1000,7 @@ export async function scanRepo(
     commands,
     ...(hasTaskfiles ? { taskfileFingerprint: taskfileHash.digest("hex") } : {}),
     ...(hasCargoEvidence ? { cargoFingerprint: cargoHash.digest("hex") } : {}),
+    ...(cargoWorkspaceFingerprint ? { cargoWorkspaceFingerprint } : {}),
     ...(goModFingerprint ? { goModFingerprint } : {}),
     ...(hasGoPackageEvidence ? { goPackageFingerprint: goPackageHash.digest("hex") } : {}),
     ciWorkflows,

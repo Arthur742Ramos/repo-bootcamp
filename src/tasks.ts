@@ -68,6 +68,8 @@ export interface DiscoverTasksOptions {
   cargoFiles?: ReadonlySet<string>;
   /** Contained Cargo manifests loaded during qualification, for cache evidence. */
   onCargoRead?: (path: string, content: string) => void;
+  /** Complete bounded wildcard workspace observations, separate from manifest reads. */
+  onCargoWorkspaceEvidence?: (path: string, evidence: string) => void;
   /** Successful contained Go module reads, for effective scan fingerprints. */
   onGoModRead?: (path: string, content: string) => void;
   /** Bounded source/boundary observations used to qualify Go package conventions. */
@@ -1005,7 +1007,13 @@ export async function discoverTasks(
   const composer = await read("composer.json");
   if (composer) tasks.push(...parseComposer(composer));
 
-  if (await hasCargoTasks(repoPath, { files: opts.cargoFiles, onRead: opts.onCargoRead })) {
+  if (
+    await hasCargoTasks(repoPath, {
+      files: opts.cargoFiles,
+      onRead: opts.onCargoRead,
+      onWorkspaceEvidence: opts.onCargoWorkspaceEvidence,
+    })
+  ) {
     tasks.push(
       { name: "build", command: "cargo build", source: "Cargo.toml", category: "build" },
       { name: "test", command: "cargo test", source: "Cargo.toml", category: "test" }

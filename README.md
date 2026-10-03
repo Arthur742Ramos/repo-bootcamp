@@ -946,17 +946,38 @@ workspace selection to Cargo's native defaults. It recognizes selected-root
 literal `[package]`/`[workspace]` tables, ASCII package names, implicit
 `src/lib.rs`, `src/main.rs`, and simple `src/bin/<name>.rs` or
 `src/bin/<name>/main.rs` targets, including literal `autolib`/`autobins` flags.
-Workspaces may contain up to 64 distinct literal relative member paths with
+Workspaces may contain up to 64 distinct relative member paths with
 qualifying contained package manifests/targets and literal `default-members`
-subsets. All qualifying evidence must be included in the selected scan;
+subsets. In addition to literal members, contained terminal single-level patterns
+like `crates/*` are supported when every matching directory is known and selected.
+Immediate topology observation is bounded to 64 prefixes and 512 entries in total,
+including regular files and hidden directories. A manifestless, excluded, truncated,
+linked or otherwise ambiguous member leaves the convention unknown. Literal/glob
+overlap and other glob syntax remain unsupported. All qualifying evidence must be included in the selected scan;
 exclusions and file limits can therefore leave Cargo commands unknown.
 
 This is conservative static qualification, not full TOML/Cargo validation.
-Explicit target tables, member globs/excludes, `package.workspace` indirection,
+Explicit target tables, recursive/other member globs, workspace excludes, `package.workspace` indirection,
 empty virtual workspaces, and unknown discovery fields contribute no Cargo
 commands. Unrelated manifest metadata is not interpreted. Manifest evidence is
 capped at 2 MiB in total; standalone implicit-bin enumeration is capped at 512
-entries. Discovery never invokes Cargo, expands aliases/config, or guesses
+entries. Wildcard workspaces also require a closed declared member set: supported
+ordinary/dev/build and target-specific dependency tables may use `{path="../core"}`
+or a detailed dependency subtable containing only a literal `path`. Each path must
+resolve to an expanded declared member or the root package, with its own selected
+manifest and target. Literal numeric registry versions (one to three components,
+optionally caret/tilde-prefixed, or `*`) are recognized as non-path references.
+At most 512 dependency declarations are observed. Automatic members outside the
+declared set, cycles, renamed packages, package/workspace inheritance, legacy
+`[project]` or underscore dependency aliases, extra inline/detail fields,
+whole inline/dotted dependency tables, patch/replace and unknown forms leave
+wildcard commands unknown; ordinary literal-member behavior is unchanged.
+
+Successfully loaded manifests retain their separate content fingerprint. Complete
+wildcard directory/membership observations add a workspace fingerprint, including
+known excluded entries; incomplete enumeration never fingerprints a partial list.
+The manifest-read callback remains manifest-only, with a separate optional workspace
+evidence callback. Discovery never invokes Cargo, expands aliases/config, or guesses
 run/install/watch commands, features, binaries, or package-selection flags.
 
 ### Auto-Create GitHub Issues

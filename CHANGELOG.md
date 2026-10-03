@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Discover native Cargo build/test guidance for bounded contained single-level workspace members, with complete topology evidence and closed declared dependency membership.
+
 - Discover native Cargo build/test conventions from qualifying selected-root packages and literal contained workspaces, preserving explicit guidance and honoring scanned evidence, exclusions, limits, and cache identity.
 - Discover native Go module build/test conventions at the selected root, retaining declared-command precedence and respecting scanned/excluded manifest evidence without executing Go or expanding workspaces. Require ordinary package evidence, omitting known implicit GOOS/GOARCH filename constraints as well as explicit build constraints.
 
