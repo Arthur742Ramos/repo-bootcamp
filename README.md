@@ -899,7 +899,7 @@ as legacy and regenerated on the next run.
 
 Repository scanning stops directory traversal and file metadata reads when `--max-files` is reached. Excluded dependency trees are pruned, and symbolic links and special filesystem entries are skipped. Exclude patterns support glob, extglob, and brace syntax. Expansion has a 10,000-alternative ceiling and a pattern-dependent memory budget; exceeding either produces an error instead of silently dropping exclusions.
 
-Use `--subdir packages/app` to analyze a package within a repository. Documentation, workflows, source evidence, workspace metadata, and runnable commands are read from that selected directory; reported file paths remain relative to it. The path must stay inside the repository.
+Use `--subdir packages/app` to analyze a package within a repository. Documentation, workflows, source evidence, workspace metadata, and runnable commands are read from that selected directory; reported file paths remain relative to it. AI file tools, extended analysis, plugins, interactive sessions, and watch regeneration use that directory too. The path must stay inside the repository.
 
 | Option                       | Description                                                                  | Default             |
 | ---------------------------- | ---------------------------------------------------------------------------- | ------------------- |

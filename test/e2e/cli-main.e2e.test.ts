@@ -221,4 +221,37 @@ describe("bootcamp CLI", () => {
     const bootcamp = await readFile(join(outputDir, "BOOTCAMP.md"), "utf-8");
     expect(bootcamp).toContain("fixture-cli-repo");
   }, 90_000);
+  it("generates extended analysis from the selected package instead of the outer manifest", async () => {
+    const tempDir = await mkdtemp(join(tmpdir(), "bootcamp-scoped-cli-"));
+    tempDirs.push(tempDir);
+    const repoPath = await createFixtureRepo(tempDir);
+    const subdir = "packages/app";
+    const selectedRoot = join(repoPath, subdir);
+    await mkdir(join(selectedRoot, "src"), { recursive: true });
+    await writeFile(
+      join(selectedRoot, "package.json"),
+      JSON.stringify({ name: "selected-app", dependencies: { "child-runtime": "^1.0.0" } })
+    );
+    await writeFile(join(selectedRoot, "README.md"), "# Selected package\n");
+    await writeFile(join(selectedRoot, "src", "index.ts"), "export const child = true;\n");
+    const outputDir = join(tempDir, "output");
+    const responseFile = join(tempDir, "mock-response.json");
+    await writeFile(responseFile, JSON.stringify(buildMockFacts(`local/${basename(repoPath)}`)));
+    const result = await runCli(
+      [repoPath, "--no-clone", "--subdir", subdir, "--no-cache", "--output", outputDir],
+      {
+        NODE_ENV: "test",
+        REPO_BOOTCAMP_TEST_LLM_RESPONSE_FILE: responseFile,
+      }
+    );
+    expect(result.exitCode).toBe(0);
+    const dependencies = await readFile(join(outputDir, "DEPENDENCIES.md"), "utf-8");
+    expect(dependencies).toContain("child-runtime");
+    expect(dependencies).not.toContain("express");
+    const summary = JSON.parse(await readFile(join(outputDir, "summary.json"), "utf-8"));
+    expect(summary.deps).toEqual({ total: 1, runtime: 1, dev: 0 });
+    expect(
+      JSON.parse(await readFile(join(repoPath, "package.json"), "utf-8")).dependencies
+    ).toHaveProperty("express");
+  }, 90_000);
 });
