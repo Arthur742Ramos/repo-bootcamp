@@ -348,7 +348,7 @@ async function scanDirectory(
   }
   // `subdir` scopes the walk to a sub-path of the repo (e.g. a monorepo
   // package); `exclude` drops additional trees (generated/vendored fixtures).
-  // Both default to a no-op — the CLI wiring arrives in a later wave.
+  // Both default to a no-op for scans of the full repository.
   const realBasePath = await realpath(basePath);
   const requestedScanRoot = subdir ? resolve(basePath, subdir) : basePath;
   let scanRoot: string;
