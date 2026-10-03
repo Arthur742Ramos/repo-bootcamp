@@ -41,42 +41,72 @@ export function parseCodeowners(content: string): OwnerRule[] {
     const parts = line.split(/\s+/);
     const pattern = parts[0];
     const owners = parts.slice(1).filter((o) => o.startsWith("@") || o.includes("@"));
-    if (pattern && owners.length > 0) rules.push({ pattern, owners });
+    // Empty owner lists intentionally clear an earlier matching assignment.
+    // Skip unsupported syntax rather than treating invalid owner text as a clear.
+    if (
+      pattern &&
+      !pattern.startsWith("!") &&
+      !pattern.includes("[") &&
+      !pattern.includes("]") &&
+      !pattern.includes("\\") &&
+      (parts.length === 1 || owners.length > 0)
+    ) {
+      rules.push({ pattern, owners });
+    }
   }
   return rules;
 }
 
-/** Pragmatic CODEOWNERS (gitignore-style) pattern match against a path. */
-function patternMatches(pattern: string, filePath: string): boolean {
+/** GitHub CODEOWNERS matching: slash anchoring, globstars, and directory rules. */
+function patternMatches(pattern: string, filePath: string, isDirectory?: boolean): boolean {
   if (pattern === "*") return true;
   let p = pattern;
-  const anchored = p.startsWith("/");
-  if (anchored) p = p.slice(1);
-  if (p.endsWith("/")) p = p.slice(0, -1);
-  const body = p
-    .split("/")
-    .map((seg) =>
-      seg === "**"
-        ? ".*"
-        : seg
-            .replace(/[.+^${}()|[\]\\]/g, "\\$&")
-            .replace(/\*/g, "[^/]*")
-            .replace(/\?/g, "[^/]")
-    )
-    .join("/");
+  const directoryOnly = p.endsWith("/");
+  if (directoryOnly) p = p.slice(0, -1);
+  // A slash at the start or in the middle roots the pattern at the repository.
+  // A single directory name followed by a slash can match at any depth.
+  const anchored = p.includes("/");
+  if (p.startsWith("/")) p = p.slice(1);
+  const segments = p.split("/");
+  const body = segments
+    .map((seg, index) => {
+      if (seg === "**") return index < segments.length - 1 ? "(?:[^/]+/)*" : ".*";
+      const single = seg
+        .replace(/[.+^${}()|[\]\\]/g, "\\$&")
+        .replace(/\*/g, "[^/]*")
+        .replace(/\?/g, "[^/]");
+      return single + (index < segments.length - 1 ? "/" : "");
+    })
+    .join("");
   const head = anchored ? "^" : "(?:^|.*/)";
+  // GitHub documents `docs/*` as matching direct files, not nested descendants.
+  // Explicit directory rules and literal directory names include descendants.
+  const tail =
+    directoryOnly && isDirectory === false
+      ? "/.*$"
+      : directoryOnly || !/[*?]/.test(segments[segments.length - 1])
+        ? "(?:/.*)?$"
+        : "$";
   try {
-    return new RegExp(`${head}${body}(?:/.*)?$`).test(filePath);
+    return new RegExp(`${head}${body}${tail}`).test(filePath);
   } catch {
     return false;
   }
 }
 
-/** Owners for a path — the LAST matching rule wins (CODEOWNERS semantics). */
-export function ownersForPath(filePath: string, rules: OwnerRule[]): string[] {
+/**
+ * Owners for a path — the LAST matching rule wins (CODEOWNERS semantics).
+ * Pass false for a known file so a directory-only pattern cannot match its name.
+ * Omitting the kind preserves callers that query a bare directory path.
+ */
+export function ownersForPath(
+  filePath: string,
+  rules: OwnerRule[],
+  isDirectory?: boolean
+): string[] {
   let owners: string[] = [];
   for (const rule of rules) {
-    if (patternMatches(rule.pattern, filePath)) owners = rule.owners;
+    if (patternMatches(rule.pattern, filePath, isDirectory)) owners = rule.owners;
   }
   return owners;
 }
@@ -131,7 +161,7 @@ function printReport(
     );
     console.log();
 
-    console.log(chalk.bold("Ownership by area"));
+    console.log(chalk.bold("Ownership by area") + chalk.dim("  (owners of scanned files)"));
     for (const area of areas) {
       const who = area.owners.length ? chalk.cyan(area.owners.join(" ")) : chalk.dim("(unowned)");
       console.log(`  ${chalk.bold(area.dir.padEnd(16))} ${who}`);
@@ -160,7 +190,7 @@ function printReport(
 /**
  * Run the standalone `bootcamp owners` command: clone/resolve the target repo,
  * parse its CODEOWNERS file, and answer "who do I ask?" — the default owners,
- * the owners responsible for each top-level area (last-match-wins), the full
+ * the union of file owners in each top-level area (last-match-wins per file), the full
  * maintainer set, and a best-effort list of top committers from the available
  * git history. Deterministic; never invokes the LLM.
  */
@@ -186,13 +216,19 @@ export async function runOwnersCommand(repoUrl: string, opts: OwnersCommandOptio
     const rules = codeownersContent ? parseCodeowners(codeownersContent) : [];
     const defaultRule = [...rules].reverse().find((r) => r.pattern === "*");
     const defaultOwners = defaultRule?.owners ?? [];
-    // Resolve each area against a directory path (trailing slash) so the common
-    // `/packages/** @team` CODEOWNERS idiom matches — patternMatches anchors a
-    // `**` rule with a `/` separator, which a bare dir name lacks. A `/dir` or
-    // `/dir/` rule still matches the trailing-slash form too.
+    // Each area lists the union of owners actually assigned to scanned files.
+    // A synthetic `src/` path cannot capture extension rules or nested overrides.
+    const areaOwners = new Map<string, Set<string>>();
+    for (const file of scan.files) {
+      if (file.isDirectory || !file.path.includes("/")) continue;
+      const dir = file.path.split("/")[0];
+      const owners = areaOwners.get(dir) ?? new Set<string>();
+      for (const owner of ownersForPath(file.path, rules, false)) owners.add(owner);
+      areaOwners.set(dir, owners);
+    }
     const areas = topLevelDirs(scan.files).map((dir) => ({
       dir,
-      owners: ownersForPath(`${dir}/`, rules),
+      owners: [...(areaOwners.get(dir) ?? [])].sort((a, b) => a.localeCompare(b)),
     }));
     const allOwners = [...new Set(rules.flatMap((r) => r.owners))].sort((a, b) =>
       a.localeCompare(b)
