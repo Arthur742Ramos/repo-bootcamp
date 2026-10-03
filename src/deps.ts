@@ -81,6 +81,16 @@ function parseTomlVersion(value: string): string {
   return token || "*";
 }
 
+/** PEP 508 URL markers require whitespace; URI semicolons are literal data. */
+function withoutPyprojectRequirementMarker(item: string): string {
+  const direct = item.match(/^[A-Za-z0-9._-]+(?:[ \t]*\[[^\]]*\])?[ \t]*@[ \t]*[^ \t\r\n]+/);
+  if (direct) {
+    const suffix = item.slice(direct[0].length);
+    return /^[ \t]+;/.test(suffix) ? direct[0].trim() : item.trim();
+  }
+  return item.split(";")[0].trim();
+}
+
 /** Drop TOML line comments without changing hashes inside quoted strings. */
 function stripTomlComments(content: string): string {
   const chunks: string[] = [];
@@ -413,7 +423,7 @@ async function extractPythonDependencies(
         for (const quoted of tomlArrayStrings(body)) {
           const item = quoted.trim();
           if (!item || item.startsWith("#")) continue;
-          const cleaned = item.split(";")[0].trim();
+          const cleaned = withoutPyprojectRequirementMarker(item);
           const match = cleaned.match(/^([A-Za-z0-9._-]+)(?:\[[^\]]*\])?\s*(.*)$/);
           if (!match) continue;
           const version = (match[2] || "").trim();
