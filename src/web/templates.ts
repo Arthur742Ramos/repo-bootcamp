@@ -816,6 +816,7 @@ export function getIndexHtml(nonce?: string): string {
       const active = document.querySelector('#phaseRail .phase-step.active');
       if (active) {
         active.classList.remove('active');
+        active.removeAttribute('aria-current');
         active.classList.add(state === 'cancelled' ? 'cancelled' : 'error');
       }
     }
@@ -901,6 +902,8 @@ export function getIndexHtml(nonce?: string): string {
         const message = err instanceof Error ? err.message : String(err);
         addProgressItem(message, 'error');
         status.textContent = 'Analysis could not start: ' + message;
+        finishPhaseRail('error');
+        stopProgressClock();
         resetButton();
         document.getElementById('retryBtn').hidden = false;
       }
@@ -928,6 +931,7 @@ export function getIndexHtml(nonce?: string): string {
           addProgressItem('The server sent invalid progress data.', 'error');
           finishPhaseRail('error');
           document.getElementById('statusMsg').textContent = 'Analysis stopped because progress data was invalid';
+          stopProgressClock();
           resetButton();
           return;
         }
@@ -938,6 +942,7 @@ export function getIndexHtml(nonce?: string): string {
           addProgressItem('The server sent an invalid progress event.', 'error');
           finishPhaseRail('error');
           document.getElementById('statusMsg').textContent = 'Analysis stopped because a progress event was invalid';
+          stopProgressClock();
           resetButton();
           return;
         }
@@ -1065,6 +1070,8 @@ export function getIndexHtml(nonce?: string): string {
         if (attempts >= maxAttempts) {
           addProgressItem('Gave up waiting for the server to respond.', 'error');
           document.getElementById('statusMsg').textContent = 'Analysis status could not be recovered';
+          finishPhaseRail('error');
+          stopProgressClock();
           resetButton();
           return;
         }
