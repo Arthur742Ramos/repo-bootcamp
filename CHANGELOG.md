@@ -16,7 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - Preserve literal task labels and command backticks, line breaks, and spacing in generated Markdown, HTML, and PDF-ready guides; match code fences only on complete closing lines and keep literal text out of formatting placeholders.
-
+- Reset kit and issue-preview download controls for new analyses, cancel obsolete requests and feedback timers, and prevent late responses from affecting a replacement run while preserving active same-job downloads.
 - Discover public Just recipes with supported literal defaults and zero required arguments; omit private helpers and ambiguous default Justfile sources from runnable onboarding guidance.
 - Recreate the analyzed branch or tag in remote onboarding clone instructions, including selected packages that exist only on that ref; detached tag source links use the known analyzed commit.
 - Quote package script names as one literal POSIX shell argument in task discovery and npm diff guidance, preserving names with spaces, quotes, and punctuation and using `run --` for leading-hyphen names.
