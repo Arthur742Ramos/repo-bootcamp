@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Keep web analysis admission within the 100-job limit while an evicted job's output cleanup is pending, preserving active jobs and existing cleanup behavior.
 - Honor standalone task discovery `--subdir` in either global option position, validate the selected contained directory, and forward advertised `--keep-temp` while preserving root output and outer-checkout cleanup.
 - Preserve literal command spacing, tabs, and line breaks in web First commands, terminal handoff, and inline reader code; wrap full task labels and commands within their rows while retaining fenced-code wrapping and raw Copy/Download output.
 - Keep clipboard feedback and retry controls owned by the displayed analysis or preview file; ignore obsolete copy completions and timers and suppress delayed fallback writes after context changes.
