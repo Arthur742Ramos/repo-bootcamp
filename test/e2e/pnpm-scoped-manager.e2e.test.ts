@@ -94,6 +94,18 @@ async function setup() {
   return { temp, repo, app, response, facts, run };
 }
 describe("actual selected pnpm workspace journeys", () => {
+  it.each(["node_modules/app", "packages/bower_components/app"])(
+    "uses selected npm tasks for native-excluded %s",
+    async (subdir) => {
+      const { repo, run } = await setup();
+      await writeFile(join(repo, "pnpm-workspace.yaml"), "packages: ['**']\n");
+      const child = join(repo, subdir);
+      await mkdir(child, { recursive: true });
+      await writeFile(join(child, "package.json"), '{"scripts":{"build":"NEVER_RUN"}}');
+      const tasks = JSON.parse(run(["tasks", repo, "--subdir", subdir, "--json"])).tasks;
+      expect(tasks.map((task: { command: string }) => task.command)).toEqual(["npm run build"]);
+    }
+  );
   it("keeps standalone tasks scoped and child overrides/exclusions/root/direct input compatible", async () => {
     const { repo, app, run } = await setup();
     const commands = (args: string[]) =>

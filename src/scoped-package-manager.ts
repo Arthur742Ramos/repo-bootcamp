@@ -80,7 +80,13 @@ export async function resolveScopedPackageManager({
     if (root === selected || !isPathInsideDir(root, selected)) return fallback;
     const path = relative(root, selected).split(sep).join("/");
     const parts = path.split("/");
-    if (parts.length > 64) return fallback;
+    // pnpm never discovers workspace packages beneath these dependency stores,
+    // even when an explicit packages pattern or a contained alias matches.
+    if (
+      parts.length > 64 ||
+      parts.some((part) => part === "node_modules" || part === "bower_components")
+    )
+      return fallback;
     const child = await manifest(selected);
     if (!child || (child.packageManager !== undefined && child.packageManager !== ""))
       return fallback;

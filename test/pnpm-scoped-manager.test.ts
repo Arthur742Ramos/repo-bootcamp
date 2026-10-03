@@ -56,6 +56,45 @@ describe("proven original-root pnpm manager context", () => {
     expect((await scanRepo(root, 100)).packageManagerContextFingerprint).toBeUndefined();
   });
   it.each([
+    "node_modules/app",
+    "bower_components/app",
+    "packages/node_modules/app",
+    "packages/bower_components/app",
+  ])(
+    "does not inherit a workspace manager beneath native-excluded %s, including aliases",
+    async (subdir) => {
+      const { root } = await setup("packages: ['**']\n");
+      const child = join(root, subdir);
+      await mkdir(child, { recursive: true });
+      await writeFile(join(child, "package.json"), '{"scripts":{"build":"NEVER_RUN"}}');
+      for (const selected of [subdir, "alias"]) {
+        if (selected === "alias")
+          await symlink(
+            child,
+            join(root, selected),
+            process.platform === "win32" ? "junction" : "dir"
+          );
+        const scan = await scanRepo(root, 100, { subdir: selected });
+        expect(scan.stack.packageManager).toBe("npm");
+        expect(scan.commands.map((command) => command.command)).toEqual(["npm run build"]);
+        expect(scan).not.toHaveProperty("packageManagerContextFingerprint");
+      }
+    }
+  );
+  it.each(["test/app", "tests/app", "packages/node_modules_app"])(
+    "keeps native-supported %s eligible",
+    async (subdir) => {
+      const { root } = await setup("packages: ['**']\n");
+      const child = join(root, subdir);
+      await mkdir(child, { recursive: true });
+      await writeFile(join(child, "package.json"), '{"scripts":{"build":"NEVER_RUN"}}');
+      const scan = await scanRepo(root, 100, { subdir });
+      expect(scan.stack.packageManager).toBe("pnpm");
+      expect(scan.commands.map((command) => command.command)).toEqual(["pnpm run build"]);
+      expect(scan.packageManagerContextFingerprint).toMatch(/^[a-f0-9]{64}$/);
+    }
+  );
+  it.each([
     "packages: []\n",
     "catalog: {}\n",
     "packages: {app: packages/app}\n",
