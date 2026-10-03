@@ -321,6 +321,8 @@ export interface ScanResult {
   commands: Command[];
   /** Content identity of contained Taskfiles read during deterministic discovery. */
   taskfileFingerprint?: string;
+  /** Relevant proven original-root pnpm manager context for a selected package. */
+  packageManagerContextFingerprint?: string;
   /** Loaded Cargo manifest evidence used to qualify build/test conventions. */
   cargoFingerprint?: string;
   /** Bounded wildcard workspace topology and declared membership observations. */
