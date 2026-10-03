@@ -16,6 +16,7 @@
  */
 
 import { hasContainedFile, readContainedFile } from "./fs-safe.js";
+import { FAILSAFE_SCHEMA, load, Type } from "js-yaml";
 import type { Command } from "./types.js";
 
 /** Coarse grouping used for report sections and getting-started ordering. */
@@ -252,28 +253,71 @@ function yamlBlockKeys(
   return out;
 }
 
-/** Parse go-task `Taskfile.yml` tasks, capturing `desc:`/`summary:` when present. */
+// Keep scalar task names/descriptions as strings while supporting standard YAML
+// merge keys. Broader YAML tags (including executable/custom types) are rejected.
+const TASKFILE_SCHEMA = FAILSAFE_SCHEMA.extend({
+  implicit: [
+    new Type("tag:yaml.org,2002:merge", {
+      kind: "scalar",
+      resolve: (value) => value === "<<" || value === null,
+    }),
+  ],
+});
+const TASK_INTERNAL_TRUE = new Set([
+  "y",
+  "Y",
+  "yes",
+  "Yes",
+  "YES",
+  "true",
+  "True",
+  "TRUE",
+  "on",
+  "On",
+  "ON",
+]);
+
+/** Parse public go-task tasks without evaluating templates or executing commands. */
 export function parseTaskfile(content: string): DiscoveredTask[] {
-  const lines = content.split(/\r?\n/);
-  const keys = yamlBlockKeys(content, "tasks");
+  let document: unknown;
+  try {
+    document = load(content, { schema: TASKFILE_SCHEMA });
+  } catch {
+    return [];
+  }
+  const isMapping = (value: unknown): value is Record<string, unknown> =>
+    value !== null && typeof value === "object" && !Array.isArray(value);
+  if (!isMapping(document) || !isMapping(document.tasks)) return [];
   const tasks: DiscoveredTask[] = [];
-  for (let k = 0; k < keys.length; k++) {
-    const { key, startLine } = keys[k];
-    if (key === "default") continue; // the default task runs as bare `task`
-    const end = k + 1 < keys.length ? keys[k + 1].startLine : lines.length;
-    let description: string | undefined;
-    for (let i = startLine + 1; i < end; i++) {
-      const dm = lines[i].match(/^\s+(?:desc|summary):\s*["']?(.+?)["']?\s*$/);
-      if (dm) {
-        description = dm[1];
-        break;
-      }
-    }
+  for (const [name, definition] of Object.entries(document.tasks)) {
+    // Emit shell-safe names verbatim, including Task's colon-separated names.
+    // Keep the existing default-task behavior (it runs as bare `task`).
+    if (name === "default" || !/^[A-Za-z0-9_.][A-Za-z0-9_.:-]*$/.test(name)) continue;
+    if (
+      isMapping(definition) &&
+      (definition.internal === true ||
+        (typeof definition.internal === "string" && TASK_INTERNAL_TRUE.has(definition.internal)))
+    )
+      continue;
+    if (
+      definition !== null &&
+      typeof definition !== "string" &&
+      !Array.isArray(definition) &&
+      !isMapping(definition)
+    )
+      continue;
+    const description = isMapping(definition)
+      ? typeof definition.desc === "string"
+        ? definition.desc
+        : typeof definition.summary === "string"
+          ? definition.summary
+          : undefined
+      : undefined;
     tasks.push({
-      name: key,
-      command: `task ${key}`,
+      name,
+      command: `task ${name}`,
       source: "Taskfile",
-      category: categorizeTask(key),
+      category: categorizeTask(name),
       description,
     });
   }

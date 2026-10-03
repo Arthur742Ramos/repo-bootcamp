@@ -224,6 +224,142 @@ describe("parseTaskfile", () => {
     ]);
   });
 
+  it("preserves namespaced and quoted public task names", () => {
+    const tasks = parseTaskfile(`version: '3'
+"tasks": # public commands
+  app:build:
+    desc: Build app
+  "test:unit":
+    cmds: [echo tested]
+  'lint:types': echo checked
+`);
+    expect(tasks.map(({ name, command, category }) => ({ name, command, category }))).toEqual([
+      { name: "app:build", command: "task app:build", category: "build" },
+      { name: "test:unit", command: "task test:unit", category: "test" },
+      { name: "lint:types", command: "task lint:types", category: "lint" },
+    ]);
+  });
+
+  it("omits private helpers in block and flow mappings", () => {
+    const tasks = parseTaskfile(`tasks:
+  build:
+    desc: Public build
+    cmds: [{task: helper}]
+  helper:
+    desc: Private helper
+    internal: true
+  hidden: {internal: true, cmds: [echo hidden]}
+  visible: {internal: false, desc: Still public}
+`);
+    expect(tasks.map((task) => task.name)).toEqual(["build", "visible"]);
+  });
+
+  it("honors inherited private metadata and explicit public overrides", () => {
+    const tasks = parseTaskfile(`tasks:
+  private: &private
+    internal: true
+    desc: Inherited description
+    cmds: [echo helper]
+  helper:
+    <<: *private
+  public:
+    <<: *private
+    internal: false
+    desc: Public override
+`);
+    expect(tasks.map(({ name, description }) => ({ name, description }))).toEqual([
+      { name: "public", description: "Public override" },
+    ]);
+  });
+
+  it("omits legacy YAML boolean forms that Task treats as internal", () => {
+    for (const internal of [
+      "y",
+      "Y",
+      "yes",
+      "Yes",
+      "YES",
+      "true",
+      "True",
+      "TRUE",
+      "on",
+      "On",
+      "ON",
+    ]) {
+      expect(parseTaskfile(`tasks:\n  helper:\n    internal: ${internal}\n`)).toEqual([]);
+    }
+  });
+
+  it("reads only the task's own metadata, with folded and literal descriptions", () => {
+    const tasks = parseTaskfile(`tasks:
+  build:
+    vars:
+      internal: true
+      desc: Nested value
+    desc: >-
+      Build the
+      application
+  test:
+    summary: |-
+      Run the tests.
+      Check the results.
+vars:
+  desc: Unrelated root value
+`);
+    expect(tasks.map((task) => task.description)).toEqual([
+      "Build the application",
+      "Run the tests.\nCheck the results.",
+    ]);
+    expect(tasks.map((task) => task.name)).toEqual(["build", "test"]);
+  });
+
+  it("keeps scalar/list shorthand tasks using Task's string semantics", () => {
+    const tasks = parseTaskfile(`tasks:
+  build: echo built
+  test: [echo tested]
+  fail: false
+  numeric: 123
+`);
+    expect(tasks.map((task) => task.command)).toEqual([
+      "task build",
+      "task test",
+      "task fail",
+      "task numeric",
+    ]);
+  });
+
+  it("preserves scalar-looking names and description text", () => {
+    const tasks = parseTaskfile(`tasks:
+  on:
+    desc: true
+  2026-01-01:
+    desc: 123
+`);
+    expect(tasks.map(({ name, description }) => ({ name, description }))).toEqual([
+      { name: "on", description: "true" },
+      { name: "2026-01-01", description: "123" },
+    ]);
+  });
+
+  it("returns no commands for malformed, duplicate, or non-mapping YAML", () => {
+    for (const content of [
+      "tasks: [",
+      "tasks: []",
+      "tasks: null",
+      "[]",
+      "tasks:\n  build: echo first\n  build: echo second\n",
+    ]) {
+      expect(parseTaskfile(content)).toEqual([]);
+    }
+  });
+
+  it("rejects custom YAML types and never emits shell syntax from task names", () => {
+    expect(parseTaskfile("tasks: !!js/function 'function () {}'")).toEqual([]);
+    for (const name of ["build; echo unintended", "--version", "-build", ":root"]) {
+      expect(parseTaskfile(`tasks:\n  "${name}": echo nope\n`)).toEqual([]);
+    }
+  });
+
   it("returns [] when there is no tasks block", () => {
     expect(parseTaskfile("version: '3'\n")).toEqual([]);
   });
