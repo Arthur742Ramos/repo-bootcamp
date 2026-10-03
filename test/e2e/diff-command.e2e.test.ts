@@ -301,9 +301,11 @@ describe("diff command", () => {
       if (keepTemp) {
         const clonePath = join(tempDir, ".tmp", clones[0]);
         expect((await stat(join(clonePath, ".git"))).isDirectory()).toBe(true);
-        expect(stripAnsi(result.stdout)).toContain(
-          `Temporary clone kept at: ${await realpath(clonePath)}`
-        );
+        const reportedPath = stripAnsi(result.stdout).match(
+          /^Temporary clone kept at: (.+)$/m
+        )?.[1];
+        expect(reportedPath).toBeTruthy();
+        expect(await realpath(reportedPath!)).toBe(await realpath(clonePath));
       }
     },
     90_000
