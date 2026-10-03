@@ -240,3 +240,30 @@ describe("GitHub issue destination and batch results", () => {
     expect(payload.body).toContain("https://github.com/octo/demo/blob/main/packages/app/docs/a.md");
   });
 });
+
+describe("issue payload attribution", () => {
+  it.each([
+    { provider: "github", host: "github.com", url: "https://github.com/octo/demo" },
+    { provider: "gitlab", host: "gitlab.com", url: "https://gitlab.com/octo/demo" },
+    { provider: "bitbucket", host: "bitbucket.org", url: "https://bitbucket.org/octo/demo" },
+    {
+      provider: undefined,
+      host: undefined,
+      url: "file:///owned/demo",
+      owner: "local",
+      fullName: "local/demo",
+    },
+    { provider: undefined, host: undefined, url: "https://github.com/octo/demo" },
+  ])("credits the canonical tool project for %j", (overrides) => {
+    const info = { ...repoInfo, ...overrides } as RepoInfo;
+    const payload = taskToIssuePayload(tasks[0], info);
+    expect(payload.body).toContain(
+      "[Repo Bootcamp](https://github.com/Arthur742Ramos/repo-bootcamp)"
+    );
+    expect(payload.body).not.toContain(`[Repo Bootcamp](https://github.com/${info.fullName})`);
+    expect(generateIssuePreview([tasks[0]], info)).toContain(
+      "[Repo Bootcamp](https://github.com/Arthur742Ramos/repo-bootcamp)"
+    );
+    expect(execFileMock).not.toHaveBeenCalled();
+  });
+});
