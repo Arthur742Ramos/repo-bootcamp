@@ -786,7 +786,9 @@ go-task `Taskfile`, `docker-compose`, `pyproject.toml` (poetry / PEP 621), and
 `composer.json` — then groups the results by category and suggests a
 first-session sequence (install → build → test → dev/run). Never invokes the
 LLM, so non-npm repos (Rust, Go, Python, PHP) finally surface runnable
-commands. Answers the most common Day-1 question: _"how do I build, test, and
+commands. Full onboarding scans use the same declared package manager and script
+commands as task discovery; `package.json` declarations take precedence over
+lockfiles, including Bun’s `bun.lock` and `bun.lockb`. Answers the most common Day-1 question: _"how do I build, test, and
 run this?"_
 
 ### Auto-Create GitHub Issues

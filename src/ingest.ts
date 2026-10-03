@@ -19,7 +19,7 @@ import type {
 } from "./types.js";
 import { SKIP_DIRS, isPathInsideDir } from "./utils.js";
 import { readContainedFile } from "./fs-safe.js";
-import { discoverTasks, toCommands } from "./tasks.js";
+import { detectPackageManager, discoverTasks, toCommands } from "./tasks.js";
 import { walkRepositoryFiles } from "./scan-walk.js";
 import frameworkMaps from "./data/framework-maps.json" with { type: "json" };
 
@@ -944,10 +944,16 @@ export async function scanRepo(
   const stack = detectStack(files);
   const monorepo = await detectMonorepo(repoPath, files);
 
-  // Extract commands
-  // Delegate command extraction to the shared task-discovery engine, forcing the
-  // npm package manager so generated `npm run <name>` strings stay byte-identical.
-  const commands = toCommands(await discoverTasks(repoPath, { packageManager: "npm" }));
+  // Resolve the manager once so onboarding evidence and runnable commands use
+  // the same manifest/lockfile selection as the standalone tasks command.
+  // scanDirectory has already validated that the selected directory stays
+  // inside the repository; its file paths are relative to that directory.
+  const taskRoot = options.subdir ? resolve(repoPath, options.subdir) : repoPath;
+  const packageManager = await detectPackageManager(taskRoot);
+  if (files.some((file) => file.path === "package.json")) {
+    stack.packageManager = packageManager;
+  }
+  const commands = toCommands(await discoverTasks(taskRoot, { packageManager }));
 
   // Parse CI workflows
   const ciWorkflows = await parseWorkflows(repoPath, files);

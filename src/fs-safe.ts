@@ -25,14 +25,29 @@ export const MAX_CONTAINED_FILE_BYTES = 10 * 1024 * 1024;
  * parent of the clone dir) doesn't cause a false rejection.
  */
 export async function readContainedFile(repoPath: string, relPath: string): Promise<string> {
-  const fullPath = join(repoPath, relPath);
-  const [realRoot, realTarget] = await Promise.all([realpath(repoPath), realpath(fullPath)]);
-  if (!isPathInsideDir(realRoot, realTarget)) {
-    throw new Error(`Refusing to read '${relPath}': symlink escapes repository root`);
-  }
+  const realTarget = await resolveContainedPath(repoPath, relPath);
   const { size } = await stat(realTarget);
   if (size > MAX_CONTAINED_FILE_BYTES) {
     throw new Error(`Refusing to read '${relPath}': ${size} bytes exceeds cap`);
   }
   return readFile(realTarget, "utf-8");
+}
+
+/** Resolve a fixed-name file while retaining the reader's containment guard. */
+async function resolveContainedPath(repoPath: string, relPath: string): Promise<string> {
+  const fullPath = join(repoPath, relPath);
+  const [realRoot, realTarget] = await Promise.all([realpath(repoPath), realpath(fullPath)]);
+  if (!isPathInsideDir(realRoot, realTarget)) {
+    throw new Error(`Refusing to read '${relPath}': symlink escapes repository root`);
+  }
+  return realTarget;
+}
+
+/** Check for a regular contained file without buffering its contents. */
+export async function hasContainedFile(repoPath: string, relPath: string): Promise<boolean> {
+  try {
+    return (await stat(await resolveContainedPath(repoPath, relPath))).isFile();
+  } catch {
+    return false;
+  }
 }
