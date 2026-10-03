@@ -340,6 +340,91 @@ test *FILES:
   );
 
   it.each(["standard", "fast"])(
+    "uses scoped native Cargo defaults in saved %s guidance and retains explicit analysis commands",
+    async (mode) => {
+      const tempDir = await mkdtemp(join(tmpdir(), "bootcamp-cargo-kit-"));
+      tempDirs.push(tempDir);
+      const repo = join(tempDir, "repo");
+      const selected = join(repo, "crates", "core");
+      await mkdir(join(selected, "src"), { recursive: true });
+      await writeFile(
+        join(repo, "Cargo.toml"),
+        '[workspace]\nmembers=["crates/core"]\nresolver="2"\n'
+      );
+      await writeFile(
+        join(selected, "Cargo.toml"),
+        '[package]\nname="owned-core"\nversion="0.1.0"\nedition="2021"\n'
+      );
+      await writeFile(join(selected, "src/lib.rs"), "pub fn answer() -> u32 { 42 }\n");
+      const facts = buildMockFacts("local/owned-rust");
+      facts.stack = {
+        languages: ["Rust"],
+        frameworks: [],
+        packageManager: "cargo",
+        buildSystem: "cargo",
+        hasCi: false,
+        hasDocker: false,
+      };
+      facts.quickstart.commands = [];
+      facts.quickstart.steps = ["Read the repository setup guide"];
+      const response = join(tempDir, "response.json");
+      await writeFile(response, JSON.stringify(facts));
+      const args = [
+        repo,
+        "--no-clone",
+        "--no-cache",
+        "--subdir",
+        "crates/core",
+        ...(mode === "fast" ? ["--fast"] : []),
+      ];
+      const output = join(tempDir, "out");
+      const result = await runCli([...args, "--output", output], {
+        NODE_ENV: "test",
+        REPO_BOOTCAMP_TEST_LLM_RESPONSE_FILE: response,
+      });
+      expect(result.exitCode).toBe(0);
+      const generated = JSON.parse(await readFile(join(output, "repo_facts.json"), "utf8"));
+      expect(
+        generated.quickstart.commands.map((command: { command: string }) => command.command)
+      ).toEqual(["cargo build", "cargo test"]);
+      expect(generated.quickstart.steps).toEqual(facts.quickstart.steps);
+      for (const document of ["ONBOARDING.md", "BOOTCAMP.md"]) {
+        const text = await readFile(join(output, document), "utf8");
+        expect(text).toContain("cargo build");
+        expect(text).toContain("cargo test");
+        expect(text).not.toContain("cargo run");
+        expect(text).not.toContain("cargo install");
+      }
+      facts.quickstart.commands = [
+        { name: "build", command: "cargo build --release", source: "README.md" },
+        { name: "test", command: "cargo test --lib", source: "README.md" },
+      ];
+      await writeFile(response, JSON.stringify(facts));
+      const explicit = join(tempDir, "explicit");
+      const explicitResult = await runCli([...args, "--output", explicit], {
+        NODE_ENV: "test",
+        REPO_BOOTCAMP_TEST_LLM_RESPONSE_FILE: response,
+      });
+      expect(explicitResult.exitCode).toBe(0);
+      expect(
+        JSON.parse(await readFile(join(explicit, "repo_facts.json"), "utf8")).quickstart.commands
+      ).toEqual(facts.quickstart.commands);
+      const excluded = join(tempDir, "excluded");
+      facts.quickstart.commands = [];
+      await writeFile(response, JSON.stringify(facts));
+      const excludedResult = await runCli(
+        [...args, "--exclude", "src/lib.rs", "--output", excluded],
+        { NODE_ENV: "test", REPO_BOOTCAMP_TEST_LLM_RESPONSE_FILE: response }
+      );
+      expect(excludedResult.exitCode).toBe(0);
+      expect(
+        JSON.parse(await readFile(join(excluded, "repo_facts.json"), "utf8")).quickstart.commands
+      ).toEqual([]);
+    },
+    60_000
+  );
+
+  it.each(["standard", "fast"])(
     "uses scoped local Task commands when the saved %s response has no commands",
     async (mode) => {
       const tempDir = await mkdtemp(join(tmpdir(), "bootcamp-task-kit-"));

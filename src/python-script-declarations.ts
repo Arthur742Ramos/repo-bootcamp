@@ -84,7 +84,7 @@ function readString(
  * Fold value data into one statement, shielding tables/keys inside strings,
  * comments and arrays. Each character is visited a bounded number of times.
  */
-function* statements(content: string): Generator<string> {
+export function* statements(content: string): Generator<string, boolean> {
   let start = 0;
   let index = 0;
   let depth = 0;
@@ -94,7 +94,7 @@ function* statements(content: string): Generator<string> {
     if (char === '"' || char === "'") {
       const string = readString(content, index, false, false);
       // Incomplete/unsupported strings cannot safely expose later declarations.
-      if (!string) return;
+      if (!string) return false;
       index = string.end;
       continue;
     }
@@ -116,6 +116,7 @@ function* statements(content: string): Generator<string> {
   }
   parts.push(content.slice(start));
   if (depth === 0) yield parts.join("").trim();
+  return depth === 0;
 }
 
 function skipSpace(text: string, index: number): number {
@@ -124,7 +125,7 @@ function skipSpace(text: string, index: number): number {
 }
 
 /** A quoted dot is part of a name; an unquoted dot separates table components. */
-function readKey(text: string, start: number): TomlString | undefined {
+export function readKey(text: string, start: number): TomlString | undefined {
   start = skipSpace(text, start);
   if (text[start] === '"' || text[start] === "'") return readString(text, start, true);
   let end = start;
@@ -133,7 +134,7 @@ function readKey(text: string, start: number): TomlString | undefined {
   return undefined;
 }
 
-function tablePath(statement: string): string[] | undefined {
+export function tablePath(statement: string): string[] | undefined {
   if (!statement.startsWith("[") || statement.startsWith("[[")) return;
   const path: string[] = [];
   let index = 1;
@@ -149,14 +150,17 @@ function tablePath(statement: string): string[] | undefined {
   return undefined;
 }
 
-function stringValue(value: string): string | undefined {
+export function stringValue(value: string): string | undefined {
   const string = readString(value, 0);
   if (string && value.slice(string.end).trim() === "") return string.value;
   return undefined;
 }
 
 /** Literal string-array extras are supported by Poetry's script-table schema. */
-function stringArray(text: string, start: number): { value: string[]; end: number } | undefined {
+export function stringArray(
+  text: string,
+  start: number
+): { value: string[]; end: number } | undefined {
   if (text[start] !== "[") return;
   const values: string[] = [];
   let index = start + 1;

@@ -960,13 +960,21 @@ export async function scanRepo(
   }
   const taskfileHash = createHash("sha256");
   let hasTaskfiles = false;
+  const cargoHash = createHash("sha256");
+  let hasCargoEvidence = false;
+  const selectedFiles = new Set(files.filter((file) => !file.isDirectory).map((file) => file.path));
   const commands = toCommands(
     await discoverTasks(scanRoot, {
       packageManager,
-      taskfileFiles: new Set(files.filter((file) => !file.isDirectory).map((file) => file.path)),
+      taskfileFiles: selectedFiles,
       onTaskfileRead: (path, content) => {
         hasTaskfiles = true;
         taskfileHash.update(JSON.stringify([path, content]));
+      },
+      cargoFiles: selectedFiles,
+      onCargoRead: (path, content) => {
+        hasCargoEvidence = true;
+        cargoHash.update(JSON.stringify([path, content]));
       },
     })
   );
@@ -989,6 +997,7 @@ export async function scanRepo(
     monorepo,
     commands,
     ...(hasTaskfiles ? { taskfileFingerprint: taskfileHash.digest("hex") } : {}),
+    ...(hasCargoEvidence ? { cargoFingerprint: cargoHash.digest("hex") } : {}),
     ciWorkflows,
     readme,
     contributing,

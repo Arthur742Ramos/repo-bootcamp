@@ -16,6 +16,28 @@ async function repoWith(files: Record<string, string>): Promise<string> {
 }
 
 describe("task discovery commands", () => {
+  it.each(["src/lib.rs", "src/main.rs", "src/bin/one.rs"])(
+    "reports native Cargo build/test defaults for ordinary target %s",
+    async (target) => {
+      const dir = await repoWith({
+        "Cargo.toml": '[package]\nname="owned"\nversion="0.1.0"\nedition="2021"\n',
+        [target]: "// Owned source; never executed\n",
+      });
+      const result = await runCli(["tasks", dir, "--json"]);
+      expect(result.exitCode).toBe(0);
+      const payload = JSON.parse(result.stdout);
+      expect(payload.gettingStarted).toEqual(["cargo build", "cargo test"]);
+      expect(payload.tasks).toEqual([
+        { name: "build", command: "cargo build", source: "Cargo.toml", category: "build" },
+        { name: "test", command: "cargo test", source: "Cargo.toml", category: "test" },
+      ]);
+      const tests = await runCli(["tasks", dir, "--json", "--category", "test"]);
+      expect(
+        JSON.parse(tests.stdout).tasks.map((task: { command: string }) => task.command)
+      ).toEqual(["cargo test"]);
+    },
+    60_000
+  );
   it("discovers quoted Python declarations without advertising example text or nested metadata", async () => {
     const dir = await repoWith({
       "pyproject.toml": String.raw`[tool.fixture]

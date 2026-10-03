@@ -44,7 +44,7 @@ function printReport(repoName: string, tasks: DiscoveredTask[], category?: TaskC
       console.log(chalk.yellow("No runnable tasks discovered."));
       console.log(
         chalk.dim(
-          "Looked for package.json scripts, Makefile, justfile, Taskfile, docker-compose, pyproject, and composer.json.\n"
+          "Looked for package.json scripts, Makefile, justfile, Taskfile, docker-compose, pyproject, composer.json, and qualifying Cargo.toml conventions.\n"
         )
       );
     }
@@ -81,7 +81,7 @@ function printReport(repoName: string, tasks: DiscoveredTask[], category?: TaskC
  * Run the standalone `bootcamp tasks` command: clone/resolve the target repo and
  * answer "how do I build / test / run this?" by parsing the task-definition files
  * it already ships (package.json scripts, Makefile, justfile, go-task Taskfile,
- * docker-compose, pyproject, composer.json). Groups the results by category,
+ * docker-compose, pyproject, composer.json) plus qualifying Cargo build/test conventions. Groups the results by category,
  * suggests a first-session sequence, and supports `--category` filtering and
  * `--json`. Deterministic; never invokes the LLM.
  */

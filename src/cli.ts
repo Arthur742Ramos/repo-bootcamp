@@ -782,7 +782,7 @@ program
 program
   .command("tasks <repo-url>")
   .description(
-    'Answer "what can I run?": discover build/test/run commands from package.json, Makefile, justfile, Taskfile, docker-compose, pyproject & composer (supports local paths)'
+    'Answer "what can I run?": discover commands from package.json, Makefile, justfile, Taskfile, docker-compose, pyproject, composer & qualifying Cargo manifests (supports local paths)'
   )
   .option("-b, --branch <branch>", "Branch to analyze", "")
   .option("--json", "Output the discovered tasks as JSON for machine consumption")
