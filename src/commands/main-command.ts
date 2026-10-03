@@ -50,6 +50,7 @@ interface GenerationResult {
 
 interface GenerateOutputsParams {
   repoPath: string;
+  repositoryRoot?: string;
   repoInfo: RepoInfo;
   scanResult: ScanResult;
   facts: RepoFacts;
@@ -136,6 +137,7 @@ async function writeRunSummary({
 
 async function generateOutputs({
   repoPath,
+  repositoryRoot,
   repoInfo,
   scanResult,
   facts,
@@ -158,6 +160,7 @@ async function generateOutputs({
     outputTargets,
   } = await prepareOutputDocuments({
     repoPath,
+    repositoryRoot,
     repoInfo,
     scanResult,
     facts,
@@ -389,6 +392,7 @@ export async function runMainCommand(repoUrl: string, options: BootcampOptions):
   try {
     const { documentCount, security, radar, deps, metrics, health } = await generateOutputs({
       repoPath: analysisRepoPath,
+      repositoryRoot: repoPath,
       repoInfo,
       scanResult,
       facts,
@@ -693,6 +697,7 @@ export async function runMainCommand(repoUrl: string, options: BootcampOptions):
         wp.startPhase("generate", options.jsonOnly ? "JSON only" : "12+ files");
         const { documentCount } = await generateOutputs({
           repoPath: analysisRepoPath,
+          repositoryRoot: repoPath,
           repoInfo,
           scanResult: newScan,
           facts: styledFacts,

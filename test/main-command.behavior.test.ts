@@ -842,6 +842,7 @@ describe("runMainCommand --watch and --interactive", () => {
       );
       expect(analyzeRepo.mock.calls[0][0]).toBe(join(repoPath, "src"));
       expect(prepareOutputDocuments.mock.calls.at(-1)![0].repoPath).toBe(join(repoPath, "src"));
+      expect(prepareOutputDocuments.mock.calls.at(-1)![0].repositoryRoot).toBe(repoPath);
       expect(writeGeneratedOutputs.mock.calls.length).toBe(writesBefore + 1);
       const lastWrite = writeGeneratedOutputs.mock.calls.at(-1)![0] as {
         allowIssueCreation?: boolean;

@@ -233,12 +233,36 @@ describe("bootcamp CLI", () => {
       JSON.stringify({ name: "selected-app", dependencies: { "child-runtime": "^1.0.0" } })
     );
     await writeFile(join(selectedRoot, "README.md"), "# Selected package\n");
-    await writeFile(join(selectedRoot, "src", "index.ts"), "export const child = true;\n");
+    await writeFile(join(selectedRoot, "src", "index.ts"), "export const publicValue = true;\n");
+    execFileSync("git", ["add", "packages"], { cwd: repoPath });
+    execFileSync("git", ["commit", "-m", "add child", "--no-gpg-sign"], {
+      cwd: repoPath,
+      stdio: "ignore",
+    });
+    await writeFile(
+      join(selectedRoot, "src", "index.ts"),
+      "const token = process.env.CHILD_TOKEN;\n"
+    );
+    execFileSync("git", ["add", "packages"], { cwd: repoPath });
+    execFileSync("git", ["commit", "-m", "change child", "--no-gpg-sign"], {
+      cwd: repoPath,
+      stdio: "ignore",
+    });
     const outputDir = join(tempDir, "output");
     const responseFile = join(tempDir, "mock-response.json");
     await writeFile(responseFile, JSON.stringify(buildMockFacts(`local/${basename(repoPath)}`)));
     const result = await runCli(
-      [repoPath, "--no-clone", "--subdir", subdir, "--no-cache", "--output", outputDir],
+      [
+        repoPath,
+        "--no-clone",
+        "--subdir",
+        subdir,
+        "--no-cache",
+        "--compare",
+        "HEAD~1",
+        "--output",
+        outputDir,
+      ],
       {
         NODE_ENV: "test",
         REPO_BOOTCAMP_TEST_LLM_RESPONSE_FILE: responseFile,
@@ -248,6 +272,9 @@ describe("bootcamp CLI", () => {
     const dependencies = await readFile(join(outputDir, "DEPENDENCIES.md"), "utf-8");
     expect(dependencies).toContain("child-runtime");
     expect(dependencies).not.toContain("express");
+    const diff = await readFile(join(outputDir, "DIFF.md"), "utf-8");
+    expect(diff).toContain("CHILD_TOKEN");
+    expect(diff).toContain("publicValue");
     const summary = JSON.parse(await readFile(join(outputDir, "summary.json"), "utf-8"));
     expect(summary.deps).toEqual({ total: 1, runtime: 1, dev: 0 });
     expect(
