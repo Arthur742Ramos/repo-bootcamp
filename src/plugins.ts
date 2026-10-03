@@ -5,7 +5,8 @@
 
 import { cosmiconfig } from "cosmiconfig";
 import { TypeScriptLoader } from "cosmiconfig-typescript-loader";
-import { join } from "path";
+import { isAbsolute, join } from "path";
+import { pathToFileURL } from "url";
 import type { StylePack, RepoFacts, ScanResult, BootcampOptions } from "./types.js";
 import type {
   AnalyzerPlugin,
@@ -243,8 +244,12 @@ export async function loadPlugins(pluginPaths: string[]): Promise<BootcampPlugin
 
   for (const path of pluginPaths) {
     try {
-      // Try to load as a module
-      const modulePath = path.startsWith(".") ? join(process.cwd(), path) : path;
+      // Filesystem paths are literal; package specifiers and URLs retain import semantics.
+      const modulePath = path.startsWith(".")
+        ? pathToFileURL(join(process.cwd(), path)).href
+        : isAbsolute(path)
+          ? pathToFileURL(path).href
+          : path;
 
       const module = await import(modulePath);
       const plugin = module.default || module;

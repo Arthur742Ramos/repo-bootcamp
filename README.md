@@ -1240,6 +1240,12 @@ Plugins can hook into three stages:
 - **Formatter plugins** via `formatDocuments(...)` (transform generated docs)
 - **Output target plugins** via `writeOutput(...)` (publish/store outputs elsewhere)
 
+List plugins in the `plugins` array of your Bootcamp configuration. Dot-prefixed paths
+resolve from the command's working directory; native absolute paths are also supported.
+These paths are literal filesystem paths, including spaces, `#`, and `%` in filenames.
+Bare package names and package subpaths keep Node's module resolution. Use explicit
+`file:` URLs when you want URL query or fragment semantics.
+
 ```typescript
 // my-plugin.ts
 export default {
