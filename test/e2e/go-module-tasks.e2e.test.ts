@@ -86,6 +86,19 @@ const moduleFiles = {
 };
 
 describe("Go module conventions", () => {
+  it.each(["windows_test.extra.go", "amd64_test.extra.go"])(
+    "retains ordinary dotted filename %s through actual CLI discovery",
+    async (name) => {
+      const { repo } = await fixture({
+        "go.mod": moduleFiles["go.mod"],
+        [name]: moduleFiles["demo.go"],
+      });
+      const result = await runCli(["tasks", repo, "--json"]);
+      expect(result.exitCode).toBe(0);
+      expect(JSON.parse(result.stdout).gettingStarted).toEqual(["go build ./...", "go test ./..."]);
+    }
+  );
+
   it("omits known filename constraints through actual tasks CLI and retains ordinary filename evidence", async () => {
     for (const name of ["demo_windows.go", "pkg/demo_linux_amd64.go", "demo_amd64.go"]) {
       const { repo } = await fixture({

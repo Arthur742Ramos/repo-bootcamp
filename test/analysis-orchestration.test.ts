@@ -215,6 +215,31 @@ beforeEach(() => {
 });
 
 describe("orchestrateAnalysis", () => {
+  it.each([
+    ["windows_test.extra.go", true],
+    ["amd64_test.extra.go", true],
+    ["foo_linux_test.extra.go", false],
+    ["windows_test.go", false],
+  ] as const)(
+    "scans dotted Go filename %s with native prefix boundaries",
+    async (name, qualifies) => {
+      const dir = await mkdtemp(join(tmpdir(), "bootcamp-go-prefix-"));
+      try {
+        await writeFile(join(dir, "go.mod"), "module example.invalid/demo\n");
+        await writeFile(join(dir, name), "package demo\n");
+        const scan = await scanRepo(dir, 100);
+        expect(scan.commands.map(({ command }) => command)).toEqual(
+          qualifies ? ["go build ./...", "go test ./..."] : []
+        );
+        expect(scan.goModFingerprint).toBeDefined();
+        expect(scan.goPackageFingerprint).toBeDefined();
+        expect(scan.taskfileFingerprint).toBeUndefined();
+      } finally {
+        await rm(dir, { recursive: true, force: true });
+      }
+    }
+  );
+
   it("omits implicit Go filename constraints while preserving source, boundary and task cache identities", async () => {
     const dir = await mkdtemp(join(tmpdir(), "bootcamp-go-filename-cache-"));
     try {

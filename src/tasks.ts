@@ -833,7 +833,9 @@ function goSourcePath(path: string): boolean {
   // windows.go is ordinary, but demo_windows.go is implicitly constrained.
   const name = parts.at(-1)!.split(".")[0];
   if (!name.includes("_")) return true;
-  const suffixes = name.split("_");
+  // Discard the original prefix before removing a trailing test segment, so
+  // windows_test.extra.go stays ordinary while demo_windows_test.extra.go does not.
+  const suffixes = name.slice(name.indexOf("_")).split("_");
   if (suffixes.at(-1) === "test") suffixes.pop();
   return !GO_FILENAME_CONSTRAINTS.has(suffixes.at(-1) ?? "");
 }

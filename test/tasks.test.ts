@@ -1135,6 +1135,8 @@ describe("discoverTasks", () => {
     "demo_riscv.go",
     "demo_windows.extra.go",
     "demo_windows_test.extra.go",
+    "foo_linux_test.extra.go",
+    "windows_test.go",
   ])("does not use implicitly constrained source as portable Go evidence: %s", async (name) => {
     const dir = await repoWith({
       "go.mod": "module example.invalid/demo\n",
@@ -1152,6 +1154,8 @@ describe("discoverTasks", () => {
     "demo_unix.go",
     "demo_windows_custom.go",
     "demo.extra_windows.go",
+    "windows_test.extra.go",
+    "amd64_test.extra.go",
   ])("retains ordinary Go filenames without known constraint suffixes: %s", async (name) => {
     const dir = await repoWith({
       "go.mod": "module example.invalid/demo\n",
