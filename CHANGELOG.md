@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Replace the vulnerable `fast-glob`/`micromatch`/`braces` production chain with bounded native directory iteration and maintained glob matching; preserve scan exclusions and stop filesystem work at the entry limit.
+
 - Evaluate all whitespace/comma-separated preflight version constraints and supported `||` alternatives instead of silently checking only the first bound; report unsupported syntax as unknown.
 
 - Reveal collapsed disclosures before focusing linked preview headings.
