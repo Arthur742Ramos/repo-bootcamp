@@ -28,7 +28,7 @@ describe("library/tool runbook build guidance", () => {
     facts.quickstart.commands = [{ name, command, source: "package.json" }];
     const runbook = generateRunbook(facts);
     expect(runbook).toContain(`\`\`\`bash\n${command}\n\`\`\``);
-    expect(runbook).not.toContain("_No build command detected_");
+    expect(runbook).not.toContain("*No build command detected*");
     expect(generateBootcamp(facts, options)).toContain(`Build/verify: \`${command}\``);
     expect(generateOnboarding(facts)).toContain(`\`\`\`bash\n${command}\n\`\`\``);
   });
@@ -48,7 +48,7 @@ describe("library/tool runbook build guidance", () => {
     const facts = runbookFacts();
     facts.quickstart.commands = [{ name, command, source: "README.md" }];
     const runbook = generateRunbook(facts);
-    expect(runbook).toContain("_No build command detected_");
+    expect(runbook).toContain("*No build command detected*");
     expect(runbook).not.toContain("```bash");
     if (command === "npm test") {
       expect(generateBootcamp(facts, options)).toContain(`Build/verify: \`${command}\``);
@@ -61,7 +61,7 @@ describe("library/tool runbook build guidance", () => {
     const facts = runbookFacts();
     facts.quickstart.commands = [{ name: "build", command: "", source: "README.md" }];
     const runbook = generateRunbook(facts);
-    expect(runbook).toContain("_No build command detected_");
+    expect(runbook).toContain("*No build command detected*");
     expect(runbook).not.toContain("```bash");
   });
 

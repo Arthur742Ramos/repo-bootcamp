@@ -569,7 +569,7 @@ export function generateMetricsDocs(metrics: CodebaseMetrics, projectName: strin
   lines.push("---");
   lines.push("");
   lines.push(
-    "_Metrics are computed deterministically from the file scan (no AI), so they're stable across runs._"
+    "*Metrics are computed deterministically from the file scan (no AI), so they're stable across runs.*"
   );
   lines.push("");
 
