@@ -91,6 +91,18 @@ function fingerprintScan(scanResult: ScanResult): string {
   return createHash("sha256").update(JSON.stringify(snapshot)).digest("hex");
 }
 
+function withDetectedCommands(facts: RepoFacts, scanResult: ScanResult): RepoFacts {
+  if (!scanResult.commands?.length || !facts.quickstart || facts.quickstart.commands.length)
+    return facts;
+  return {
+    ...facts,
+    quickstart: {
+      ...facts.quickstart,
+      commands: scanResult.commands.map((command) => ({ ...command })),
+    },
+  };
+}
+
 export async function orchestrateAnalysis({
   repoPath,
   repoInfo,
@@ -135,7 +147,7 @@ export async function orchestrateAnalysis({
         endTime: Date.now(),
       };
       return {
-        facts: cachedFacts,
+        facts: withDetectedCommands(cachedFacts, scanResult),
         analysisStats: cachedStats,
         durationMs: Date.now() - analysisStart,
         toolCalls: 0,
@@ -169,7 +181,7 @@ export async function orchestrateAnalysis({
   }
 
   return {
-    facts: result.facts,
+    facts: withDetectedCommands(result.facts, scanResult),
     analysisStats: result.stats,
     durationMs,
     toolCalls: result.stats.toolCalls.length,

@@ -822,6 +822,33 @@ Taskfile discovery preserves shell-safe namespaced and quoted task names, omits 
 
 Make discovery preserves literal multi-target rules and dotted public names in file order, including continued rule headers and trailing comments. Variable assignments, continued values/recipes, and multiline variable bodies do not declare tasks; empty and double-colon rules remain runnable tasks. It does not evaluate includes, expressions, or recipes.
 
+Local Task includes contribute canonical names such as `task app:test`, including
+namespaced `default` tasks. The root `default` remains omitted. Literal file and
+directory includes resolve relative to the including Taskfile, with the same
+default-file order at the root and in included directories: `Taskfile.yml`,
+`taskfile.yml`, `Taskfile.yaml`, `taskfile.yaml`, followed by their `.dist.yml` and
+`.dist.yaml` variants in that order. Shared files can contribute multiple namespaces;
+internal include visibility propagates to descendants. Alias alternatives are not
+listed. Remote or templated paths, flattening, exclusions, variables, duplicate YAML
+keys, and unknown include options are unsupported; discovery skips unsupported include
+branches rather than evaluating them. It does not validate every Task runtime option.
+
+Included files must remain within the selected scan root after symlink resolution.
+Full onboarding scans also require each included file to be present in the effective
+walk, respecting exclusions and `--max-files`; excluded primary files never select a
+lower-priority fallback. Existing root metadata discovery stays unchanged. A missing
+required local include, malformed included document, duplicate canonical task, cycle,
+or exceeded budget contributes no Task commands; `optional: true` permits missing
+files. Reading is bounded to 64 physical files, 1 MiB per file and 8 MiB in total,
+16 include levels, 128 include/namespace traversal steps, 2,000 expanded task names
+(including internal tasks), 1 MiB of expanded names and 1 MiB of emitted task data.
+The pure `parseTaskfile` API continues to parse one document. Generated kits use
+detected commands only when analysis supplies an empty command list, including
+cached responses; existing nonempty command lists and other setup fields are preserved.
+Contained Taskfile content participates in scan cache identity, including recipe
+edits that leave command names unchanged; ignored includes and files outside the
+selected scan root do not contribute to that identity.
+
 ### Auto-Create GitHub Issues
 
 ```bash

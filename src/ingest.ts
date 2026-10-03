@@ -5,6 +5,7 @@
 
 import { execFile } from "child_process";
 import { promisify } from "util";
+import { createHash } from "crypto";
 import { mkdir, readFile, rm, realpath, stat, mkdtemp } from "fs/promises";
 import { join, basename, resolve, relative, isAbsolute, dirname } from "path";
 import type {
@@ -957,7 +958,18 @@ export async function scanRepo(
   if (files.some((file) => file.path === "package.json")) {
     stack.packageManager = packageManager;
   }
-  const commands = toCommands(await discoverTasks(scanRoot, { packageManager }));
+  const taskfileHash = createHash("sha256");
+  let hasTaskfiles = false;
+  const commands = toCommands(
+    await discoverTasks(scanRoot, {
+      packageManager,
+      taskfileFiles: new Set(files.filter((file) => !file.isDirectory).map((file) => file.path)),
+      onTaskfileRead: (path, content) => {
+        hasTaskfiles = true;
+        taskfileHash.update(JSON.stringify([path, content]));
+      },
+    })
+  );
 
   // Parse CI workflows
   const ciWorkflows = await parseWorkflows(scanRoot, files);
@@ -976,6 +988,7 @@ export async function scanRepo(
     stack,
     monorepo,
     commands,
+    ...(hasTaskfiles ? { taskfileFingerprint: taskfileHash.digest("hex") } : {}),
     ciWorkflows,
     readme,
     contributing,
