@@ -1,3 +1,4 @@
+import { execFileSync } from "child_process";
 import { mkdtemp, mkdir, rm, writeFile } from "fs/promises";
 import { tmpdir } from "os";
 import { join } from "path";
@@ -24,6 +25,36 @@ describe("preflight command", () => {
     await Promise.all(tempDirs.map((d) => rm(d, { recursive: true, force: true })));
     tempDirs.length = 0;
   });
+
+  it.each(["", "="])(
+    "enforces a %s complete Node pin through the real CLI gate",
+    async (operator) => {
+      // Preflight probes PATH's node, which may differ from the test runner's executable.
+      const installed = execFileSync("node", ["--version"], { encoding: "utf-8" })
+        .trim()
+        .replace(/^v/, "");
+      const [major, minor, patch] = installed.split(".").map(Number);
+      const repoPath = await repoWith({
+        "package.json": JSON.stringify({
+          engines: { node: `${operator}${major}.${minor}.${patch + 1}` },
+        }),
+      });
+      const rejected = await runCli(["preflight", repoPath, "--json", "--check"]);
+      expect(rejected.exitCode).toBe(1);
+      expect(JSON.parse(rejected.stdout)).toMatchObject({
+        ok: false,
+        checks: [{ tool: "Node.js", installed, status: "mismatch" }],
+      });
+      await writeFile(
+        join(repoPath, "package.json"),
+        JSON.stringify({ engines: { node: `${operator}${installed}` } })
+      );
+      const accepted = await runCli(["preflight", repoPath, "--json", "--check"]);
+      expect(accepted.exitCode).toBe(0);
+      expect(JSON.parse(accepted.stdout)).toMatchObject({ ok: true, checks: [{ status: "ok" }] });
+    },
+    60_000
+  );
 
   it("checks the local machine against the repo's declared Node version (satisfied)", async () => {
     // The test runner uses Node >= 20, so `engines.node: >=20` is satisfied.
