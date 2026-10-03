@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Preserve URL and Markdown source links for detected default branches containing reserved characters, without changing explicit clone-ref restrictions or recorded Git refs.
+
 - Render generated fallback prose and informational notes with supported emphasis across guides, the web reader, and HTML/PDF-ready exports; preserve inline-code placeholders as literal text.
 
 - Recognize declared dotted build/test tasks in npm-family and Task onboarding guidance while preserving setup, filename, provenance and simple-invocation boundaries.
