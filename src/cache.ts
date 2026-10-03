@@ -11,7 +11,7 @@ import { createHash } from "crypto";
 import type { RepoFacts } from "./types.js";
 
 const CACHE_DIR = join(homedir(), ".cache", "repo-bootcamp");
-const CACHE_VERSION = 2;
+const CACHE_VERSION = 3;
 
 /** Current cache entry schema version. Exposed so the CLI and tests can
  *  display it without duplicating the constant. */
@@ -27,7 +27,7 @@ interface CacheEntry<T = unknown> {
   phase: CachePhase;
   repoFullName: string;
   commitSha: string;
-  generationOptions?: NormalizedCacheGenerationOptions;
+  generationOptions: NormalizedCacheGenerationOptions;
   createdAt: string;
   value: T;
 }
@@ -39,6 +39,11 @@ export interface CacheGenerationOptions {
   style?: string;
   model?: string;
   audience?: string;
+  maxFiles?: number;
+  subdir?: string;
+  exclude?: readonly string[];
+  /** Fingerprint of the actual scanned files and loaded evidence. */
+  scanFingerprint?: string;
 }
 
 interface NormalizedCacheGenerationOptions {
@@ -46,26 +51,63 @@ interface NormalizedCacheGenerationOptions {
   style: string;
   model: string;
   audience: string;
+  maxFiles: number | null;
+  subdir: string;
+  exclude: string[];
+  scanFingerprint: string;
 }
 
 function normalizeGenerationOptions(
   options?: CacheGenerationOptions
 ): NormalizedCacheGenerationOptions {
+  if (
+    options?.maxFiles !== undefined &&
+    (!Number.isSafeInteger(options.maxFiles) || options.maxFiles <= 0)
+  ) {
+    throw new RangeError("Cache maxFiles must be a positive safe integer");
+  }
   return {
     focus: options?.focus || "",
     style: options?.style || "",
     model: options?.model || "",
     audience: options?.audience || "",
+    maxFiles: options?.maxFiles ?? null,
+    subdir: options?.subdir || "",
+    // Exclusions are a union: ordering and duplicate patterns do not change
+    // the scan. Preserve each pattern verbatim (including glob escapes).
+    exclude: [...new Set(options?.exclude ?? [])].sort(),
+    scanFingerprint: options?.scanFingerprint || "",
   };
 }
 
 function serializeGenerationOptions(options: NormalizedCacheGenerationOptions): string {
-  return [
-    `focus=${options.focus}`,
-    `style=${options.style}`,
-    `model=${options.model}`,
-    `audience=${options.audience}`,
-  ].join("|");
+  // Structured encoding prevents user-controlled delimiters from colliding.
+  return JSON.stringify([
+    options.focus,
+    options.style,
+    options.model,
+    options.audience,
+    options.maxFiles,
+    options.subdir,
+    [...new Set(options.exclude)].sort(),
+    options.scanFingerprint,
+  ]);
+}
+
+function hasGenerationOptions(raw: unknown): raw is NormalizedCacheGenerationOptions {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return false;
+  const options = raw as Record<string, unknown>;
+  return (
+    ["focus", "style", "model", "audience", "subdir", "scanFingerprint"].every(
+      (field) => typeof options[field] === "string"
+    ) &&
+    (options.maxFiles === null ||
+      (typeof options.maxFiles === "number" &&
+        Number.isSafeInteger(options.maxFiles) &&
+        options.maxFiles > 0)) &&
+    Array.isArray(options.exclude) &&
+    options.exclude.every((pattern) => typeof pattern === "string")
+  );
 }
 
 /**
@@ -80,7 +122,7 @@ function cacheKey(
   const normalizedOptions = normalizeGenerationOptions(generationOptions);
   const optionsFingerprint = serializeGenerationOptions(normalizedOptions);
   const baseSeed =
-    optionsFingerprint === "focus=|style=|model=|audience="
+    optionsFingerprint === serializeGenerationOptions(normalizeGenerationOptions())
       ? `${repoFullName}@${commitSha}`
       : `${repoFullName}@${commitSha}|${optionsFingerprint}`;
   const hashSeed = phase === "facts" ? baseSeed : `${baseSeed}|phase=${phase}`;
@@ -112,7 +154,8 @@ export async function readPhaseCache<T>(
     const filePath = join(CACHE_DIR, cacheKey(repoFullName, commitSha, generationOptions, phase));
     const raw = await readFile(filePath, "utf-8");
     const entry: CacheEntry<T> = JSON.parse(raw);
-    const entryOptions = normalizeGenerationOptions(entry.generationOptions);
+    if (!hasGenerationOptions(entry.generationOptions)) return { hit: false };
+    const entryOptions = entry.generationOptions;
 
     if (
       entry.version !== CACHE_VERSION ||
@@ -367,6 +410,10 @@ async function summarizeCacheFile(file: string): Promise<CacheEntrySummary | nul
     return { ...base, entry: null, problem: "legacy" };
   }
 
+  if (!hasGenerationOptions(raw.generationOptions)) {
+    return { ...base, entry: null, problem: "malformed" };
+  }
+
   return {
     ...base,
     entry: {
@@ -374,13 +421,7 @@ async function summarizeCacheFile(file: string): Promise<CacheEntrySummary | nul
       phase: raw.phase as CachePhase,
       repoFullName: raw.repoFullName as string,
       commitSha: raw.commitSha as string,
-      generationOptions: normalizeGenerationOptions(
-        // generationOptions is optional in the on-disk schema — normalize
-        // missing/partial objects to empty strings to match readPhaseCache's
-        // compatibility rules (otherwise readable v2 entries would be
-        // flagged as malformed by stricter validation).
-        raw.generationOptions as CacheGenerationOptions | undefined
-      ),
+      generationOptions: raw.generationOptions,
       createdAt: raw.createdAt as string,
     },
   };

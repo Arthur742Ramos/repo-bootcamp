@@ -889,7 +889,11 @@ bootcamp cache clear
 
 Bootcamp reuses the deps/security/impact analysis phases between runs; manage
 that cache here, or bypass it for a single run with `--no-cache`. `bootcamp
-cache ls` is an alias for `list`.
+cache ls` is an alias for `list`. Changing `--subdir`, `--exclude`, or `--max-files`
+uses separate cached analysis. The effective file selection and loaded evidence
+are fingerprinted too, including when absolute exclusions differ between
+checkouts. Older entries without scan identity are listed
+as legacy and regenerated on the next run.
 
 ## CLI Options
 

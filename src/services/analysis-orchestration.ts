@@ -1,3 +1,4 @@
+import { createHash } from "crypto";
 import { analyzeRepo, type AnalysisStats } from "../agent.js";
 import { runParallelAnalysis } from "../analysis.js";
 import { readCache, writeCache, type CacheGenerationOptions } from "../cache.js";
@@ -78,6 +79,18 @@ function mergeDeep(base: unknown, patch: unknown): unknown {
   return merged;
 }
 
+// Absolute exclusions and bounded walks may select different files across
+// checkouts. Fingerprint the actual scan, including already-loaded evidence,
+// without depending on a temporary clone directory or rereading source files.
+function fingerprintScan(scanResult: ScanResult): string {
+  const snapshot = {
+    ...scanResult,
+    files: [...scanResult.files].sort((a, b) => a.path.localeCompare(b.path)),
+    keySourceFiles: [...scanResult.keySourceFiles].sort(([a], [b]) => a.localeCompare(b)),
+  };
+  return createHash("sha256").update(JSON.stringify(snapshot)).digest("hex");
+}
+
 export async function orchestrateAnalysis({
   repoPath,
   repoInfo,
@@ -98,6 +111,10 @@ export async function orchestrateAnalysis({
     style: options.style,
     model: options.model,
     audience: options.audience,
+    maxFiles: options.maxFiles,
+    subdir: options.subdir,
+    exclude: options.exclude,
+    scanFingerprint: fingerprintScan(scanResult),
   };
   const cacheEligible = !options.noCache && Boolean(repoInfo.commitSha);
 
@@ -209,6 +226,10 @@ export async function prepareOutputDocuments({
         style: options.style,
         model: options.model,
         audience: options.audience,
+        maxFiles: options.maxFiles,
+        subdir: options.subdir,
+        exclude: options.exclude,
+        scanFingerprint: fingerprintScan(scanResult),
       },
     }
   );

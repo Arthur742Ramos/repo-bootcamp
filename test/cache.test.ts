@@ -313,7 +313,7 @@ describe("cache", () => {
       expect(entries).toEqual([]);
     });
 
-    it("returns valid v2 entries with full metadata", async () => {
+    it("returns current entries with full metadata", async () => {
       const repo = "list-test/repo";
       const sha = "deadbeefcafe1234567890";
       await writeCache(repo, sha, makeFacts({ repoName: repo }), {
@@ -386,10 +386,7 @@ describe("cache", () => {
       expect(ours[0].entry).toBeNull();
     });
 
-    it("treats missing generationOptions as compatible with v2 (matches readPhaseCache)", async () => {
-      // readPhaseCache normalizes a missing generationOptions to empty
-      // strings rather than rejecting the entry. listCacheEntries should
-      // do the same so it doesn't falsely flag readable v2 files.
+    it("flags current entries without scan identity as malformed", async () => {
       const cacheDir = getCacheDir();
       await mkdir(cacheDir, { recursive: true });
       const file = join(cacheDir, "list-nogenopts.json");
@@ -406,14 +403,8 @@ describe("cache", () => {
       const entries = await listCacheEntries();
       const ours = entries.filter((e) => e.file === "list-nogenopts.json");
       expect(ours).toHaveLength(1);
-      expect(ours[0].problem).toBeUndefined();
-      expect(ours[0].entry).not.toBeNull();
-      expect(ours[0].entry!.generationOptions).toEqual({
-        focus: "",
-        style: "",
-        model: "",
-        audience: "",
-      });
+      expect(ours[0].problem).toBe("malformed");
+      expect(ours[0].entry).toBeNull();
     });
 
     it("sorts mtime descending with filename tiebreaker", async () => {
