@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Evaluate all whitespace/comma-separated preflight version constraints and supported `||` alternatives instead of silently checking only the first bound; report unsupported syntax as unknown.
+
 - Reveal collapsed disclosures before focusing linked preview headings.
 
 - Ignore late cancellation replies and errors after a newer analysis starts or the originating job becomes terminal.

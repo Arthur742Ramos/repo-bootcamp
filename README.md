@@ -740,7 +740,10 @@ Reads the repo's declared toolchain — Node (`engines.node`, `.nvmrc`,
 (`requires-python`, `.python-version`), and Go (`go.mod`) — and checks each
 against your local machine with a per-row remedy. Unlike `bootcamp doctor`
 (which checks whether _your_ machine can run bootcamp itself), `preflight`
-checks your machine against the _target_ repo's requirements.
+checks your machine against the _target_ repo's requirements. Version checks honor
+all whitespace- or comma-separated bounds (for example, `>=20 <23`) and
+`||` alternatives (for example, `^20.19.0 || ^22.12.0 || >=24.0.0`).
+Unsupported version syntax is reported as unknown.
 
 ### Who Do I Ask? (Ownership Map)
 
