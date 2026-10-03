@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Keep inline-code source links clickable and formatted in HTML exports, including bracketed route filenames; preserve escaping and prevent nested anchors.
+
 - Prefix scoped source links in generated documentation and issue previews with the selected repository directory, preserving GitHub, GitLab, and Bitbucket links.
 - Refresh watched generation and phase-cache commit identity after checkout updates so regenerated summaries and manifests describe actual HEAD; detect local commits and keep caching disabled for working-tree edits.
 

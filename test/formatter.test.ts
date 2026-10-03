@@ -83,6 +83,47 @@ describe("markdownToHtml", () => {
     expect(html).toContain('<a href="https://example.com">text</a>');
   });
 
+  it("renders linked inline-code route filenames containing brackets", () => {
+    const url = "https://github.com/owner/project/blob/main/src/routes/%5Bid%5D/page.ts";
+    const html = markdownToHtml(`- [\`src/routes/[id]/page.ts\`](${url})`);
+    expect(html).toContain(`<a href="${url}"><code>src/routes/[id]/page.ts</code></a>`);
+    expect(html).not.toContain(`](${url})`);
+  });
+
+  it("supports balanced label brackets and preserves unmatched backticks as text", () => {
+    expect(markdownToHtml("[Route [id]](./route.html)")).toContain(
+      '<a href="./route.html">Route [id]</a>'
+    );
+    expect(markdownToHtml("[literal ` tick](./route.html)")).toContain(
+      '<a href="./route.html">literal ` tick</a>'
+    );
+  });
+
+  it("renders label formatting without nested anchors or unsafe URLs", () => {
+    const html = markdownToHtml(
+      "[**source** `a]b.ts`](javascript:alert) [outer [inner](https://example.com)](./outer.html)"
+    );
+    expect(html).toContain("<strong>source</strong> <code>a]b.ts</code>");
+    expect(html).not.toContain('href="javascript:');
+    expect(html.match(/<a /g)).toHaveLength(1);
+    expect(html).toContain('href="./outer.html"');
+  });
+
+  it("preserves image syntax for balanced or empty alt labels", () => {
+    const html = markdownToHtml(
+      "![Route [id]](https://example.com/route.png) ![](https://example.com/empty.png)"
+    );
+    expect(html).toContain('<img src="https://example.com/route.png" alt="Route [id]" />');
+    expect(html).toContain('<img src="https://example.com/empty.png" alt="" />');
+    expect(html).not.toContain("<a ");
+  });
+
+  it("escapes raw HTML inside linked code labels", () => {
+    const html = markdownToHtml("[`<img src=x onerror=alert(1)>`](https://example.com)");
+    expect(html).toContain("<code>&lt;img src=x onerror=alert(1)&gt;</code>");
+    expect(html).not.toContain("<img");
+  });
+
   it("preserves literal placeholder-shaped text", () => {
     const html = markdownToHtml("@@INLINE_999@@\n\n@@INLINE_0@@ [link](https://example.com)");
     expect(html).toContain("<p>@@INLINE_999@@</p>");

@@ -12,6 +12,7 @@ import {
   getFirstTaskRecommendations,
   generateRunbook,
 } from "../src/generator.js";
+import { markdownToHtml } from "../src/formatter.js";
 import type { RepoFacts, BootcampOptions } from "../src/types.js";
 
 const mockFacts: RepoFacts = {
@@ -565,5 +566,31 @@ describe("scoped remote documentation links", () => {
     expect(generateArchitecture(facts, undefined, repoInfo)).toContain(expected);
     expect(generateCodemap(facts, repoInfo)).toContain(expected);
     expect(generateFirstTasks(facts, undefined, undefined, repoInfo)).toContain(expected);
+  });
+});
+
+describe("generated HTML source links", () => {
+  it("keeps bracketed route sources clickable with code formatting", () => {
+    const path = "src/routes/[id]/page.ts";
+    const facts = {
+      ...mockFacts,
+      structure: {
+        ...mockFacts.structure,
+        entrypoints: [{ path, type: "route", description: "Dynamic route" }],
+      },
+    };
+    const repoInfo = {
+      owner: "owner",
+      repo: "project",
+      fullName: "owner/project",
+      url: "https://github.com/owner/project",
+      branch: "main",
+      host: "github.com",
+      sourcePathPrefix: "packages/app",
+    };
+    const html = markdownToHtml(generateCodemap(facts, repoInfo));
+    expect(html).toContain(
+      '<a href="https://github.com/owner/project/blob/main/packages/app/src/routes/%5Bid%5D/page.ts"><code>src/routes/[id]/page.ts</code></a>'
+    );
   });
 });

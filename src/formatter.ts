@@ -53,10 +53,36 @@ function convertInlineFormatting(line: string): string {
     return trimmed.startsWith("#") || trimmed.startsWith("./") || trimmed.startsWith("../");
   };
 
+  // Labels can contain inline code with closing brackets (e.g. [id] routes).
+  // Read the label as balanced text rather than stopping inside a code span.
+  const readLink = (
+    source: string,
+    allowEmptyLabel = false
+  ): { text: string; url: string; length: number } | null => {
+    if (!source.startsWith("[")) return null;
+    let depth = 1;
+    for (let index = 1; index < source.length; index++) {
+      if (source[index] === "`") {
+        const close = source.indexOf("`", index + 1);
+        if (close > index + 1) {
+          index = close;
+          continue;
+        }
+      }
+      if (source[index] === "[") depth++;
+      if (source[index] !== "]" || --depth !== 0) continue;
+      if ((!allowEmptyLabel && index === 1) || source[index + 1] !== "(") return null;
+      const end = source.indexOf(")", index + 2);
+      if (end <= index + 2) return null;
+      return { text: source.slice(1, index), url: source.slice(index + 2, end), length: end + 1 };
+    }
+    return null;
+  };
+
   // Render protected inline constructs as output fragments while walking the
   // source. This avoids textual placeholders entirely: user content can never
   // be mistaken for an internal token during restoration.
-  const render = (source: string): string => {
+  const render = (source: string, allowLinks = true): string => {
     let output = "";
     let index = 0;
 
@@ -65,23 +91,23 @@ function convertInlineFormatting(line: string): string {
 
       // Images must be checked before links so the leading `!` is not treated
       // as ordinary text. Unsafe image URLs are rendered as escaped alt text.
-      const imageMatch = remainder.match(/^!\[([^\]]*)\]\(([^)]+)\)/);
+      const imageMatch = remainder.startsWith("!") ? readLink(remainder.slice(1), true) : null;
       if (imageMatch) {
-        const [, alt, url] = imageMatch;
+        const { text: alt, url, length } = imageMatch;
         output += isSafeUrl(url, false)
           ? `<img src="${escapeHtml(url.trim())}" alt="${escapeHtml(alt)}" />`
           : escapeHtml(alt);
-        index += imageMatch[0].length;
+        index += length + 1;
         continue;
       }
 
-      const linkMatch = remainder.match(/^\[([^\]]+)\]\(([^)]+)\)/);
+      const linkMatch = allowLinks ? readLink(remainder) : null;
       if (linkMatch) {
-        const [, text, url] = linkMatch;
+        const { text, url, length } = linkMatch;
         output += isSafeUrl(url, true)
-          ? `<a href="${escapeHtml(url.trim())}">${escapeHtml(text)}</a>`
-          : escapeHtml(text);
-        index += linkMatch[0].length;
+          ? `<a href="${escapeHtml(url.trim())}">${render(text, false)}</a>`
+          : render(text, false);
+        index += length;
         continue;
       }
 
@@ -94,14 +120,14 @@ function convertInlineFormatting(line: string): string {
 
       const boldMatch = remainder.match(/^\*\*(.+?)\*\*/);
       if (boldMatch) {
-        output += `<strong>${render(boldMatch[1])}</strong>`;
+        output += `<strong>${render(boldMatch[1], allowLinks)}</strong>`;
         index += boldMatch[0].length;
         continue;
       }
 
       const italicMatch = remainder.match(/^\*(.+?)\*/);
       if (italicMatch) {
-        output += `<em>${render(italicMatch[1])}</em>`;
+        output += `<em>${render(italicMatch[1], allowLinks)}</em>`;
         index += italicMatch[0].length;
         continue;
       }
