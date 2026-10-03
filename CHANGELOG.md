@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Select a package directory in web Run options, with scoped commands, documentation, source links, follow-up questions, cache identity, restored jobs, and a shell-quoted `--subdir` in the copied CLI command.
+
 ### Fixed
 
 - Discover Python console scripts from quoted TOML tables and escaped names while keeping multiline examples, nested dotted keys, and non-script values out of runnable task guidance.

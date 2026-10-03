@@ -18,7 +18,8 @@ import {
   scanRepositoryFiles,
   cleanupRepository,
 } from "../services/clone-service.js";
-import { resolveRunConfiguration } from "../services/config-resolution.js";
+import { updateSourcePathPrefix } from "../services/scan-scope.js";
+import { normalizeScanScope, resolveRunConfiguration } from "../services/config-resolution.js";
 import { writeGeneratedOutputs } from "../services/output-writer.js";
 import type { BootcampOptions, RepoFacts } from "../types.js";
 import { createAnalysisManifest } from "../manifest.js";
@@ -41,6 +42,7 @@ interface ProgressEvent {
 interface AnalysisJob {
   id: string;
   repoUrl: string;
+  subdir?: string;
   status: "pending" | "running" | "complete" | "error" | "cancelled";
   progress: ProgressEvent[];
   result?: {
@@ -177,6 +179,7 @@ function clampMaxFiles(value: unknown): number {
 function buildWebOptions(options: Record<string, unknown>): BootcampOptions {
   return {
     branch: typeof options.branch === "string" ? options.branch : "",
+    ...(typeof options.subdir === "string" ? { subdir: options.subdir } : {}),
     focus: pickAllowedValue(options.focus, VALID_WEB_FOCUS, "all"),
     audience: pickAllowedValue(options.audience, VALID_WEB_AUDIENCE, "all"),
     output: "",
@@ -220,7 +223,7 @@ function buildRateLimitKey(prefix: string, scope: string, req: Request): string 
 /**
  * Run analysis in background
  */
-async function runAnalysis(job: AnalysisJob, options: Record<string, unknown>): Promise<void> {
+async function runAnalysis(job: AnalysisJob, options: BootcampOptions): Promise<void> {
   const emit = (event: ProgressEvent) => {
     job.progress.push(event);
     job.emitter.emit("progress", event);
@@ -232,7 +235,7 @@ async function runAnalysis(job: AnalysisJob, options: Record<string, unknown>): 
   try {
     job.status = "running";
     job.startedAt = Date.now();
-    const fullOptions = buildWebOptions(options);
+    const fullOptions = options;
     const { config, styleConfig, outputFormat } = await resolveRunConfiguration(fullOptions);
     assertJobActive(job);
 
@@ -254,7 +257,11 @@ async function runAnalysis(job: AnalysisJob, options: Record<string, unknown>): 
 
     // Scan
     emit({ type: "phase", phase: "scan", message: "Scanning files..." });
-    const scanResult = await scanRepositoryFiles(repoPath, fullOptions.maxFiles);
+    const scanResult = fullOptions.subdir
+      ? await scanRepositoryFiles(repoPath, fullOptions.maxFiles, { subdir: fullOptions.subdir })
+      : await scanRepositoryFiles(repoPath, fullOptions.maxFiles);
+    await updateSourcePathPrefix(repoPath, fullOptions.subdir, repoInfo);
+    const analysisRepoPath = fullOptions.subdir ? resolve(repoPath, fullOptions.subdir) : repoPath;
     assertJobActive(job);
     emit({ type: "progress", message: `Scanned ${scanResult.files.length} files` });
     emit({ type: "progress", message: `Stack: ${scanResult.stack.languages.join(", ")}` });
@@ -264,7 +271,7 @@ async function runAnalysis(job: AnalysisJob, options: Record<string, unknown>): 
     progress.startPhase("analyze");
     const analysisStart = Date.now();
     const analysis = await orchestrateAnalysis({
-      repoPath,
+      repoPath: analysisRepoPath,
       repoInfo,
       scanResult,
       options: fullOptions,
@@ -301,7 +308,7 @@ async function runAnalysis(job: AnalysisJob, options: Record<string, unknown>): 
       deps,
       outputTargets,
     } = await prepareOutputDocuments({
-      repoPath,
+      repoPath: analysisRepoPath,
       repoInfo,
       scanResult,
       facts,
@@ -421,7 +428,9 @@ async function runAnalysis(job: AnalysisJob, options: Record<string, unknown>): 
     // Log the detailed cause server-side; never expose git stderr / FS paths
     // (which clone/scan errors embed) to the anonymous web client.
     console.error(`[web] Analysis job ${job.id} failed:`, error);
-    const message = "Analysis failed. Please check the repository URL and try again.";
+    const message = job.subdir
+      ? "Analysis failed. Please check the repository URL and package directory, then try again."
+      : "Analysis failed. Please check the repository URL and try again.";
     job.error = message;
     emit({ type: "error", message });
   } finally {
@@ -509,9 +518,37 @@ export function registerRoutes(app: Application): void {
           return;
         }
 
+        const suppliedOptions = isObjectRecord(requestOptions) ? requestOptions : {};
+        if (
+          suppliedOptions.subdir !== undefined &&
+          (typeof suppliedOptions.subdir !== "string" ||
+            suppliedOptions.subdir.length > 500 ||
+            Array.from(suppliedOptions.subdir).some(
+              (char) => char.charCodeAt(0) < 32 || char.charCodeAt(0) === 127
+            ))
+        ) {
+          res.status(400).json({
+            error: "Package directory must be a relative path of at most 500 characters.",
+            field: "subdir",
+          });
+          return;
+        }
+        const options = buildWebOptions(suppliedOptions);
+        try {
+          normalizeScanScope(options);
+        } catch {
+          res.status(400).json({
+            error:
+              "Use a package directory within the repository, without a leading slash or .. segments.",
+            field: "subdir",
+          });
+          return;
+        }
+
         const job: AnalysisJob = {
           id: generateJobId(),
           repoUrl,
+          subdir: options.subdir,
           status: "pending",
           progress: [],
           abortController: new AbortController(),
@@ -543,9 +580,6 @@ export function registerRoutes(app: Application): void {
         jobs.set(job.id, job);
 
         // Start analysis in background
-        const options: Record<string, unknown> = isObjectRecord(requestOptions)
-          ? requestOptions
-          : {};
         void runAnalysis(job, options);
 
         res.json({ jobId: job.id });
@@ -625,6 +659,7 @@ export function registerRoutes(app: Application): void {
     res.json({
       id: job.id,
       repoUrl: job.repoUrl,
+      subdir: job.subdir ?? "",
       status: job.status,
       result: job.result,
       error: job.error,
@@ -664,15 +699,22 @@ export function registerRoutes(app: Application): void {
       let repoPath: string | null = null;
       try {
         const manifest = job.result.manifest as
-          { repository?: { branch?: string }; options?: { maxFiles?: number } } | undefined;
+          | { repository?: { branch?: string }; options?: { maxFiles?: number; subdir?: string } }
+          | undefined;
         const repoInfo = parseGitHubUrl(job.repoUrl);
         const branch = manifest?.repository?.branch;
         repoPath = await cloneRepository(repoInfo, branch, false);
         const maxFiles = clampMaxFiles(manifest?.options?.maxFiles);
-        const scanResult = await scanRepositoryFiles(repoPath, maxFiles);
+        const scope = buildWebOptions({ subdir: job.subdir ?? manifest?.options?.subdir });
+        normalizeScanScope(scope);
+        const scanResult = scope.subdir
+          ? await scanRepositoryFiles(repoPath, maxFiles, { subdir: scope.subdir })
+          : await scanRepositoryFiles(repoPath, maxFiles);
+        await updateSourcePathPrefix(repoPath, scope.subdir, repoInfo);
+        const analysisRepoPath = scope.subdir ? resolve(repoPath, scope.subdir) : repoPath;
         const stats = job.result.stats as { model?: unknown };
         const answer = await quickAsk(
-          repoPath,
+          analysisRepoPath,
           repoInfo,
           scanResult,
           question,

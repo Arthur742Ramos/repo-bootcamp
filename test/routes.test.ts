@@ -28,7 +28,10 @@ vi.mock("../src/services/clone-service.js", () => ({
   cleanupRepository: vi.fn().mockResolvedValue(undefined),
 }));
 
-vi.mock("../src/services/config-resolution.js", () => ({
+vi.mock("../src/services/config-resolution.js", async () => ({
+  ...(await vi.importActual<typeof import("../src/services/config-resolution.js")>(
+    "../src/services/config-resolution.js"
+  )),
   resolveRunConfiguration: vi.fn().mockResolvedValue({
     config: null,
     styleConfig: { name: "oss", firstTasksCount: 5, sections: {} },

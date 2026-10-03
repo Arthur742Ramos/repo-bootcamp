@@ -882,6 +882,8 @@ bootcamp web --port 8080
 # Then open http://localhost:3000 in your browser
 ```
 
+For a monorepo, open **Run options** and enter a **Package directory**, such as `packages/app`. Commands, documentation, source links, and follow-up questions use that package. The directory must stay within the checkout; leave it blank to analyze the repository root. The selected directory is preserved when reconnecting to a run and in the copied CLI command.
+
 The browser UI streams live progress, then lets you read generated Markdown with a **Rendered / Source** toggle and links between generated documents. **Copy** and **Download** always preserve the original source. JSON and other files open as source. The reader supports keyboard navigation and mobile screens.
 
 ![Web Dashboard](media/screenshot-web-dashboard.png)
