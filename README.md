@@ -791,6 +791,8 @@ commands as task discovery; `package.json` declarations take precedence over
 lockfiles, including Bun’s `bun.lock` and `bun.lockb`. Answers the most common Day-1 question: _"how do I build, test, and
 run this?"_
 
+Taskfile discovery preserves shell-safe namespaced and quoted task names, omits internal helpers, and reads descriptions from YAML without executing task commands or templates.
+
 ### Auto-Create GitHub Issues
 
 ```bash

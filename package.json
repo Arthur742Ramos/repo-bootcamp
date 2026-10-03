@@ -159,6 +159,7 @@
     "express": "^5.2.1",
     "express-rate-limit": "^8.7.0",
     "helmet": "^8.3.0",
+    "js-yaml": "4.3.2",
     "ora": "^9.4.1",
     "picomatch": "4.0.7",
     "zod": "^4.6.2"
@@ -167,6 +168,7 @@
     "@eslint/js": "^10.0.1",
     "@playwright/test": "^1.63.0",
     "@types/express": "^5.0.6",
+    "@types/js-yaml": "4.0.9",
     "@types/node": "^26.6.3",
     "@types/picomatch": "4.0.3",
     "@types/supertest": "^7.2.1",
