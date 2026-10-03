@@ -66,6 +66,75 @@ old = { callable = "fixture:main", extras = [] }
     expect(payload.gettingStarted).toEqual(["poetry run serve"]);
   }, 60_000);
 
+  it("advertises public zero-argument Just recipes and omits required/private helpers", async () => {
+    const dir = await repoWith({
+      justfile: `set unstable
+set lists
+example := (
+  '''
+fake:
+'''
+)
+dev target:
+    @echo {{target}}
+[no-cd,
+private]
+setup:
+    @echo helper
+_helper:
+    @echo helper
+# Build with the local default
+[ no-cd ]
+build mode='debug':
+    @echo {{mode}}
+test *FILES:
+    @echo {{FILES}}
+required +FILES:
+    @echo {{FILES}}
+[arg(
+  'FILES',
+  min='2'
+)]
+check *FILES:
+    @echo {{FILES}}
+`,
+    });
+    const result = await runCli(["tasks", dir, "--json"]);
+    expect(result.exitCode).toBe(0);
+    const payload = JSON.parse(result.stdout);
+    expect(payload.tasks.map((task: { command: string }) => task.command)).toEqual([
+      "just build",
+      "just test",
+    ]);
+    expect(payload.tasks[0].description).toBe("Build with the local default");
+    expect(payload.gettingStarted).toEqual(["just build", "just test"]);
+  }, 60_000);
+
+  it("omits ambiguous Just sources while retaining independent ecosystem commands", async () => {
+    const dir = await repoWith({
+      justfile: "build:\n    @echo build\n",
+      ".justfile": "test:\n    @echo test\n",
+      Makefile: "verify:\n\t@echo verify\n",
+    });
+    const result = await runCli(["tasks", dir, "--json"]);
+    expect(result.exitCode).toBe(0);
+    expect(JSON.parse(result.stdout).gettingStarted).toEqual(["make verify"]);
+    expect(
+      JSON.parse(result.stdout).tasks.map((task: { command: string }) => task.command)
+    ).toEqual(["make verify"]);
+  }, 60_000);
+
+  it.each(["justfile", "Justfile", ".justfile"])(
+    "does not confuse one %s entry with multiple default sources",
+    async (name) => {
+      const dir = await repoWith({ [name]: "build mode='debug':\n    @echo {{mode}}\n" });
+      const result = await runCli(["tasks", dir, "--json"]);
+      expect(result.exitCode).toBe(0);
+      expect(JSON.parse(result.stdout).gettingStarted).toEqual(["just build"]);
+    },
+    60_000
+  );
+
   afterEach(async () => {
     await Promise.all(dirs.map((dir) => rm(dir, { recursive: true, force: true })));
     dirs.length = 0;

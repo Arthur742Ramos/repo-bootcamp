@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Discover public Just recipes with supported literal defaults and zero required arguments; omit private helpers and ambiguous default Justfile sources from runnable onboarding guidance.
 - Validate and explicitly qualify GitHub issue destinations before invoking `gh`, export offline manual previews for other repositories, skip successful duplicate titles within a batch, and fail the CLI when issue creation fails while preserving generated documents and clone cleanup.
 - Discover Python console scripts from quoted TOML tables and escaped names while keeping multiline examples, nested dotted keys, and non-script values out of runnable task guidance.
 - Link BOOTCAMP's generated Next Steps only to emitted kit documents, retaining nonempty optional reports and honoring output exclusions and formatter removals in Markdown, HTML, and PDF-ready exports.

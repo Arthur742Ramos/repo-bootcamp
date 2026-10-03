@@ -18,6 +18,8 @@
 import { hasContainedFile, readContainedFile } from "./fs-safe.js";
 import yaml, { FAILSAFE_SCHEMA, load, Type } from "js-yaml";
 import type { Command } from "./types.js";
+import { readdir } from "fs/promises";
+import { publicJustRecipes } from "./just-recipes.js";
 import { lstat, realpath, stat } from "fs/promises";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "path";
 import { isPathInsideDir } from "./utils.js";
@@ -243,48 +245,19 @@ export function parseMakefile(content: string): DiscoveredTask[] {
   return tasks;
 }
 
-const JUST_RESERVED = new Set(["set", "export", "alias", "import", "mod"]);
-
 /**
- * Parse `just` recipes from a justfile. Recipe definitions start at column 0 and
- * end in a colon; indented lines are recipe bodies. A `# comment` immediately
- * preceding a recipe becomes its description.
+ * Parse supported public Just recipes that accept zero arguments. Literal
+ * defaults remain with Just; required parameters and unsupported expressions
+ * cannot become bare runnable commands. No recipe or expression is evaluated.
  */
 export function parseJustfile(content: string): DiscoveredTask[] {
-  const lines = content.split(/\r?\n/);
-  const tasks: DiscoveredTask[] = [];
-  const seen = new Set<string>();
-  let pendingComment: string | undefined;
-  for (const raw of lines) {
-    const line = raw.replace(/\r$/, "");
-    const trimmed = line.trim();
-    if (trimmed.startsWith("#")) {
-      pendingComment = trimmed.replace(/^#+\s*/, "") || undefined;
-      continue;
-    }
-    if (trimmed === "") {
-      pendingComment = undefined;
-      continue;
-    }
-    // Indented lines are recipe bodies, not definitions.
-    if (/^\s/.test(line)) {
-      pendingComment = undefined;
-      continue;
-    }
-    const m = line.match(/^@?([a-zA-Z_][a-zA-Z0-9_-]*)\s*(?:\s+[^:=]*?)?:(?!=)/);
-    if (m && !JUST_RESERVED.has(m[1]) && !seen.has(m[1])) {
-      seen.add(m[1]);
-      tasks.push({
-        name: m[1],
-        command: `just ${m[1]}`,
-        source: "justfile",
-        category: categorizeTask(m[1]),
-        description: pendingComment,
-      });
-    }
-    pendingComment = undefined;
-  }
-  return tasks;
+  return publicJustRecipes(content).map(({ name, description }) => ({
+    name,
+    command: `just ${name}`,
+    source: "justfile",
+    category: categorizeTask(name),
+    description,
+  }));
 }
 
 // Keep scalar names/descriptions as strings while supporting standard YAML
@@ -703,7 +676,6 @@ export async function detectPackageManager(repoPath: string): Promise<PackageMan
 
 /** File candidates for each ecosystem, tried in order (first hit wins). */
 const MAKEFILE_NAMES = ["GNUmakefile", "makefile", "Makefile"];
-const JUSTFILE_NAMES = ["justfile", "Justfile", ".justfile"];
 const TASKFILE_NAMES = [
   "Taskfile.yml",
   "taskfile.yml",
@@ -765,7 +737,16 @@ export async function discoverTasks(
   const makefile = await readFirst(MAKEFILE_NAMES);
   if (makefile) tasks.push(...parseMakefile(makefile));
 
-  const just = await readFirst(JUSTFILE_NAMES);
+  // Native Just searches these names case-insensitively and rejects multiple
+  // candidates. Enumerate names once so case-insensitive filesystems do not
+  // count the same entry twice through differently capitalized probes.
+  let just: string | null = null;
+  try {
+    const candidates = (await readdir(repoPath)).filter((name) => /^\.?justfile$/i.test(name));
+    if (candidates.length === 1) just = await read(candidates[0]);
+  } catch {
+    // Unreadable/ambiguous Just sources contribute no runnable commands.
+  }
   if (just) tasks.push(...parseJustfile(just));
 
   tasks.push(...(await discoverTaskfiles(repoPath, opts.taskfileFiles, opts.onTaskfileRead)));
