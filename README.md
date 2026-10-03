@@ -293,6 +293,11 @@ Within the selected scan root, `poetry.lock` and `uv.lock` identify those Python
 does not parse TOML workflow configuration or establish whether Poetry or uv is used
 without a lockfile. Poetry can also use standard `[project]` metadata.
 
+Development, testing, and build/verify guidance uses semantic command names or recognized
+simple script, task, and runner invocations. Dependency-group arguments and file paths
+do not establish a command's role. Unknown or compound shell commands need an explicit
+role name to appear in these steps; this is not a general shell parser.
+
 ## Example Output
 
 <details>

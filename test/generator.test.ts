@@ -168,6 +168,126 @@ describe("generateBootcamp", () => {
 });
 
 describe("generateOnboarding", () => {
+  it.each([
+    ["install", "uv sync --frozen --group dev"],
+    ["prepare", "poetry install --with dev"],
+    ["setup", "npm install --save-dev server-tools"],
+    ["dependencies", "pip install pytest"],
+    ["latest", "echo latest"],
+    ["restart", "echo restart"],
+    ["observe", "echo observe"],
+    ["inspect", "node ./scripts/server-test.js"],
+    ["prepare", "cp ./dev/server ./test/fixtures"],
+    ["prepare", "npm run build -- --output ./dev/server"],
+    ["prepare", "echo dev && npm install"],
+    ["dev", "vite --help"],
+    ["dev", "npm run install:dev"],
+    ["prepare", "npm run build:test-fixtures"],
+    ["prepare", "make build-test-fixtures"],
+    ["prepare", "npm run dev:build"],
+    ["prepare", "npm run watch:test-build"],
+    ["unit tests", "task watch:unit:build"],
+    ["inspect", "uv run dev-tools.py --self-test"],
+    ["inspect", "poetry run build-tools.py"],
+    ["inspect", "uv run ./dev-tools --self-test"],
+  ])("does not label %s / %s as a development server", (name, command) => {
+    const facts = structuredClone(mockFacts);
+    facts.quickstart.commands = [{ name, command, source: "README.md" }];
+    expect(generateOnboarding(facts)).not.toContain("Start the dev server/watch mode");
+    expect(generateBootcamp(facts, mockOptions)).not.toContain("Run the dev server:");
+  });
+
+  it.each([
+    ["dev:web", "node app.js"],
+    ["launch", "npm run dev -- --port 4000"],
+    ["launch", "pnpm run app:dev"],
+    ["launch", "yarn start"],
+    ["launch", "bun run 'dev:web'"],
+    ["launch", "make serve"],
+    ["launch", "just watch"],
+    ["launch", "task app:dev"],
+    ["launch", "poetry run serve"],
+    ["launch", "uv run --frozen --group dev uvicorn app:app"],
+    ["launch", "npx vite"],
+    ["launch", "python manage.py runserver"],
+    ["Preview docs", "python3 -m http.server 8000"],
+    ["server", "node app.js"],
+    ["launch", "npm run server"],
+    ["dev", "uv run dev-tools.py"],
+    ["launch", "uv run ./node_modules/.bin/vite"],
+    ["launch", "dotnet watch"],
+  ])("recognizes the development role of %s / %s", (name, command) => {
+    const facts = structuredClone(mockFacts);
+    facts.quickstart.commands = [{ name, command, source: "README.md" }];
+    expect(generateOnboarding(facts)).toContain(`Start the dev server/watch mode (\`${command}\`)`);
+    expect(generateBootcamp(facts, mockOptions)).toContain(`Run the dev server: \`${command}\``);
+  });
+
+  it.each([
+    ["unit tests", "python -m unittest"],
+    ["verify", "npm run test:unit"],
+    ["verify", "uv run --group dev pytest"],
+    ["verify", "poetry run pytest"],
+    ["verify", "cargo test"],
+    ["verify", "go test ./..."],
+    ["verify", "npx playwright test"],
+    ["verify", "npm run test:watch"],
+    ["verify", "npm run 'test:unit'"],
+    ["verify", "npm run watch:test-build"],
+    ["unit tests", "task watch:unit:build"],
+  ])("selects real test commands %s / %s", (name, command) => {
+    const facts = structuredClone(mockFacts);
+    facts.quickstart.commands = [{ name, command, source: "README.md" }];
+    const result = generateOnboarding(facts);
+    expect(result).toContain(`## Running Tests\n\n\`\`\`bash\n${command}\n\`\`\``);
+    expect(result).not.toContain("Start the dev server/watch mode");
+  });
+
+  it.each([
+    ["latest", "echo latest"],
+    ["contest", "node contest.js"],
+    ["install", "pip install pytest"],
+    ["prepare", "cp ./test/fixtures ./output"],
+    ["test", "vitest --version"],
+    ["prepare", "npm run build:test-fixtures"],
+    ["prepare", "make build-test-fixtures"],
+  ])("does not invent a test role from %s / %s", (name, command) => {
+    const facts = structuredClone(mockFacts);
+    facts.quickstart.commands = [{ name, command, source: "README.md" }];
+    expect(generateOnboarding(facts)).toContain("_No test command detected_");
+  });
+
+  it("uses a real build/test command for verification instead of the first setup command", () => {
+    const facts = structuredClone(mockFacts);
+    facts.quickstart.commands = [
+      { name: "install", command: "uv sync --group dev", source: "README.md" },
+      { name: "compile", command: "cargo build", source: "README.md" },
+    ];
+    const result = generateBootcamp(facts, mockOptions);
+    expect(result).toContain("Build/verify: `cargo build`");
+    expect(result).not.toContain("Build/verify: `uv sync");
+  });
+
+  it("keeps development build variants in build verification", () => {
+    const facts = structuredClone(mockFacts);
+    facts.quickstart.commands = [
+      { name: "compile", command: "npm run dev:build", source: "package.json" },
+    ];
+    expect(generateBootcamp(facts, mockOptions)).toContain("Build/verify: `npm run dev:build`");
+    expect(generateOnboarding(facts)).toContain("_No test command detected_");
+  });
+
+  it("does not infer build verification from a Poetry filename", () => {
+    const facts = structuredClone(mockFacts);
+    facts.quickstart.commands = [
+      { name: "inspect", command: "poetry run build-tools.py", source: "README.md" },
+    ];
+    expect(generateBootcamp(facts, mockOptions)).not.toContain("Build/verify: `poetry run");
+    facts.quickstart.commands[0].name = "build";
+    expect(generateBootcamp(facts, mockOptions)).toContain(
+      "Build/verify: `poetry run build-tools.py`"
+    );
+  });
   it("includes clone instructions", () => {
     const result = generateOnboarding(mockFacts);
     expect(result).toContain("git clone");
