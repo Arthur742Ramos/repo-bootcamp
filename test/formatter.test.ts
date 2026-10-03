@@ -215,6 +215,36 @@ describe("markdownToHtml", () => {
     expect(html).toContain("</table>");
   });
 
+  it("keeps escaped pipes in table text and inline code and accepts omitted trailing bars", () => {
+    const html = markdownToHtml(
+      String.raw`| Range | File |
+|---|---|
+| ^1.0.0 \|\| ^2.0.0 | \`a\|b.ts\` |
+| plain\\folder | \`raw\\folder\``.replaceAll("\\`", "`")
+    );
+    expect(html).toContain("<tr><td>^1.0.0 || ^2.0.0</td><td><code>a|b.ts</code></td></tr>");
+    expect(html).toContain(
+      String.raw`<tr><td>plain\folder</td><td><code>raw\\folder</code></td></tr>`
+    );
+  });
+
+  it("distinguishes escaped backslashes from escaped column separators", () => {
+    const html = markdownToHtml(String.raw`| A | B |
+|---|---|
+| a\\ | b\\\|c |`);
+    expect(html).toContain(String.raw`<tr><td>a\</td><td>b\|c</td></tr>`);
+  });
+
+  it("ignores trailing whitespace and CRLF without dropping intentional empty cells", () => {
+    const html = markdownToHtml("| A | B |   \r\n|---|---|  \r\n| x | y |  \r\n| z | | \r\n");
+    expect(html).toContain("<tr><th>A</th><th>B</th></tr>");
+    expect(html).toContain("<tr><td>x</td><td>y</td></tr>");
+    expect(html).toContain("<tr><td>z</td><td></td></tr>");
+    expect(html).not.toContain("---");
+    expect(html.match(/<th>/g)).toHaveLength(2);
+    expect(html.match(/<td>/g)).toHaveLength(4);
+  });
+
   it("passes through HTML tags", () => {
     const md = "<details>\n<summary>Click</summary>\n\nContent\n\n</details>";
     const html = markdownToHtml(md);

@@ -4,7 +4,8 @@ import { join } from "path";
 
 import { afterEach, describe, expect, it } from "vitest";
 
-import { extractDependencies, type Dependency } from "../src/deps.js";
+import { extractDependencies, generateDependencyDocs, type Dependency } from "../src/deps.js";
+import { markdownToHtml } from "../src/formatter.js";
 
 const dirs: string[] = [];
 
@@ -39,6 +40,19 @@ describe("dependency manifest parsers", () => {
     expect(deps?.packageManager).toBe("npm");
     expect(names(deps!.runtime)).toContain("fsevents");
     expect(deps!.totalCount).toBe(2);
+  });
+
+  it("npm: renders non-string manifest versions without aborting the kit", async () => {
+    const dir = await repoWith({
+      "package.json": JSON.stringify({ dependencies: { numeric: 3, empty: null } }),
+    });
+    const deps = await extractDependencies(dir);
+    const markdown = generateDependencyDocs(deps!, "Project");
+    expect(markdown).toContain("| numeric | 3 |");
+    expect(markdown).toContain("| empty | null |");
+    const html = markdownToHtml(markdown);
+    expect(html).toContain("<td>numeric</td><td>3</td>");
+    expect(html).toContain("<td>empty</td><td>null</td>");
   });
 
   it("Cargo: resets section state so [features]/[profile] are not parsed as deps", async () => {

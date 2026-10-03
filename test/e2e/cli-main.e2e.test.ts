@@ -26,7 +26,7 @@ async function createFixtureRepo(baseDir: string): Promise<string> {
           test: "echo test",
         },
         dependencies: {
-          express: "^5.1.0",
+          express: "^4.0.0 || ^5.0.0",
         },
         devDependencies: {
           vitest: "^4.0.0",
@@ -220,6 +220,8 @@ describe("bootcamp CLI", () => {
 
     const bootcamp = await readFile(join(outputDir, "BOOTCAMP.md"), "utf-8");
     expect(bootcamp).toContain("fixture-cli-repo");
+    const dependencies = await readFile(join(outputDir, "DEPENDENCIES.md"), "utf-8");
+    expect(dependencies).toContain(String.raw`| express | ^4.0.0 \|\| ^5.0.0 |`);
   }, 90_000);
   it.each(["html", "pdf"] as const)(
     "generates a navigable %s kit through the real CLI",
@@ -243,6 +245,8 @@ describe("bootcamp CLI", () => {
       expect(bootcamp).toContain('href="./ARCHITECTURE.html"');
       const tasks = await readFile(join(outputDir, "FIRST_TASKS.html"), "utf-8");
       expect(tasks).toContain('href="./ARCHITECTURE.html"');
+      const dependencies = await readFile(join(outputDir, "DEPENDENCIES.html"), "utf-8");
+      expect(dependencies).toContain("<td>^4.0.0 || ^5.0.0</td>");
       for (const file of files.filter((name) => name.endsWith(".html"))) {
         const content = await readFile(join(outputDir, file), "utf-8");
         for (const match of content.matchAll(/href="\.\/([^"?#]+\.html)(?:[?#][^"]*)?"/g)) {

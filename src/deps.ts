@@ -605,6 +605,14 @@ export function generateDependencyDiagram(deps: DependencyAnalysis, projectName:
 /**
  * Generate markdown documentation for dependencies
  */
+/** Keep manifest text inside one Markdown table cell. */
+function dependencyTableCell(value: string): string {
+  return String(value)
+    .replace(/\\/g, "\\\\")
+    .replace(/\|/g, "\\|")
+    .replace(/[\r\n]+/g, " ");
+}
+
 export function generateDependencyDocs(deps: DependencyAnalysis, projectName: string): string {
   const lines: string[] = [];
 
@@ -655,7 +663,7 @@ export function generateDependencyDocs(deps: DependencyAnalysis, projectName: st
     lines.push("| Package | Version |");
     lines.push("|---------|---------|");
     for (const dep of deps.runtime.slice(0, 50)) {
-      lines.push(`| ${dep.name} | ${dep.version} |`);
+      lines.push(`| ${dependencyTableCell(dep.name)} | ${dependencyTableCell(dep.version)} |`);
     }
     if (deps.runtime.length > 50) {
       lines.push(`| ... | +${deps.runtime.length - 50} more |`);
@@ -672,7 +680,7 @@ export function generateDependencyDocs(deps: DependencyAnalysis, projectName: st
     lines.push("| Package | Version |");
     lines.push("|---------|---------|");
     for (const dep of deps.dev.slice(0, 30)) {
-      lines.push(`| ${dep.name} | ${dep.version} |`);
+      lines.push(`| ${dependencyTableCell(dep.name)} | ${dependencyTableCell(dep.version)} |`);
     }
     if (deps.dev.length > 30) {
       lines.push(`| ... | +${deps.dev.length - 30} more |`);
