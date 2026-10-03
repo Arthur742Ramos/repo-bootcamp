@@ -51,13 +51,17 @@ describe("watch extra coverage", () => {
   });
 
   it("fetchAndCheckUpdates no change", async () => {
-    mockExecFile.mockReturnValueOnce("").mockReturnValueOnce("abc\n");
+    mockExecFile.mockReturnValueOnce("").mockReturnValueOnce("abc\n").mockReturnValueOnce("abc\n");
     const r = await fetchAndCheckUpdates("/r", "abc");
     expect(r.updated).toBe(false);
   });
 
   it("fetchAndCheckUpdates with change and merge", async () => {
-    mockExecFile.mockReturnValueOnce("").mockReturnValueOnce("def\n").mockReturnValueOnce("");
+    mockExecFile
+      .mockReturnValueOnce("")
+      .mockReturnValueOnce("def\n")
+      .mockReturnValueOnce("")
+      .mockReturnValueOnce("def\n");
     const r = await fetchAndCheckUpdates("/r", "abc");
     expect(r.updated).toBe(true);
   });
@@ -69,7 +73,8 @@ describe("watch extra coverage", () => {
         throw new Error("no upstream");
       })
       .mockReturnValueOnce("def\n")
-      .mockReturnValueOnce("");
+      .mockReturnValueOnce("")
+      .mockReturnValueOnce("def\n");
     const r = await fetchAndCheckUpdates("/r", "abc");
     expect(r.updated).toBe(true);
   });
@@ -81,7 +86,8 @@ describe("watch extra coverage", () => {
       .mockImplementationOnce(() => {
         throw new Error("not ff");
       })
-      .mockReturnValueOnce("");
+      .mockReturnValueOnce("")
+      .mockReturnValueOnce("def\n");
     const r = await fetchAndCheckUpdates("/r", "abc", { allowHardReset: true });
     expect(r.updated).toBe(true);
   });
@@ -102,12 +108,13 @@ describe("watch extra coverage", () => {
       .mockReturnValueOnce("aaa\n") // getHeadCommit
       .mockReturnValueOnce("") // fetch
       .mockReturnValueOnce("bbb\n") // @{u}
-      .mockReturnValueOnce(""); // merge
+      .mockReturnValueOnce("") // merge
+      .mockReturnValueOnce("bbb\n"); // checked-out HEAD
 
     const h = startWatch("/r", { intervalSeconds: 1, onChangeDetected: onChange, verbose: true });
     await vi.advanceTimersByTimeAsync(1200);
     h.stop();
-    expect(onChange).toHaveBeenCalled();
+    expect(onChange).toHaveBeenCalledExactlyOnceWith("bbb");
   });
 
   it("startWatch handles error gracefully", async () => {
@@ -121,7 +128,11 @@ describe("watch extra coverage", () => {
 
   it("startWatch no change", async () => {
     const onChange = vi.fn();
-    mockExecFile.mockReturnValueOnce("aaa\n").mockReturnValueOnce("").mockReturnValueOnce("aaa\n");
+    mockExecFile
+      .mockReturnValueOnce("aaa\n")
+      .mockReturnValueOnce("")
+      .mockReturnValueOnce("aaa\n")
+      .mockReturnValueOnce("aaa\n");
     const h = startWatch("/r", { intervalSeconds: 1, onChangeDetected: onChange });
     await vi.advanceTimersByTimeAsync(1200);
     h.stop();

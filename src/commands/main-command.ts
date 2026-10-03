@@ -4,7 +4,7 @@ import { join, resolve, relative, sep } from "path";
 
 import { analyzeRepo, type AnalysisStats } from "../agent.js";
 import { formatDocName, type OutputFormat } from "../formatter.js";
-import { parseGitHubUrl } from "../ingest.js";
+import { parseGitHubUrl, isWorkingTreeDirty } from "../ingest.js";
 import { runInteractiveMode } from "../interactive.js";
 import type { BootcampConfig } from "../plugins.js";
 import { ProgressTracker } from "../progress.js";
@@ -684,7 +684,10 @@ export async function runMainCommand(repoUrl: string, options: BootcampOptions):
       intervalSeconds: options.watchInterval || 30,
       allowHardReset: options.watchForce || false,
       verbose: options.verbose,
-      onChangeDetected: async () => {
+      onChangeDetected: async (commitSha) => {
+        // Preserve the initial run metadata while giving regenerated manifests
+        // and phase caches the commit that watch just checked out.
+        if (commitSha) repoInfo = { ...repoInfo, commitSha };
         const wp = new ProgressTracker(options.verbose, quiet);
 
         wp.startPhase("scan", `max ${options.maxFiles} files`);
@@ -694,12 +697,18 @@ export async function runMainCommand(repoUrl: string, options: BootcampOptions):
         await updateSourcePathPrefix(repoPath, options.subdir, repoInfo);
         wp.succeed(`Scanned ${newScan.files.length} files`);
 
+        // Local edits may survive a non-conflicting checkout update. Record
+        // HEAD in artifacts, but never cache modified working-tree results.
+        const watchOptions = {
+          ...options,
+          noCache: Boolean(options.noCache) || (await isWorkingTreeDirty(repoPath)),
+        };
         wp.startPhase("analyze");
         const result = await analyzeRepo(
           analysisRepoPath,
           repoInfo,
           newScan,
-          options,
+          watchOptions,
           (msg) => {
             wp.update(msg);
           },
@@ -718,7 +727,7 @@ export async function runMainCommand(repoUrl: string, options: BootcampOptions):
           repoInfo,
           scanResult: newScan,
           facts: styledFacts,
-          options,
+          options: watchOptions,
           config,
           styleConfig,
           outputDir,
@@ -730,7 +739,7 @@ export async function runMainCommand(repoUrl: string, options: BootcampOptions):
           repoInfo,
           scanResult: newScan,
           facts: styledFacts,
-          options,
+          options: watchOptions,
           format: outputFormat,
           durationMs: result.stats.endTime ? result.stats.endTime - result.stats.startTime : 0,
           model: result.stats.model,

@@ -17,8 +17,9 @@ const execFileAsync = promisify(execFile);
 export interface WatchOptions {
   /** Polling interval in seconds (default: 30) */
   intervalSeconds: number;
-  /** Called when new commits are detected; resolves when re-analysis is done */
-  onChangeDetected: () => Promise<void>;
+  /** Called after checkout updates, with the new SHA; resolves when re-analysis is done.
+   * The argument is optional for compatibility with callbacks invoked by API callers. */
+  onChangeDetected: (commitSha?: string) => Promise<void>;
   /** Optional verbose logging */
   verbose?: boolean;
   /** Allow destructive fallback to git reset --hard when ff merge fails */
@@ -85,10 +86,13 @@ export async function fetchAndCheckUpdates(
       }
       await execFileAsync("git", ["reset", "--hard", remoteSha], { cwd: repoPath });
     }
-    return { updated: true, newSha: remoteSha };
   }
 
-  return { updated: false, newSha: lastSha };
+  // A fast-forward merge can succeed without moving an ahead local HEAD.
+  // Also detect local commits when the upstream has not changed.
+  const checkedOutSha = await getHeadCommit(repoPath);
+  if (!checkedOutSha) throw new Error("Unable to determine checked-out HEAD after watch update");
+  return { updated: checkedOutSha !== lastSha, newSha: checkedOutSha };
 }
 
 /**
@@ -133,7 +137,7 @@ export function startWatch(repoPath: string, opts: WatchOptions): WatchHandle {
         );
 
         console.log(chalk.cyan("  Re-running analysis...\n"));
-        await opts.onChangeDetected();
+        await opts.onChangeDetected(result.newSha);
         // Advance the cursor only AFTER a successful re-analysis. The working
         // tree is already at newSha, so if onChangeDetected() throws (a transient
         // failure), the next poll re-detects the still-unprocessed commit and

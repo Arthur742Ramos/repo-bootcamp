@@ -61,6 +61,7 @@ describe("fetchAndCheckUpdates", () => {
   it("returns updated: false when SHA matches", async () => {
     mockExecResult(""); // git fetch origin
     mockExecResult("abc1234\n"); // git rev-parse @{u}
+    mockExecResult("abc1234\n"); // checked-out HEAD
 
     const result = await fetchAndCheckUpdates("/tmp/repo", "abc1234");
     expect(result.updated).toBe(false);
@@ -71,6 +72,7 @@ describe("fetchAndCheckUpdates", () => {
     mockExecResult(""); // git fetch origin
     mockExecResult("newsha99\n"); // git rev-parse @{u}
     mockExecResult(""); // git merge --ff-only
+    mockExecResult("newsha99\n"); // checked-out HEAD
 
     const result = await fetchAndCheckUpdates("/tmp/repo", "oldsha11");
     expect(result.updated).toBe(true);
@@ -82,10 +84,19 @@ describe("fetchAndCheckUpdates", () => {
     mockExecError("no upstream"); // git rev-parse @{u} fails
     mockExecResult("fallback1\n"); // git rev-parse FETCH_HEAD
     mockExecResult(""); // git merge --ff-only
+    mockExecResult("fallback1\n"); // checked-out HEAD
 
     const result = await fetchAndCheckUpdates("/tmp/repo", "oldsha11");
     expect(result.updated).toBe(true);
     expect(result.newSha).toBe("fallback1");
+  });
+
+  it("fails without a checked-out HEAD instead of reporting an unverified remote SHA", async () => {
+    mockExecResult("");
+    mockExecResult("newsha99\n");
+    mockExecResult("");
+    mockExecError("HEAD unavailable");
+    await expect(fetchAndCheckUpdates("/tmp/repo", "oldsha11")).rejects.toThrow("checked-out HEAD");
   });
 
   it("refuses hard reset when ff-merge fails without force", async () => {
@@ -101,6 +112,7 @@ describe("fetchAndCheckUpdates", () => {
     mockExecResult("newsha99\n"); // git rev-parse @{u}
     mockExecError("not ff"); // git merge --ff-only fails
     mockExecResult(""); // git reset --hard
+    mockExecResult("newsha99\n"); // checked-out HEAD
 
     const result = await fetchAndCheckUpdates("/tmp/repo", "oldsha11", {
       allowHardReset: true,
