@@ -23,6 +23,31 @@ describe("selected-directory source links", () => {
       ).toBe(`https://${host}/owner/project/${route}/main/packages/my%20app/src/a%23b.ts`);
     }
   );
+  it.each([
+    ["github", "github.com", "blob"],
+    ["gitlab", "gitlab.com", "-/blob"],
+    ["bitbucket", "bitbucket.org", "src"],
+  ] as const)("links detached %s content to the known commit only", (provider, host, route) => {
+    const commitSha = "0123456789abcdef0123456789abcdef01234567";
+    const scoped = {
+      ...repo,
+      provider,
+      host,
+      branch: "HEAD",
+      commitSha,
+      sourcePathPrefix: "packages/my app",
+    };
+    expect(buildBlobUrl(scoped, "src/a(b).ts")).toBe(
+      `https://${host}/owner/project/${route}/${commitSha}/packages/my%20app/src/a%28b%29.ts`
+    );
+    expect(buildBlobUrl({ ...scoped, commitSha: undefined }, "src/a(b).ts")).toBe(
+      `https://${host}/owner/project/${route}/HEAD/packages/my%20app/src/a%28b%29.ts`
+    );
+    expect(buildBlobUrl({ ...scoped, branch: "release/v2" }, "src/a(b).ts")).toBe(
+      `https://${host}/owner/project/${route}/release/v2/packages/my%20app/src/a%28b%29.ts`
+    );
+    expect(buildBlobUrl({ ...scoped, branch: "local" }, "src/a(b).ts")).toBeNull();
+  });
   it("preserves existing root links and normalizes scoped relative wrappers", () => {
     expect(buildBlobUrl(repo, "./src/index.ts")).toBe(
       "https://github.com/owner/project/blob/main/src/index.ts"

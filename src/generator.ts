@@ -27,6 +27,8 @@ type RepoTask = RepoFacts["firstTasks"][number];
 export interface OnboardingCheckoutContext {
   repoInfo: RepoInfo;
   localPath?: string;
+  /** Explicit analyzed branch or tag, including refs that produce detached HEAD. */
+  ref?: string;
 }
 
 /** Document availability supplied by the kit assembler; standalone calls keep style defaults. */
@@ -456,7 +458,9 @@ export function generateOnboarding(
       const directory = [checkout.repoInfo.repo, checkout.repoInfo.sourcePathPrefix]
         .filter(Boolean)
         .join("/");
-      checkoutCommands = `# Clone the repository\ngit clone -- ${quoteBashArgument(cloneUrl)}\ncd -- ${quoteBashArgument(directory)}`;
+      const ref = checkout.ref || checkout.repoInfo.branch;
+      const branchOption = ref && ref !== "HEAD" ? ` --branch ${quoteBashArgument(ref)}` : "";
+      checkoutCommands = `# Clone the repository\ngit clone${branchOption} -- ${quoteBashArgument(cloneUrl)}\ncd -- ${quoteBashArgument(directory)}`;
     }
   }
   const documentedInstall = facts.quickstart.commands.find((c) => c.name === "install");

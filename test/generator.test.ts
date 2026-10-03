@@ -302,11 +302,69 @@ describe("generateOnboarding", () => {
   ])("uses the actual remote and scoped checkout for %s", (url) => {
     const repoInfo = { ...parseGitHubUrl(url), sourcePathPrefix: "packages/my app" };
     const result = generateOnboarding(mockFacts, undefined, { repoInfo });
-    expect(result).toContain(`git clone -- '${url}.git'\ncd -- 'project/packages/my app'`);
+    expect(result).toContain(
+      `git clone --branch 'main' -- '${url}.git'\ncd -- 'project/packages/my app'`
+    );
     expect(result).not.toContain("git clone https://github.com/test/repo");
     expect(result).not.toContain("cd team");
     expect(result).toContain("Check existing repository issues");
     expect(result).not.toContain("Check existing issues on GitHub");
+  });
+
+  it.each(["main", "master", "local", "release/v2", "feature's $branch"])(
+    "preserves the analyzed remote branch %s without changing documented commands",
+    (branch) => {
+      const facts = structuredClone(mockFacts);
+      facts.quickstart.commands = facts.quickstart.commands.filter(
+        (command) => command.name !== "install"
+      );
+      facts.quickstart.commands.push({
+        name: "install",
+        command: "npm ci --ignore-scripts",
+        source: "README.md",
+      });
+      const repoInfo = { ...parseGitHubUrl("owner/project"), branch };
+      const result = generateOnboarding(facts, undefined, { repoInfo });
+      const quoted = "'" + branch.replace(/'/g, `'"'"'`) + "'";
+      expect(result).toContain(
+        `git clone --branch ${quoted} -- 'https://github.com/owner/project.git'`
+      );
+      expect(result).toContain("# Install dependencies\nnpm ci --ignore-scripts");
+    }
+  );
+
+  it("uses an explicit analyzed tag when Git reports detached HEAD and retains .git URLs", () => {
+    const repoInfo = {
+      ...parseGitHubUrl("owner/project"),
+      url: "https://github.com/owner/project.git",
+      branch: "HEAD",
+    };
+    const result = generateOnboarding(mockFacts, undefined, { repoInfo, ref: "v2.0" });
+    expect(result).toContain("git clone --branch 'v2.0' -- 'https://github.com/owner/project.git'");
+    expect(result).not.toContain(".git.git");
+  });
+
+  it.each(["", "HEAD"])("does not invent a clone ref from %j", (branch) => {
+    const repoInfo = { ...parseGitHubUrl("owner/project"), branch };
+    expect(generateOnboarding(mockFacts, undefined, { repoInfo })).toContain(
+      "git clone -- 'https://github.com/owner/project.git'"
+    );
+  });
+
+  it("keeps explicit ref metadata out of local checkout instructions", () => {
+    const repoInfo = {
+      ...parseGitHubUrl("owner/project"),
+      url: "file:///checkout",
+      branch: "release/v2",
+    };
+    const result = generateOnboarding(mockFacts, undefined, {
+      repoInfo,
+      ref: "v2.0",
+      localPath: "/checkout",
+    });
+    expect(result).toContain("cd -- '/checkout'");
+    expect(result).not.toContain("git clone");
+    expect(result).not.toContain("--branch");
   });
 
   it("uses an existing local scope and quotes shell metacharacters", () => {
