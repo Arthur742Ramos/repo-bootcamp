@@ -356,7 +356,10 @@ test *FILES:
             ? "export default {type:'formatter',name:'summary-aliases',formatDocuments(docs){return docs.filter(d=>d.name==='BOOTCAMP.md').flatMap(d=>[d,{...d,name:'./BOOTCAMP.md'}]).concat({name:'./summary.json',content:'plugin metadata'},{name:'./ANALYSIS_MANIFEST.json',content:'plugin metadata'});}};"
             : "export default {type:'formatter',name:'summary-fixture',formatDocuments(docs){return docs.filter(d=>d.name!=='SECURITY.md').map(d=>d.name==='BOOTCAMP.md'?{...d,name:'WELCOME.md'}:d).concat({name:'PLUGIN_GUIDE.md',content:'# Plugin guide'},{name:'summary.json',content:'plugin metadata'},{name:'ANALYSIS_MANIFEST.json',content:'plugin metadata'});}};"
       );
-      await writeFile(join(tempDir, ".bootcamprc.json"), JSON.stringify({ plugins: [plugin] }));
+      await writeFile(
+        join(tempDir, ".bootcamprc.json"),
+        JSON.stringify({ plugins: [pathToFileURL(plugin).href] })
+      );
     }
     const quiet = mode === "quiet" || mode === "quiet-json";
     const jsonOnly = mode === "json" || mode === "quiet-json";
@@ -421,6 +424,22 @@ test *FILES:
     if (mode === "preview") expect(files).toContain("ISSUES_PREVIEW.html");
     if (mode === "aliases")
       expect(files).toEqual(["ANALYSIS_MANIFEST.json", "BOOTCAMP.html", "summary.json"]);
+    if (mode === "case" || mode === "case-output-alias") {
+      const expectedPaths = [
+        "BOOTCAMP.html",
+        "bootcamp.html",
+        "SUMMARY.json",
+        "analysis_manifest.json",
+        "ANALYSIS_MANIFEST.json",
+        "summary.json",
+      ];
+      const actualNames = await Promise.all(
+        expectedPaths.map(async (name) => basename(await realpath(join(output, name))))
+      );
+      expect(files).toEqual([...new Set(actualNames)].sort());
+      expect(files).not.toContain("ONBOARDING.html");
+      expect(files).not.toContain("repo_facts.json");
+    }
   });
 
   it("generates the onboarding kit through the real CLI process", async () => {
