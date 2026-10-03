@@ -16,6 +16,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Retain dependencies from every recognized ecosystem at the selected root, including Python runtime packages alongside Node tooling; distinguish mixed records in reports and diagrams, preserve single-ecosystem output, and invalidate only the previous dependency cache projection.
+
 - Preserve literal Git changed-file paths in comparison reports, including Unicode and rename/copy destinations, so environment and export changes are inspected correctly and control characters/backticks remain safe display labels.
 
 - Keep web analysis admission within the 100-job limit while an evicted job's output cleanup is pending, preserving active jobs and existing cleanup behavior.

@@ -1,0 +1,86 @@
+import { afterAll, describe, expect, it, vi } from "vitest";
+import { createHash } from "crypto";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "fs/promises";
+import { dirname, join } from "path";
+import { tmpdir } from "os";
+vi.mock("os", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("os")>();
+  const { mkdtemp } = await import("fs/promises");
+  const home = await mkdtemp(join(actual.tmpdir(), "bootcamp-mixed-cache-home-"));
+  return { ...actual, homedir: () => home };
+});
+import {
+  getCacheDir,
+  readPhaseCache,
+  writePhaseCache,
+  listCacheEntries,
+  type CachePhase,
+} from "../src/cache.js";
+import { runParallelAnalysis } from "../src/analysis.js";
+import { scanRepo } from "../src/ingest.js";
+import * as depsModule from "../src/deps.js";
+afterAll(async () => {
+  await rm(dirname(dirname(getCacheDir())), { recursive: true, force: true });
+});
+
+describe("mixed dependency projection cache identity", () => {
+  it("misses a real old deps entry, computes complete records, then hits warm while other phase keys stay exact", async () => {
+    const repo = "mixed/cache";
+    const sha = "unchanged-commit";
+    const dir = await mkdtemp(join(tmpdir(), "bootcamp-mixed-cache-repo-"));
+    const hash = (seed: string) => createHash("sha256").update(seed).digest("hex").slice(0, 16);
+    try {
+      await writeFile(
+        join(dir, "package.json"),
+        JSON.stringify({ devDependencies: { prettier: "3" } })
+      );
+      await writeFile(join(dir, "pyproject.toml"), '[project]\ndependencies = ["fastapi>=0.110"]');
+      await mkdir(getCacheDir(), { recursive: true });
+      const oldPath = join(
+        getCacheDir(),
+        `mixed-cache-deps-${hash(`${repo}@${sha}|phase=deps`)}.json`
+      );
+      // Use an actual current schema entry, changing only the pre-fix projection filename/value.
+      await writePhaseCache("deps", repo, sha, {
+        packageManager: "npm",
+        totalCount: 1,
+        runtime: [],
+        dev: [{ name: "prettier", version: "3", type: "dev" }],
+        peer: [],
+        categories: [],
+      });
+      const entry = (await listCacheEntries())[0];
+      await writeFile(oldPath, await readFile(entry.path));
+      await rm(entry.path);
+      expect((await readPhaseCache("deps", repo, sha)).hit).toBe(false);
+      for (const phase of ["facts", "security", "impact", "cycles"] as CachePhase[]) {
+        const value = { preserved: phase };
+        await writePhaseCache(phase, repo, sha, value);
+        const seed = `${repo}@${sha}${phase === "facts" ? "" : `|phase=${phase}`}`;
+        const file = `mixed-cache${phase === "facts" ? "" : `-${phase}`}-${hash(seed)}.json`;
+        expect(JSON.parse(await readFile(join(getCacheDir(), file), "utf8")).value).toEqual(value);
+        expect(await readPhaseCache(phase, repo, sha)).toEqual({ hit: true, value });
+        await rm(join(getCacheDir(), file));
+      }
+      const spy = vi.spyOn(depsModule, "extractDependencies");
+      const cold = await runParallelAnalysis(dir, await scanRepo(dir, 100), undefined, {
+        repoFullName: repo,
+        commitSha: sha,
+      });
+      expect(cold.deps?.totalCount).toBe(2);
+      expect(cold.deps?.runtime[0]).toMatchObject({ name: "fastapi", ecosystem: "python" });
+      const progress = { update: vi.fn() } as any;
+      const warm = await runParallelAnalysis(dir, await scanRepo(dir, 100), progress, {
+        repoFullName: repo,
+        commitSha: sha,
+      });
+      expect(warm.deps).toEqual(cold.deps);
+      expect(spy).toHaveBeenCalledTimes(1);
+      expect(progress.update).toHaveBeenCalledWith("deps ✓ (cache)");
+      spy.mockRestore();
+      expect(JSON.parse(await readFile(oldPath, "utf8")).value.runtime).toEqual([]);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+});

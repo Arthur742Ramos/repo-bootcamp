@@ -686,7 +686,14 @@ bootcamp deps ./my-repo --json
 bootcamp deps ./my-repo --diagram
 ```
 
-Supports npm, Cargo, pip/Poetry, and Go module manifests.
+Supports npm, Cargo, pip/Poetry, and Go module manifests at the selected repository
+root. When multiple ecosystems have dependencies, reports combine their runtime,
+development, optional, and peer records without merging equal names across
+languages. Mixed JSON retains the primary `packageManager` and flat lists, adding
+`packageManagers`, `ecosystem`, and `sourceFile` provenance; mixed documentation
+and diagrams distinguish those records. Single-ecosystem output stays unchanged.
+For example, a Python app with a Node formatter reports both the Python runtime
+packages and Node development tooling. No dependency installation is performed.
 
 ### Tech Radar & Onboarding Risk
 

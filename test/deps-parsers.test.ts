@@ -401,19 +401,26 @@ describe("dependency manifest parsers", () => {
     expect(deps!.totalCount).toBe(3);
   });
 
-  it("polyglot repo: first manifest wins (npm over cargo) — known single-manifest limitation", async () => {
-    // extractDependencies returns the FIRST non-null extractor in the fixed
-    // order npm -> cargo -> python -> go, so a repo carrying both package.json
-    // and Cargo.toml reports only npm and silently drops the Rust deps. This
-    // pins that lossy contract; aggregating across manifests would be a
-    // deliberate, test-visible change rather than a silent regression.
+  it("polyglot repo retains npm primary manager and dependencies from Cargo", async () => {
+    // Preserve npm compatibility while correcting the known lossy first-manifest behavior.
     const dir = await repoWith({
       "package.json": JSON.stringify({ name: "poly", dependencies: { express: "^5.0.0" } }),
       "Cargo.toml": ["[dependencies]", 'serde = "1.0"'].join("\n"),
     });
     const deps = await extractDependencies(dir);
     expect(deps?.packageManager).toBe("npm");
-    expect(names(deps!.runtime)).toEqual(["express"]);
-    expect(names(deps!.runtime)).not.toContain("serde");
+    expect(names(deps!.runtime)).toEqual(["express", "serde"]);
+    expect(deps!.runtime[0]).toMatchObject({
+      name: "express",
+      ecosystem: "node",
+      sourceFile: "package.json",
+    });
+    expect(deps!.runtime[1]).toMatchObject({
+      name: "serde",
+      ecosystem: "rust",
+      sourceFile: "Cargo.toml",
+    });
+    expect(deps!.packageManagers).toEqual(["npm", "cargo"]);
+    expect(deps!.totalCount).toBe(2);
   });
 });

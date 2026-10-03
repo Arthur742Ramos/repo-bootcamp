@@ -42,7 +42,9 @@ function printDepTable(title: string, list: Dependency[], cap: number): void {
   console.log(chalk.bold(title));
   const nameWidth = Math.min(40, Math.max(10, ...list.slice(0, cap).map((dep) => dep.name.length)));
   for (const dep of list.slice(0, cap)) {
-    console.log(`  ${dep.name.padEnd(nameWidth)} ${chalk.dim(dep.version)}`);
+    console.log(
+      `  ${dep.name.padEnd(nameWidth)} ${chalk.dim(dep.version)}${dep.ecosystem ? chalk.dim(` (${dep.ecosystem}; ${dep.sourceFile})`) : ""}`
+    );
   }
   if (list.length > cap) {
     console.log(chalk.dim(`  … +${list.length - cap} more`));
@@ -53,7 +55,13 @@ function printDepTable(title: string, list: Dependency[], cap: number): void {
 function printReport(deps: DependencyAnalysis, repoName: string): void {
   console.log(chalk.bold("\n📦 Dependencies"));
   console.log(chalk.dim(`Repository: ${repoName}`));
-  console.log(chalk.dim(`Package manager: ${managerLabel(deps.packageManager)}\n`));
+  console.log(
+    chalk.dim(
+      deps.packageManagers
+        ? `Package managers: ${deps.packageManagers.map((manager) => managerLabel(manager).split(" (")[0]).join(", ")}\n`
+        : `Package manager: ${managerLabel(deps.packageManager)}\n`
+    )
+  );
 
   console.log(countLine("Runtime", deps.runtime.length, chalk.green));
   console.log(countLine("Development", deps.dev.length, chalk.cyan));
@@ -75,6 +83,7 @@ function printReport(deps: DependencyAnalysis, repoName: string): void {
 
   printDepTable("Runtime dependencies", deps.runtime, 40);
   printDepTable("Development dependencies", deps.dev, 20);
+  if (deps.packageManagers) printDepTable("Peer dependencies", deps.peer, 20);
 }
 
 /**
@@ -114,6 +123,7 @@ export async function runDepsCommand(repoUrl: string, opts: DepsCommandOptions):
           {
             repo: repoSource.repoInfo.fullName,
             packageManager: deps.packageManager,
+            ...(deps.packageManagers ? { packageManagers: deps.packageManagers } : {}),
             totalCount: deps.totalCount,
             counts: {
               runtime: deps.runtime.length,
