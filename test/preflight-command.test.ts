@@ -37,6 +37,50 @@ describe("satisfiesVersion", () => {
     expect(satisfiesVersion(">=3.8, <4.0", "3.9.0")).toBe(true); // tolerates spaces
   });
 
+  it.each([
+    [">=20 <23", "22.15.0", true],
+    [">=20 <23", "24.0.0", false],
+    [">=20 <23", "19.0.0", false],
+    [">= 20 < 23", "22.0.0", true],
+    [">= 20 < 23", "23.0.0", false],
+    [">=3.8, <4.0 >=3.10", "3.9.0", false],
+    [">=3.8, <4.0 >=3.10", "3.11.0", true],
+  ] as const)("evaluates every comparator in %s against %s", (required, installed, expected) => {
+    expect(satisfiesVersion(required, installed)).toBe(expected);
+  });
+
+  it.each([
+    ["^20.19.0 || ^22.12.0 || >=24.0.0", "20.19.0", true],
+    ["^20.19.0 || ^22.12.0 || >=24.0.0", "22.15.0", true],
+    ["^20.19.0 || ^22.12.0 || >=24.0.0", "24.1.0", true],
+    ["^20.19.0 || ^22.12.0 || >=24.0.0", "20.18.0", false],
+    ["^20.19.0 || ^22.12.0 || >=24.0.0", "22.11.0", false],
+    ["^20.19.0 || ^22.12.0 || >=24.0.0", "23.0.0", false],
+    [">=20 <21||>=22 <23", "22.0.0", true],
+    [">=20 <21||>=22 <23", "21.0.0", false],
+    [">=20,<21 || >=22,<23", "24.0.0", false],
+  ] as const)("evaluates OR alternatives in %s against %s", (required, installed, expected) => {
+    expect(satisfiesVersion(required, installed)).toBe(expected);
+  });
+
+  it.each([
+    ">=20oops",
+    "20.0.0.1",
+    ">=20 <23oops",
+    ">=20 <",
+    ">=20,,<23",
+    ">=20 ||",
+    "|| >=20",
+    ">=20 || stable",
+    ">=20 || >=20oops",
+    "20.0.0-beta.1",
+    ">=20 - 23",
+    "",
+    "   ",
+  ])("returns unknown instead of partially evaluating unsupported requirement %s", (required) => {
+    expect(satisfiesVersion(required, "22.0.0")).toBeNull();
+  });
+
   it("returns null when any constraint in a compound range is non-numeric", () => {
     expect(satisfiesVersion(">=3.8,foo", "3.9.0")).toBeNull();
   });

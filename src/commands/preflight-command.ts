@@ -182,34 +182,38 @@ function compare(a: number[], b: number[]): number {
 
 /**
  * Pragmatic semver satisfaction: handles `>=`, `>`, `<=`, `<`, `^`, `~`, and
- * bare/exact versions. Returns null when the requirement can't be compared
- * deterministically (e.g. `lts/iron`, `stable`).
+ * bare/exact versions, AND comparator sets, and OR alternatives. Returns null
+ * when the requirement can't be compared deterministically (e.g. `lts/iron`, `stable`).
  */
 export function satisfiesVersion(required: string, installed: string): boolean | null {
   const inst = parseVersion(installed);
   if (inst.length === 0) return null;
 
-  // A requirement may be a comma-separated compound range (PEP 621 style,
-  // e.g. `>=3.8,<4.0`). Every constraint must hold, so evaluate each and AND
-  // the results. A single constraint is just a one-element range.
-  const constraints = required
-    .split(",")
-    .map((c) => c.trim())
-    .filter(Boolean);
-  if (constraints.length === 0) return null;
-
-  let result: boolean | null = null;
-  for (const constraint of constraints) {
-    const single = satisfiesSingleConstraint(constraint, inst);
-    if (single === null) return null; // can't compare deterministically
-    result = result === null ? single : result && single;
+  // Node engine ranges join comparator sets with ||; within a set, both
+  // whitespace (npm) and commas (Python) mean AND. Parse every comparator so
+  // an unsupported suffix or alternative never silently becomes a valid pin.
+  const alternatives = required.trim().split("||");
+  let satisfied = false;
+  for (const alternative of alternatives) {
+    const groups = alternative.split(",").map((group) => group.trim());
+    if (groups.some((group) => !group)) return null;
+    let matches = true;
+    for (const group of groups) {
+      const constraints = group.replace(/(>=|>|<=|<|\^|~|=)\s+(?=v?\d)/g, "$1").split(/\s+/);
+      for (const constraint of constraints) {
+        const single = satisfiesSingleConstraint(constraint, inst);
+        if (single === null) return null;
+        matches = matches && single;
+      }
+    }
+    satisfied = satisfied || matches;
   }
-  return result;
+  return satisfied;
 }
 
 /** Evaluate one parsed-version constraint against an already-parsed install. */
 function satisfiesSingleConstraint(required: string, inst: number[]): boolean | null {
-  const opMatch = required.trim().match(/^(>=|>|<=|<|\^|~|=)?\s*v?(\d+(?:\.\d+){0,2})/);
+  const opMatch = required.trim().match(/^(>=|>|<=|<|\^|~|=)?\s*v?(\d+(?:\.\d+){0,2})$/);
   if (!opMatch) return null;
   const op = opMatch[1] || "=";
   const hasMinor = opMatch[2].includes(".");

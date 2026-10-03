@@ -53,4 +53,33 @@ describe("preflight command", () => {
     expect(gated.exitCode).toBe(1);
     expect(`${gated.stdout}\n${gated.stderr}`).toContain("not satisfied");
   }, 60_000);
+  it("rejects a satisfied lower bound when the whitespace-separated upper bound fails", async () => {
+    const repoPath = await repoWith({
+      "package.json": JSON.stringify({ name: "x", engines: { node: ">=0 <1" } }),
+    });
+    const result = await runCli(["preflight", repoPath, "--json", "--check"]);
+    expect(result.exitCode).toBe(1);
+    const parsed = JSON.parse(result.stdout);
+    expect(parsed.ok).toBe(false);
+    expect(parsed.checks[0]).toMatchObject({
+      tool: "Node.js",
+      required: ">=0 <1",
+      status: "mismatch",
+    });
+  }, 60_000);
+
+  it("accepts an installed tool that satisfies a later OR alternative", async () => {
+    const repoPath = await repoWith({
+      "package.json": JSON.stringify({ name: "x", engines: { node: ">=99 || >=20 <99" } }),
+    });
+    const result = await runCli(["preflight", repoPath, "--json", "--check"]);
+    expect(result.exitCode).toBe(0);
+    const parsed = JSON.parse(result.stdout);
+    expect(parsed.ok).toBe(true);
+    expect(parsed.checks[0]).toMatchObject({
+      tool: "Node.js",
+      required: ">=99 || >=20 <99",
+      status: "ok",
+    });
+  }, 60_000);
 });
