@@ -7,7 +7,7 @@ import { readFile } from "fs/promises";
 import { join, dirname, basename, posix } from "path";
 import { readContainedFile } from "./fs-safe.js";
 import type { FileInfo, ChangeImpact } from "./types.js";
-import type { CyclesSummary } from "./cycles.js";
+import { SOURCE_EXT, type CyclesSummary } from "./cycles.js";
 import { escapeRegex } from "./utils.js";
 import importPatternsJson from "./data/import-patterns.json" with { type: "json" };
 
@@ -285,7 +285,7 @@ async function buildGraphContext(
 
 /**
  * Probe a repo-relative base path against the scan set: exact match, then source
- * extensions, then the ESM `.js`→`.ts` rewrite, then index files. Shared by
+ * extensions, then compiled-specifier source substitution, then index files. Shared by
  * relative and alias (tsconfig `paths`/`baseUrl`) resolution.
  */
 function probeResolved(resolved: string, filePathSet: Set<string>): string | null {
@@ -304,16 +304,19 @@ function probeResolved(resolved: string, filePathSet: Set<string>): string | nul
     }
   }
 
-  // ESM/TypeScript projects import the compiled `.js` (or `.mjs`/`.cjs`)
-  // specifier even though the on-disk source is `.ts`/`.tsx` — e.g.
-  // `import "./util.js"` resolves to `util.ts`. When the literal path didn't
-  // match a real file, strip a JS-family extension and retry the source
-  // extensions. (A real `.js` file is still preferred via the exact-match
-  // check above.)
+  // Match TypeScript's module-kind-specific source substitutions. `.mjs` and
+  // `.cjs` must not point at same-named `.ts`/`.tsx` files. Keep exact-file
+  // precedence above, and do not infer `.mts`/`.cts` from extensionless imports.
   const jsExtMatch = resolved.match(/\.(js|jsx|mjs|cjs)$/);
   if (jsExtMatch) {
     const base = resolved.slice(0, resolved.length - jsExtMatch[0].length);
-    for (const ext of [".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs"]) {
+    const sourceExtensions =
+      jsExtMatch[1] === "mjs"
+        ? [".mts", ".d.mts"]
+        : jsExtMatch[1] === "cjs"
+          ? [".cts", ".d.cts"]
+          : [".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs"];
+    for (const ext of sourceExtensions) {
       if (filePathSet.has(base + ext)) {
         return base + ext;
       }
@@ -496,7 +499,7 @@ export async function buildImportGraph(
   const sourceFiles = files.filter(
     (f) =>
       !f.isDirectory &&
-      /\.(ts|tsx|js|jsx|mjs|cjs|py|go)$/.test(f.path) &&
+      SOURCE_EXT.test(f.path) &&
       !f.path.includes("node_modules") &&
       f.size < MAX_FILE_SIZE_FOR_GRAPH
   );
@@ -799,17 +802,17 @@ export function generateImpactDocs(
  */
 export function getKeyFilesForImpact(files: FileInfo[]): string[] {
   const keyPatterns = [
-    /^src\/index\.(ts|js|tsx|jsx)$/,
-    /^source\/index\.(ts|js|tsx|jsx)$/,
-    /^src\/main\.(ts|js)$/,
-    /^source\/main\.(ts|js)$/,
-    /^src\/app\.(ts|js|tsx|jsx)$/,
-    /^src\/server\.(ts|js)$/,
-    /^src\/cli\.(ts|js)$/,
-    /^index\.(ts|js)$/,
-    /^src\/[^/]+\.(ts|js)$/, // Top-level src files
-    /^source\/[^/]+\.(ts|js)$/, // Top-level source files
-    /^lib\/[^/]+\.(ts|js)$/, // Top-level lib files
+    /^src\/index\.(ts|js|tsx|jsx|mts|cts)$/,
+    /^source\/index\.(ts|js|tsx|jsx|mts|cts)$/,
+    /^src\/main\.(ts|js|mts|cts)$/,
+    /^source\/main\.(ts|js|mts|cts)$/,
+    /^src\/app\.(ts|js|tsx|jsx|mts|cts)$/,
+    /^src\/server\.(ts|js|mts|cts)$/,
+    /^src\/cli\.(ts|js|mts|cts)$/,
+    /^index\.(ts|js|mts|cts)$/,
+    /^src\/[^/]+\.(ts|js|mts|cts)$/, // Top-level src files
+    /^source\/[^/]+\.(ts|js|mts|cts)$/, // Top-level source files
+    /^lib\/[^/]+\.(ts|js|mts|cts)$/, // Top-level lib files
     // Terraform IaC key files (root-level only)
     /^main\.tf$/,
     /^variables\.tf$/,

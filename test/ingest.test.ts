@@ -305,6 +305,17 @@ describe("mergeFrameworksFromDeps", () => {
 });
 
 describe("scanRepo", () => {
+  it.each(["mts", "cts"])("detects TypeScript from a .%s-only repository", async (ext) => {
+    const repoPath = await mkdtemp(join(tmpdir(), "bootcamp-ingest-modules-"));
+    try {
+      await writeFile(join(repoPath, `index.${ext}`), "export const x = 1;\n");
+      const scan = await scanRepo(repoPath, 200);
+      expect(scan.stack.languages).toEqual(["TypeScript"]);
+      expect(scan.files.map((file) => file.path)).toEqual([`index.${ext}`]);
+    } finally {
+      await rm(repoPath, { recursive: true, force: true });
+    }
+  });
   it("skips ignored directories while scanning", async () => {
     const repoPath = await mkdtemp(join(tmpdir(), "bootcamp-ingest-"));
     try {

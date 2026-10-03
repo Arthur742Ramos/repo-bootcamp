@@ -164,8 +164,8 @@ export function describeCycle(cycle: Cycle, graph: Map<string, GraphNode>): stri
   return cycle.files.join(", ");
 }
 
-/** Source-code extensions the import graph actually parses (mirrors impact.ts). */
-export const SOURCE_EXT = /\.(ts|tsx|js|jsx|mjs|cjs|py|go)$/;
+/** Source-code extensions shared by import parsing and cycle detection. */
+export const SOURCE_EXT = /\.(ts|tsx|mts|cts|js|jsx|mjs|cjs|py|go)$/;
 
 /**
  * Whether a path is a test file. Re-exported from the canonical `isTestFile` in
