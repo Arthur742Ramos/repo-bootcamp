@@ -287,6 +287,9 @@ describe("issue result propagation", () => {
       writeGeneratedOutputs(
         makeParams({ options: { createIssues: true }, facts: { firstTasks: [{ title: "task" }] } })
       )
-    ).resolves.toEqual({ documentCount: 2 });
+    ).resolves.toEqual({
+      documentCount: 2,
+      emittedFiles: ["BOOTCAMP.md", "repo_facts.json"],
+    });
   });
 });
