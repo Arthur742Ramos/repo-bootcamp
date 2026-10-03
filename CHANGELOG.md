@@ -15,7 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- Preserve command backticks, line breaks, and spacing in generated Markdown, HTML, and PDF-ready guides; match code fences only on complete closing lines and keep literal text out of formatting placeholders.
+- Preserve literal task labels and command backticks, line breaks, and spacing in generated Markdown, HTML, and PDF-ready guides; match code fences only on complete closing lines and keep literal text out of formatting placeholders.
 
 - Discover public Just recipes with supported literal defaults and zero required arguments; omit private helpers and ambiguous default Justfile sources from runnable onboarding guidance.
 - Recreate the analyzed branch or tag in remote onboarding clone instructions, including selected packages that exist only on that ref; detached tag source links use the known analyzed commit.

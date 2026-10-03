@@ -928,7 +928,7 @@ For a monorepo, open **Run options** and enter a **Package directory**, such as 
 
 The browser UI streams live progress, then lets you read generated Markdown with a **Rendered / Source** toggle and links between generated documents. **Copy** and **Download** always preserve the original source. JSON and other files open as source. The reader supports keyboard navigation and mobile screens.
 
-Generated command snippets use delimiters that preserve literal backticks. Multiline commands appear in fenced blocks, and HTML/PDF-ready exports preserve command spacing. The formatter supports bounded inline code and fenced blocks; it is not a complete CommonMark implementation.
+Generated command snippets use delimiters that preserve literal backticks. Multiline task names use a quoted label with visible line-break escapes. Multiline commands appear in fenced blocks, and HTML/PDF-ready exports preserve command spacing. The formatter supports bounded inline code and fenced blocks; it is not a complete CommonMark implementation.
 
 ![Web Dashboard](media/screenshot-web-dashboard.png)
 

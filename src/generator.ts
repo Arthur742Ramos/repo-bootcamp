@@ -10,7 +10,12 @@ import { getStyleConfig, type StyleConfig } from "./plugins.js";
 import { markdownToHtml } from "./formatter.js";
 import { buildBlobUrl } from "./source-links.js";
 import { findGuidanceCommand } from "./command-guidance.js";
-import { isMultilineCode, markdownCodeBlock, markdownCodeSpan } from "./markdown-code.js";
+import {
+  isMultilineCode,
+  markdownCodeBlock,
+  markdownCodeSpan,
+  markdownCommandName,
+} from "./markdown-code.js";
 
 /** Maximum items shown in summary sections of BOOTCAMP.md */
 const MAX_BOOTCAMP_SUMMARY_ITEMS = 5;
@@ -424,7 +429,7 @@ export function generateOnboarding(
   const commands = facts.quickstart.commands
     .map(
       (c) =>
-        `### ${c.name}\n${markdownCodeBlock(c.command, "bash")}\n${c.description ? `> ${c.description}` : ""}`
+        `### ${markdownCommandName(c.name)}\n${markdownCodeBlock(c.command, "bash")}\n${c.description ? `> ${c.description}` : ""}`
     )
     .join("\n\n");
 

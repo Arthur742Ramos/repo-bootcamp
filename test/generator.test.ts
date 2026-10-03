@@ -16,6 +16,7 @@ import {
   generateRunbook,
 } from "../src/generator.js";
 import { convertToHtml, convertToPdf, markdownToHtml } from "../src/formatter.js";
+import { parsePackageJsonScripts } from "../src/tasks.js";
 import { parseGitHubUrl } from "../src/ingest.js";
 import type { RepoFacts, BootcampOptions } from "../src/types.js";
 
@@ -902,6 +903,51 @@ describe("literal generated command presentation", () => {
         .replaceAll("&gt;", ">")
         .replaceAll("&amp;", "&")
     );
+
+  it.each(["npm", "pnpm", "yarn", "bun"] as const)(
+    "keeps detected %s script labels from swallowing their own and following commands",
+    (manager) => {
+      const names = [
+        "test\n```\nunit",
+        "test`literal`",
+        "dev```literal```",
+        "test\r\nunit",
+        "test\runit",
+        "test\tunit",
+        "test  unit",
+        "--test",
+        "test",
+      ];
+      const detected = parsePackageJsonScripts(
+        JSON.stringify({ scripts: Object.fromEntries(names.map((name) => [name, "echo marker"])) }),
+        manager
+      );
+      const facts: RepoFacts = {
+        ...mockFacts,
+        quickstart: { ...mockFacts.quickstart, commands: detected },
+      };
+      const original = JSON.stringify(facts.quickstart.commands);
+      const markdown = generateOnboarding(facts);
+      for (const html of [
+        markdownToHtml(markdown),
+        convertToHtml(markdown, "Guide"),
+        convertToPdf(markdown, "Guide"),
+      ]) {
+        for (const task of detected) expect(codePayloads(html)).toContain(task.command);
+        for (const name of names.filter((name) => /[\r\n]/.test(name))) {
+          expect(codePayloads(html)).toContain(JSON.stringify(name));
+        }
+        expect(codePayloads(html)).toContain("test`literal`");
+        expect(codePayloads(html)).toContain("dev```literal```");
+        expect(html).toContain('id="development-loop"');
+        expect(html).toContain('id="running-tests"');
+        expect(html).toContain('id="getting-help"');
+      }
+      expect(JSON.stringify(facts.quickstart.commands)).toBe(original);
+      expect(detected.map((task) => task.name)).toEqual(names);
+      expect(markdown).toContain("### test\n");
+    }
+  );
 
   it.each(commands)("preserves original command %j in every affected guide format", (command) => {
     const facts: RepoFacts = {
