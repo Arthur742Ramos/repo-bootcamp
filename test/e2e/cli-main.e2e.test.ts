@@ -1,5 +1,5 @@
 import { execFileSync } from "child_process";
-import { mkdtemp, mkdir, readFile, readdir, rm, writeFile } from "fs/promises";
+import { mkdtemp, mkdir, readFile, readdir, realpath, rm, writeFile } from "fs/promises";
 import { tmpdir } from "os";
 import { basename, join } from "path";
 
@@ -261,7 +261,7 @@ describe("bootcamp CLI", () => {
     const tempDir = await mkdtemp(join(tmpdir(), "bootcamp-scoped-cli-"));
     tempDirs.push(tempDir);
     const repoPath = await createFixtureRepo(tempDir);
-    const subdir = "packages/app";
+    const subdir = "packages/my app";
     const selectedRoot = join(repoPath, subdir);
     await mkdir(join(selectedRoot, "src"), { recursive: true });
     await writeFile(
@@ -305,6 +305,14 @@ describe("bootcamp CLI", () => {
       }
     );
     expect(result.exitCode).toBe(0);
+    const onboarding = await readFile(join(outputDir, "ONBOARDING.md"), "utf-8");
+    const reportedPath = onboarding.match(/^cd -- '(.+)'$/m)?.[1];
+    expect(reportedPath).toBeTruthy();
+    expect(await realpath(reportedPath!)).toBe(await realpath(selectedRoot));
+    expect(onboarding).not.toContain("git clone");
+    expect(onboarding.indexOf(`cd -- '${reportedPath}'`)).toBeLessThan(
+      onboarding.indexOf("npm install")
+    );
     const dependencies = await readFile(join(outputDir, "DEPENDENCIES.md"), "utf-8");
     expect(dependencies).toContain("child-runtime");
     expect(dependencies).not.toContain("express");

@@ -79,6 +79,7 @@ import {
   prepareOutputDocuments,
 } from "../src/services/analysis-orchestration.js";
 import { analyzeDiff } from "../src/diff.js";
+import { generateOnboarding } from "../src/generator.js";
 import { ProgressTracker } from "../src/progress.js";
 
 const defaultOptions: BootcampOptions = {
@@ -112,6 +113,7 @@ const mockRepoInfo: RepoInfo = {
   owner: "test-owner",
   repo: "test-repo",
   fullName: "test-owner/test-repo",
+  url: "https://github.com/test-owner/test-repo",
   commitSha: "abc123",
   defaultBranch: "main",
   branch: "main",
@@ -272,6 +274,24 @@ describe("orchestrateAnalysis", () => {
 });
 
 describe("prepareOutputDocuments", () => {
+  it("passes the selected local checkout into onboarding generation", async () => {
+    const repoInfo = { ...mockRepoInfo, url: "file:///repo", sourcePathPrefix: "packages/my app" };
+    await prepareOutputDocuments({
+      repoPath: "/repo/packages/my app",
+      repositoryRoot: "/repo",
+      repoInfo,
+      scanResult: mockScanResult,
+      facts: mockFacts,
+      options: defaultOptions,
+      config: null,
+      styleConfig: defaultStyleConfig,
+      progress: { update: vi.fn() } as any,
+    });
+    expect(generateOnboarding).toHaveBeenCalledWith(expect.anything(), defaultOptions, {
+      repoInfo,
+      localPath: "/repo/packages/my app",
+    });
+  });
   it("generates core documents", async () => {
     const progress = { update: vi.fn(), succeed: vi.fn(), recordToolCall: vi.fn() } as any;
 

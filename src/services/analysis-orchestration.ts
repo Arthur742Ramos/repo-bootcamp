@@ -272,7 +272,13 @@ export async function prepareOutputDocuments({
 
   const documents: GeneratedDoc[] = [
     { name: "BOOTCAMP.md", content: generateBootcamp(finalFacts, options, styleConfig) },
-    { name: "ONBOARDING.md", content: generateOnboarding(finalFacts, options) },
+    {
+      name: "ONBOARDING.md",
+      content: generateOnboarding(finalFacts, options, {
+        repoInfo,
+        localPath: repoInfo.url.startsWith("file://") ? repoPath : undefined,
+      }),
+    },
     { name: "ARCHITECTURE.md", content: generateArchitecture(finalFacts, options, repoInfo) },
     { name: "CODEMAP.md", content: generateCodemap(finalFacts, repoInfo) },
     {
