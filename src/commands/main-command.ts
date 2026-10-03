@@ -135,6 +135,21 @@ async function writeRunSummary({
   await writeFile(join(outputDir, "summary.json"), JSON.stringify(summary, null, 2), "utf-8");
 }
 
+async function updateSourcePathPrefix(
+  repoPath: string,
+  subdir: string | undefined,
+  repoInfo: RepoInfo
+): Promise<void> {
+  if (!subdir) return;
+  // Contained aliases are valid scan roots; source URLs need the actual Git
+  // path. Recompute after each scan because watch updates can retarget them.
+  const [root, selected] = await Promise.all([
+    realpath(repoPath),
+    realpath(resolve(repoPath, subdir)),
+  ]);
+  repoInfo.sourcePathPrefix = relative(root, selected).split(sep).join("/");
+}
+
 async function generateOutputs({
   repoPath,
   repositoryRoot,
@@ -318,15 +333,7 @@ export async function runMainCommand(repoUrl: string, options: BootcampOptions):
     scanResult = scanScope
       ? await scanRepositoryFiles(repoPath, options.maxFiles, scanScope)
       : await scanRepositoryFiles(repoPath, options.maxFiles);
-    if (options.subdir) {
-      // A contained directory alias is valid for scanning; Git source links
-      // must point to its actual repository path rather than alias/file.
-      const [root, selected] = await Promise.all([
-        realpath(repoPath),
-        realpath(resolve(repoPath, options.subdir)),
-      ]);
-      repoInfo.sourcePathPrefix = relative(root, selected).split(sep).join("/");
-    }
+    await updateSourcePathPrefix(repoPath, options.subdir, repoInfo);
     runStats.scanTime = Date.now() - scanStart;
     runStats.filesScanned = scanResult.files.length;
     progress.succeed(
@@ -684,6 +691,7 @@ export async function runMainCommand(repoUrl: string, options: BootcampOptions):
         const newScan = scanScope
           ? await scanRepositoryFiles(repoPath, options.maxFiles, scanScope)
           : await scanRepositoryFiles(repoPath, options.maxFiles);
+        await updateSourcePathPrefix(repoPath, options.subdir, repoInfo);
         wp.succeed(`Scanned ${newScan.files.length} files`);
 
         wp.startPhase("analyze");

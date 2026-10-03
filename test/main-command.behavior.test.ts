@@ -759,6 +759,8 @@ describe("runMainCommand --watch and --interactive", () => {
   it("re-scans, re-analyzes and re-writes (issue creation off) on change, and stops on SIGINT", async () => {
     const repoPath = await createLocalFixtureRepo();
     const outputDir = join(repoPath, "bootcamp-output");
+    await symlink(join(repoPath, "src"), join(repoPath, "source-alias"), "junction");
+    await mkdir(join(repoPath, "other-src"));
     const facts = makeFacts();
     const scanResult = makeScanResult();
 
@@ -821,7 +823,7 @@ describe("runMainCommand --watch and --interactive", () => {
         ...BASE_OPTIONS,
         jsonOnly: false,
         watch: true,
-        subdir: "src",
+        subdir: "source-alias",
         output: outputDir,
       }).catch(() => {});
 
@@ -836,6 +838,10 @@ describe("runMainCommand --watch and --interactive", () => {
       const scansBefore = scanRepositoryFiles.mock.calls.length;
       const writesBefore = writeGeneratedOutputs.mock.calls.length;
 
+      expect(prepareOutputDocuments.mock.calls[0][0].repoInfo.sourcePathPrefix).toBe("src");
+      // Retarget the contained alias as a Git update can, then rescan.
+      await rm(join(repoPath, "source-alias"));
+      await symlink(join(repoPath, "other-src"), join(repoPath, "source-alias"), "junction");
       // Simulate a detected change.
       await capturedOnChange!();
 
@@ -845,10 +851,16 @@ describe("runMainCommand --watch and --interactive", () => {
       expect(scanRepositoryFiles).toHaveBeenLastCalledWith(
         repoPath,
         200,
-        expect.objectContaining({ subdir: "src" })
+        expect.objectContaining({ subdir: "source-alias" })
       );
-      expect(analyzeRepo.mock.calls[0][0]).toBe(join(repoPath, "src"));
-      expect(prepareOutputDocuments.mock.calls.at(-1)![0].repoPath).toBe(join(repoPath, "src"));
+      expect(analyzeRepo.mock.calls[0][0]).toBe(join(repoPath, "source-alias"));
+      expect(analyzeRepo.mock.calls[0][1].sourcePathPrefix).toBe("other-src");
+      expect(prepareOutputDocuments.mock.calls.at(-1)![0].repoPath).toBe(
+        join(repoPath, "source-alias")
+      );
+      expect(prepareOutputDocuments.mock.calls.at(-1)![0].repoInfo.sourcePathPrefix).toBe(
+        "other-src"
+      );
       expect(prepareOutputDocuments.mock.calls.at(-1)![0].repositoryRoot).toBe(repoPath);
       expect(writeGeneratedOutputs.mock.calls.length).toBe(writesBefore + 1);
       const lastWrite = writeGeneratedOutputs.mock.calls.at(-1)![0] as {
