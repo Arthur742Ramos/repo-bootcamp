@@ -946,11 +946,14 @@ export async function scanRepo(
 
   // Resolve the manager once so onboarding evidence and runnable commands use
   // the same manifest/lockfile selection as the standalone tasks command.
-  const packageManager = await detectPackageManager(repoPath);
+  // scanDirectory has already validated that the selected directory stays
+  // inside the repository; its file paths are relative to that directory.
+  const taskRoot = options.subdir ? resolve(repoPath, options.subdir) : repoPath;
+  const packageManager = await detectPackageManager(taskRoot);
   if (files.some((file) => file.path === "package.json")) {
     stack.packageManager = packageManager;
   }
-  const commands = toCommands(await discoverTasks(repoPath, { packageManager }));
+  const commands = toCommands(await discoverTasks(taskRoot, { packageManager }));
 
   // Parse CI workflows
   const ciWorkflows = await parseWorkflows(repoPath, files);

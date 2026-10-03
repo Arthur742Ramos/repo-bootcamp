@@ -82,6 +82,27 @@ describe("ingest parsers", () => {
     }
   );
 
+  it("uses the selected package's manager and commands in a scoped scan", async () => {
+    const dir = await repoWith({
+      "package.json": JSON.stringify({
+        packageManager: "pnpm@9.12.0",
+        scripts: { root: "echo root" },
+      }),
+      "pnpm-lock.yaml": "root lockfile",
+      "packages/app/package.json": JSON.stringify({
+        packageManager: "bun@1.4.0",
+        scripts: { build: "tsc", test: "vitest" },
+      }),
+      "packages/app/bun.lock": "child lockfile",
+    });
+    const scan = await scanRepo(dir, 100, { subdir: "packages/app" });
+    expect(scan.stack.packageManager).toBe("bun");
+    expect(scan.commands.map((command) => command.command)).toEqual([
+      "bun run build",
+      "bun run test",
+    ]);
+  });
+
   it("detects the text Bun lockfile even without a root JavaScript manifest", async () => {
     const dir = await repoWith({ "bun.lock": "lockfile" });
     expect((await scanRepo(dir, 100)).stack.packageManager).toBe("bun");
