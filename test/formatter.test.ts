@@ -11,6 +11,7 @@ import {
   formatContent,
   wrapHtmlPage,
   getFileExtension,
+  applyOutputFormat,
 } from "../src/formatter.js";
 
 describe("markdownToHtml", () => {
@@ -445,5 +446,87 @@ describe("wrapHtmlPage", () => {
     expect(result).toContain("<title>My Title</title>");
     expect(result).toContain("<h1>Hi</h1>");
     expect(result).toContain("</body>");
+  });
+});
+
+describe("applyOutputFormat document navigation", () => {
+  it.each(["html", "pdf"] as const)("links the converted kit in %s output", (format) => {
+    const docs = applyOutputFormat(
+      [
+        {
+          name: "BOOTCAMP.md",
+          content: "# Bootcamp\n\nRead [setup](./ONBOARDING.md) and [source](./src/README.md).",
+        },
+        { name: "ONBOARDING.md", content: "# Onboarding\n\nReturn [home](./BOOTCAMP.md)." },
+      ],
+      format
+    );
+    expect(docs.map((doc) => doc.name)).toEqual(["BOOTCAMP.html", "ONBOARDING.html"]);
+    expect(docs[0].content).toContain('<a href="./ONBOARDING.html">setup</a>');
+    expect(docs[1].content).toContain('<a href="./BOOTCAMP.html">home</a>');
+    expect(docs[0].content).toContain('<a href="./src/README.md">source</a>');
+  });
+
+  it("resolves nested and encoded kit paths and preserves URL suffixes", () => {
+    const docs = applyOutputFormat(
+      [
+        {
+          name: "guides/START.md",
+          content:
+            "[setup](../ONBOARDING.md?mode=quick&theme=dark#setup) [nested](./Space%20%26%20Notes.md)",
+        },
+        { name: "ONBOARDING.md", content: "# Setup" },
+        { name: "guides/Space & Notes.md", content: "# Notes" },
+      ],
+      "html"
+    );
+    expect(docs[0].content).toContain('href="../ONBOARDING.html?mode=quick&amp;theme=dark#setup"');
+    expect(docs[0].content).toContain('href="./Space%20%26%20Notes.html"');
+  });
+
+  it("matches equivalent encoded path segments without treating encoded slashes as directories", () => {
+    const docs = applyOutputFormat(
+      [
+        {
+          name: "BOOTCAMP.md",
+          content:
+            "[extension](./ONBOARDING%2emd) [letter](./%4FNBOARDING.md) [notes](./guides/Space%20&%20Notes.md) [slash](./guides%2FSpace%20&%20Notes.md) [bad](./ONBOARDING%broken.md)",
+        },
+        { name: "ONBOARDING.md", content: "# Setup" },
+        { name: "guides/Space & Notes.md", content: "# Notes" },
+      ],
+      "html"
+    );
+    expect(docs[0].content).toContain('href="./ONBOARDING.html">extension');
+    expect(docs[0].content).toContain('href="./ONBOARDING.html">letter');
+    expect(docs[0].content).toContain('href="./guides/Space%20%26%20Notes.html">notes');
+    expect(docs[0].content).toContain('href="./guides%2FSpace%20&amp;%20Notes.md">slash');
+    expect(docs[0].content).toContain('href="./ONBOARDING%broken.md">bad');
+  });
+
+  it("preserves external links, images, fragments and code examples", () => {
+    const content =
+      "[external](https://example.com/ONBOARDING.md) [section](#setup) ![image](https://example.com/ONBOARDING.md)\n\n`[setup](./ONBOARDING.md)`\n\n```md\n[setup](./ONBOARDING.md)\n```";
+    const docs = applyOutputFormat(
+      [
+        { name: "BOOTCAMP.md", content },
+        { name: "ONBOARDING.md", content: "# Setup" },
+      ],
+      "html"
+    );
+    expect(docs[0].content).toContain('href="https://example.com/ONBOARDING.md"');
+    expect(docs[0].content).toContain('href="#setup"');
+    expect(docs[0].content).toContain('src="https://example.com/ONBOARDING.md"');
+    expect(docs[0].content).toContain("<code>[setup](./ONBOARDING.md)</code>");
+    expect(docs[0].content).toContain('<code class="language-md">[setup](./ONBOARDING.md)</code>');
+  });
+
+  it("returns Markdown and non-Markdown artifacts unchanged", () => {
+    const docs = [
+      { name: "BOOTCAMP.md", content: "[setup](./ONBOARDING.md)" },
+      { name: "facts.json", content: '{"link":"./ONBOARDING.md"}' },
+    ];
+    expect(applyOutputFormat(docs, "markdown")).toBe(docs);
+    expect(applyOutputFormat(docs, "html")[1]).toBe(docs[1]);
   });
 });

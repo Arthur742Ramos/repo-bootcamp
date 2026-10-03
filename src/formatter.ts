@@ -6,6 +6,8 @@
  * for rendering with a headless browser (e.g. Puppeteer / Chrome).
  */
 
+import { posix } from "node:path";
+
 /** Supported output formats */
 export type OutputFormat = "markdown" | "html" | "pdf";
 
@@ -531,11 +533,54 @@ export function applyOutputFormat(
   format: OutputFormat
 ): { name: string; content: string }[] {
   if (format === "markdown") return documents;
+  // Convert references only when their target is part of this output kit.
+  // Rewriting Markdown would also alter examples and fenced code blocks; use
+  // the escaped href attributes emitted by our HTML renderer instead.
+  const documentUrl = (name: string): URL =>
+    new URL(name.split("/").map(encodeURIComponent).join("/"), "https://kit.invalid/");
+  const convertedPaths = new Map(
+    documents
+      .filter((doc) => doc.name.endsWith(".md"))
+      .map((doc) => [
+        documentUrl(doc.name).pathname,
+        documentUrl(formatFileName(doc.name, format)).pathname,
+      ])
+  );
   return documents.map((doc) => {
     if (!doc.name.endsWith(".md")) return doc;
     return {
       name: formatFileName(doc.name, format),
-      content: formatContent(doc.content, doc.name, format),
+      content: formatContent(doc.content, doc.name, format).replace(
+        /<a href="([^"]*)"/g,
+        (anchor, escapedHref: string) => {
+          const href = escapedHref
+            .replace(/&quot;/g, '"')
+            .replace(/&lt;/g, "<")
+            .replace(/&gt;/g, ">")
+            .replace(/&amp;/g, "&");
+          if (!href.startsWith("./") && !href.startsWith("../")) return anchor;
+          let target: URL;
+          try {
+            target = new URL(href, documentUrl(doc.name));
+          } catch {
+            return anchor;
+          }
+          let pathname: string;
+          try {
+            pathname = target.pathname
+              .split("/")
+              .map((segment) => encodeURIComponent(decodeURIComponent(segment)))
+              .join("/");
+          } catch {
+            return anchor;
+          }
+          const converted = convertedPaths.get(pathname);
+          if (!converted || target.origin !== "https://kit.invalid") return anchor;
+          const relative = posix.relative(posix.dirname(documentUrl(doc.name).pathname), converted);
+          const path = relative.startsWith(".") ? relative : "./" + relative;
+          return `<a href="${escapeHtml(path + target.search + target.hash)}"`;
+        }
+      ),
     };
   });
 }
