@@ -1,4 +1,5 @@
 import request from "supertest";
+import { closeLoopbackServers, listenLoopback } from "./helpers/loopback-server.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { RepoFacts } from "../src/types.js";
@@ -156,14 +157,15 @@ async function waitForTerminalStatus(app: ReturnType<typeof request>, jobId: str
   throw new Error("Timed out waiting for job to finish");
 }
 
-afterEach(() => {
+afterEach(async () => {
+  await closeLoopbackServers();
   vi.restoreAllMocks();
 });
 
 describe("web routes analysis lifecycle", () => {
   it("completes an analysis job and serves generated files", async () => {
     const { app, mocks } = await setupRoutes();
-    const http = request(app);
+    const http = request(await listenLoopback(app));
 
     const startResponse = await http
       .post("/api/analyze")
@@ -246,7 +248,7 @@ describe("web routes analysis lifecycle", () => {
       scanRepositoryFilesError: new Error("scan failed"),
       cleanupRepositoryError: new Error("cleanup failed"),
     });
-    const http = request(app);
+    const http = request(await listenLoopback(app));
 
     const startResponse = await http
       .post("/api/analyze")
@@ -274,7 +276,7 @@ describe("web routes analysis lifecycle", () => {
   it("rejects unsafe filenames and returns file read errors", async () => {
     const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
     const { app, mocks } = await setupRoutes();
-    const http = request(app);
+    const http = request(await listenLoopback(app));
 
     const startResponse = await http
       .post("/api/analyze")
@@ -296,20 +298,22 @@ describe("web routes analysis lifecycle", () => {
 
   it("returns a clear error for cancelling an unknown job", async () => {
     const { app } = await setupRoutes();
-    const response = await request(app).post("/api/jobs/job_missing/cancel");
+    const response = await request(await listenLoopback(app)).post("/api/jobs/job_missing/cancel");
     expect(response.status).toBe(404);
     expect(response.body.error).toBe("Job not found");
   });
 
   it("returns a clear error for asking an unknown job", async () => {
     const { app } = await setupRoutes();
-    const response = await request(app).post("/api/jobs/job_missing/ask").send({ question: "" });
+    const response = await request(await listenLoopback(app))
+      .post("/api/jobs/job_missing/ask")
+      .send({ question: "" });
     expect(response.status).toBe(404);
   });
 
   it("clamps and allowlists client-supplied options", async () => {
     const { app, mocks } = await setupRoutes();
-    const http = request(app);
+    const http = request(await listenLoopback(app));
 
     const startResponse = await http.post("/api/analyze").send({
       repoUrl: "https://github.com/owner/repo",
@@ -345,7 +349,7 @@ describe("web routes analysis lifecycle", () => {
 
   it("removes expired jobs and their generated artifacts", async () => {
     const { app, mocks, pruneExpiredJobs } = await setupRoutes();
-    const http = request(app);
+    const http = request(await listenLoopback(app));
     const startResponse = await http
       .post("/api/analyze")
       .send({ repoUrl: "https://github.com/owner/repo" });
