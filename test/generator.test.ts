@@ -889,10 +889,14 @@ describe("literal generated command presentation", () => {
     "  npm run test  ",
     "printf 'literal'  ",
     "`literal`",
+    "printf 'first\r\nsecond'",
+    "printf 'first\rsecond'",
+    "npm run 'test\tunit'",
   ];
   const codePayloads = (html: string) =>
     [...html.matchAll(/<code(?: [^>]*)?>([\s\S]*?)<\/code>/g)].map((match) =>
       match[1]
+        .replaceAll("&#13;", "\r")
         .replaceAll("&quot;", '"')
         .replaceAll("&lt;", "<")
         .replaceAll("&gt;", ">")

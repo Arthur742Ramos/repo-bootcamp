@@ -24,15 +24,20 @@ function escapeHtml(text: string): string {
     .replace(/"/g, "&quot;");
 }
 
+/** Preserve carriage returns that the HTML parser would otherwise normalize. */
+function escapeCodeHtml(text: string): string {
+  return escapeHtml(text).replace(/\r/g, "&#13;");
+}
+
 /**
  * Convert a fenced code block to an HTML <pre><code> block.
  */
 function convertCodeBlock(code: string, language: string): string {
   if (language === "mermaid") {
-    return `<div class="mermaid">\n${escapeHtml(code)}\n</div>`;
+    return `<div class="mermaid">\n${escapeCodeHtml(code)}\n</div>`;
   }
   const cls = language ? ` class="language-${escapeHtml(language)}"` : "";
-  return `<pre tabindex="0" role="region" aria-label="Code block"><code${cls}>${escapeHtml(code)}</code></pre>`;
+  return `<pre tabindex="0" role="region" aria-label="Code block"><code${cls}>${escapeCodeHtml(code)}</code></pre>`;
 }
 
 interface CodeRun {
@@ -183,7 +188,7 @@ function convertInlineFormatting(line: string): string {
         if (code.startsWith(" ") && code.endsWith(" ") && /[^ ]/.test(code)) {
           code = code.slice(1, -1);
         }
-        output += `<code>${escapeHtml(code)}</code>`;
+        output += `<code>${escapeCodeHtml(code)}</code>`;
         index = codeRun.close + codeRun.length;
         continue;
       }
