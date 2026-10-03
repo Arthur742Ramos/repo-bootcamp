@@ -22,6 +22,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Keep PDF-ready HTML previews at normal mobile reading scale and contain wide tables in keyboard-scrollable regions, preserving their A4 print layout.
+
 - Arrange single-ecosystem dependency diagrams vertically with full library names, retaining category and runtime/dev records, limits, and counters; connect categorized dependencies through one collection relationship so mobile labels remain readable.
 
 - Retain dependencies from every recognized ecosystem at the selected root, including Python runtime packages alongside Node tooling; distinguish mixed records in reports and diagrams, preserve single-ecosystem output, and invalidate only the previous dependency cache projection.

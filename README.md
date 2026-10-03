@@ -1014,6 +1014,8 @@ The browser UI streams live progress, then lets you read generated Markdown with
 
 Generated command snippets use delimiters that preserve literal backticks. Multiline task names use a quoted label with visible line-break escapes. Multiline commands appear in fenced blocks, and HTML/PDF-ready exports preserve command spacing. The formatter supports bounded inline code and fenced blocks; it is not a complete CommonMark implementation.
 
+PDF-ready exports are HTML files intended for browser printing. They open at the device's normal reading scale; wide tables scroll inside a focusable, labeled region, including with the arrow keys. Printing retains A4 pages, 2 cm margins, 11 pt body text, and automatic table column widths.
+
 ![Web Dashboard](media/screenshot-web-dashboard.png)
 
 The web interface allows you to analyze repositories interactively through your browser.
