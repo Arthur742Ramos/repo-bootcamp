@@ -121,6 +121,7 @@ export function getIndexHtml(nonce?: string): string {
     .advanced-options { margin-top: 1rem; border-top: 1px solid var(--border); padding-top: 0.75rem; }
     .advanced-options summary { color: var(--ink-muted); cursor: pointer; font-size: 0.8125rem; font-weight: 600; }
     .advanced-options summary:focus-visible { outline: none; color: var(--ink); box-shadow: 0 0 0 2px var(--accent); }
+    .package-directory { grid-column: 1 / -1; }
     .options-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0.75rem; margin-top: 0.75rem; }
     .option-field { display: flex; flex-direction: column; gap: 0.35rem; }
     .option-field label { color: var(--ink-muted); font-size: 0.75rem; font-weight: 600; }
@@ -511,6 +512,12 @@ export function getIndexHtml(nonce?: string): string {
             <label for="maxFiles">Scan limit</label>
             <input id="maxFiles" type="number" min="1" max="1000" step="1" value="200" inputmode="numeric" />
           </div>
+          <div class="option-field package-directory">
+            <label for="subdir">Package directory (optional)</label>
+            <input id="subdir" type="text" placeholder="packages/app" maxlength="500" autocomplete="off" spellcheck="false" aria-describedby="subdirHint subdirError" />
+            <p id="subdirHint" class="field-hint">Relative to the checkout. Leave blank for the repository root.</p>
+            <p id="subdirError" class="field-error" role="alert" hidden></p>
+          </div>
         </div>
       </details>
     </form>
@@ -728,6 +735,15 @@ export function getIndexHtml(nonce?: string): string {
       }
     }
 
+    function setSubdirError(message) {
+      const input = document.getElementById('subdir');
+      const error = document.getElementById('subdirError');
+      error.textContent = message;
+      error.hidden = !message;
+      if (message) input.setAttribute('aria-invalid', 'true');
+      else input.removeAttribute('aria-invalid');
+    }
+
     function requestErrorMessage(status) {
       if (status === 429) return 'Too many requests. Wait a moment and try again.';
       if (status === 503) return 'The server is at capacity. Try again shortly.';
@@ -747,9 +763,9 @@ export function getIndexHtml(nonce?: string): string {
         throw new Error('The server returned an invalid response.');
       }
       if (!response.ok) {
-        throw new Error(
-          typeof payload.error === 'string' ? payload.error : requestErrorMessage(response.status)
-        );
+        const error = new Error(typeof payload.error === 'string' ? payload.error : requestErrorMessage(response.status));
+        if (payload.field === 'subdir') error.field = 'subdir';
+        throw error;
       }
       return payload;
     }
@@ -758,6 +774,7 @@ export function getIndexHtml(nonce?: string): string {
       const maxFiles = Number.parseInt(document.getElementById('maxFiles').value, 10);
       return {
         branch: document.getElementById('branch').value.trim(),
+        subdir: document.getElementById('subdir').value.trim(),
         focus: document.getElementById('focus').value,
         audience: document.getElementById('audience').value,
         maxFiles: Number.isFinite(maxFiles) && maxFiles > 0 ? maxFiles : 200,
@@ -881,6 +898,7 @@ export function getIndexHtml(nonce?: string): string {
         return;
       }
       setUrlError('');
+      setSubdirError('');
 
       const status = document.getElementById('statusMsg');
       const runToken = beginRun();
@@ -920,6 +938,11 @@ export function getIndexHtml(nonce?: string): string {
         const message = err instanceof Error ? err.message : String(err);
         addProgressItem(message, 'error');
         status.textContent = 'Analysis could not start: ' + message;
+        if (err && err.field === 'subdir') {
+          setSubdirError(message);
+          document.getElementById('advancedOptions').open = true;
+          document.getElementById('subdir').focus();
+        }
         finishPhaseRail('error');
         stopProgressClock();
         resetButton();
@@ -1137,7 +1160,7 @@ export function getIndexHtml(nonce?: string): string {
       statsContainer.appendChild(stat);
     }
 
-    function renderResultMeta(repository, evidenceSources) {
+    function renderResultMeta(repository, evidenceSources, subdir) {
       const resultMeta = document.getElementById('resultMeta');
       resultMeta.textContent = '';
       resultMeta.removeAttribute('title');
@@ -1158,6 +1181,7 @@ export function getIndexHtml(nonce?: string): string {
       }
       const parts = [];
       if (repository && repository.branch) parts.push('branch ' + String(repository.branch));
+      if (typeof subdir === 'string' && subdir) parts.push('package ' + subdir);
       if (repository && repository.commitSha) {
         const commit = String(repository.commitSha);
         parts.push('commit ' + commit.slice(0, 8));
@@ -1329,7 +1353,7 @@ export function getIndexHtml(nonce?: string): string {
       }
       const repository = manifest && manifest.repository && typeof manifest.repository === 'object'
         ? manifest.repository : null;
-      renderResultMeta(repository, data.stats.evidenceSources);
+      renderResultMeta(repository, data.stats.evidenceSources, currentRunOptions.subdir);
       document.getElementById('cliCommand').textContent = buildCliCommand();
       const quickstartCount = renderQuickstartCommands(data.quickstartCommands);
       document.getElementById('summaryDescription').textContent = quickstartCount
@@ -1781,10 +1805,15 @@ export function getIndexHtml(nonce?: string): string {
       }, 1500);
     }
 
+    function quoteCliArgument(value) {
+      return "'" + String(value).replace(/'/g, "'\\"'\\"'") + "'";
+    }
+
     function buildCliCommand() {
       const repoUrl = document.getElementById('repoUrl').value.trim();
       const parts = ['bootcamp', repoUrl];
       if (currentRunOptions.branch) parts.push('--branch', currentRunOptions.branch);
+      if (currentRunOptions.subdir) parts.push('--subdir', quoteCliArgument(currentRunOptions.subdir));
       if (currentRunOptions.focus && currentRunOptions.focus !== 'all') parts.push('--focus', currentRunOptions.focus);
       if (currentRunOptions.audience && currentRunOptions.audience !== 'all') parts.push('--audience', currentRunOptions.audience);
       if (currentRunOptions.maxFiles && currentRunOptions.maxFiles !== 200) parts.push('--max-files', String(currentRunOptions.maxFiles));
@@ -1903,6 +1932,8 @@ export function getIndexHtml(nonce?: string): string {
         const runToken = beginRun();
         currentJobId = job.id;
         if (job.repoUrl) document.getElementById('repoUrl').value = job.repoUrl;
+        document.getElementById('subdir').value = typeof job.subdir === 'string' ? job.subdir : '';
+        currentRunOptions = { ...currentRunOptions, subdir: document.getElementById('subdir').value };
         document.getElementById('emptyState').hidden = true;
         document.getElementById('results').classList.remove('show');
         resetPhaseRail();
@@ -1977,6 +2008,7 @@ export function getIndexHtml(nonce?: string): string {
 
     // Clear the inline validation message as soon as the user edits the field.
     document.getElementById('repoUrl').addEventListener('input', () => setUrlError(''));
+    document.getElementById('subdir').addEventListener('input', () => setSubdirError(''));
     // User edits supersede pending initial-page restoration, even when reverted.
     const recordAnalysisInput = () => { analysisInputRevision += 1; };
     document.getElementById('analyzeForm').addEventListener('input', recordAnalysisInput);

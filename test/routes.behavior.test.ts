@@ -82,7 +82,10 @@ async function setupRoutes(overrides: SetupOverrides = {}) {
     parseGitHubUrl,
   }));
   vi.doMock("../src/interactive.js", () => ({ quickAsk }));
-  vi.doMock("../src/services/config-resolution.js", () => ({
+  vi.doMock("../src/services/config-resolution.js", async () => ({
+    ...(await vi.importActual<typeof import("../src/services/config-resolution.js")>(
+      "../src/services/config-resolution.js"
+    )),
     resolveRunConfiguration,
   }));
   vi.doMock("../src/services/clone-service.js", () => ({

@@ -16,6 +16,7 @@ export interface AnalysisManifest {
     format: string;
     maxFiles: number;
     style: string;
+    subdir?: string;
   };
   scan: {
     filesScanned: number;
@@ -85,6 +86,7 @@ export function createAnalysisManifest(params: {
       format: params.format,
       maxFiles: options.maxFiles,
       style: options.style ?? "oss",
+      ...(options.subdir ? { subdir: options.subdir } : {}),
     },
     scan: {
       filesScanned: scanResult.files.length,
