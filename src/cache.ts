@@ -42,6 +42,8 @@ export interface CacheGenerationOptions {
   maxFiles?: number;
   subdir?: string;
   exclude?: readonly string[];
+  /** Fingerprint of the actual scanned files and loaded evidence. */
+  scanFingerprint?: string;
 }
 
 interface NormalizedCacheGenerationOptions {
@@ -52,6 +54,7 @@ interface NormalizedCacheGenerationOptions {
   maxFiles: number | null;
   subdir: string;
   exclude: string[];
+  scanFingerprint: string;
 }
 
 function normalizeGenerationOptions(
@@ -73,6 +76,7 @@ function normalizeGenerationOptions(
     // Exclusions are a union: ordering and duplicate patterns do not change
     // the scan. Preserve each pattern verbatim (including glob escapes).
     exclude: [...new Set(options?.exclude ?? [])].sort(),
+    scanFingerprint: options?.scanFingerprint || "",
   };
 }
 
@@ -86,6 +90,7 @@ function serializeGenerationOptions(options: NormalizedCacheGenerationOptions): 
     options.maxFiles,
     options.subdir,
     [...new Set(options.exclude)].sort(),
+    options.scanFingerprint,
   ]);
 }
 
@@ -93,7 +98,7 @@ function hasGenerationOptions(raw: unknown): raw is NormalizedCacheGenerationOpt
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return false;
   const options = raw as Record<string, unknown>;
   return (
-    ["focus", "style", "model", "audience", "subdir"].every(
+    ["focus", "style", "model", "audience", "subdir", "scanFingerprint"].every(
       (field) => typeof options[field] === "string"
     ) &&
     (options.maxFiles === null ||

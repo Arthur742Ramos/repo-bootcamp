@@ -75,6 +75,7 @@ describe("cache commands", () => {
         maxFiles: 200,
         subdir: "",
         exclude: [],
+        scanFingerprint: "",
       },
       createdAt: new Date().toISOString(),
       value: { repoName: "owner/example" },

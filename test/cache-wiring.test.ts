@@ -132,6 +132,48 @@ describe("orchestrateAnalysis facts cache wiring", () => {
     );
   });
 
+  it("fingerprints effective files and evidence without depending on list ordering", async () => {
+    const run = async (scan: ScanResult) => {
+      await orchestrateAnalysis({
+        repoPath: "/checkout",
+        repoInfo: makeRepoInfo(),
+        scanResult: scan,
+        options: makeOptions({ exclude: ["/other-checkout/**"] }),
+        styleConfig,
+        progress: makeProgress(),
+        analysisStart: Date.now(),
+      });
+      return readCacheMock.mock.calls.at(-1)![2].scanFingerprint;
+    };
+    const first = {
+      ...scanResult,
+      files: [
+        { path: "a.ts", size: 5, isDirectory: false },
+        { path: "b.ts", size: 7, isDirectory: false },
+      ],
+      keySourceFiles: new Map([
+        ["a.ts", "export const a = 1"],
+        ["b.ts", "export const b = 2"],
+      ]),
+    };
+    const original = await run(first);
+    expect(original).toMatch(/^[a-f0-9]{64}$/);
+    expect(
+      await run({
+        ...first,
+        files: [...first.files].reverse(),
+        keySourceFiles: new Map([...first.keySourceFiles].reverse()),
+      })
+    ).toBe(original);
+    expect(await run({ ...first, files: [] })).not.toBe(original);
+    expect(
+      await run({ ...first, keySourceFiles: new Map([["a.ts", "changed evidence"]]) })
+    ).not.toBe(original);
+    expect(writeCacheMock.mock.calls.at(-1)![3].scanFingerprint).toBe(
+      readCacheMock.mock.calls.at(-1)![2].scanFingerprint
+    );
+  });
+
   it("returns cached facts without invoking the model on a hit", async () => {
     const cachedFacts = {
       repoName: "owner/repo",

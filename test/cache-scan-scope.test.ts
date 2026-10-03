@@ -20,7 +20,7 @@ import {
 } from "../src/cache.js";
 
 const phases: CachePhase[] = ["facts", "deps", "security", "impact", "cycles"];
-const scope = { maxFiles: 200, subdir: "", exclude: [] as string[] };
+const scope = { maxFiles: 200, subdir: "", exclude: [] as string[], scanFingerprint: "" };
 
 afterAll(async () => {
   await rm(dirname(dirname(getCacheDir())), { recursive: true, force: true });
@@ -36,6 +36,7 @@ describe("scan scope cache isolation", () => {
         { ...scope, subdir: "packages/web" },
         { ...scope, maxFiles: 10 },
         { ...scope, exclude: ["**/fixtures/**"] },
+        { ...scope, scanFingerprint: "different-effective-files" },
       ];
       for (const [index, variant] of variants.entries()) {
         expect(await readPhaseCache(phase, repo, "same-sha", variant)).toEqual({ hit: false });
