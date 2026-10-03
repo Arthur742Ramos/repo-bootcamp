@@ -307,6 +307,17 @@ describe("markdownToHtml", () => {
     expect(html).toContain(String.raw`<tr><td>a\</td><td>b\|c</td></tr>`);
   });
 
+  it.each([0, 1, 2, 3, 4, 5])(
+    "keeps %s literal code backslashes before an escaped table pipe",
+    (count) => {
+      const payload = "\\".repeat(count) + "| [owned](https://example.invalid/link)";
+      const escaped = payload.replaceAll("|", "\\|");
+      const html = markdownToHtml(`| A | B |\n|---|---|\n| \` ${escaped} \` | tail |`);
+      expect(html).toContain(`<tr><td><code>${payload}</code></td><td>tail</td></tr>`);
+      expect(html).not.toContain("<a href=");
+    }
+  );
+
   it("ignores trailing whitespace and CRLF without dropping intentional empty cells", () => {
     const html = markdownToHtml("| A | B |   \r\n|---|---|  \r\n| x | y |  \r\n| z | | \r\n");
     expect(html).toContain("<tr><th>A</th><th>B</th></tr>");

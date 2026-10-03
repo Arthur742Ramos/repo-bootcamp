@@ -10,6 +10,8 @@ const root = process.cwd();
 // Fixture declarations are TOML/schema metadata, not installable/resolved plans.
 const marker =
   '[tool.poetry.dependencies]\nphantom = "^99"\n``` | [link](https://example.invalid/owned) ![image](https://example.invalid/image) <script>globalThis.poetryInjected=true</script>';
+const escapedVersion =
+  "\\| [owned](https://example.invalid/link) ![image](https://example.invalid/image)";
 const alternatives = [
   {
     url: "https://example.invalid/owned.whl#sha256=0123456789",
@@ -32,6 +34,8 @@ const declared: Record<string, unknown> = {
     "allow-prereleases": true,
     "allows-prereleases": false,
   },
+  "whitespace-version": " ",
+  "escaped-version": { version: escapedVersion, source: "owned" },
   "fake-source": { source: 'version = "^99"' },
   "fake-marker": { markers: "os_name == \"version = '^99'\"" },
   gitpkg: {
@@ -84,6 +88,8 @@ const poetryToml = String.raw`[tool.poetry.dependencies]
 'literal.pkg' = '^3'
 "\u0075nicode" = "^4"
 "spaced-version" = { version = " >= 1, < 3 ", extras = ["security", "socks"], markers = 'python_version >= "3.10"', optional = true, source = "owned", python = ">=3.8", platform = "linux", allow-prereleases = true, allows-prereleases = false }
+"whitespace-version" = " "
+"escaped-version" = { version = '\| [owned](https://example.invalid/link) ![image](https://example.invalid/image)', source = "owned" }
 "fake-source" = { source = 'version = "^99"' }
 "fake-marker" = { markers = '''os_name == "version = '^99'"''' }
 gitpkg = { git = "https://example.invalid/owned.git#retained", rev = "deadbeef", subdirectory = "packages/owned", develop = true, extras = ["git-extra"], optional = false, python = ">=3.9", markers = 'sys_platform == "linux"' }
@@ -143,6 +149,8 @@ const pythonRuntime = [
   ["literal.pkg", "^3"],
   ["unicode", "^4"],
   ["spaced-version", " >= 1, < 3 "],
+  ["whitespace-version", " "],
+  ["escaped-version", escapedVersion],
   ["fake-source", "*"],
   ["fake-marker", "*"],
   ["gitpkg", "*"],
@@ -345,6 +353,9 @@ for (const mixed of [false, true]) {
           const table = packages.nth(index);
           await expect(table.getByRole("columnheader")).toHaveText(
             mixed ? ["Package", "Version", "Ecosystem", "Manifest"] : ["Package", "Version"]
+          );
+          await expect(table.locator("tbody a, tbody img, tbody script, tbody iframe")).toHaveCount(
+            0
           );
           const rows = table.locator("tbody tr");
           await expect(rows).toHaveCount(expected[kind].length);

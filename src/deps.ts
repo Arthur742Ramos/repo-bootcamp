@@ -788,6 +788,8 @@ function literalDependencyCell(value: string): string {
   let width = 1;
   for (const run of value.matchAll(/`+/g)) width = Math.max(width, run[0].length + 1);
   const fence = "`".repeat(width);
+  // All-space code payloads retain Markdown padding; omit it in that case.
+  if (/^ +$/.test(value)) return `${fence}${value}${fence}`;
   return `${fence} ${value.replace(/\|/g, "\\|").replace(/[\r\n]+/g, " ")} ${fence}`;
 }
 

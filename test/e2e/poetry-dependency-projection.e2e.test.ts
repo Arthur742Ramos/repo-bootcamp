@@ -10,6 +10,8 @@ const root = process.cwd();
 // Fixture declarations are TOML/schema metadata, not installable/resolved plans.
 const marker =
   '[tool.poetry.dependencies]\nphantom = "^99"\n``` | [link](https://example.invalid/owned) ![image](https://example.invalid/image) <script>globalThis.poetryInjected=true</script>';
+const escapedVersion =
+  "\\| [owned](https://example.invalid/link) ![image](https://example.invalid/image)";
 const alternatives = [
   {
     url: "https://example.invalid/owned.whl#sha256=0123456789",
@@ -32,6 +34,8 @@ const declared: Record<string, unknown> = {
     "allow-prereleases": true,
     "allows-prereleases": false,
   },
+  "whitespace-version": " ",
+  "escaped-version": { version: escapedVersion, source: "owned" },
   "fake-source": { source: 'version = "^99"' },
   "fake-marker": { markers: "os_name == \"version = '^99'\"" },
   gitpkg: {
@@ -84,6 +88,8 @@ const poetryToml = String.raw`[tool.poetry.dependencies]
 'literal.pkg' = '^3'
 "\u0075nicode" = "^4"
 "spaced-version" = { version = " >= 1, < 3 ", extras = ["security", "socks"], markers = 'python_version >= "3.10"', optional = true, source = "owned", python = ">=3.8", platform = "linux", allow-prereleases = true, allows-prereleases = false }
+"whitespace-version" = " "
+"escaped-version" = { version = '\| [owned](https://example.invalid/link) ![image](https://example.invalid/image)', source = "owned" }
 "fake-source" = { source = 'version = "^99"' }
 "fake-marker" = { markers = '''os_name == "version = '^99'"''' }
 gitpkg = { git = "https://example.invalid/owned.git#retained", rev = "deadbeef", subdirectory = "packages/owned", develop = true, extras = ["git-extra"], optional = false, python = ">=3.9", markers = 'sys_platform == "linux"' }
@@ -143,6 +149,8 @@ const pythonRuntime = [
   ["literal.pkg", "^3"],
   ["unicode", "^4"],
   ["spaced-version", " >= 1, < 3 "],
+  ["whitespace-version", " "],
+  ["escaped-version", escapedVersion],
   ["fake-source", "*"],
   ["fake-marker", "*"],
   ["gitpkg", "*"],
@@ -301,7 +309,9 @@ function documentTables(doc: string, markdown: boolean): { headers: string[]; ro
       .map((cell) => cell.trim().replace(/\\\|/g, "|"));
     return values.map((cell) => {
       const span = cell.match(/^(`+) ([\s\S]*?) \1$/);
-      return span ? span[2] : cell;
+      if (span) return span[2];
+      const spaces = cell.match(/^(`+)( +)\1$/);
+      return spaces ? spaces[2] : cell;
     });
   };
   return [...doc.matchAll(/(?:^|\n)(\|[^\n]+\|)\n\|[-| ]+\|\n((?:\|[^\n]*\|(?:\n|$))*)/g)].map(
@@ -376,6 +386,12 @@ describe("actual Poetry dependency projection exports", () => {
             "utf8"
           );
           const tables = documentTables(doc, format === "markdown");
+          if (format !== "markdown") {
+            for (const table of doc.matchAll(/<table\b[\s\S]*?<\/table>/g)) {
+              expect(table[0]).not.toContain("<a href=");
+              expect(table[0]).not.toContain("<img ");
+            }
+          }
           const packages = tables.filter((table) => table.headers[0] === "Package");
           expect(packages).toHaveLength(2);
           for (const [index, kind] of (["runtime", "dev"] as const).entries()) {

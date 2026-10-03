@@ -230,11 +230,15 @@ function readTableCells(line: string): string[] {
     if (codeRun && codeRun.close >= 0 && index >= codeEnd) {
       codeEnd = codeRun.close + codeRun.length;
     }
-    if (character === "\\" && (line[index + 1] === "|" || line[index + 1] === "\\")) {
+    if (
+      character === "\\" &&
+      (line[index + 1] === "|" || (line[index + 1] === "\\" && index >= codeEnd))
+    ) {
       const escaped = line[++index];
-      // Code spans preserve literal doubled backslashes; plain Markdown cells
-      // use a pair to encode one. Escaped pipes remain literal in either form.
-      cell += escaped === "\\" && index < codeEnd ? "\\\\" : escaped;
+      // Inside code, backslashes remain literal except the table pipe escape.
+      // Consuming a pair there would expose a following pipe for odd payload
+      // backslash counts. Plain Markdown still decodes pairs as before.
+      cell += escaped;
       endedWithSeparator = false;
     } else if (character === "|") {
       cells.push(cell.trim());

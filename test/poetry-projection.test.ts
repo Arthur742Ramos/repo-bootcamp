@@ -82,6 +82,13 @@ describe("typed Poetry metadata projection", () => {
         .dependencies
     ).toEqual([{ name: "requests", version: "^2", type: "runtime" }]);
   });
+  it("does not label scalar lookalike namespaces as Poetry", async () => {
+    const deps = await extract(
+      'tool.poetry="unrelated"\n[project]\ndependencies=["requests>=2"]\n'
+    );
+    expect(deps!.packageManager).toBe("pip");
+    expect(deps!.runtime).toEqual([{ name: "requests", version: ">=2", type: "runtime" }]);
+  });
   it("retains complete origin/marker data without reading fabricated version or package text", async () => {
     const marker =
       '[tool.poetry.dependencies]\nphantom = "^99"\n[x](https://example.invalid) ![y](data:text/html,bad) * | ` ``` \\path <img src=x>';
@@ -132,5 +139,27 @@ describe("typed Poetry metadata projection", () => {
     const html = markdownToHtml(generateDependencyDocs(deps!, "Owned"));
     expect(html).toContain(source);
     expect(html).not.toContain("<a ");
+  });
+  it.each([0, 1, 2, 3, 4, 5])(
+    "preserves %s backslashes before a literal pipe without exposing markup",
+    async (count) => {
+      const version =
+        "\\".repeat(count) +
+        "| [owned](https://example.invalid/link) ![image](https://example.invalid/image) ` ```";
+      const deps = await extract(
+        `[tool.poetry.dependencies]\nx={version=${JSON.stringify(version)},source="owned"}\n`
+      );
+      expect(deps!.runtime[0].version).toBe(version);
+      const html = markdownToHtml(generateDependencyDocs(deps!, "Owned"));
+      expect(html).toContain(`<tr><td>x</td><td><code>${version}</code></td></tr>`);
+      expect(html).not.toContain("<a href=");
+      expect(html).not.toContain("<img ");
+    }
+  );
+  it.each([" ", "   "])("keeps all-space declared versions exact: %j", async (version) => {
+    const deps = await extract(`[tool.poetry.dependencies]\nx=${JSON.stringify(version)}\n`);
+    expect(deps!.runtime[0].version).toBe(version);
+    const html = markdownToHtml(generateDependencyDocs(deps!, "Owned"));
+    expect(html).toContain(`<tr><td>x</td><td><code>${version}</code></td></tr>`);
   });
 });

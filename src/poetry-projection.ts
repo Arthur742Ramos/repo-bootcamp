@@ -114,7 +114,7 @@ export function projectPoetryDependencies(document: ReturnType<typeof scanTomlMe
   sawPoetry: boolean;
 } {
   const namespace = tableAt(document.root, ["tool", "poetry"]);
-  const sawPoetry = namespace !== undefined;
+  const sawPoetry = namespace instanceof Map;
   if (!document.complete) return { dependencies: [], sawPoetry };
   const paths: string[][] = [
     ["tool", "poetry", "dependencies"],
