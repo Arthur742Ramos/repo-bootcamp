@@ -786,7 +786,7 @@ describe("runMainCommand --watch and --interactive", () => {
       outputFormat: "markdown",
     });
 
-    let capturedOnChange: (() => Promise<void>) | undefined;
+    let capturedOnChange: ((commitSha?: string) => Promise<void>) | undefined;
     const stop = vi.fn();
     const startWatch = vi.fn().mockImplementation((_path: string, opts: any) => {
       capturedOnChange = opts.onChangeDetected;
@@ -842,8 +842,24 @@ describe("runMainCommand --watch and --interactive", () => {
       // Retarget the contained alias as a Git update can, then rescan.
       await rm(join(repoPath, "source-alias"));
       await symlink(join(repoPath, "other-src"), join(repoPath, "source-alias"), "junction");
-      // Simulate a detected change.
-      await capturedOnChange!();
+      const initialRepoInfo = orchestrateAnalysis.mock.calls[0][0].repoInfo;
+      const initialCommitSha = initialRepoInfo.commitSha;
+      // Simulate the exact commit delivered after watch updates the checkout.
+      const updatedCommitSha = "0123456789abcdef0123456789abcdef01234567";
+      await capturedOnChange!(updatedCommitSha);
+      expect(initialRepoInfo.commitSha).toBe(initialCommitSha);
+      expect(analyzeRepo.mock.calls[0][1].commitSha).toBe(updatedCommitSha);
+      expect(prepareOutputDocuments.mock.calls.at(-1)![0].repoInfo.commitSha).toBe(
+        updatedCommitSha
+      );
+      const regeneratedSummary = JSON.parse(
+        await readFile(join(outputDir, "summary.json"), "utf-8")
+      );
+      const regeneratedManifest = JSON.parse(
+        await readFile(join(outputDir, "ANALYSIS_MANIFEST.json"), "utf-8")
+      );
+      expect(regeneratedSummary.commitSha).toBe(updatedCommitSha);
+      expect(regeneratedManifest.repository.commitSha).toBe(updatedCommitSha);
 
       expect(scanRepositoryFiles.mock.calls.length).toBe(scansBefore + 1);
       expect(analyzeRepo).toHaveBeenCalledTimes(1);

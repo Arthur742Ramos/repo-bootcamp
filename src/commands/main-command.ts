@@ -684,7 +684,10 @@ export async function runMainCommand(repoUrl: string, options: BootcampOptions):
       intervalSeconds: options.watchInterval || 30,
       allowHardReset: options.watchForce || false,
       verbose: options.verbose,
-      onChangeDetected: async () => {
+      onChangeDetected: async (commitSha) => {
+        // Preserve the initial run metadata while giving regenerated manifests
+        // and phase caches the commit that watch just checked out.
+        if (commitSha) repoInfo = { ...repoInfo, commitSha };
         const wp = new ProgressTracker(options.verbose, quiet);
 
         wp.startPhase("scan", `max ${options.maxFiles} files`);

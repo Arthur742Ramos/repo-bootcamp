@@ -486,6 +486,9 @@ bootcamp https://github.com/owner/repo --watch --watch-interval 60
 bootcamp https://github.com/owner/repo --watch --watch-force
 ```
 
+Each regenerated kit records the updated commit in `summary.json` and
+`ANALYSIS_MANIFEST.json`, and cached phases use that commit identity.
+
 ### Environment Doctor
 
 ```bash

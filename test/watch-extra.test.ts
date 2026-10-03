@@ -107,7 +107,7 @@ describe("watch extra coverage", () => {
     const h = startWatch("/r", { intervalSeconds: 1, onChangeDetected: onChange, verbose: true });
     await vi.advanceTimersByTimeAsync(1200);
     h.stop();
-    expect(onChange).toHaveBeenCalled();
+    expect(onChange).toHaveBeenCalledExactlyOnceWith("bbb");
   });
 
   it("startWatch handles error gracefully", async () => {
