@@ -81,6 +81,11 @@ import {
 import { analyzeDiff } from "../src/diff.js";
 import { generateOnboarding } from "../src/generator.js";
 import { ProgressTracker } from "../src/progress.js";
+import { readCache, writeCache } from "../src/cache.js";
+import { scanRepo } from "../src/ingest.js";
+import { mkdtemp, rm, writeFile } from "fs/promises";
+import { tmpdir } from "os";
+import { join } from "path";
 
 const defaultOptions: BootcampOptions = {
   branch: "main",
@@ -158,10 +163,18 @@ const mockFacts: RepoFacts = {
   deploymentInfo: "",
   diagrams: { dependencyGraph: "", moduleRelations: "", flowDiagram: "" },
   contextSummary: "",
+  quickstart: {
+    prerequisites: ["Task 3"],
+    steps: ["Read CONTRIBUTING"],
+    commands: [],
+    commonErrors: [],
+    sources: ["README.md"],
+  },
 };
 
 beforeEach(() => {
   vi.clearAllMocks();
+  vi.mocked(readCache).mockResolvedValue(null);
 
   analyzeRepoMock.mockResolvedValue({
     facts: mockFacts,
@@ -202,6 +215,102 @@ beforeEach(() => {
 });
 
 describe("orchestrateAnalysis", () => {
+  const detected = [
+    { name: "app:test", command: "task app:test", source: "Taskfile", description: "App tests" },
+  ];
+  const analyze = (
+    facts: RepoFacts,
+    cached: boolean,
+    options: BootcampOptions = defaultOptions
+  ) => {
+    if (cached) vi.mocked(readCache).mockResolvedValue(facts);
+    else analyzeRepoMock.mockResolvedValue({ facts, stats: { toolCalls: [], model: "fixture" } });
+    return orchestrateAnalysis({
+      repoPath: "/repo",
+      repoInfo: mockRepoInfo,
+      scanResult: { ...mockScanResult, commands: detected },
+      options,
+      styleConfig: defaultStyleConfig,
+      progress: { update: vi.fn(), succeed: vi.fn(), recordToolCall: vi.fn() } as any,
+      analysisStart: Date.now(),
+    });
+  };
+  it.each([false, true])(
+    "fills only empty commands for cached=%s while preserving quickstart fields and source facts",
+    async (cached) => {
+      const facts = structuredClone(mockFacts);
+      const original = structuredClone(facts);
+      const result = await analyze(facts, cached);
+      expect(result.facts.quickstart).toEqual({ ...original.quickstart, commands: detected });
+      expect(facts).toEqual(original);
+      expect(result.facts.quickstart.commands).not.toBe(detected);
+      if (cached) expect(analyzeRepoMock).not.toHaveBeenCalled();
+      else expect(vi.mocked(writeCache).mock.calls[0][2]).toBe(facts);
+    }
+  );
+  it.each([false, true])(
+    "preserves every nonempty explicit command for cached=%s",
+    async (cached) => {
+      const facts = {
+        ...mockFacts,
+        quickstart: {
+          ...mockFacts.quickstart,
+          commands: [
+            {
+              name: "documented",
+              command: "task custom:check\n# documented flags",
+              source: "README.md",
+            },
+          ],
+        },
+      };
+      expect((await analyze(facts, cached)).facts).toBe(facts);
+    }
+  );
+  it.each([false, true])("repairs empty command lists with fast=%s", async (fast) => {
+    const options = { ...defaultOptions, fast };
+    expect((await analyze(mockFacts, false, options)).facts.quickstart.commands).toEqual(detected);
+    expect(analyzeRepoMock.mock.calls[0][3]).toBe(options);
+  });
+  it("changes phase-cache identity for included edits and excludes hidden commands from hydrated facts", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "bootcamp-task-cache-"));
+    try {
+      await writeFile(join(dir, "Taskfile.yml"), "includes: {app: './child.yml'}");
+      await writeFile(join(dir, "child.yml"), "tasks: {test: 'echo test'}");
+      const scans = [await scanRepo(dir, 100)];
+      await writeFile(join(dir, "child.yml"), "tasks: {test: 'echo best'}");
+      scans.push(await scanRepo(dir, 100));
+      await writeFile(join(dir, "child.yml"), "tasks: {lint: 'echo lint'}");
+      scans.push(await scanRepo(dir, 100), await scanRepo(dir, 100, { exclude: ["child.yml"] }));
+      const identities: string[] = [];
+      for (const scanResult of scans) {
+        vi.mocked(readCache).mockResolvedValue(mockFacts);
+        const result = await orchestrateAnalysis({
+          repoPath: dir,
+          repoInfo: mockRepoInfo,
+          scanResult,
+          options: defaultOptions,
+          styleConfig: defaultStyleConfig,
+          progress: { update: vi.fn(), succeed: vi.fn(), recordToolCall: vi.fn() } as any,
+          analysisStart: Date.now(),
+        });
+        expect(result.facts.quickstart.commands).toEqual(scanResult.commands);
+        identities.push(vi.mocked(readCache).mock.calls.at(-1)![2]!.scanFingerprint!);
+      }
+      expect(new Set(identities).size).toBe(4);
+      expect(scans[0].commands[0].name).toBe("app:test");
+      expect(scans[1].commands).toEqual(scans[0].commands);
+      expect(scans[1].files).toEqual(scans[0].files);
+      expect(scans[2].commands[0].name).toBe("app:lint");
+      expect(scans[3].commands).toEqual([]);
+      await writeFile(join(dir, "child.yml"), "tasks: {devs: 'echo devs'}");
+      const excludedAgain = await scanRepo(dir, 100, { exclude: ["child.yml"] });
+      expect(excludedAgain.taskfileFingerprint).toBe(scans[3].taskfileFingerprint);
+      expect(analyzeRepoMock).not.toHaveBeenCalled();
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
   it("returns analysis result with correct structure", async () => {
     const progress = { update: vi.fn(), succeed: vi.fn(), recordToolCall: vi.fn() } as any;
 

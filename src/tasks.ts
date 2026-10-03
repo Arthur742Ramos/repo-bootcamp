@@ -18,6 +18,9 @@
 import { hasContainedFile, readContainedFile } from "./fs-safe.js";
 import yaml, { FAILSAFE_SCHEMA, load, Type } from "js-yaml";
 import type { Command } from "./types.js";
+import { lstat, realpath, stat } from "fs/promises";
+import { dirname, isAbsolute, join, relative, resolve, sep } from "path";
+import { isPathInsideDir } from "./utils.js";
 
 /** Coarse grouping used for report sections and getting-started ordering. */
 export type TaskCategory =
@@ -48,6 +51,10 @@ export interface DiscoverTasksOptions {
    * passes its resolved manager so stack metadata and task commands agree.
    */
   packageManager?: PackageManager;
+  /** Selected, scanned file paths (POSIX relative paths); restricts included Taskfiles. */
+  taskfileFiles?: ReadonlySet<string>;
+  /** Successful contained Taskfile reads, for effective scan fingerprints. */
+  onTaskfileRead?: (path: string, content: string) => void;
 }
 
 /**
@@ -329,25 +336,36 @@ const TASK_INTERNAL_TRUE = new Set([
 ]);
 
 /** Parse public go-task tasks without evaluating templates or executing commands. */
-export function parseTaskfile(content: string): DiscoveredTask[] {
+function loadTaskfile(content: string): Record<string, unknown> | null {
   let document: unknown;
   try {
     document = load(content, { schema: TASK_YAML_SCHEMA });
   } catch {
-    return [];
+    return null;
   }
-  if (!isMapping(document) || !isMapping(document.tasks)) return [];
-  const tasks: DiscoveredTask[] = [];
+  return isMapping(document) ? document : null;
+}
+
+function taskIsInternal(definition: unknown): boolean {
+  return (
+    isMapping(definition) &&
+    (definition.internal === true ||
+      (typeof definition.internal === "string" && TASK_INTERNAL_TRUE.has(definition.internal)))
+  );
+}
+
+function* taskfileTasks(
+  document: Record<string, unknown>,
+  namespace = "",
+  includeInternal = false
+): Generator<DiscoveredTask> {
+  if (!isMapping(document.tasks)) return;
   for (const [name, definition] of Object.entries(document.tasks)) {
     // Emit shell-safe names verbatim, including Task's colon-separated names.
     // Keep the existing default-task behavior (it runs as bare `task`).
-    if (name === "default" || !/^[A-Za-z0-9_.][A-Za-z0-9_.:-]*$/.test(name)) continue;
-    if (
-      isMapping(definition) &&
-      (definition.internal === true ||
-        (typeof definition.internal === "string" && TASK_INTERNAL_TRUE.has(definition.internal)))
-    )
+    if ((!namespace && name === "default") || !/^[A-Za-z0-9_.][A-Za-z0-9_.:-]*$/.test(name))
       continue;
+    if (!includeInternal && taskIsInternal(definition)) continue;
     if (
       definition !== null &&
       typeof definition !== "string" &&
@@ -362,15 +380,235 @@ export function parseTaskfile(content: string): DiscoveredTask[] {
           ? definition.summary
           : undefined
       : undefined;
-    tasks.push({
-      name,
-      command: `task ${name}`,
+    const qualifiedName = namespace ? `${namespace}:${name}` : name;
+    yield {
+      name: qualifiedName,
+      command: `task ${qualifiedName}`,
       source: "Taskfile",
       category: categorizeTask(name),
       description,
-    });
+    };
   }
-  return tasks;
+}
+
+export function parseTaskfile(content: string): DiscoveredTask[] {
+  const document = loadTaskfile(content);
+  return document ? [...taskfileTasks(document)] : [];
+}
+
+// Discovery is best-effort metadata reading, not a Task interpreter. Bound both
+// physical input and namespace expansion; the public pure parser stays unchanged.
+const TASKFILE_LIMITS = {
+  files: 64,
+  contexts: 128,
+  depth: 16,
+  fileBytes: 1024 * 1024,
+  totalBytes: 8 * 1024 * 1024,
+  tasks: 2000,
+  outputBytes: 1024 * 1024,
+};
+const TASK_FALSE = new Set([
+  "n",
+  "N",
+  "no",
+  "No",
+  "NO",
+  "false",
+  "False",
+  "FALSE",
+  "off",
+  "Off",
+  "OFF",
+]);
+function taskBoolean(value: unknown): boolean | null {
+  if (
+    value === undefined ||
+    value === false ||
+    (typeof value === "string" && TASK_FALSE.has(value))
+  )
+    return false;
+  if (value === true || (typeof value === "string" && TASK_INTERNAL_TRUE.has(value))) return true;
+  return null;
+}
+
+interface TaskfileEntry {
+  path: string;
+  physical: string;
+  bytes: number;
+}
+
+async function discoverTaskfiles(
+  repoPath: string,
+  allowedFiles?: ReadonlySet<string>,
+  onRead?: (path: string, content: string) => void
+): Promise<DiscoveredTask[]> {
+  let root: string;
+  try {
+    root = await realpath(repoPath);
+  } catch {
+    return [];
+  }
+  const documents = new Map<string, Record<string, unknown> | null>();
+  let contexts = 0;
+  let totalBytes = 0;
+  let outputBytes = 0;
+  let nameBytes = 0;
+  const tasks: DiscoveredTask[] = [];
+  const names = new Set<string>();
+
+  const entry = async (path: string): Promise<TaskfileEntry | null> => {
+    const target = resolve(repoPath, path);
+    if (!isPathInsideDir(resolve(repoPath), target)) return null;
+    try {
+      const physical = await realpath(target);
+      if (!isPathInsideDir(root, physical)) return null;
+      const info = await stat(physical);
+      return info.isFile() ? { path, physical, bytes: info.size } : null;
+    } catch {
+      return null;
+    }
+  };
+
+  const selected = (file: TaskfileEntry): TaskfileEntry | "skipped" =>
+    !allowedFiles || allowedFiles.has(file.path.split(sep).join("/")) ? file : "skipped";
+  const exists = async (path: string): Promise<boolean> => {
+    try {
+      await lstat(resolve(repoPath, path));
+      return true;
+    } catch (error) {
+      if (["ENOENT", "ENOTDIR"].includes((error as NodeJS.ErrnoException).code || "")) return false;
+      throw error;
+    }
+  };
+  const select = async (path: string): Promise<TaskfileEntry | "skipped" | null> => {
+    const direct = await entry(path);
+    if (direct) return selected(direct);
+    // A symlink outside the scan root is skipped, including directory aliases.
+    // Never substitute a different default file for an inaccessible primary.
+    if (await exists(path)) {
+      const physical = await realpath(resolve(repoPath, path));
+      if (!isPathInsideDir(root, physical)) return "skipped";
+    }
+    // File candidates are also safe to try beneath a literal directory. No
+    // ancestor search: the selected repository scope remains the only root.
+    for (const filename of TASKFILE_NAMES) {
+      const found = await entry(join(path, filename));
+      // An excluded primary file cannot make a lower-precedence Taskfile win.
+      if (found) return selected(found);
+      if (await exists(join(path, filename))) {
+        const physical = await realpath(resolve(repoPath, path, filename));
+        if (!isPathInsideDir(root, physical)) return "skipped";
+        throw new Error("Invalid Taskfile entry");
+      }
+    }
+    return null;
+  };
+
+  const visit = async (
+    file: TaskfileEntry,
+    namespace: string,
+    ancestry: ReadonlySet<string>,
+    depth: number,
+    visible = true
+  ): Promise<void> => {
+    if (
+      ++contexts > TASKFILE_LIMITS.contexts ||
+      depth > TASKFILE_LIMITS.depth ||
+      ancestry.has(file.physical)
+    )
+      throw new Error("Taskfile traversal limit or cycle");
+    let document = documents.get(file.physical);
+    if (!documents.has(file.physical)) {
+      if (
+        documents.size >= TASKFILE_LIMITS.files ||
+        file.bytes > TASKFILE_LIMITS.fileBytes ||
+        totalBytes + file.bytes > TASKFILE_LIMITS.totalBytes
+      )
+        throw new Error("Taskfile input limit");
+      const content = await readContainedFile(repoPath, file.path);
+      const bytes = Buffer.byteLength(content);
+      if (bytes > TASKFILE_LIMITS.fileBytes || totalBytes + bytes > TASKFILE_LIMITS.totalBytes)
+        throw new Error("Taskfile input limit");
+      totalBytes += bytes;
+      onRead?.(file.path.split(sep).join("/"), content);
+      document = loadTaskfile(content);
+      documents.set(file.physical, document);
+    }
+    if (!document) throw new Error("Invalid Taskfile");
+    for (const task of taskfileTasks(document, namespace, true)) {
+      if (names.has(task.name)) throw new Error("Duplicate Taskfile task");
+      if (names.size >= TASKFILE_LIMITS.tasks) throw new Error("Taskfile task limit");
+      nameBytes += Buffer.byteLength(task.name);
+      if (nameBytes > TASKFILE_LIMITS.outputBytes) throw new Error("Taskfile name limit");
+      names.add(task.name);
+      const localName = namespace ? task.name.slice(namespace.length + 1) : task.name;
+      if (!visible || taskIsInternal((document.tasks as Record<string, unknown>)[localName]))
+        continue;
+      outputBytes += Buffer.byteLength(JSON.stringify(task));
+      if (tasks.length >= TASKFILE_LIMITS.tasks || outputBytes > TASKFILE_LIMITS.outputBytes)
+        throw new Error("Taskfile output limit");
+      tasks.push(task);
+    }
+    if (!isMapping(document.includes)) return;
+    const ancestors = new Set([...ancestry, file.physical]);
+    for (const [name, definition] of Object.entries(document.includes)) {
+      if (++contexts > TASKFILE_LIMITS.contexts) throw new Error("Taskfile traversal limit");
+      if (!/^[A-Za-z0-9_.][A-Za-z0-9_.:-]*$/.test(name)) continue;
+      const include = typeof definition === "string" ? { taskfile: definition } : definition;
+      if (!isMapping(include) || typeof include.taskfile !== "string") continue;
+      const internal = taskBoolean(include.internal);
+      const optional = taskBoolean(include.optional);
+      // Alias alternatives are not emitted; they do not change canonical names.
+      // Flatten/excludes/variables and unknown include options need Task evaluation.
+      if (
+        internal === null ||
+        optional === null ||
+        Object.keys(include).some(
+          (key) => !["taskfile", "dir", "internal", "optional", "aliases"].includes(key)
+        )
+      )
+        continue;
+      if (
+        include.aliases !== undefined &&
+        (!Array.isArray(include.aliases) ||
+          include.aliases.some((alias) => typeof alias !== "string"))
+      )
+        continue;
+      const literal = (value: unknown): value is string =>
+        typeof value === "string" &&
+        !/[{}$~\0\r\n]/.test(value) &&
+        (!/^[A-Za-z][A-Za-z0-9+.-]*:/.test(value) || isAbsolute(value));
+      if (!literal(include.taskfile) || (include.dir !== undefined && !literal(include.dir)))
+        continue;
+      const target = resolve(repoPath, dirname(file.path), include.taskfile);
+      if (!isPathInsideDir(resolve(repoPath), target)) continue;
+      const relativeTarget = relative(resolve(repoPath), target);
+      const child = await select(relativeTarget);
+      if (child === "skipped") continue;
+      if (!child && optional) continue;
+      if (!child) throw new Error("Missing required Taskfile");
+      await visit(
+        child,
+        namespace ? `${namespace}:${name}` : name,
+        ancestors,
+        depth + 1,
+        visible && !internal
+      );
+    }
+  };
+
+  try {
+    for (const filename of TASKFILE_NAMES) {
+      const file = await entry(filename);
+      if (!file) continue;
+      await visit(file, "", new Set(), 0);
+      return tasks;
+    }
+  } catch {
+    // Cyclic, malformed, or over-budget local graphs contribute no commands.
+    return [];
+  }
+  return [];
 }
 
 /** Parse docker-compose services into `docker compose up <service>` run tasks. */
@@ -484,7 +722,16 @@ export async function detectPackageManager(repoPath: string): Promise<PackageMan
 /** File candidates for each ecosystem, tried in order (first hit wins). */
 const MAKEFILE_NAMES = ["GNUmakefile", "makefile", "Makefile"];
 const JUSTFILE_NAMES = ["justfile", "Justfile", ".justfile"];
-const TASKFILE_NAMES = ["Taskfile.yml", "Taskfile.yaml", "taskfile.yml", "taskfile.yaml"];
+const TASKFILE_NAMES = [
+  "Taskfile.yml",
+  "taskfile.yml",
+  "Taskfile.yaml",
+  "taskfile.yaml",
+  "Taskfile.dist.yml",
+  "taskfile.dist.yml",
+  "Taskfile.dist.yaml",
+  "taskfile.dist.yaml",
+];
 const COMPOSE_NAMES = ["compose.yaml", "compose.yml", "docker-compose.yml", "docker-compose.yaml"];
 
 /** Drop duplicate tasks that share both a source and a name (stable, keeps first). */
@@ -539,8 +786,7 @@ export async function discoverTasks(
   const just = await readFirst(JUSTFILE_NAMES);
   if (just) tasks.push(...parseJustfile(just));
 
-  const taskfile = await readFirst(TASKFILE_NAMES);
-  if (taskfile) tasks.push(...parseTaskfile(taskfile));
+  tasks.push(...(await discoverTaskfiles(repoPath, opts.taskfileFiles, opts.onTaskfileRead)));
 
   const compose = await readFirst(COMPOSE_NAMES);
   if (compose) tasks.push(...parseDockerCompose(compose));

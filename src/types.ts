@@ -319,6 +319,8 @@ export interface ScanResult {
   stack: StackInfo;
   monorepo?: MonorepoInfo | null;
   commands: Command[];
+  /** Content identity of contained Taskfiles read during deterministic discovery. */
+  taskfileFingerprint?: string;
   ciWorkflows: CIWorkflow[];
   readme: string | null;
   contributing: string | null;

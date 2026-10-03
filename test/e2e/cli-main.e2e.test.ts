@@ -183,6 +183,68 @@ describe("bootcamp CLI", () => {
     tempDirs.length = 0;
   });
 
+  it.each(["standard", "fast"])(
+    "uses scoped local Task commands when the saved %s response has no commands",
+    async (mode) => {
+      const tempDir = await mkdtemp(join(tmpdir(), "bootcamp-task-kit-"));
+      tempDirs.push(tempDir);
+      const repo = join(tempDir, "repo");
+      const selected = join(repo, "packages", "app");
+      await mkdir(join(selected, "taskfiles"), { recursive: true });
+      await writeFile(join(repo, "Taskfile.yml"), "version: '3'\ntasks: {outer: 'echo outer'}");
+      await writeFile(
+        join(selected, "Taskfile.yml"),
+        "version: '3'\nincludes: {app: './taskfiles/app.yml', ignored: {taskfile: './ignored.yml', optional: true}}\n"
+      );
+      await writeFile(
+        join(selected, "taskfiles", "app.yml"),
+        "version: '3'\ntasks:\n  build: {desc: Build app, cmds: ['echo build']}\n  test: {desc: Test app, cmds: ['echo test']}\n"
+      );
+      await writeFile(
+        join(selected, "ignored.yml"),
+        "version: '3'\ntasks: {secret: 'echo secret'}"
+      );
+      const facts = buildMockFacts(`local/${basename(repo)}`);
+      facts.stack.packageManager = undefined;
+      facts.quickstart.commands = [];
+      facts.quickstart.steps = ["Read the repository setup guide"];
+      const response = join(tempDir, "response.json");
+      const output = join(tempDir, "out");
+      await writeFile(response, JSON.stringify(facts));
+      const result = await runCli(
+        [
+          repo,
+          "--no-clone",
+          "--no-cache",
+          "--subdir",
+          "packages/app",
+          "--exclude",
+          "ignored.yml",
+          ...(mode === "fast" ? ["--fast"] : []),
+          "--output",
+          output,
+        ],
+        {
+          NODE_ENV: "test",
+          REPO_BOOTCAMP_TEST_LLM_RESPONSE_FILE: response,
+        }
+      );
+      expect(result.exitCode).toBe(0);
+      const generated = JSON.parse(await readFile(join(output, "repo_facts.json"), "utf8"));
+      expect(
+        generated.quickstart.commands.map((command: { command: string }) => command.command)
+      ).toEqual(["task app:build", "task app:test"]);
+      expect(generated.quickstart.steps).toEqual(facts.quickstart.steps);
+      const onboarding = await readFile(join(output, "ONBOARDING.md"), "utf8");
+      const bootcamp = await readFile(join(output, "BOOTCAMP.md"), "utf8");
+      expect(onboarding).toContain("task app:test");
+      expect(bootcamp).toContain("task app:build");
+      expect(bootcamp).not.toContain("task outer");
+      expect(bootcamp).not.toContain("task ignored:secret");
+    },
+    60_000
+  );
+
   it("generates the onboarding kit through the real CLI process", async () => {
     const tempDir = await mkdtemp(join(tmpdir(), "bootcamp-cli-e2e-"));
     tempDirs.push(tempDir);

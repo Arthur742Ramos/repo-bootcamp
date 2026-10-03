@@ -1,4 +1,4 @@
-import { mkdtemp, rm, writeFile } from "fs/promises";
+import { mkdtemp, mkdir, rm, writeFile } from "fs/promises";
 import { tmpdir } from "os";
 import { join } from "path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -9,6 +9,7 @@ async function repoWith(files: Record<string, string>): Promise<string> {
   const dir = await mkdtemp(join(tmpdir(), "bootcamp-tasks-e2e-"));
   dirs.push(dir);
   for (const [name, content] of Object.entries(files)) {
+    await mkdir(join(dir, name, ".."), { recursive: true });
     await writeFile(join(dir, name), content, "utf-8");
   }
   return dir;
@@ -19,6 +20,50 @@ describe("task discovery commands", () => {
     await Promise.all(dirs.map((dir) => rm(dir, { recursive: true, force: true })));
     dirs.length = 0;
   });
+
+  it("reports canonical local Task namespaces, included defaults and the runnable getting-started sequence", async () => {
+    const dir = await repoWith({
+      "Taskfile.dist.yml":
+        "version: '3'\nincludes:\n  app: ./app\n  other: ./app\n  hidden: {taskfile: ./app, internal: true}\ntasks:\n  default: {cmds: ['echo root']}\n",
+      "app/Taskfile.dist.yml":
+        "version: '3'\ntasks:\n  build: {desc: Build app, cmds: ['echo build']}\n  test: {desc: Test app, cmds: ['echo test']}\n  default: {desc: Default workflow, cmds: ['echo default']}\n  helper: {internal: true, cmds: ['echo hidden']}\n",
+    });
+    const result = await runCli(["tasks", dir, "--json"]);
+    expect(result.exitCode).toBe(0);
+    const payload = JSON.parse(result.stdout);
+    expect(payload.tasks.map((task: { command: string }) => task.command)).toEqual([
+      "task app:build",
+      "task app:test",
+      "task app:default",
+      "task other:build",
+      "task other:test",
+      "task other:default",
+    ]);
+    expect(payload.gettingStarted).toEqual(["task app:build", "task app:test"]);
+    const report = await runCli(["tasks", dir, "--category", "test"]);
+    expect(report.exitCode).toBe(0);
+    expect(report.stdout).toContain("task app:test");
+    expect(report.stdout).toContain("task other:test");
+    expect(report.stdout).not.toContain("task app:build");
+  }, 60_000);
+
+  it("does not advertise commands for missing required or colliding Task graphs", async () => {
+    const dir = await repoWith({
+      "Taskfile.yml":
+        "version: '3'\nincludes: {app: './missing.yml'}\ntasks: {public: 'echo public'}",
+    });
+    const missing = await runCli(["tasks", dir, "--json"]);
+    expect(missing.exitCode).toBe(0);
+    expect(JSON.parse(missing.stdout).tasks).toEqual([]);
+    await writeFile(
+      join(dir, "Taskfile.yml"),
+      "version: '3'\nincludes: {app: './child.yml'}\ntasks: {'app:test': 'echo root'}"
+    );
+    await writeFile(join(dir, "child.yml"), "version: '3'\ntasks: {test: 'echo child'}");
+    const collision = await runCli(["tasks", dir, "--json"]);
+    expect(collision.exitCode).toBe(0);
+    expect(JSON.parse(collision.stdout).tasks).toEqual([]);
+  }, 60_000);
 
   it("reports commands from the selected Make and Compose files and commented Python headers", async () => {
     const dir = await repoWith({
