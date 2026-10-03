@@ -939,33 +939,33 @@ export async function scanRepo(
 ): Promise<ScanResult> {
   // Scan files (`options` scopes/excludes the walk; see scanDirectory)
   const files = await scanDirectory(repoPath, maxFiles, options);
+  // File paths from the validated walk are relative to the selected directory.
+  // Read every piece of onboarding evidence from that same directory.
+  const scanRoot = options.subdir ? resolve(repoPath, options.subdir) : repoPath;
 
   // Detect stack
   const stack = detectStack(files);
-  const monorepo = await detectMonorepo(repoPath, files);
+  const monorepo = await detectMonorepo(scanRoot, files);
 
   // Resolve the manager once so onboarding evidence and runnable commands use
   // the same manifest/lockfile selection as the standalone tasks command.
-  // scanDirectory has already validated that the selected directory stays
-  // inside the repository; its file paths are relative to that directory.
-  const taskRoot = options.subdir ? resolve(repoPath, options.subdir) : repoPath;
-  const packageManager = await detectPackageManager(taskRoot);
+  const packageManager = await detectPackageManager(scanRoot);
   if (files.some((file) => file.path === "package.json")) {
     stack.packageManager = packageManager;
   }
-  const commands = toCommands(await discoverTasks(taskRoot, { packageManager }));
+  const commands = toCommands(await discoverTasks(scanRoot, { packageManager }));
 
   // Parse CI workflows
-  const ciWorkflows = await parseWorkflows(repoPath, files);
+  const ciWorkflows = await parseWorkflows(scanRoot, files);
 
   // Read docs in parallel
   const [readme, contributing] = await Promise.all([
-    readDocFile(repoPath, "README"),
-    readDocFile(repoPath, "CONTRIBUTING"),
+    readDocFile(scanRoot, "README"),
+    readDocFile(scanRoot, "CONTRIBUTING"),
   ]);
 
   // Read key source files
-  const keySourceFiles = await readKeySourceFiles(repoPath, files);
+  const keySourceFiles = await readKeySourceFiles(scanRoot, files);
 
   return {
     files,
