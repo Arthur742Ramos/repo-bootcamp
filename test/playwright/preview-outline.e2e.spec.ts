@@ -185,6 +185,7 @@ test("keyboard-only section selection focuses its heading and Escape returns to 
   const outline = page.getByRole("combobox", { name: "Jump to section" });
   await outline.focus();
   await page.keyboard.press("ArrowDown");
+  await page.keyboard.press("Enter");
   await expect(page.locator("#renderedContent h1")).toBeFocused();
   await page.keyboard.press("Escape");
   await expect(page.getByRole("button", { name: "Analyze", exact: true })).toBeFocused();
