@@ -820,6 +820,8 @@ run this?"_
 
 Taskfile discovery preserves shell-safe namespaced and quoted task names, omits internal helpers, and reads descriptions from YAML without executing task commands or templates.
 
+Make discovery preserves literal multi-target rules and dotted public names in file order, including continued rule headers and trailing comments. Variable assignments, continued values/recipes, and multiline variable bodies do not declare tasks; empty and double-colon rules remain runnable tasks. It does not evaluate includes, expressions, or recipes.
+
 ### Auto-Create GitHub Issues
 
 ```bash

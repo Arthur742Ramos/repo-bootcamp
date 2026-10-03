@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Discover literal multi-target Make rules and dotted public goals; omit target-specific assignments and multiline variable bodies from runnable tasks while preserving empty and double-colon rules.
 - Count `.mts`, `.cts`, `.mjs`, and `.cjs` modules in the large-codebase onboarding-risk factor so modern JS/TS repositories receive the same radar reports and CI gate outcomes as equivalent `.ts`/`.js` repositories.
 - Keep document preview navigation and file actions visible while reading long documents, with linked headings below the controls and compact controls on short screens.
 - Preserve explicit onboarding install commands and use setup-documentation guidance when a non-Node installation command is unknown; identify Poetry and uv from lockfiles in the selected scan root instead of treating every Python project as Poetry.

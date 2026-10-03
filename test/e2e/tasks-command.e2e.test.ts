@@ -56,6 +56,83 @@ describe("task discovery commands", () => {
     expect(JSON.parse(result.stdout)).toMatchObject({ tasks: [], gettingStarted: [] });
   }, 60_000);
 
+  it("reports literal Make goals in file order and omits variable-only goals", async () => {
+    const dir = await repoWith({
+      Makefile: "ignored:\n",
+      GNUmakefile: [
+        ".PHONY: build test lint test.unit empty configured",
+        "build test lint: ; @:",
+        "test.unit: ; @:",
+        "prepare: MODE=debug",
+        "configured: MODE := debug",
+        "empty:",
+        "configured:",
+        "lint.types:: ; @:",
+        "define HELP",
+        "test.fake: text inside a variable",
+        "endef",
+        "",
+      ].join("\n"),
+    });
+    const result = await runCli(["tasks", dir, "--json"]);
+    expect(result.exitCode).toBe(0);
+    const payload = JSON.parse(result.stdout);
+    expect(payload.tasks.map((task: { command: string }) => task.command)).toEqual([
+      "make build",
+      "make test",
+      "make lint",
+      "make test.unit",
+      "make empty",
+      "make configured",
+      "make lint.types",
+    ]);
+    expect(payload.gettingStarted).toEqual(["make build", "make test"]);
+    const report = await runCli(["tasks", dir]);
+    expect(report.exitCode).toBe(0);
+    expect(report.stdout).toContain("make test.unit");
+    expect(report.stdout).toContain("make lint.types");
+    expect(report.stdout).not.toContain("make prepare");
+    expect(report.stdout).not.toContain("make test.fake");
+    expect(report.stdout).not.toContain("make ignored");
+  }, 60_000);
+
+  it("does not suggest setup/build/test goals declared only by target-specific assignments", async () => {
+    const dir = await repoWith({
+      Makefile:
+        "all: ; @:\nsetup: MODE += debug\nbuild: override MODE=debug\ntest: MODE ?= debug\n",
+    });
+    const result = await runCli(["tasks", dir, "--json"]);
+    expect(result.exitCode).toBe(0);
+    expect(JSON.parse(result.stdout)).toMatchObject({
+      tasks: [{ name: "all", command: "make all" }],
+      gettingStarted: [],
+    });
+  }, 60_000);
+
+  it.each([
+    ["assignment-like comment", "build: #MODE=debug\n", ["make build"]],
+    ["multi-target comment", "one two: #MODE = debug\n", ["make one", "make two"]],
+    ["continued variable", "HELP = text \\\nbuild fake: text\nall: ; @:\n", ["make all"]],
+    ["continued assignment", "setup: FLAGS = -O \\\nbuild.fake: ; @:\nall: ; @:\n", ["make all"]],
+    ["continued inline recipe", "all: ; @printf hello \\\nbuild fake: text\n", ["make all"]],
+    ["continued recipe", "all:\n\t@printf hello \\\nbuild fake: text\n", ["make all"]],
+    ["continued targets", "build \\\ntest: ; @:\n", ["make build", "make test"]],
+    ["continued comment", "# task examples \\\nbuild fake: text\nall: ; @:\n", ["make all"]],
+  ] satisfies Array<[string, string, string[]]>)(
+    "uses logical Make rules for %s",
+    async (_name, content, commands) => {
+      const dir = await repoWith({ Makefile: content });
+      const result = await runCli(["tasks", dir, "--json"]);
+      expect(result.exitCode).toBe(0);
+      const payload = JSON.parse(result.stdout);
+      expect(payload.tasks.map((task: { command: string }) => task.command)).toEqual(commands);
+      expect(payload.gettingStarted.every((command: string) => commands.includes(command))).toBe(
+        true
+      );
+    },
+    60_000
+  );
+
   it.each(["npm", "pnpm", "yarn", "bun"])(
     "uses declared %s for runnable and getting-started commands",
     async (manager) => {

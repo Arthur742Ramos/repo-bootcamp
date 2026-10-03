@@ -144,6 +144,129 @@ describe("parseMakefile", () => {
     const tasks = parseMakefile("lint:\n\techo hi\n");
     expect(tasks[0].description).toBeUndefined();
   });
+
+  it("preserves literal multi-target rule order and dotted public names", () => {
+    const tasks = parseMakefile(
+      ".PHONY: build test lint\nbuild test lint: ; @:\ntest.unit lint.types: ; @:\n"
+    );
+    expect(tasks.map((task) => task.name)).toEqual([
+      "build",
+      "test",
+      "lint",
+      "test.unit",
+      "lint.types",
+    ]);
+    expect(tasks.map((task) => task.command)).toEqual([
+      "make build",
+      "make test",
+      "make lint",
+      "make test.unit",
+      "make lint.types",
+    ]);
+    expect(tasks.map((task) => task.category)).toEqual(["build", "test", "lint", "test", "lint"]);
+  });
+
+  it.each(["=", ":=", "::=", ":::=", "?=", "+=", "!="])(
+    "does not treat %s assignments as rules",
+    (operator) => {
+      const tasks = parseMakefile(
+        `VALUE ${operator} data\nprepare inspect: MODE ${operator} debug\nsetup: override export MODE ${operator} debug\nbuild:\n`
+      );
+      expect(tasks.map((task) => task.name)).toEqual(["build"]);
+    }
+  );
+
+  it("keeps later real rules, empty goals, and double-colon rules in their declared order", () => {
+    const tasks = parseMakefile(
+      "configured: MODE=debug\nempty:\nconfigured:\nlint:: ; @:\nbuild test:: ; @:\n"
+    );
+    expect(tasks.map((task) => task.name)).toEqual([
+      "empty",
+      "configured",
+      "lint",
+      "build",
+      "test",
+    ]);
+  });
+
+  it("ignores literal multiline variable bodies, including nested defines", () => {
+    const tasks = parseMakefile(
+      "override define HELP\ntest: help text\ndefine INNER\nbuild.fake: text\nendef\nendef\nall:\n\tdefine recipe-text\n\tendef\nlint:\n"
+    );
+    expect(tasks.map((task) => task.name)).toEqual(["all", "lint"]);
+  });
+
+  it("omits metadata, patterns, expansions, unsafe names, and indented recipe text", () => {
+    const tasks = parseMakefile(
+      ".PHONY: build\n.SUFFIXES:\n%.o: %.c\n$(TASK):\n-lint:\nbuild;echo:\n    hidden:\n\tpretend:\nvalid: # public rule\n"
+    );
+    expect(tasks.map((task) => task.name)).toEqual(["valid"]);
+  });
+
+  it("keeps real empty rules whose comments resemble assignments", () => {
+    const tasks = parseMakefile(
+      "build: #MODE=debug\none two: #MODE = debug\nlint: # MODE := text\n"
+    );
+    expect(tasks.map((task) => task.name)).toEqual(["build", "one", "two", "lint"]);
+  });
+
+  it("folds literal multi-target continuations before extracting rule names", () => {
+    const tasks = parseMakefile("build \\\n  test \\\n\tlint: ; @:\n");
+    expect(tasks.map((task) => task.name)).toEqual(["build", "test", "lint"]);
+  });
+
+  it.each([
+    "HELP = text \\\nbuild fake: text\nall: ; @:\n",
+    "setup: FLAGS = -O \\\nbuild.fake: ; @:\nall: ; @:\n",
+    "all: ; @printf hello \\\nbuild fake: text\n",
+    "all:\n\t@printf hello \\\nbuild fake: text\n",
+    "# task examples \\\nbuild fake: text\nall: ; @:\n",
+  ])("does not discover targets within a continued variable, recipe, or comment", (content) => {
+    expect(parseMakefile(content).map((task) => task.name)).toEqual(["all"]);
+  });
+
+  it("does not interpret inline recipe assignments as target-specific variables", () => {
+    const tasks = parseMakefile("build: ;MODE=debug :\ntest: ; #MODE=debug\n");
+    expect(tasks.map((task) => task.name)).toEqual(["build", "test"]);
+  });
+
+  it("preserves escaped comment markers and even trailing backslashes", () => {
+    expect(parseMakefile("prepare: \\#MODE=debug\n")).toEqual([]);
+    expect(parseMakefile("HELP = text \\\\\nbuild: ; @:\n").map((task) => task.name)).toEqual([
+      "build",
+    ]);
+  });
+
+  it("keeps continued endef text inside a multiline variable until its real endef", () => {
+    const tasks = parseMakefile("define HELP\nvalue \\\nendef\nendef\nbuild: ; @:\n");
+    expect(tasks.map((task) => task.name)).toEqual(["build"]);
+  });
+
+  it("preserves rule and recipe boundaries across blank continuation segments", () => {
+    expect(parseMakefile("build \\\n\\\ntest: ; @:\n").map((task) => task.name)).toEqual([
+      "build",
+      "test",
+    ]);
+    expect(parseMakefile("all:\n\t\\\nbuild fake: text\n").map((task) => task.name)).toEqual([
+      "all",
+    ]);
+    expect(parseMakefile("\\\n\\\nbuild: ; @:\n")).toEqual([]);
+  });
+
+  it("handles long backslash runs according to terminal continuation parity", () => {
+    const backslashes = "\\".repeat(32_000);
+    expect(parseMakefile(`VALUE = ${backslashes}x\nall: ; @:\n`).map((task) => task.name)).toEqual([
+      "all",
+    ]);
+    expect(
+      parseMakefile(`HELP = ${backslashes.slice(1)}\nbuild.fake: text\nall: ; @:\n`).map(
+        (task) => task.name
+      )
+    ).toEqual(["all"]);
+    expect(parseMakefile(`HELP = ${backslashes}\nbuild: ; @:\n`).map((task) => task.name)).toEqual([
+      "build",
+    ]);
+  });
 });
 
 describe("parseJustfile", () => {
