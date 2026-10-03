@@ -301,6 +301,76 @@ describe("dependency manifest parsers", () => {
     expect(names(deps!.runtime).sort()).toEqual(["click", "pytest"]);
   });
 
+  it("pyproject arrays: ignores quoted packages and delimiters in TOML comments", async () => {
+    const dir = await repoWith({
+      "pyproject.toml": [
+        "[project]",
+        'name = "owned-comment-fixture"',
+        '# dependencies = ["phantom-project>=99"]',
+        "dependencies = [",
+        '  "requests[security]>=2.28", # "phantom-inline>=99" ] [',
+        '  "flask>=2.0",',
+        "]",
+        "[project.optional-dependencies]",
+        '# example = ["phantom-extra>=99"]',
+        "web = [",
+        "  \"httpx>=0.27\", # 'phantom-web>=99' ]",
+        '  "uvicorn>=0.20",',
+        "]",
+        "[dependency-groups]",
+        '# example = ["phantom-dev>=99"]',
+        "dev = [",
+        '  "pytest>=8", # "phantom-test>=99" ] [',
+        '  "ruff>=0.5",',
+        "]",
+      ].join("\n"),
+    });
+    const deps = await extractDependencies(dir);
+    expect(names(deps!.runtime)).toEqual(["requests", "flask", "httpx", "uvicorn"]);
+    expect(names(deps!.dev)).toEqual(["pytest", "ruff"]);
+    expect(deps!.totalCount).toBe(6);
+    expect(generateDependencyDocs(deps!, "Project")).not.toContain("phantom");
+  });
+
+  it("pyproject comments: retains literal hashes and handles escaped quotes", async () => {
+    const dir = await repoWith({
+      "pyproject.toml": [
+        "[project]",
+        'description = "Escaped \\\"quote\\\" # remains in a string" # "phantom-description"',
+        "dependencies = [",
+        '  "direct @ https://example.invalid/package.whl#sha256=owned", # "phantom-url"',
+        "  'literal @ https://example.invalid/package.whl#owned', # 'phantom-literal'",
+        '  "requests>=2.28",',
+        "]",
+      ].join("\n"),
+    });
+    const deps = await extractDependencies(dir);
+    expect(names(deps!.runtime)).toEqual(["direct", "literal", "requests"]);
+    expect(deps!.runtime[0].version).toBe("@ https://example.invalid/package.whl#sha256=owned");
+    expect(deps!.runtime[1].version).toBe("@ https://example.invalid/package.whl#owned");
+    expect(deps!.totalCount).toBe(3);
+  });
+
+  it.each(['"', "'"])(
+    "pyproject comments: retains %s multiline string boundaries",
+    async (quote) => {
+      const delimiter = quote.repeat(3);
+      const dir = await repoWith({
+        "pyproject.toml": [
+          "[project]",
+          `description = ${delimiter}A literal # and quoted example`,
+          `still inside the string # not a comment${quote.repeat(4)} # trailing comment`,
+          'dependencies = ["requests>=2.28", "flask>=2.0"]',
+          "[project.optional-dependencies]",
+          'web = ["httpx>=0.27"]',
+        ].join("\n"),
+      });
+      const deps = await extractDependencies(dir);
+      expect(names(deps!.runtime)).toEqual(["requests", "flask", "httpx"]);
+      expect(deps!.totalCount).toBe(3);
+    }
+  );
+
   it("requirements.txt: skips pip option/include lines", async () => {
     const dir = await repoWith({
       "requirements.txt": [

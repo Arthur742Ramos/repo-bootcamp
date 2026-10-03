@@ -125,10 +125,11 @@ function cacheKey(
     optionsFingerprint === serializeGenerationOptions(normalizeGenerationOptions())
       ? `${repoFullName}@${commitSha}`
       : `${repoFullName}@${commitSha}|${optionsFingerprint}`;
-  // Only dependency projection changed: old first-manifest results must miss,
-  // while facts and every other phase retain their existing cache identity.
+  // Dependency projection changes must miss stale results; facts and every
+  // other phase retain their existing cache identity.
   const phaseSeed = phase === "facts" ? baseSeed : `${baseSeed}|phase=${phase}`;
-  const hashSeed = phase === "deps" ? `${phaseSeed}|projection=mixed-ecosystems-v1` : phaseSeed;
+  const hashSeed =
+    phase === "deps" ? `${phaseSeed}|projection=mixed-ecosystems-v2-comments` : phaseSeed;
 
   const hash = createHash("sha256").update(hashSeed).digest("hex").substring(0, 16);
   const safeName = repoFullName.replace(/\//g, "-");

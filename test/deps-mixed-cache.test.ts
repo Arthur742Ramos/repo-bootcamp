@@ -24,6 +24,63 @@ afterAll(async () => {
 });
 
 describe("mixed dependency projection cache identity", () => {
+  it("misses pre-comment-fix deps entries and keeps corrected counts on a warm run", async () => {
+    const repo = "comments/cache";
+    const sha = "unchanged-comment-commit";
+    const dir = await mkdtemp(join(tmpdir(), "bootcamp-comment-cache-repo-"));
+    const hash = (seed: string) => createHash("sha256").update(seed).digest("hex").slice(0, 16);
+    try {
+      await writeFile(
+        join(dir, "pyproject.toml"),
+        '[project]\ndependencies = [\n  "requests>=2.28", # "phantom>=99"\n  "flask>=2.0",\n]\n'
+      );
+      const oldValue = {
+        packageManager: "pip",
+        totalCount: 3,
+        runtime: [
+          { name: "requests", version: ">=2.28", type: "runtime" },
+          { name: "phantom", version: ">=99", type: "runtime" },
+          { name: "flask", version: ">=2.0", type: "runtime" },
+        ],
+        dev: [],
+        peer: [],
+        categories: [],
+      };
+      await writePhaseCache("deps", repo, sha, oldValue);
+      const entry = (await listCacheEntries()).find(
+        (entry) => entry.entry?.phase === "deps" && entry.entry.repoFullName === repo
+      )!;
+      const oldPath = join(
+        getCacheDir(),
+        `comments-cache-deps-${hash(`${repo}@${sha}|phase=deps|projection=mixed-ecosystems-v1`)}.json`
+      );
+      const oldBytes = await readFile(entry.path);
+      await writeFile(oldPath, oldBytes);
+      if (entry.path !== oldPath) await rm(entry.path);
+      expect((await readPhaseCache("deps", repo, sha)).hit).toBe(false);
+      const spy = vi.spyOn(depsModule, "extractDependencies");
+      try {
+        const cold = await runParallelAnalysis(dir, await scanRepo(dir, 100), undefined, {
+          repoFullName: repo,
+          commitSha: sha,
+        });
+        expect(cold.deps?.totalCount).toBe(2);
+        expect(cold.deps?.runtime.map((dep) => dep.name)).toEqual(["requests", "flask"]);
+        const warm = await runParallelAnalysis(dir, await scanRepo(dir, 100), undefined, {
+          repoFullName: repo,
+          commitSha: sha,
+        });
+        expect(warm.deps).toEqual(cold.deps);
+        expect(spy).toHaveBeenCalledTimes(1);
+        expect(await readFile(oldPath)).toEqual(oldBytes);
+      } finally {
+        spy.mockRestore();
+      }
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
   it("misses a real old deps entry, computes complete records, then hits warm while other phase keys stay exact", async () => {
     const repo = "mixed/cache";
     const sha = "unchanged-commit";
@@ -49,7 +106,9 @@ describe("mixed dependency projection cache identity", () => {
         peer: [],
         categories: [],
       });
-      const entry = (await listCacheEntries())[0];
+      const entry = (await listCacheEntries()).find(
+        (entry) => entry.entry?.phase === "deps" && entry.entry.repoFullName === repo
+      )!;
       await writeFile(oldPath, await readFile(entry.path));
       await rm(entry.path);
       expect((await readPhaseCache("deps", repo, sha)).hit).toBe(false);
