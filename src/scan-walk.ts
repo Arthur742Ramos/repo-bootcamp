@@ -19,13 +19,35 @@ function compileIgnores(patterns: readonly string[]) {
     // Brace expansion unescapes backslashes; protect glob escapes so they reach
     // the matcher unchanged, including literal braces and escaped brackets.
     const escapes: string[] = [];
-    const protectedPattern = pattern.replace(/\\./g, (escape) => {
+    let protectedPattern = pattern.replace(/\\[\s\S]/g, (escape) => {
       escapes.push(escape);
       return `\0${escapes.length - 1}\0`;
     });
-    const expandedPatterns = expand(protectedPattern, { max: 10_001 });
-    if (expandedPatterns.length > 10_000) {
-      throw new Error("Exclude pattern exceeds the 10,000 brace-alternative limit.");
+    // Preserve the expander's special treatment of a leading literal {} before
+    // adding the witness below. Input NULs were rejected, so markers cannot clash.
+    if (protectedPattern.startsWith("{}")) {
+      const index = escapes.length;
+      escapes.push("\\{", "\\}");
+      protectedPattern = `\0${index}\0\0${index + 1}\0${protectedPattern.slice(2)}`;
+    }
+    // Nonempty witnesses prevent dropped empty alternatives from concealing an
+    // internal count limit. Brace rewrites replace each closing brace with an
+    // escape sentinel shorter than 64 characters; bound raw results as well.
+    const witness = "\0bootcamp-brace\0";
+    const closingBraces = protectedPattern.split("}").length - 1;
+    const rawBound = protectedPattern.length + witness.length + 64 * (closingBraces + 2);
+    const allowed = Math.min(10_000, Math.floor(4_000_000 / rawBound));
+    if (allowed < 1) throw new Error("Exclude pattern exceeds the brace-expansion memory budget.");
+    const raw = expand(witness + protectedPattern, {
+      max: allowed + 1,
+      maxLength: (allowed + 1) * rawBound,
+    });
+    if (raw.length > allowed) {
+      throw new Error("Exclude pattern exceeds the brace-alternative limit or memory budget.");
+    }
+    const expandedPatterns = raw.map((candidate) => candidate.slice(witness.length));
+    if (expandedPatterns.reduce((total, candidate) => total + candidate.length, 0) > 4_000_000) {
+      throw new Error("Exclude pattern exceeds the brace-expansion memory budget.");
     }
     return expandedPatterns.filter(Boolean).map((candidate) => {
       const expanded = candidate.replace(

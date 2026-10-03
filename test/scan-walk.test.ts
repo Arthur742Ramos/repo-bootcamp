@@ -26,7 +26,6 @@ vi.mock("fs/promises", async (importOriginal) => {
           async *[Symbol.asyncIterator]() {
             try {
               throw Object.assign(new Error("read failed"), { code: "EIO" });
-              yield;
             } finally {
               await handle.close();
             }
@@ -56,7 +55,8 @@ async function fixture(paths: string[]): Promise<string> {
 }
 afterEach(async () => {
   for (const handle of io.handles) {
-    await expect(handle.read()).rejects.toMatchObject({ code: "ERR_DIR_CLOSED" });
+    // Node 20 throws synchronously; newer Node versions reject the promise.
+    await expect(async () => handle.read()).rejects.toMatchObject({ code: "ERR_DIR_CLOSED" });
   }
   await Promise.all(
     directories.splice(0).map((root) => rm(root, { recursive: true, force: true }))
@@ -221,6 +221,35 @@ describe("exclude syntax compatibility", () => {
       "brace-alternative limit"
     );
     expect(io.opened).toEqual([]);
+  });
+
+  it("rejects long alternatives instead of silently truncating their exclusions", async () => {
+    const root = await fixture(["keep.ts"]);
+    const prefix = Array.from({ length: 4 }, () => "a".repeat(180)).join("/");
+    await expect(walkRepositoryFiles(root, 100, [`${prefix}/file-{1..10001}.ts`])).rejects.toThrow(
+      "memory budget"
+    );
+    expect(io.opened).toEqual([]);
+  });
+
+  it("detects overflow hidden by nested empty alternatives", async () => {
+    const root = await fixture(["a"]);
+    const pattern = "{,{" + ",".repeat(10002) + "a}}";
+    await expect(walkRepositoryFiles(root, 100, [pattern])).rejects.toThrow(
+      "brace-alternative limit"
+    );
+    expect(io.opened).toEqual([]);
+  });
+
+  it("accepts 10,000 ordinary short alternatives without truncation", async () => {
+    const root = await fixture(["file-10000.ts"]);
+    expect(await walkRepositoryFiles(root, 100, ["file-{1..10000}.ts"])).toEqual([]);
+  });
+
+  it("preserves empty alternatives and leading literal braces", async () => {
+    const root = await fixture(["src/main.ts", "{}a/main.ts", "keep.ts"]);
+    const files = await walkRepositoryFiles(root, 100, ["src{,s}/**", "{}a/**"]);
+    expect(files.map((file) => file.path)).toEqual(["keep.ts"]);
   });
 
   it("handles deeply nested braces without exhausting the process stack", async () => {
