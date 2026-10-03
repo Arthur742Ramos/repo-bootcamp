@@ -184,6 +184,91 @@ describe("bootcamp CLI", () => {
   });
 
   it.each([false, true])(
+    "keeps glob characters and Markdown path labels literal (fast=%s)",
+    async (fast) => {
+      const tempDir = await mkdtemp(join(tmpdir(), "bootcamp-diff-pathspec-cli-"));
+      tempDirs.push(tempDir);
+      const repoPath = await createFixtureRepo(tempDir);
+      const entries = [
+        ["src/[x]", "literalBracket"],
+        ["src/x", "ordinaryCollision"],
+        [process.platform === "win32" ? "_emphasis_" : "*emphasis*", "literalEmphasis"],
+        ["link[label](target)", "literalLink"],
+      ];
+      for (const [folder, name] of entries) {
+        await mkdir(join(repoPath, folder), { recursive: true });
+        await writeFile(
+          join(repoPath, folder, "index.ts"),
+          `export const ${name}=1;\nexport const kept=2;\n`
+        );
+      }
+      execFileSync("git", ["add", "-A"], { cwd: repoPath, stdio: "ignore" });
+      execFileSync("git", ["commit", "--no-gpg-sign", "-m", "Pathspec base"], {
+        cwd: repoPath,
+        stdio: "ignore",
+      });
+      const base = execFileSync("git", ["rev-parse", "HEAD"], {
+        cwd: repoPath,
+        encoding: "utf8",
+      }).trim();
+      for (const [folder] of entries)
+        await writeFile(join(repoPath, folder, "index.ts"), "export const kept=2;\n");
+      execFileSync("git", ["add", "-A"], { cwd: repoPath, stdio: "ignore" });
+      execFileSync("git", ["commit", "--no-gpg-sign", "-m", "Pathspec head"], {
+        cwd: repoPath,
+        stdio: "ignore",
+      });
+      const responseFile = join(tempDir, "response.json");
+      await writeFile(responseFile, JSON.stringify(buildMockFacts("owned/literal-pathspecs")));
+      const preload = join(tempDir, "owned-home.mjs");
+      await writeFile(
+        preload,
+        `import os from 'node:os';import {syncBuiltinESMExports} from 'node:module';os.homedir=()=>${JSON.stringify(join(tempDir, "home"))};syncBuiltinESMExports();`
+      );
+      const env: NodeJS.ProcessEnv = {
+        ...process.env,
+        NODE_ENV: "test",
+        REPO_BOOTCAMP_TEST_LLM_RESPONSE_FILE: responseFile,
+      };
+      delete env.NODE_OPTIONS;
+      const output = join(tempDir, "output");
+      execFileSync(
+        process.execPath,
+        [
+          "--import",
+          pathToFileURL(join(process.cwd(), "node_modules/tsx/dist/loader.mjs")).href,
+          "--import",
+          pathToFileURL(preload).href,
+          join(process.cwd(), "src/cli.ts"),
+          repoPath,
+          "--no-clone",
+          "--no-cache",
+          "--compare",
+          base,
+          "--output",
+          output,
+          ...(fast ? ["--fast"] : []),
+        ],
+        {
+          cwd: tempDir,
+          env,
+          encoding: "utf8",
+          timeout: 60_000,
+          maxBuffer: 4 * 1024 * 1024,
+          stdio: ["ignore", "pipe", "pipe"],
+        }
+      );
+      const diff = await readFile(join(output, "DIFF.md"), "utf8");
+      for (const [folder, name] of entries) {
+        const label = folder === "src/x" ? `${folder}/index.ts` : `\`${folder}/index.ts\``;
+        expect(diff).toContain(`Removed export: ${name} in ${label}`);
+      }
+      expect(diff.match(/Removed export:/g)).toHaveLength(4);
+      expect(diff).not.toContain("Removed export: ordinaryCollision in `src/[x]/index.ts`");
+    }
+  );
+
+  it.each([false, true])(
     "preserves literal Git paths in comparison guidance (fast=%s)",
     async (fast) => {
       const tempDir = await mkdtemp(join(tmpdir(), "bootcamp-diff-paths-cli-"));

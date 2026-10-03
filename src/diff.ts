@@ -7,12 +7,7 @@ import { execFile } from "child_process";
 import { promisify } from "util";
 import type { DiffSummary, RepoInfo } from "./types.js";
 import { packageScriptCommand } from "./package-script-command.js";
-import {
-  isMultilineCode,
-  markdownCodeBlock,
-  markdownCodeSpan,
-  markdownCommandName,
-} from "./markdown-code.js";
+import { isMultilineCode, markdownCodeBlock, markdownCodeSpan } from "./markdown-code.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -205,7 +200,7 @@ async function getFileDiff(
   try {
     const { stdout } = await execFileAsync(
       "git",
-      ["diff", `${baseRef}...${headRef}`, "--", filePath],
+      ["--literal-pathspecs", "diff", `${baseRef}...${headRef}`, "--", filePath],
       { cwd: repoPath, maxBuffer: FILE_DIFF_MAX_BUFFER }
     );
     return stdout;
@@ -412,9 +407,7 @@ async function detectBreakingChanges(
       for (const line of removedExports.slice(0, MAX_REMOVED_EXPORTS_PER_FILE)) {
         const match = line.match(/export\s+(?:const|function|class|type|interface)\s+(\w+)/);
         if (match) {
-          breakingChanges.push(
-            `Removed export: ${match[1]} in ${markdownCommandName(diffPathLabel(file))}`
-          );
+          breakingChanges.push(`Removed export: ${match[1]} in ${diffPathDescription(file)}`);
         }
       }
     } catch (err: unknown) {
@@ -676,6 +669,12 @@ function diffPathLabel(path: string): string {
     parts.push(isControl(code) ? `\\u${code.toString(16).padStart(4, "0")}` : character);
   }
   return parts.join("");
+}
+
+/** Keep ordinary descriptions unchanged; delimit names with Markdown punctuation. */
+function diffPathDescription(path: string): string {
+  const label = diffPathLabel(path);
+  return /[`*_[\]]/.test(label) ? markdownCodeSpan(label) : label;
 }
 
 /**

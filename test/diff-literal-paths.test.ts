@@ -122,6 +122,70 @@ describe("literal Git changed paths", () => {
       modified: [],
     });
   });
+
+  it("inspects bracket paths literally instead of attributing a neighboring export removal", async () => {
+    const dir = await fixture();
+    for (const [folder, name] of [
+      ["src/[x]", "literalBracket"],
+      ["src/x", "ordinaryCollision"],
+    ]) {
+      await mkdir(join(dir, folder), { recursive: true });
+      await writeFile(
+        join(dir, folder, "index.ts"),
+        `export const ${name}=1;\nexport const kept=2;\n`
+      );
+    }
+    commit(dir, "base");
+    const base = git(dir, ["rev-parse", "HEAD"]).trim();
+    for (const folder of ["src/[x]", "src/x"])
+      await writeFile(join(dir, folder, "index.ts"), "export const kept=2;\n");
+    commit(dir, "head");
+    const defaultPatch = git(dir, ["diff", `${base}...HEAD`, "--", "src/[x]/index.ts"]);
+    const literalPatch = git(dir, [
+      "--literal-pathspecs",
+      "diff",
+      `${base}...HEAD`,
+      "--",
+      "src/[x]/index.ts",
+    ]);
+    expect(defaultPatch).toContain("ordinaryCollision");
+    expect(literalPatch).toContain("literalBracket");
+    expect(literalPatch).not.toContain("ordinaryCollision");
+    const summary = await analyzeDiff(dir, base);
+    expect(summary.filesModified).toEqual(["src/[x]/index.ts", "src/x/index.ts"]);
+    expect(summary.onboardingDeltas.breakingChanges).toEqual([
+      "Removed export: literalBracket in `src/[x]/index.ts`",
+      "Removed export: ordinaryCollision in src/x/index.ts",
+    ]);
+  });
+
+  it.each([
+    "link[label](target)",
+    "_emphasis_",
+    ...(process.platform === "win32" ? [] : ["*emphasis*"]),
+  ])("renders removed-export path punctuation literally in %j", async (folder) => {
+    const dir = await fixture();
+    await mkdir(join(dir, folder));
+    await writeFile(
+      join(dir, folder, "index.ts"),
+      "export const removedPunctuation=1;\nexport const kept=2;\n"
+    );
+    commit(dir, "base");
+    const base = git(dir, ["rev-parse", "HEAD"]).trim();
+    await writeFile(join(dir, folder, "index.ts"), "export const kept=2;\n");
+    commit(dir, "head");
+    const summary = await analyzeDiff(dir, base);
+    expect(summary.filesModified).toEqual([`${folder}/index.ts`]);
+    expect(summary.onboardingDeltas.breakingChanges).toEqual([
+      `Removed export: removedPunctuation in ${markdownCodeSpan(`${folder}/index.ts`)}`,
+    ]);
+    const html = markdownToHtml(generateDiffDocs(summary, "owned"));
+    expect(html).toContain(
+      `<li>Removed export: removedPunctuation in <code>${folder}/index.ts</code></li>`
+    );
+    expect(html).not.toContain("<em>");
+    expect(html).not.toContain("<a ");
+  });
 });
 
 describe("literal changed-file labels", () => {

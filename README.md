@@ -509,7 +509,7 @@ bootcamp diff owner/repo#123
 bootcamp diff https://github.com/owner/repo/pull/123
 ```
 
-Comparison reports preserve literal Git paths, including Unicode and rename/copy destinations. Paths containing control characters use quoted JSON-escaped display labels (for example, `"folder\nname/index.ts"`); programmatic `DiffSummary` file arrays retain the original path characters.
+Comparison reports inspect literal Git paths, including Unicode, glob characters and rename/copy destinations. Paths containing control characters use quoted JSON-escaped display labels (for example, `"folder\nname/index.ts"`); Markdown punctuation is protected in file labels and removed-export descriptions. Programmatic `DiffSummary` file arrays retain the original path characters.
 
 ### Watch Mode
 
