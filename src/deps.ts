@@ -363,7 +363,7 @@ async function extractPythonDependencies(
         ) {
           continue;
         }
-        const match = cleaned.match(/^([A-Za-z0-9._-]+)(?:\[[^\]]*\])?\s*[=<>!~]*\s*(.*)$/);
+        const match = cleaned.match(/^([A-Za-z0-9._-]+)(?:[ \t]*\[[^\]]*\])?\s*[=<>!~]*\s*(.*)$/);
         if (match) {
           const version = (match[2] || "").trim();
           runtime.push({ name: match[1], version: version || "*", type: "runtime" });
@@ -397,6 +397,26 @@ async function extractPythonDependencies(
       }
       flush();
 
+      // PyPI identity is case-insensitive and folds separator runs; retain
+      // the first accepted spelling/version independently in each target.
+      const identities = new Map<Dependency[], Set<string>>();
+      const addDependency = (
+        name: string,
+        version: string,
+        type: "runtime" | "dev",
+        target: Dependency[]
+      ): void => {
+        const identity = name.toLowerCase().replace(/[-_.]+/g, "-");
+        let seen = identities.get(target);
+        if (!seen) {
+          seen = new Set<string>();
+          identities.set(target, seen);
+        }
+        if (seen.has(identity)) return;
+        seen.add(identity);
+        target.push({ name, version, type });
+      };
+
       // `key = value` TOML tables (legacy Poetry + dependency groups).
       const parseTable = (body: string, type: "runtime" | "dev", target: Dependency[]): void => {
         for (const line of body.split("\n")) {
@@ -405,9 +425,7 @@ async function extractPythonDependencies(
           const match = trimmed.match(/^([A-Za-z0-9._-]+)\s*=\s*(.+)$/);
           if (!match) continue;
           if (type === "runtime" && match[1] === "python") continue;
-          if (!target.some((d) => d.name === match[1])) {
-            target.push({ name: match[1], version: parseTomlVersion(match[2]), type });
-          }
+          addDependency(match[1], parseTomlVersion(match[2]), type, target);
         }
       };
 
@@ -424,12 +442,10 @@ async function extractPythonDependencies(
           const item = quoted.trim();
           if (!item || item.startsWith("#")) continue;
           const cleaned = withoutPyprojectRequirementMarker(item);
-          const match = cleaned.match(/^([A-Za-z0-9._-]+)(?:\[[^\]]*\])?\s*(.*)$/);
+          const match = cleaned.match(/^([A-Za-z0-9._-]+)(?:[ \t]*\[[^\]]*\])?\s*(.*)$/);
           if (!match) continue;
           const version = (match[2] || "").trim();
-          if (!target.some((d) => d.name === match[1])) {
-            target.push({ name: match[1], version: version || "*", type });
-          }
+          addDependency(match[1], version || "*", type, target);
         }
       };
 

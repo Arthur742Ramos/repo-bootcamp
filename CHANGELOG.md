@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Honor spaced Python extras and canonical package identities in pyproject dependency projections, retaining first-accepted spelling/version per runtime/dev target and the existing pip duplicate/operator behavior.
+
 - Preserve literal semicolons, query parameters and hashes in pyproject.toml direct-reference URLs while removing only whitespace-delimited environment markers.
 
 - Decode complete Python TOML requirement literals before projecting dependencies, retaining escaped markers, quoted brackets, Unicode names and multiline continuations without phantom packages or stale cached counts.
