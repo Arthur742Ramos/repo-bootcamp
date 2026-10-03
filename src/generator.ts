@@ -405,7 +405,7 @@ ${keyDirs}
 2. ${runVerifyStep}
 3. Pick one of these starter tasks:
 
-${quickTasks || "- _No beginner tasks suggested_"}${multilineVerification}
+${quickTasks || "- *No beginner tasks suggested*"}${multilineVerification}
 
 ## Next Steps
 
@@ -435,7 +435,7 @@ export function generateOnboarding(
 
   const errors =
     facts.quickstart.commonErrors?.map((e) => `### ${e.error}\n**Fix:** ${e.fix}`).join("\n\n") ||
-    "_No common errors documented_";
+    "*No common errors documented*";
 
   const testDirs = facts.structure.testDirs.map((d) => `- \`${d}\``).join("\n");
   const testCmd = findGuidanceCommand(facts.quickstart.commands, "test");
@@ -526,10 +526,10 @@ ${audienceTasks || "- `_No tasks available yet_`"}
 
 ## Running Tests
 
-${testCmd ? markdownCodeBlock(testCmd.command, "bash") : "_No test command detected_"}
+${testCmd ? markdownCodeBlock(testCmd.command, "bash") : "*No test command detected*"}
 
 Test directories:
-${testDirs || "_No test directories detected_"}
+${testDirs || "*No test directories detected*"}
 
 ## Common Errors & Fixes
 
@@ -570,7 +570,7 @@ export function generateArchitecture(
   const abstractions =
     facts.architecture.keyAbstractions
       ?.map((a) => `- **${a.name}**: ${a.description}`)
-      .join("\n") || "_None documented_";
+      .join("\n") || "*None documented*";
 
   // Generate code examples section
   let codeExamplesSection = "";
@@ -660,16 +660,16 @@ ${profile.architectureDescription}
 ${audienceChecklist}
 
 ### Components to trace first
-${audienceComponents || "- _No role-specific components detected_"}
+${audienceComponents || "- *No role-specific components detected*"}
 
 ### Files to inspect first
-${audienceFiles || "- _No role-specific files detected_"}
+${audienceFiles || "- *No role-specific files detected*"}
 
 `
     : ""
 }${codeExamplesSection}## Data Flow
 
-${facts.architecture.dataFlow || "_Data flow not documented_"}
+${facts.architecture.dataFlow || "*Data flow not documented*"}
 
 ## Key Abstractions
 
@@ -684,7 +684,7 @@ ${
     ? facts.structure.entrypoints
         .map((e) => `| ${fileLink(e.path, repoInfo)} | ${e.type} | ${e.description || "-"} |`)
         .join("\n")
-    : "| _None detected_ | - | - |"
+    : "| *None detected* | - | - |"
 }
 
 ## Where to Change What
@@ -769,7 +769,7 @@ ${dirs}
 ${
   facts.structure.testDirs.length > 0
     ? facts.structure.testDirs.map((d) => `| \`${d}\` | Test files |`).join("\n")
-    : "| _None detected_ | - |"
+    : "| *None detected* | - |"
 }
 
 ## CI/CD
@@ -781,7 +781,7 @@ ${
     ? facts.ci.workflows
         .map((w) => `| \`${w.file}\` | ${w.triggers.join(", ") || "-"} |`)
         .join("\n")
-    : "| _None detected_ | - |"
+    : "| *None detected* | - |"
 }
 
 ## Reading Order for New Contributors
@@ -821,7 +821,7 @@ export function generateFirstTasks(
   const hiddenTasks = Math.max(0, facts.firstTasks.length - prioritizedTasks.length);
   const styleLimitNote =
     hiddenTasks > 0
-      ? `_Showing top ${prioritizedTasks.length} tasks for the ${resolvedStyle.name} style pack (${hiddenTasks} hidden)._`
+      ? `*Showing top ${prioritizedTasks.length} tasks for the ${resolvedStyle.name} style pack (${hiddenTasks} hidden).*`
       : "";
   const includeFullTaskDetails = resolvedStyle.sectionDepth !== "minimal";
 
@@ -836,7 +836,7 @@ ${includeFullTaskDetails ? `**Why this matters:** ${t.why}` : ""}
 ${
   includeFullTaskDetails
     ? `**Files to look at:**\n${t.files.map((f) => `- ${fileLink(f, repoInfo)}`).join("\n")}`
-    : `**Start in:** ${t.files[0] ? fileLink(t.files[0], repoInfo) : "_No file provided_"}`
+    : `**Start in:** ${t.files[0] ? fileLink(t.files[0], repoInfo) : "*No file provided*"}`
 }
 `;
 
@@ -850,19 +850,19 @@ ${tonePrefix(resolvedStyle)}
 ${profile.firstTaskDescription}
 ${styleLimitNote}
 
-${audiencePicks || "_No tasks suggested yet_"}
+${audiencePicks || "*No tasks suggested yet*"}
 
 ## Beginner Tasks (Safe Small Wins)
 
-${tasksByCategory.beginner.map(formatTask).join("\n") || "_No beginner tasks suggested_"}
+${tasksByCategory.beginner.map(formatTask).join("\n") || "*No beginner tasks suggested*"}
 
 ## Intermediate Tasks
 
-${tasksByCategory.intermediate.map(formatTask).join("\n") || "_No intermediate tasks suggested_"}
+${tasksByCategory.intermediate.map(formatTask).join("\n") || "*No intermediate tasks suggested*"}
 
 ## Advanced Tasks
 
-${tasksByCategory.advanced.map(formatTask).join("\n") || "_No advanced tasks suggested_"}
+${tasksByCategory.advanced.map(formatTask).join("\n") || "*No advanced tasks suggested*"}
 
 ## How to Pick a Task
 
@@ -904,7 +904,7 @@ For usage instructions, see [ONBOARDING.md](./ONBOARDING.md).
 
 ## Build & Release
 
-${buildCommand?.command ? markdownCodeBlock(buildCommand.command, "bash") : "_No build command detected_"}
+${buildCommand?.command ? markdownCodeBlock(buildCommand.command, "bash") : "*No build command detected*"}
 
 ## Publishing (if applicable)
 
@@ -920,12 +920,12 @@ ${buildCommand?.command ? markdownCodeBlock(buildCommand.command, "bash") : "_No
 
   const runbook = facts.runbook!;
   const deploySteps =
-    runbook.deploySteps?.map((s, i) => `${i + 1}. ${s}`).join("\n") || "_Not documented_";
+    runbook.deploySteps?.map((s, i) => `${i + 1}. ${s}`).join("\n") || "*Not documented*";
   const observability =
-    runbook.observability?.map((o) => `- ${o}`).join("\n") || "_Not documented_";
+    runbook.observability?.map((o) => `- ${o}`).join("\n") || "*Not documented*";
   const incidents =
     runbook.incidents?.map((i) => `### ${i.name}\n\n**Check:** ${i.check}`).join("\n\n") ||
-    "_No incidents documented_";
+    "*No incidents documented*";
 
   return `# Runbook: ${facts.repoName}
 

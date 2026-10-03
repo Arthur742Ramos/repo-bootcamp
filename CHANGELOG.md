@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Render generated fallback prose and informational notes with supported emphasis across guides, the web reader, and HTML/PDF-ready exports; preserve inline-code placeholders as literal text.
+
 - Recognize declared dotted build/test tasks in npm-family and Task onboarding guidance while preserving setup, filename, provenance and simple-invocation boundaries.
 
 - Use the same detected build role in library/tool runbooks and onboarding overviews, retaining build variants and compile/bundle aliases while omitting setup and inspection commands.

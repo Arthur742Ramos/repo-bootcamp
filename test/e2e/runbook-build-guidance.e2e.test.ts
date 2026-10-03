@@ -102,7 +102,11 @@ describe("actual library/tool runbook build guidance", () => {
         for (const document of [documents.bootcamp, documents.onboarding, documents.runbook]) {
           expect(document).toContain(command);
         }
-        expect(documents.runbook).not.toContain("_No build command detected_");
+        expect(documents.runbook).not.toContain(
+          format === "markdown"
+            ? "*No build command detected*"
+            : "<em>No build command detected</em>"
+        );
       }
       await expect(readFile(sentinel)).rejects.toMatchObject({ code: "ENOENT" });
     }
@@ -129,7 +133,7 @@ describe("actual library/tool runbook build guidance", () => {
       })
     );
     const documents = await generate(owned, "markdown");
-    expect(documents.runbook).toContain("_No build command detected_");
+    expect(documents.runbook).toContain("*No build command detected*");
     expect(documents.runbook).not.toContain("```bash");
     expect(documents.onboarding).toContain("npm run test");
   });
@@ -143,7 +147,11 @@ describe("actual library/tool runbook build guidance", () => {
       await writeFile(owned.response, JSON.stringify(facts));
       for (const format of ["markdown", "html"] as const) {
         const documents = await generate(owned, format);
-        expect(documents.runbook).toContain("_No build command detected_");
+        expect(documents.runbook).toContain(
+          format === "markdown"
+            ? "*No build command detected*"
+            : "<em>No build command detected</em>"
+        );
         expect(documents.runbook).not.toContain(command);
       }
     }

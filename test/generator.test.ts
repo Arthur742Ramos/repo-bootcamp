@@ -255,7 +255,7 @@ describe("generateOnboarding", () => {
   ])("does not invent a test role from %s / %s", (name, command) => {
     const facts = structuredClone(mockFacts);
     facts.quickstart.commands = [{ name, command, source: "README.md" }];
-    expect(generateOnboarding(facts)).toContain("_No test command detected_");
+    expect(generateOnboarding(facts)).toContain("*No test command detected*");
   });
 
   it("uses a real build/test command for verification instead of the first setup command", () => {
@@ -275,7 +275,7 @@ describe("generateOnboarding", () => {
       { name: "compile", command: "npm run dev:build", source: "package.json" },
     ];
     expect(generateBootcamp(facts, mockOptions)).toContain("Build/verify: `npm run dev:build`");
-    expect(generateOnboarding(facts)).toContain("_No test command detected_");
+    expect(generateOnboarding(facts)).toContain("*No test command detected*");
   });
 
   it("does not infer build verification from a Poetry filename", () => {

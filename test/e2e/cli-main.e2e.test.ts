@@ -1211,7 +1211,7 @@ test *FILES:
       if (testCommand) {
         expect(onboarding).toContain(`## Running Tests\n\n\`\`\`bash\n${testCommand}\n\`\`\``);
       } else {
-        expect(onboarding).toContain("_No test command detected_");
+        expect(onboarding).toContain("*No test command detected*");
       }
       const install = commands.find((command) => command.name === "install");
       if (install) {

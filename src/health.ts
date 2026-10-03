@@ -532,7 +532,7 @@ export function generateHealthDocs(health: RepoHealth, projectName: string): str
   lines.push("---");
   lines.push("");
   lines.push(
-    "_Health is computed deterministically from the file scan (no AI), so it's stable across runs._"
+    "*Health is computed deterministically from the file scan (no AI), so it's stable across runs.*"
   );
   lines.push("");
 
