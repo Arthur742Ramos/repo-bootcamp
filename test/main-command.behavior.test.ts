@@ -756,7 +756,7 @@ describe("runMainCommand summary.json", () => {
 });
 
 describe("runMainCommand --watch and --interactive", () => {
-  it("re-scans, re-analyzes and re-writes (issue creation off) on change, and stops on SIGINT", async () => {
+  it.each([false, true])("refreshes watched commits (dirty=%s)", async (dirty) => {
     const repoPath = await createLocalFixtureRepo();
     const outputDir = join(repoPath, "bootcamp-output");
     await symlink(join(repoPath, "src"), join(repoPath, "source-alias"), "junction");
@@ -842,6 +842,14 @@ describe("runMainCommand --watch and --interactive", () => {
       // Retarget the contained alias as a Git update can, then rescan.
       await rm(join(repoPath, "source-alias"));
       await symlink(join(repoPath, "other-src"), join(repoPath, "source-alias"), "junction");
+      // Commit generated fixture artifacts so the clean case is truly clean.
+      execSync("git add -A", { cwd: repoPath, stdio: "ignore" });
+      execSync('git commit -m "fixture artifacts" --no-gpg-sign', {
+        cwd: repoPath,
+        stdio: "ignore",
+      });
+      if (dirty)
+        await writeFile(join(repoPath, "src", "index.ts"), "export const changed = true;\n");
       const initialRepoInfo = orchestrateAnalysis.mock.calls[0][0].repoInfo;
       const initialCommitSha = initialRepoInfo.commitSha;
       // Simulate the exact commit delivered after watch updates the checkout.
@@ -849,6 +857,8 @@ describe("runMainCommand --watch and --interactive", () => {
       await capturedOnChange!(updatedCommitSha);
       expect(initialRepoInfo.commitSha).toBe(initialCommitSha);
       expect(analyzeRepo.mock.calls[0][1].commitSha).toBe(updatedCommitSha);
+      expect(analyzeRepo.mock.calls[0][3].noCache).toBe(dirty);
+      expect(prepareOutputDocuments.mock.calls.at(-1)![0].options.noCache).toBe(dirty);
       expect(prepareOutputDocuments.mock.calls.at(-1)![0].repoInfo.commitSha).toBe(
         updatedCommitSha
       );

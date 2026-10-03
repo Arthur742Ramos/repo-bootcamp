@@ -86,10 +86,13 @@ export async function fetchAndCheckUpdates(
       }
       await execFileAsync("git", ["reset", "--hard", remoteSha], { cwd: repoPath });
     }
-    return { updated: true, newSha: remoteSha };
   }
 
-  return { updated: false, newSha: lastSha };
+  // A fast-forward merge can succeed without moving an ahead local HEAD.
+  // Also detect local commits when the upstream has not changed.
+  const checkedOutSha = await getHeadCommit(repoPath);
+  if (!checkedOutSha) throw new Error("Unable to determine checked-out HEAD after watch update");
+  return { updated: checkedOutSha !== lastSha, newSha: checkedOutSha };
 }
 
 /**

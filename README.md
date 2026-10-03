@@ -487,7 +487,9 @@ bootcamp https://github.com/owner/repo --watch --watch-force
 ```
 
 Each regenerated kit records the updated commit in `summary.json` and
-`ANALYSIS_MANIFEST.json`, and cached phases use that commit identity.
+`ANALYSIS_MANIFEST.json`, and cached phases use that commit identity. Local commits
+are detected even when upstream is unchanged; working-tree edits keep phase
+caching disabled.
 
 ### Environment Doctor
 
