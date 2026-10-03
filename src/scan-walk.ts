@@ -79,6 +79,18 @@ function compileIgnores(patterns: readonly string[]) {
   });
 }
 
+/** Reuse walker exclusion semantics for bounded fixed-name context evidence. */
+export function createFileExclusionMatcher(scanRoot: string, patterns: readonly string[]) {
+  const ignores = compileIgnores(patterns);
+  return (path: string, isDirectory = false): boolean => {
+    const absolutePath = join(scanRoot, path).split(sep).join("/");
+    return ignores.some(({ matcher, absolute, subtree }) => {
+      const subject = absolute ? absolutePath : path;
+      return matcher(subject) || ((isDirectory || subtree) && matcher(`${subject}/`));
+    });
+  };
+}
+
 /**
  * Walk one directory at a time, retaining at most maxFiles entries. Native
  * directory iteration closes its handle on exhaustion, failure, or early return;

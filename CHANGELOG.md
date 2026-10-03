@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Selected pnpm workspace packages now use their proven original repository manager for default install and script commands, while preserving child declarations/locks, selected evidence scope, exclusions and cache identity.
+
 ### Added
 
 - Discover native Cargo build/test guidance for bounded contained single-level workspace members, with complete topology evidence and closed declared dependency membership.

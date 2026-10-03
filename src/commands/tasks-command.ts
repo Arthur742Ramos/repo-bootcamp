@@ -9,6 +9,7 @@ import {
 } from "../tasks.js";
 import { withResolvedRepo } from "./_shared.js";
 import { normalizeScanScope } from "../services/config-resolution.js";
+import { resolveScopedPackageManager } from "../scoped-package-manager.js";
 import { resolveScanRoot } from "../services/scan-scope.js";
 
 /** Options accepted by the `bootcamp tasks` command. */
@@ -126,7 +127,15 @@ export async function runTasksCommand(repoUrl: string, opts: TasksCommandOptions
     const taskRoot = scope.subdir
       ? await resolveScanRoot(repoSource.path, scope.subdir)
       : repoSource.path;
-    const all = await discoverTasks(taskRoot);
+    const manager = scope.subdir
+      ? await resolveScopedPackageManager({
+          repositoryRoot: repoSource.path,
+          selectedRoot: taskRoot,
+        })
+      : undefined;
+    const all = manager
+      ? await discoverTasks(taskRoot, { packageManager: manager.packageManager })
+      : await discoverTasks(taskRoot);
     const tasks = category ? all.filter((t) => t.category === category) : all;
 
     if (opts.json) {

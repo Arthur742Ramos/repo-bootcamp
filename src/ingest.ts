@@ -20,7 +20,8 @@ import type {
 } from "./types.js";
 import { SKIP_DIRS, isPathInsideDir } from "./utils.js";
 import { readContainedFile } from "./fs-safe.js";
-import { detectPackageManager, discoverTasks, toCommands } from "./tasks.js";
+import { discoverTasks, toCommands } from "./tasks.js";
+import { resolveScopedPackageManager } from "./scoped-package-manager.js";
 import { walkRepositoryFiles } from "./scan-walk.js";
 import { resolveScanRoot } from "./services/scan-scope.js";
 import frameworkMaps from "./data/framework-maps.json" with { type: "json" };
@@ -929,7 +930,8 @@ export async function scanRepo(
   // Scan files (`options` scopes/excludes the walk; see scanDirectory)
   const files = await scanDirectory(repoPath, maxFiles, options);
   // File paths from the validated walk are relative to the selected directory.
-  // Read every piece of onboarding evidence from that same directory.
+  // Read onboarding evidence there; only proven manager context may use the
+  // explicitly supplied outer repository metadata.
   const scanRoot = options.subdir ? resolve(repoPath, options.subdir) : repoPath;
 
   // Detect stack
@@ -938,7 +940,13 @@ export async function scanRepo(
 
   // Resolve the manager once so onboarding evidence and runnable commands use
   // the same manifest/lockfile selection as the standalone tasks command.
-  const packageManager = await detectPackageManager(scanRoot);
+  const selectedFiles = new Set(files.filter((file) => !file.isDirectory).map((file) => file.path));
+  const { packageManager, packageManagerContextFingerprint } = await resolveScopedPackageManager({
+    repositoryRoot: repoPath,
+    selectedRoot: scanRoot,
+    selectedFiles,
+    exclude: options.exclude,
+  });
   if (files.some((file) => file.path === "package.json")) {
     stack.packageManager = packageManager;
   }
@@ -947,7 +955,6 @@ export async function scanRepo(
   const cargoHash = createHash("sha256");
   let hasCargoEvidence = false;
   let cargoWorkspaceFingerprint: string | undefined;
-  const selectedFiles = new Set(files.filter((file) => !file.isDirectory).map((file) => file.path));
   let goModFingerprint: string | undefined;
   const goPackageHash = createHash("sha256");
   let hasGoPackageEvidence = false;
@@ -998,6 +1005,7 @@ export async function scanRepo(
     stack,
     monorepo,
     commands,
+    ...(packageManagerContextFingerprint ? { packageManagerContextFingerprint } : {}),
     ...(hasTaskfiles ? { taskfileFingerprint: taskfileHash.digest("hex") } : {}),
     ...(hasCargoEvidence ? { cargoFingerprint: cargoHash.digest("hex") } : {}),
     ...(cargoWorkspaceFingerprint ? { cargoWorkspaceFingerprint } : {}),
