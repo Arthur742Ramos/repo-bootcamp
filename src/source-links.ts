@@ -27,12 +27,15 @@ export function buildBlobUrl(repoInfo: RepoInfo | undefined, filePath: string): 
     )
     .join("/");
   const base = `https://${repoInfo.host}/${repoInfo.owner}/${repoInfo.repo}`;
+  // Tag checkouts report detached HEAD; link the concrete analyzed content.
+  const ref =
+    repoInfo.branch === "HEAD" && repoInfo.commitSha ? repoInfo.commitSha : repoInfo.branch;
   switch (repoInfo.provider) {
     case "gitlab":
-      return `${base}/-/blob/${repoInfo.branch}/${encoded}`;
+      return `${base}/-/blob/${ref}/${encoded}`;
     case "bitbucket":
-      return `${base}/src/${repoInfo.branch}/${encoded}`;
+      return `${base}/src/${ref}/${encoded}`;
     default:
-      return `${base}/blob/${repoInfo.branch}/${encoded}`;
+      return `${base}/blob/${ref}/${encoded}`;
   }
 }

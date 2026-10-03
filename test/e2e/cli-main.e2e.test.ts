@@ -183,6 +183,97 @@ describe("bootcamp CLI", () => {
     tempDirs.length = 0;
   });
 
+  it.each([
+    ["standard", "release/v2"],
+    ["fast", "release/v2"],
+    ["standard", "v2.0"],
+    ["fast", "v2.0"],
+  ])("recreates the analyzed %s checkout for remote ref %s", async (mode, ref) => {
+    const tempDir = await mkdtemp(join(tmpdir(), "bootcamp-ref-kit-"));
+    tempDirs.push(tempDir);
+    const repo = await createFixtureRepo(tempDir);
+    execFileSync("git", ["checkout", "-b", "release/v2"], { cwd: repo, stdio: "ignore" });
+    const selected = join(repo, "packages", "release app");
+    await mkdir(join(selected, "src"), { recursive: true });
+    await writeFile(
+      join(selected, "package.json"),
+      JSON.stringify({ name: "release-app", scripts: { test: "echo fixture" } })
+    );
+    await writeFile(join(selected, "src", "index.ts"), "export const releaseOnly = true;\n");
+    execFileSync("git", ["add", "-A"], { cwd: repo, stdio: "ignore" });
+    execFileSync("git", ["commit", "--no-gpg-sign", "-m", "Release-only package"], {
+      cwd: repo,
+      stdio: "ignore",
+    });
+    execFileSync("git", ["tag", "v2.0"], { cwd: repo, stdio: "ignore" });
+    const expectedSha = execFileSync("git", ["rev-parse", "HEAD"], {
+      cwd: repo,
+      encoding: "utf-8",
+    }).trim();
+    execFileSync("git", ["checkout", "main"], { cwd: repo, stdio: "ignore" });
+    const url = "https://github.com/owned/fixture-cli-repo";
+    const response = join(tempDir, "response.json");
+    await writeFile(response, JSON.stringify(buildMockFacts("owned/fixture-cli-repo")));
+    const env = {
+      NODE_ENV: "test",
+      REPO_BOOTCAMP_TEST_LLM_RESPONSE_FILE: response,
+      GIT_CONFIG_COUNT: "1",
+      GIT_CONFIG_KEY_0: `url.${pathToFileURL(repo).href}.insteadOf`,
+      GIT_CONFIG_VALUE_0: url + ".git",
+    };
+    const output = join(tempDir, "output");
+    const result = await runCli(
+      [
+        url,
+        "--branch",
+        ref,
+        "--subdir",
+        "packages/release app",
+        "--no-cache",
+        "--quiet",
+        "--output",
+        output,
+        ...(mode === "fast" ? ["--fast"] : []),
+      ],
+      env,
+      60_000,
+      tempDir
+    );
+    expect(result.exitCode, result.stdout + result.stderr).toBe(0);
+    const guide = await readFile(join(output, "ONBOARDING.md"), "utf-8");
+    expect(guide).toContain(`git clone --branch '${ref}' -- '${url}.git'`);
+    expect(guide).toContain("cd -- 'fixture-cli-repo/packages/release app'");
+    expect(guide).toContain("npm test");
+    const manifest = JSON.parse(await readFile(join(output, "ANALYSIS_MANIFEST.json"), "utf-8"));
+    expect(manifest.repository.commitSha).toBe(expectedSha);
+    expect(manifest.repository.branch).toBe(ref === "v2.0" ? "HEAD" : "release/v2");
+    const sourceRef = ref === "v2.0" ? expectedSha : "release/v2";
+    const codemap = await readFile(join(output, "CODEMAP.md"), "utf-8");
+    expect(codemap).toContain(
+      `https://github.com/owned/fixture-cli-repo/blob/${sourceRef}/packages/release%20app/src/index.ts`
+    );
+    if (ref === "v2.0") expect(codemap).not.toContain("/blob/HEAD/");
+
+    const clone = guide.split("\n").find((line) => line.startsWith("git clone "))!;
+    const cloneArgs = clone.match(/^git clone --branch '([^']+)' -- '([^']+)'$/)!;
+    expect(cloneArgs).not.toBeNull();
+    const verify = join(tempDir, "verify");
+    await mkdir(verify);
+    execFileSync("git", ["clone", "--branch", cloneArgs[1], "--", cloneArgs[2]], {
+      cwd: verify,
+      env: { ...process.env, ...env },
+      stdio: "ignore",
+    });
+    const cloned = join(verify, "fixture-cli-repo");
+    expect(
+      execFileSync("git", ["rev-parse", "HEAD"], { cwd: cloned, encoding: "utf-8" }).trim()
+    ).toBe(expectedSha);
+    expect(
+      await readFile(join(cloned, "packages", "release app", "src", "index.ts"), "utf-8")
+    ).toContain("releaseOnly");
+    expect(await readdir(join(tempDir, ".tmp"))).toEqual([]);
+  });
+
   it.each(["standard", "fast"])(
     "uses only public zero-argument Just commands in saved %s onboarding guidance",
     async (mode) => {

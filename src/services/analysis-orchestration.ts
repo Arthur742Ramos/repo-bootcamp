@@ -291,6 +291,7 @@ export async function prepareOutputDocuments({
       content: generateOnboarding(finalFacts, options, {
         repoInfo,
         localPath: repoInfo.url.startsWith("file://") ? repoPath : undefined,
+        ...(!repoInfo.url.startsWith("file://") && options.branch ? { ref: options.branch } : {}),
       }),
     },
     { name: "ARCHITECTURE.md", content: generateArchitecture(finalFacts, options, repoInfo) },

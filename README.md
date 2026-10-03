@@ -1014,7 +1014,7 @@ Use `--subdir packages/app` to analyze a package within a repository. Documentat
 
 | Option                       | Description                                                                  | Default             |
 | ---------------------------- | ---------------------------------------------------------------------------- | ------------------- |
-| `-b, --branch <branch>`      | Branch to analyze                                                            | default branch      |
+| `-b, --branch <branch>`      | Branch or tag to analyze (also used by remote onboarding clone instructions) | default branch      |
 | `-f, --focus <focus>`        | Focus: onboarding, architecture, contributing, all                           | `all`               |
 | `-a, --audience <type>`      | Target: all, backend, frontend, sre                                          | `all`               |
 | `-o, --output <dir>`         | Output directory                                                             | `./bootcamp-{repo}` |

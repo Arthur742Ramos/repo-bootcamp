@@ -401,6 +401,25 @@ describe("prepareOutputDocuments", () => {
       localPath: "/repo/packages/my app",
     });
   });
+  it("passes the requested tag through detached-HEAD metadata to onboarding", async () => {
+    const repoInfo = { ...mockRepoInfo, branch: "HEAD" };
+    const options = { ...defaultOptions, branch: "v2.0" };
+    await prepareOutputDocuments({
+      repoPath: "/repo",
+      repoInfo,
+      scanResult: mockScanResult,
+      facts: mockFacts,
+      options,
+      config: null,
+      styleConfig: defaultStyleConfig,
+      progress: { update: vi.fn() } as any,
+    });
+    expect(generateOnboarding).toHaveBeenCalledWith(expect.anything(), options, {
+      repoInfo,
+      localPath: undefined,
+      ref: "v2.0",
+    });
+  });
   it("generates core documents", async () => {
     const progress = { update: vi.fn(), succeed: vi.fn(), recordToolCall: vi.fn() } as any;
 
