@@ -832,6 +832,12 @@ run this?"_
 
 Taskfile discovery preserves shell-safe namespaced and quoted task names, omits internal helpers, and reads descriptions from YAML without executing task commands or templates.
 
+Package script commands retain each declared name as one POSIX shell argument,
+including spaces, quotes, and shell punctuation. Ordinary names such as `test:e2e`
+remain unchanged; leading-hyphen names use the manager's `run --` option terminator.
+Script bodies are never executed during discovery. These command strings target
+POSIX shells such as Bash and Zsh; other shells may require different quoting.
+
 Make discovery preserves literal multi-target rules and dotted public names in file order, including continued rule headers and trailing comments. Variable assignments, continued values/recipes, and multiline variable bodies do not declare tasks; empty and double-colon rules remain runnable tasks. It does not evaluate includes, expressions, or recipes.
 
 Just discovery advertises public recipes that can be invoked without arguments.

@@ -425,6 +425,74 @@ test *FILES:
   );
 
   it.each(["standard", "fast"])(
+    "keeps literal package script commands in the generated %s guide",
+    async (mode) => {
+      const tempDir = await mkdtemp(join(tmpdir(), "bootcamp-package-script-kit-"));
+      tempDirs.push(tempDir);
+      const repo = await createFixtureRepo(tempDir);
+      await writeFile(
+        join(repo, "package.json"),
+        JSON.stringify({
+          name: "fixture-cli-repo",
+          private: true,
+          scripts: {
+            "build app": "echo build",
+            "test unit": "echo unit",
+            "test'quoted": "echo quote",
+            "dev;literal": "echo dev",
+            "--test": "echo option",
+          },
+        })
+      );
+      const facts = buildMockFacts(`local/${basename(repo)}`);
+      facts.quickstart.commands = [];
+      facts.quickstart.steps = ["Read the repository setup guide"];
+      const response = join(tempDir, "response.json");
+      const output = join(tempDir, "out");
+      await writeFile(response, JSON.stringify(facts));
+      const result = await runCli(
+        [
+          repo,
+          "--no-clone",
+          "--no-cache",
+          ...(mode === "fast" ? ["--fast"] : []),
+          "--output",
+          output,
+        ],
+        {
+          NODE_ENV: "test",
+          REPO_BOOTCAMP_TEST_LLM_RESPONSE_FILE: response,
+        }
+      );
+      expect(result.exitCode).toBe(0);
+      const generated = JSON.parse(await readFile(join(output, "repo_facts.json"), "utf8"));
+      const commands = [
+        "npm run 'build app'",
+        "npm run 'test unit'",
+        `npm run 'test'"'"'quoted'`,
+        "npm run 'dev;literal'",
+        "npm run -- --test",
+      ];
+      expect(
+        generated.quickstart.commands.map((command: { command: string }) => command.command)
+      ).toEqual(commands);
+      expect(
+        generated.quickstart.commands.map((command: { name: string }) => command.name)
+      ).toEqual(["build app", "test unit", "test'quoted", "dev;literal", "--test"]);
+      expect(generated.quickstart.steps).toEqual(facts.quickstart.steps);
+      const onboarding = await readFile(join(output, "ONBOARDING.md"), "utf8");
+      const bootcamp = await readFile(join(output, "BOOTCAMP.md"), "utf8");
+      for (const command of commands)
+        expect(onboarding).toContain(`\`\`\`bash\n${command}\n\`\`\``);
+      expect(onboarding).toContain("## Running Tests\n\n```bash\nnpm run 'test unit'\n```");
+      for (const command of commands) expect(bootcamp).toContain(`\`${command}\``);
+      expect(bootcamp).toContain("Build/verify: `npm run 'build app'`");
+      expect(onboarding).not.toContain("```bash\nnpm run test unit\n```");
+    },
+    60_000
+  );
+
+  it.each(["standard", "fast"])(
     "uses scoped local Task commands when the saved %s response has no commands",
     async (mode) => {
       const tempDir = await mkdtemp(join(tmpdir(), "bootcamp-task-kit-"));
