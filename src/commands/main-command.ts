@@ -1,6 +1,6 @@
 import chalk from "chalk";
-import { mkdir, writeFile } from "fs/promises";
-import { join, resolve } from "path";
+import { mkdir, writeFile, realpath } from "fs/promises";
+import { join, resolve, relative, sep } from "path";
 
 import { analyzeRepo, type AnalysisStats } from "../agent.js";
 import { formatDocName, type OutputFormat } from "../formatter.js";
@@ -318,6 +318,15 @@ export async function runMainCommand(repoUrl: string, options: BootcampOptions):
     scanResult = scanScope
       ? await scanRepositoryFiles(repoPath, options.maxFiles, scanScope)
       : await scanRepositoryFiles(repoPath, options.maxFiles);
+    if (options.subdir) {
+      // A contained directory alias is valid for scanning; Git source links
+      // must point to its actual repository path rather than alias/file.
+      const [root, selected] = await Promise.all([
+        realpath(repoPath),
+        realpath(resolve(repoPath, options.subdir)),
+      ]);
+      repoInfo.sourcePathPrefix = relative(root, selected).split(sep).join("/");
+    }
     runStats.scanTime = Date.now() - scanStart;
     runStats.filesScanned = scanResult.files.length;
     progress.succeed(
@@ -343,9 +352,6 @@ export async function runMainCommand(repoUrl: string, options: BootcampOptions):
   // paths. Every file-reading consumer must resolve those paths from it.
   // Keep repoPath as the outer checkout for clone cleanup and Git watching.
   const analysisRepoPath = options.subdir ? resolve(repoPath, options.subdir) : repoPath;
-  // Source paths remain relative to the selected directory; remote links
-  // need its repository-relative prefix to resolve the original files.
-  if (options.subdir) repoInfo.sourcePathPrefix = options.subdir;
 
   const analysisStart = Date.now();
   progress.startPhase("analyze");

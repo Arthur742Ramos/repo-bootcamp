@@ -1,5 +1,5 @@
 import { execSync } from "child_process";
-import { mkdtemp, mkdir, rm, writeFile, readFile } from "fs/promises";
+import { mkdtemp, mkdir, rm, writeFile, readFile, symlink } from "fs/promises";
 import { tmpdir } from "os";
 import { join } from "path";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -128,10 +128,12 @@ afterEach(() => {
 });
 
 describe("runMainCommand --no-clone behavior", () => {
-  it.each([undefined, "src"])(
+  it.each([undefined, "src", "source-alias"])(
     "uses local directory and scopes analysis to %s without cloning",
     async (subdir) => {
       const repoPath = await createLocalFixtureRepo();
+      if (subdir === "source-alias")
+        await symlink(join(repoPath, "src"), join(repoPath, subdir), "junction");
       const outputDir = join(repoPath, "bootcamp-output");
       const facts = makeFacts();
       const scanResult = makeScanResult();
@@ -234,7 +236,9 @@ describe("runMainCommand --no-clone behavior", () => {
       expect(orchestrateAnalysis).toHaveBeenCalledWith(
         expect.objectContaining({
           repoPath: selectedRoot,
-          repoInfo: expect.objectContaining({ ...(subdir ? { sourcePathPrefix: subdir } : {}) }),
+          repoInfo: expect.objectContaining({
+            ...(subdir ? { sourcePathPrefix: subdir === "source-alias" ? "src" : subdir } : {}),
+          }),
         })
       );
       expect(prepareOutputDocuments).toHaveBeenCalledWith(
