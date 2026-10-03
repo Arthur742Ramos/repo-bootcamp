@@ -155,6 +155,26 @@ test("Back restores the chosen section, expanded disclosures, focus and reading 
   expect(await page.locator("#modal").evaluate((el) => el.scrollTop)).toBeCloseTo(scroll, 0);
 });
 
+test("Back restores the exact heading even when anchor text is empty or collides", async ({
+  page,
+}) => {
+  await mockDocuments(page, {
+    "GUIDE.md": "# Guide\n\n## Setup\n\n## Setup\n\n## Setup-1\n\n## 環境設定",
+    "OTHER.md": "# Other guide",
+  });
+  for (const index of ["3", "4"]) {
+    await openFile(page, "GUIDE.md");
+    await page.getByRole("combobox", { name: "Jump to section" }).selectOption(index);
+    const heading = page.locator("#renderedContent h2").nth(Number(index) - 1);
+    await expect(heading).toBeFocused();
+    await openFile(page, "OTHER.md");
+    await page.getByRole("button", { name: "Back to GUIDE.md", exact: true }).click();
+    await expect(heading).toBeFocused();
+    await expect(page.getByRole("combobox", { name: "Jump to section" })).toHaveValue(index);
+    await page.keyboard.press("Escape");
+  }
+});
+
 test("outline hides in source mode and for documents with fewer than two headings", async ({
   page,
 }) => {
@@ -184,9 +204,9 @@ test("keyboard-only section selection focuses its heading and Escape returns to 
   await openFile(page, "GUIDE.md");
   const outline = page.getByRole("combobox", { name: "Jump to section" });
   await outline.focus();
-  await page.keyboard.press("ArrowDown");
+  await page.keyboard.press("v");
   await page.keyboard.press("Enter");
-  await expect(page.locator("#renderedContent h1")).toBeFocused();
+  await expect(page.locator('[data-anchor="validation"]')).toBeFocused();
   await page.keyboard.press("Escape");
   await expect(page.getByRole("button", { name: "Analyze", exact: true })).toBeFocused();
   await expect(page.locator("#previewSection option")).toHaveCount(1);

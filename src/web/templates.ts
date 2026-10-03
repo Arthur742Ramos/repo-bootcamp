@@ -1537,7 +1537,7 @@ export function getIndexHtml(nonce?: string): string {
         scrollTop: document.getElementById('modal').scrollTop,
         contentScrollTop: reader.scrollTop,
         contentScrollLeft: reader.scrollLeft,
-        focusAnchor: rendered && reader.contains(active) ? active.dataset.anchor : null,
+        focusHeading: rendered && reader.contains(active) ? previewHeadings().indexOf(active) : -1,
         focusLink: rendered ? Array.from(reader.querySelectorAll('a[href]')).indexOf(active) : -1,
       };
     }
@@ -1550,9 +1550,8 @@ export function getIndexHtml(nonce?: string): string {
         detail.open = context.openDetails.includes(index);
       });
       const reader = document.getElementById(rendered ? 'renderedContent' : 'modalContent');
-      const heading = rendered && context.focusAnchor
-        ? Array.from(reader.querySelectorAll('[data-anchor]')).find(item => item.dataset.anchor === context.focusAnchor)
-        : null;
+      const heading = rendered && context.focusHeading >= 0
+        ? previewHeadings()[context.focusHeading] : null;
       const link = rendered && context.focusLink >= 0
         ? reader.querySelectorAll('a[href]')[context.focusLink] : null;
       (heading || link || reader).focus({ preventScroll: true });
