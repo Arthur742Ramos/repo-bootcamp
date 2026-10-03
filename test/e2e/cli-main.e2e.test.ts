@@ -183,6 +183,117 @@ describe("bootcamp CLI", () => {
     tempDirs.length = 0;
   });
 
+  it.each([false, true])(
+    "preserves literal Git paths in comparison guidance (fast=%s)",
+    async (fast) => {
+      const tempDir = await mkdtemp(join(tmpdir(), "bootcamp-diff-paths-cli-"));
+      tempDirs.push(tempDir);
+      const repoPath = await createFixtureRepo(tempDir);
+      const names =
+        process.platform === "win32"
+          ? ["café", "with space", "with`tick"]
+          : [
+              "café",
+              "with space",
+              "with`tick",
+              "with\ttab",
+              "with\nnewline",
+              'with"quote',
+              "with\\slash",
+            ];
+      for (const name of names) {
+        await mkdir(join(repoPath, name));
+        await writeFile(
+          join(repoPath, name, "index.ts"),
+          "export const removedLiteral=1;\nexport const kept=2;\n"
+        );
+        await writeFile(join(repoPath, name, ".env.example"), "EXISTING=1\n");
+      }
+      execFileSync("git", ["add", "-A"], { cwd: repoPath, stdio: "ignore" });
+      execFileSync("git", ["commit", "--no-gpg-sign", "-m", "Literal base"], {
+        cwd: repoPath,
+        stdio: "ignore",
+      });
+      const base = execFileSync("git", ["rev-parse", "HEAD"], {
+        cwd: repoPath,
+        encoding: "utf8",
+      }).trim();
+      for (const [index, name] of names.entries()) {
+        await writeFile(
+          join(repoPath, name, "index.ts"),
+          `export const kept=2;\nconst value=process.env.CODE_LITERAL_${index};\n`
+        );
+        await writeFile(
+          join(repoPath, name, ".env.example"),
+          `EXISTING=1\nENV_LITERAL_${index}=1\n`
+        );
+      }
+      execFileSync("git", ["add", "-A"], { cwd: repoPath, stdio: "ignore" });
+      execFileSync("git", ["commit", "--no-gpg-sign", "-m", "Literal head"], {
+        cwd: repoPath,
+        stdio: "ignore",
+      });
+      const responseFile = join(tempDir, "response.json");
+      await writeFile(responseFile, JSON.stringify(buildMockFacts("owned/literal-paths")));
+      const preload = join(tempDir, "owned-home.mjs");
+      await writeFile(
+        preload,
+        `import os from 'node:os';import {syncBuiltinESMExports} from 'node:module';os.homedir=()=>${JSON.stringify(join(tempDir, "home"))};syncBuiltinESMExports();`
+      );
+      const env: NodeJS.ProcessEnv = {
+        ...process.env,
+        NODE_ENV: "test",
+        REPO_BOOTCAMP_TEST_LLM_RESPONSE_FILE: responseFile,
+      };
+      delete env.NODE_OPTIONS;
+      const output = join(tempDir, "output");
+      const stdout = execFileSync(
+        process.execPath,
+        [
+          "--import",
+          pathToFileURL(join(process.cwd(), "node_modules/tsx/dist/loader.mjs")).href,
+          "--import",
+          pathToFileURL(preload).href,
+          join(process.cwd(), "src/cli.ts"),
+          repoPath,
+          "--no-clone",
+          "--no-cache",
+          "--compare",
+          base,
+          "--output",
+          output,
+          ...(fast ? ["--fast"] : []),
+        ],
+        {
+          cwd: tempDir,
+          env,
+          encoding: "utf8",
+          timeout: 60_000,
+          maxBuffer: 4 * 1024 * 1024,
+          stdio: ["ignore", "pipe", "pipe"],
+        }
+      );
+      expect(stdout).toContain("Bootcamp Generated Successfully!");
+      const diff = await readFile(join(output, "DIFF.md"), "utf8");
+      for (const index of names.keys()) {
+        expect(diff).toContain(`ENV_LITERAL_${index}`);
+        expect(diff).toContain(`CODE_LITERAL_${index}`);
+      }
+      expect(diff).toContain("Removed export: removedLiteral in café/index.ts");
+      expect(diff).toContain("`café/index.ts`");
+      expect(diff).toContain("``with`tick/index.ts``");
+      expect(diff).not.toContain("caf\\303\\251");
+      if (process.platform !== "win32") {
+        expect(diff).toContain('"with\\ttab/index.ts"');
+        expect(diff).toContain('"with\\nnewline/index.ts"');
+      }
+      expect(await readFile(join(output, "ONBOARDING.md"), "utf8")).toContain("npm test");
+      expect(
+        JSON.parse(await readFile(join(output, "ANALYSIS_MANIFEST.json"), "utf8"))
+      ).toHaveProperty("schemaVersion");
+    }
+  );
+
   it.each([
     ["standard", "release/v2"],
     ["fast", "release/v2"],

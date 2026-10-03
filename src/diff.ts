@@ -7,7 +7,12 @@ import { execFile } from "child_process";
 import { promisify } from "util";
 import type { DiffSummary, RepoInfo } from "./types.js";
 import { packageScriptCommand } from "./package-script-command.js";
-import { isMultilineCode, markdownCodeBlock, markdownCodeSpan } from "./markdown-code.js";
+import {
+  isMultilineCode,
+  markdownCodeBlock,
+  markdownCodeSpan,
+  markdownCommandName,
+} from "./markdown-code.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -151,7 +156,7 @@ export async function getChangedFiles(
   try {
     const { stdout } = await execFileAsync(
       "git",
-      ["diff", "--name-status", `${baseRef}...${headRef}`],
+      ["diff", "--name-status", "-z", `${baseRef}...${headRef}`],
       { cwd: repoPath, maxBuffer: DIFF_MAX_BUFFER }
     );
 
@@ -159,12 +164,13 @@ export async function getChangedFiles(
     const removed: string[] = [];
     const modified: string[] = [];
 
-    for (const line of stdout.trim().split("\n")) {
-      if (!line) continue;
-      const parts = line.split("\t");
-      const status = parts[0];
-      // Renames/copies emit `R<score>\toldpath\tnewpath`; the new path is last.
-      const path = parts[parts.length - 1];
+    // NUL records preserve literal tabs, newlines and Git-quoted characters.
+    const fields = stdout.split("\0");
+    for (let index = 0; index < fields.length - 1;) {
+      const status = fields[index++];
+      let path = fields[index++];
+      // Renames/copies have two path fields; keep the existing new-path API.
+      if (status.startsWith("R") || status.startsWith("C")) path = fields[index++];
 
       switch (status[0]) {
         case "A":
@@ -406,7 +412,9 @@ async function detectBreakingChanges(
       for (const line of removedExports.slice(0, MAX_REMOVED_EXPORTS_PER_FILE)) {
         const match = line.match(/export\s+(?:const|function|class|type|interface)\s+(\w+)/);
         if (match) {
-          breakingChanges.push(`Removed export: ${match[1]} in ${file}`);
+          breakingChanges.push(
+            `Removed export: ${match[1]} in ${markdownCommandName(diffPathLabel(file))}`
+          );
         }
       }
     } catch (err: unknown) {
@@ -656,6 +664,20 @@ export async function analyzeDiff(
   };
 }
 
+/** Escape control characters only in display labels, retaining exact API paths. */
+function diffPathLabel(path: string): string {
+  const isControl = (code: number) =>
+    code < 32 || (code >= 127 && code <= 159) || code === 0x2028 || code === 0x2029;
+  if (![...path].some((character) => isControl(character.codePointAt(0)!))) return path;
+  // JSON handles ASCII controls; explicitly escape the remaining line/control marks.
+  const parts: string[] = [];
+  for (const character of JSON.stringify(path)) {
+    const code = character.codePointAt(0)!;
+    parts.push(isControl(code) ? `\\u${code.toString(16).padStart(4, "0")}` : character);
+  }
+  return parts.join("");
+}
+
 /**
  * Generate DIFF.md documentation
  */
@@ -760,7 +782,7 @@ export function generateDiffDocs(diff: DiffSummary, projectName: string): string
     lines.push("## Files Added");
     lines.push("");
     for (const file of diff.filesAdded.slice(0, MAX_DIFF_DOC_FILES)) {
-      lines.push(`- \`${file}\``);
+      lines.push(`- ${markdownCodeSpan(diffPathLabel(file))}`);
     }
     if (diff.filesAdded.length > MAX_DIFF_DOC_FILES) {
       lines.push(`- ... and ${diff.filesAdded.length - MAX_DIFF_DOC_FILES} more`);
@@ -772,7 +794,7 @@ export function generateDiffDocs(diff: DiffSummary, projectName: string): string
     lines.push("## Files Removed");
     lines.push("");
     for (const file of diff.filesRemoved.slice(0, MAX_DIFF_DOC_FILES)) {
-      lines.push(`- \`${file}\``);
+      lines.push(`- ${markdownCodeSpan(diffPathLabel(file))}`);
     }
     if (diff.filesRemoved.length > MAX_DIFF_DOC_FILES) {
       lines.push(`- ... and ${diff.filesRemoved.length - MAX_DIFF_DOC_FILES} more`);
@@ -784,7 +806,7 @@ export function generateDiffDocs(diff: DiffSummary, projectName: string): string
     lines.push("## Files Modified");
     lines.push("");
     for (const file of diff.filesModified.slice(0, MAX_DIFF_DOC_MODIFIED)) {
-      lines.push(`- \`${file}\``);
+      lines.push(`- ${markdownCodeSpan(diffPathLabel(file))}`);
     }
     if (diff.filesModified.length > MAX_DIFF_DOC_MODIFIED) {
       lines.push(`- ... and ${diff.filesModified.length - MAX_DIFF_DOC_MODIFIED} more`);

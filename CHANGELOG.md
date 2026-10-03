@@ -16,6 +16,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Preserve literal Git changed-file paths in comparison reports, including Unicode and rename/copy destinations, so environment and export changes are inspected correctly and control characters/backticks remain safe display labels.
+
 - Keep web analysis admission within the 100-job limit while an evicted job's output cleanup is pending, preserving active jobs and existing cleanup behavior.
 - Recover a PR's shared comparison ancestor with bounded targeted history fetches, and use that same baseline for file, dependency, command, environment and breaking-change guidance; retain public ref labels, local compare context and clone cleanup, with clear unrelated/history-limit failures.
 
