@@ -1,3 +1,4 @@
+import { join } from "path";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
 vi.mock("chalk", () => {
@@ -157,8 +158,12 @@ describe("issue result propagation", () => {
           })
         )
       ).rejects.toThrow("1 starter issue could not be created");
-      expect(writeFile).toHaveBeenCalledWith("/tmp/out/BOOTCAMP.md", "# Boot", "utf-8");
-      expect(writeFile).toHaveBeenCalledWith("/tmp/out/repo_facts.json", '{"a":1}', "utf-8");
+      expect(writeFile).toHaveBeenCalledWith(join("/tmp/out", "BOOTCAMP.md"), "# Boot", "utf-8");
+      expect(writeFile).toHaveBeenCalledWith(
+        join("/tmp/out", "repo_facts.json"),
+        '{"a":1}',
+        "utf-8"
+      );
       expect(vi.mocked(writeFile).mock.invocationCallOrder[1]).toBeLessThan(
         vi.mocked(createIssuesFromTasks).mock.invocationCallOrder[0]
       );
