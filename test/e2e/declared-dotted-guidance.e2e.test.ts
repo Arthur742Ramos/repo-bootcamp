@@ -123,7 +123,9 @@ describe("actual declared dotted command guidance", () => {
         const docs = await generate(owned, format);
         expect(docs.bootcamp).toContain(`${prefix} ${build}`);
         expect(docs.onboarding).toContain(`${prefix} ${test}`);
-        expect(docs.onboarding).not.toContain("_No test command detected_");
+        expect(docs.onboarding).not.toContain(
+          format === "markdown" ? "*No test command detected*" : "<em>No test command detected</em>"
+        );
         expect(docs.facts.quickstart.commands).toContainEqual(
           expect.objectContaining({
             name: build,
@@ -154,7 +156,9 @@ describe("actual declared dotted command guidance", () => {
       for (const format of ["markdown", "html"] as const) {
         const docs = await generate(owned, format);
         expect(docs.bootcamp).not.toContain("Build/verify:");
-        expect(docs.onboarding).toContain("_No test command detected_");
+        expect(docs.onboarding).toContain(
+          format === "markdown" ? "*No test command detected*" : "<em>No test command detected</em>"
+        );
         expect(docs.onboarding).not.toContain("Start the dev server/watch mode");
         expect(docs.onboarding).toContain("build.js");
       }
@@ -176,7 +180,7 @@ describe("actual declared dotted command guidance", () => {
       await writeFile(owned.response, JSON.stringify(response));
       const docs = await generate(owned, "markdown");
       expect(docs.bootcamp).not.toContain("Build/verify:");
-      expect(docs.onboarding).toContain("_No test command detected_");
+      expect(docs.onboarding).toContain("*No test command detected*");
       expect(docs.onboarding).not.toContain("Start the dev server/watch mode");
     }
   );
@@ -204,7 +208,7 @@ describe("actual declared dotted command guidance", () => {
       await writeFile(owned.response, JSON.stringify(response));
       const docs = await generate(owned, "markdown");
       expect(docs.bootcamp).not.toContain("Build/verify:");
-      expect(docs.onboarding).toContain("_No test command detected_");
+      expect(docs.onboarding).toContain("*No test command detected*");
       expect(docs.facts.quickstart.commands).toEqual(response.quickstart.commands);
     }
   );
@@ -217,7 +221,7 @@ describe("actual declared dotted command guidance", () => {
     );
     const docs = await generate(owned, "markdown");
     expect(docs.bootcamp).not.toContain("Build/verify:");
-    expect(docs.onboarding).toContain("_No test command detected_");
+    expect(docs.onboarding).toContain("*No test command detected*");
     expect(docs.onboarding).toContain("make build.prod");
     await expect(readFile(join(owned.repo, "recipe-was-executed.txt"))).rejects.toMatchObject({
       code: "ENOENT",
