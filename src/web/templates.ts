@@ -292,13 +292,13 @@ export function getIndexHtml(nonce?: string): string {
       padding: 0.45rem 0.55rem;
     }
     .command-prefix { color: var(--success); font: 700 0.8rem var(--font-mono); }
-    .command-row code { min-width: 0; flex: 1; overflow-wrap: anywhere; color: var(--ink); font: 0.78rem var(--font-mono); }
+    .command-row code { white-space: pre-wrap; min-width: 0; flex: 1; overflow-wrap: anywhere; color: var(--ink); font: 0.78rem var(--font-mono); }
     .command-row .icon-btn { flex: 0 0 auto; }
     .quickstart-list { display: grid; gap: 0.5rem; margin-top: 0.65rem; }
     .quickstart-item { display: flex; align-items: center; gap: 0.65rem; min-width: 0; }
     .quickstart-copy { display: flex; align-items: baseline; gap: 0.55rem; min-width: 0; flex: 1; }
     .quickstart-name { flex: 0 0 auto; color: var(--ink-muted); font-size: 0.72rem; font-weight: 600; }
-    .quickstart-copy code { min-width: 0; overflow-wrap: anywhere; color: var(--ink); font: 0.78rem var(--font-mono); }
+    .quickstart-copy code { white-space: pre-wrap; min-width: 0; overflow-wrap: anywhere; color: var(--ink); font: 0.78rem var(--font-mono); }
     .quickstart-source { color: var(--ink-subtle); font: 0.68rem var(--font-mono); }
     .command-row .icon-btn, .quickstart-item .icon-btn { padding: 0.35rem 0.6rem; font-size: 0.72rem; }
     .ask-panel { margin-top: 1rem; border-top: 1px solid var(--border); padding-top: 0.9rem; }
@@ -400,6 +400,7 @@ export function getIndexHtml(nonce?: string): string {
     .markdown-preview h3 { font-size: 1.15rem; }
     .markdown-preview p { max-width: 72ch; }
     .markdown-preview ul, .markdown-preview ol { padding-left: 1.5rem; }
+    .markdown-preview :not(pre) > code { white-space: pre-wrap; }
     .markdown-preview code { font-family: var(--font-mono); font-size: 0.875em; }
     .markdown-preview a[href] { color: var(--accent); text-decoration: underline; }
     .markdown-preview .table-scroll { max-width: 100%; overflow-x: auto; }
