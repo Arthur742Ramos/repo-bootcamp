@@ -16,9 +16,36 @@ import {
 
 describe("markdownToHtml", () => {
   it("converts headings", () => {
-    expect(markdownToHtml("# Title")).toContain("<h1>Title</h1>");
-    expect(markdownToHtml("## Sub")).toContain("<h2>Sub</h2>");
-    expect(markdownToHtml("### H3")).toContain("<h3>H3</h3>");
+    expect(markdownToHtml("# Title")).toContain('<h1 id="title">Title</h1>');
+    expect(markdownToHtml("## Sub")).toContain('<h2 id="sub">Sub</h2>');
+    expect(markdownToHtml("### H3")).toContain('<h3 id="h3">H3</h3>');
+  });
+
+  it("assigns unique anchors to repeated, suffix-like, Unicode and empty headings", () => {
+    const html = markdownToHtml(
+      "# Setup\n\n## Setup\n\n## Setup-1\n\n## Setup\n\n## 環境設定\n\n## Café\n\n## Cafe\u0301\n\n## !!!"
+    );
+    const anchors = [...html.matchAll(/<h[1-6] id="([^"]*)"/g)].map((match) => match[1]);
+    expect(anchors).toEqual([
+      "setup",
+      "setup-1",
+      "setup-1-1",
+      "setup-2",
+      "環境設定",
+      "café",
+      "café-1",
+      "section",
+    ]);
+    expect(new Set(anchors).size).toBe(anchors.length);
+  });
+
+  it("derives anchors from rendered formatted labels while escaping source HTML", () => {
+    const html = markdownToHtml(
+      '## **Run** `npm ci` [now](https://example.com)\n\n## `<img onerror=alert>` & "Setup"'
+    );
+    expect(html).toContain('id="run-npm-ci-now"');
+    expect(html).toContain('id="img-onerroralert-setup"');
+    expect(html).not.toContain("<img");
   });
 
   it("converts unordered lists", () => {
@@ -235,7 +262,7 @@ describe("markdownToHtml", () => {
 Paragraph text with **bold** and *italic*.`;
 
     const html = markdownToHtml(md);
-    expect(html).toContain("<h1>Heading</h1>");
+    expect(html).toContain('<h1 id="heading">Heading</h1>');
     expect(html).toContain("<blockquote>");
     expect(html).toContain("<ul>");
     expect(html).toContain("<table>");
@@ -259,9 +286,9 @@ Paragraph text with **bold** and *italic*.`;
   it("handles consecutive headings", () => {
     const md = "# H1\n## H2\n### H3";
     const html = markdownToHtml(md);
-    expect(html).toContain("<h1>H1</h1>");
-    expect(html).toContain("<h2>H2</h2>");
-    expect(html).toContain("<h3>H3</h3>");
+    expect(html).toContain('<h1 id="h1">H1</h1>');
+    expect(html).toContain('<h2 id="h2">H2</h2>');
+    expect(html).toContain('<h3 id="h3">H3</h3>');
   });
 
   it("handles whitespace-only input", () => {
@@ -276,7 +303,7 @@ Paragraph text with **bold** and *italic*.`;
 
   it("handles markdown with only a heading and no body", () => {
     const html = markdownToHtml("# Title");
-    expect(html).toContain("<h1>Title</h1>");
+    expect(html).toContain('<h1 id="title">Title</h1>');
   });
 
   it("handles table with empty cells", () => {
@@ -293,7 +320,7 @@ describe("convertToHtml", () => {
     const html = convertToHtml("# Test", "Test Doc");
     expect(html).toContain("<!DOCTYPE html>");
     expect(html).toContain("<title>Test Doc</title>");
-    expect(html).toContain("<h1>Test</h1>");
+    expect(html).toContain('<h1 id="test">Test</h1>');
     expect(html).toContain("</html>");
   });
 
@@ -320,7 +347,7 @@ describe("convertToPdf", () => {
     expect(html).toContain("<!DOCTYPE html>");
     expect(html).toContain("@page");
     expect(html).toContain("page-break");
-    expect(html).toContain("<h1>Test</h1>");
+    expect(html).toContain('<h1 id="test">Test</h1>');
   });
 
   it("includes A4 page size", () => {
@@ -418,7 +445,7 @@ describe("formatContent", () => {
     const md = "# Hello";
     const result = formatContent(md, "BOOTCAMP.md", "html");
     expect(result).toContain("<!DOCTYPE html>");
-    expect(result).toContain("<h1>Hello</h1>");
+    expect(result).toContain('<h1 id="hello">Hello</h1>');
   });
 
   it("converts .md files to pdf html", () => {
@@ -441,10 +468,10 @@ describe("formatContent", () => {
 
 describe("wrapHtmlPage", () => {
   it("wraps body content in a full page", () => {
-    const result = wrapHtmlPage("<h1>Hi</h1>", "My Title");
+    const result = wrapHtmlPage('<h1 id="hi">Hi</h1>', "My Title");
     expect(result).toContain("<!DOCTYPE html>");
     expect(result).toContain("<title>My Title</title>");
-    expect(result).toContain("<h1>Hi</h1>");
+    expect(result).toContain('<h1 id="hi">Hi</h1>');
     expect(result).toContain("</body>");
   });
 });

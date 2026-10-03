@@ -27,7 +27,7 @@ exports[`formatter snapshots > matches convertToHtml output 1`] = `
 </style>
 </head>
 <body>
-<h1>Snapshot Title</h1>
+<h1 id="snapshot-title">Snapshot Title</h1>
 <blockquote>Snapshot quote</blockquote>
 <ul>
 <li>☐ todo item</li>
@@ -75,7 +75,7 @@ exports[`formatter snapshots > matches convertToPdf output 1`] = `
 </style>
 </head>
 <body>
-<h1>Snapshot Title</h1>
+<h1 id="snapshot-title">Snapshot Title</h1>
 <blockquote>Snapshot quote</blockquote>
 <ul>
 <li>☐ todo item</li>
@@ -100,7 +100,7 @@ A--&gt;B
 `;
 
 exports[`formatter snapshots > matches markdownToHtml output 1`] = `
-"<h1>Snapshot Title</h1>
+"<h1 id="snapshot-title">Snapshot Title</h1>
 <blockquote>Snapshot quote</blockquote>
 <ul>
 <li>☐ todo item</li>

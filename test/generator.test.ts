@@ -304,7 +304,7 @@ describe("generateFirstTasks", () => {
     };
     const [pick] = getFirstTaskRecommendations(input);
     expect(pick.taskHeadingHtml).toBe(
-      "<h3>1. Fix <strong>retry</strong> &amp; <code>timeout</code> behavior</h3>"
+      '<h3 id="1-fix-retry-timeout-behavior">1. Fix <strong>retry</strong> &amp; <code>timeout</code> behavior</h3>'
     );
   });
   it("groups by difficulty", () => {
