@@ -535,3 +535,35 @@ describe("edge cases", () => {
     expect(result).toContain("database connections");
   });
 });
+
+describe("scoped remote documentation links", () => {
+  it("links architecture, codemap and first tasks to the package while keeping displayed paths relative", () => {
+    const repoInfo = {
+      owner: "owner",
+      repo: "project",
+      fullName: "owner/project",
+      url: "https://github.com/owner/project",
+      branch: "main",
+      host: "github.com",
+      sourcePathPrefix: "packages/app",
+    };
+    const facts = {
+      ...mockFacts,
+      firstTasks: [
+        {
+          title: "Fix entry",
+          description: "Fix entry",
+          why: "Learn",
+          difficulty: "beginner" as const,
+          category: "bug-fix" as const,
+          files: ["src/index.ts"],
+        },
+      ],
+    };
+    const expected =
+      "[`src/index.ts`](https://github.com/owner/project/blob/main/packages/app/src/index.ts)";
+    expect(generateArchitecture(facts, undefined, repoInfo)).toContain(expected);
+    expect(generateCodemap(facts, repoInfo)).toContain(expected);
+    expect(generateFirstTasks(facts, undefined, undefined, repoInfo)).toContain(expected);
+  });
+});

@@ -132,6 +132,18 @@ describe("Auto-Issue Creator", () => {
       );
     });
 
+    it("prefixes scoped source links in issue previews without publishing an issue", () => {
+      const scoped: RepoInfo = {
+        ...mockRepoInfo,
+        host: "github.com",
+        sourcePathPrefix: "packages/app",
+      };
+      const expected =
+        "[`src/utils.ts`](https://github.com/testowner/testrepo/blob/main/packages/app/src/utils.ts)";
+      expect(taskToIssuePayload(mockTasks[0], scoped).body).toContain(expected);
+      expect(generateIssuePreview(mockTasks, scoped)).toContain(expected);
+    });
+
     it("renders GitLab-style blob links for gitlab-hosted repos", () => {
       const gl: RepoInfo = {
         owner: "group",

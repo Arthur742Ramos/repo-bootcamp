@@ -178,6 +178,8 @@ export interface RepoInfo {
   provider?: RepoProvider;
   host?: string;
   commitSha?: string;
+  /** Selected repository-relative directory prefixed to remote source links. */
+  sourcePathPrefix?: string;
 }
 
 export type MonorepoManager = "lerna" | "nx" | "turborepo" | "pnpm" | "npm-workspaces";

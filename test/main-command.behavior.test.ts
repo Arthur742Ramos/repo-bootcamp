@@ -1,5 +1,5 @@
 import { execSync } from "child_process";
-import { mkdtemp, mkdir, rm, writeFile, readFile } from "fs/promises";
+import { mkdtemp, mkdir, rm, writeFile, readFile, symlink } from "fs/promises";
 import { tmpdir } from "os";
 import { join } from "path";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -128,10 +128,12 @@ afterEach(() => {
 });
 
 describe("runMainCommand --no-clone behavior", () => {
-  it.each([undefined, "src"])(
+  it.each([undefined, "src", "source-alias"])(
     "uses local directory and scopes analysis to %s without cloning",
     async (subdir) => {
       const repoPath = await createLocalFixtureRepo();
+      if (subdir === "source-alias")
+        await symlink(join(repoPath, "src"), join(repoPath, subdir), "junction");
       const outputDir = join(repoPath, "bootcamp-output");
       const facts = makeFacts();
       const scanResult = makeScanResult();
@@ -232,7 +234,12 @@ describe("runMainCommand --no-clone behavior", () => {
       }
       const selectedRoot = subdir ? join(repoPath, subdir) : repoPath;
       expect(orchestrateAnalysis).toHaveBeenCalledWith(
-        expect.objectContaining({ repoPath: selectedRoot })
+        expect.objectContaining({
+          repoPath: selectedRoot,
+          repoInfo: expect.objectContaining({
+            ...(subdir ? { sourcePathPrefix: subdir === "source-alias" ? "src" : subdir } : {}),
+          }),
+        })
       );
       expect(prepareOutputDocuments).toHaveBeenCalledWith(
         expect.objectContaining({ repoPath: selectedRoot })
@@ -752,6 +759,8 @@ describe("runMainCommand --watch and --interactive", () => {
   it("re-scans, re-analyzes and re-writes (issue creation off) on change, and stops on SIGINT", async () => {
     const repoPath = await createLocalFixtureRepo();
     const outputDir = join(repoPath, "bootcamp-output");
+    await symlink(join(repoPath, "src"), join(repoPath, "source-alias"), "junction");
+    await mkdir(join(repoPath, "other-src"));
     const facts = makeFacts();
     const scanResult = makeScanResult();
 
@@ -814,7 +823,7 @@ describe("runMainCommand --watch and --interactive", () => {
         ...BASE_OPTIONS,
         jsonOnly: false,
         watch: true,
-        subdir: "src",
+        subdir: "source-alias",
         output: outputDir,
       }).catch(() => {});
 
@@ -829,6 +838,10 @@ describe("runMainCommand --watch and --interactive", () => {
       const scansBefore = scanRepositoryFiles.mock.calls.length;
       const writesBefore = writeGeneratedOutputs.mock.calls.length;
 
+      expect(prepareOutputDocuments.mock.calls[0][0].repoInfo.sourcePathPrefix).toBe("src");
+      // Retarget the contained alias as a Git update can, then rescan.
+      await rm(join(repoPath, "source-alias"));
+      await symlink(join(repoPath, "other-src"), join(repoPath, "source-alias"), "junction");
       // Simulate a detected change.
       await capturedOnChange!();
 
@@ -838,10 +851,16 @@ describe("runMainCommand --watch and --interactive", () => {
       expect(scanRepositoryFiles).toHaveBeenLastCalledWith(
         repoPath,
         200,
-        expect.objectContaining({ subdir: "src" })
+        expect.objectContaining({ subdir: "source-alias" })
       );
-      expect(analyzeRepo.mock.calls[0][0]).toBe(join(repoPath, "src"));
-      expect(prepareOutputDocuments.mock.calls.at(-1)![0].repoPath).toBe(join(repoPath, "src"));
+      expect(analyzeRepo.mock.calls[0][0]).toBe(join(repoPath, "source-alias"));
+      expect(analyzeRepo.mock.calls[0][1].sourcePathPrefix).toBe("other-src");
+      expect(prepareOutputDocuments.mock.calls.at(-1)![0].repoPath).toBe(
+        join(repoPath, "source-alias")
+      );
+      expect(prepareOutputDocuments.mock.calls.at(-1)![0].repoInfo.sourcePathPrefix).toBe(
+        "other-src"
+      );
       expect(prepareOutputDocuments.mock.calls.at(-1)![0].repositoryRoot).toBe(repoPath);
       expect(writeGeneratedOutputs.mock.calls.length).toBe(writesBefore + 1);
       const lastWrite = writeGeneratedOutputs.mock.calls.at(-1)![0] as {
@@ -915,6 +934,7 @@ describe("runMainCommand --watch and --interactive", () => {
 
         expect(runInteractiveMode).toHaveBeenCalledTimes(1);
         expect(runInteractiveMode.mock.calls[0][0]).toBe(join(repoPath, "src"));
+        expect(runInteractiveMode.mock.calls[0][1].sourcePathPrefix).toBe("src");
         if (isLocal) {
           expect(cleanupRepository).not.toHaveBeenCalled();
         } else {

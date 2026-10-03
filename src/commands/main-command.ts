@@ -1,6 +1,6 @@
 import chalk from "chalk";
-import { mkdir, writeFile } from "fs/promises";
-import { join, resolve } from "path";
+import { mkdir, writeFile, realpath } from "fs/promises";
+import { join, resolve, relative, sep } from "path";
 
 import { analyzeRepo, type AnalysisStats } from "../agent.js";
 import { formatDocName, type OutputFormat } from "../formatter.js";
@@ -133,6 +133,21 @@ async function writeRunSummary({
   };
 
   await writeFile(join(outputDir, "summary.json"), JSON.stringify(summary, null, 2), "utf-8");
+}
+
+async function updateSourcePathPrefix(
+  repoPath: string,
+  subdir: string | undefined,
+  repoInfo: RepoInfo
+): Promise<void> {
+  if (!subdir) return;
+  // Contained aliases are valid scan roots; source URLs need the actual Git
+  // path. Recompute after each scan because watch updates can retarget them.
+  const [root, selected] = await Promise.all([
+    realpath(repoPath),
+    realpath(resolve(repoPath, subdir)),
+  ]);
+  repoInfo.sourcePathPrefix = relative(root, selected).split(sep).join("/");
 }
 
 async function generateOutputs({
@@ -318,6 +333,7 @@ export async function runMainCommand(repoUrl: string, options: BootcampOptions):
     scanResult = scanScope
       ? await scanRepositoryFiles(repoPath, options.maxFiles, scanScope)
       : await scanRepositoryFiles(repoPath, options.maxFiles);
+    await updateSourcePathPrefix(repoPath, options.subdir, repoInfo);
     runStats.scanTime = Date.now() - scanStart;
     runStats.filesScanned = scanResult.files.length;
     progress.succeed(
@@ -675,6 +691,7 @@ export async function runMainCommand(repoUrl: string, options: BootcampOptions):
         const newScan = scanScope
           ? await scanRepositoryFiles(repoPath, options.maxFiles, scanScope)
           : await scanRepositoryFiles(repoPath, options.maxFiles);
+        await updateSourcePathPrefix(repoPath, options.subdir, repoInfo);
         wp.succeed(`Scanned ${newScan.files.length} files`);
 
         wp.startPhase("analyze");

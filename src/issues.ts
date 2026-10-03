@@ -7,38 +7,9 @@ import { execFile } from "child_process";
 import { promisify } from "util";
 import chalk from "chalk";
 import type { FirstTask, RepoInfo } from "./types.js";
+import { buildBlobUrl } from "./source-links.js";
 
 const execFileAsync = promisify(execFile);
-
-/**
- * Build a provider-aware remote blob URL for a repo-relative file path, or null
- * when repoInfo has no usable remote (local/--no-clone runs). Mirrors the
- * generator's helper so issue bodies link to GitHub (`/blob/`), GitLab
- * (`/-/blob/`), or Bitbucket (`/src/`) rather than hardcoding github.com.
- */
-function buildBlobUrl(repoInfo: RepoInfo, filePath: string): string | null {
-  if (
-    !repoInfo.host ||
-    !repoInfo.owner ||
-    repoInfo.owner === "local" ||
-    !repoInfo.branch ||
-    repoInfo.branch === "local"
-  ) {
-    return null;
-  }
-  const cleanPath = filePath.replace(/^\.?\/+/, "");
-  if (!cleanPath) return null;
-  const encoded = cleanPath.split("/").map(encodeURIComponent).join("/");
-  const base = `https://${repoInfo.host}/${repoInfo.owner}/${repoInfo.repo}`;
-  switch (repoInfo.provider) {
-    case "gitlab":
-      return `${base}/-/blob/${repoInfo.branch}/${encoded}`;
-    case "bitbucket":
-      return `${base}/src/${repoInfo.branch}/${encoded}`;
-    default:
-      return `${base}/blob/${repoInfo.branch}/${encoded}`;
-  }
-}
 
 /** Render a file path as a clickable remote link when possible, else bare code. */
 function fileLink(filePath: string, repoInfo: RepoInfo): string {
