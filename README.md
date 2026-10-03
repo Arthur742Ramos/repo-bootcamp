@@ -827,6 +827,15 @@ Taskfile discovery preserves shell-safe namespaced and quoted task names, omits 
 
 Make discovery preserves literal multi-target rules and dotted public names in file order, including continued rule headers and trailing comments. Variable assignments, continued values/recipes, and multiline variable bodies do not declare tasks; empty and double-colon rules remain runnable tasks. It does not evaluate includes, expressions, or recipes.
 
+Just discovery advertises public recipes that can be invoked without arguments.
+It preserves single-line quoted literal defaults, exported parameters, optional
+`*` variadics and defaulted variadics, plus `no-cd` attributes. Required
+arguments, `_`/`private` helpers, expression or multiline defaults, and unsupported
+attributes contribute no runnable guidance. Imports, modules and aliases are not
+expanded. Default Justfile lookup is case-insensitive within the selected root;
+multiple candidates contribute no Just commands because native Just rejects an
+ambiguous lookup. Discovery never evaluates expressions or executes recipes.
+
 Local Task includes contribute canonical names such as `task app:test`, including
 namespaced `default` tasks. The root `default` remains omitted. Literal file and
 directory includes resolve relative to the including Taskfile, with the same

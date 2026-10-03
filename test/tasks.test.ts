@@ -303,11 +303,205 @@ describe("parseJustfile", () => {
     expect(names).not.toContain("alias");
   });
 
-  it("handles recipes with parameters", () => {
-    const tasks = parseJustfile("deploy env:\n    echo {{env}}\n");
-    expect(tasks[0].name).toBe("deploy");
-    expect(tasks[0].command).toBe("just deploy");
-    expect(tasks[0].category).toBe("release");
+  it("omits required-argument recipes whose bare invocation native Just rejects", () => {
+    expect(parseJustfile("deploy env:\n    echo {{env}}\n")).toEqual([]);
+    expect(parseJustfile("test +FILES:\n    echo {{FILES}}\n")).toEqual([]);
+    expect(parseJustfile("dev target mode='debug':\n    echo {{target}}\n")).toEqual([]);
+  });
+
+  it.each([
+    "mode='debug'",
+    'mode="debug"',
+    "target='some: path'",
+    "mode=''",
+    "$mode='debug'",
+    "+FLAGS='-q'",
+    "*FILES",
+    "*FILES='one'",
+    "+$FILES='one'",
+    "build-mode = 'debug'",
+    "mode='debug' target='app'",
+    String.raw`mode="quote\"slash\\"`,
+    String.raw`mode="\u{1F916}"`,
+    "mode='{{literal braces}}'",
+  ])("advertises native zero-argument signature %s with a bare command", (parameters) => {
+    const tasks = parseJustfile(`build ${parameters}:\n    @echo literal\n`);
+    expect(tasks).toEqual([
+      {
+        name: "build",
+        command: "just build",
+        source: "justfile",
+        category: "build",
+        description: undefined,
+      },
+    ]);
+  });
+
+  it("keeps public recipe order and descriptions while excluding private helpers", () => {
+    const tasks = parseJustfile(`# Hidden setup
+[private, no-cd]
+setup:
+    @echo helper
+_helper:
+    @echo helper
+# Build with a default
+[no-cd]
+@build mode='debug':
+    @echo {{mode}}
+# Test locally
+@test *FILES:
+    @echo {{FILES}}
+`);
+    expect(tasks.map((task) => [task.command, task.description])).toEqual([
+      ["just build", "Build with a default"],
+      ["just test", "Test locally"],
+    ]);
+  });
+
+  it("conservatively omits expression defaults and unsupported argument attributes", () => {
+    expect(
+      parseJustfile(`mode := 'debug'
+build value=mode:
+    @echo {{value}}
+test value=(mode + '-test'):
+    @echo {{value}}
+dev value=x'$MODE':
+    @echo {{value}}
+[arg('FILES', min='2')]
+check *FILES:
+    @echo {{FILES}}
+[quiet]
+quiet:
+    @echo unsupported
+public:
+    @echo public
+`).map((task) => task.command)
+    ).toEqual(["just public"]);
+  });
+
+  it.each(["[ no-cd ]", "[\tno-cd\t]", "[ no-cd ] # Local working directory"])(
+    "preserves native whitespace in supported attribute %s",
+    (attribute) => {
+      expect(
+        parseJustfile(`${attribute}\nbuild mode='debug':\n    @echo literal\n`).map(
+          (task) => task.command
+        )
+      ).toEqual(["just build"]);
+    }
+  );
+
+  it("keeps multiline private/unsupported attributes associated with their recipes", () => {
+    expect(
+      parseJustfile(`[no-cd,
+private]
+setup:
+    @echo hidden
+[
+  private,
+  no-cd
+]
+hidden:
+    @echo hidden
+[linux,
+no-cd]
+platform:
+    @echo conditional
+[
+  no-cd
+]
+build mode='debug':
+    @echo literal
+`).map((task) => task.command)
+    ).toEqual(["just build"]);
+  });
+
+  it("keeps opaque multiline argument and documentation attributes on their recipes", () => {
+    const tasks = parseJustfile(`set unstable
+set lists
+[arg(
+  'FILES',
+  min='2'
+)]
+check *FILES:
+    @echo literal
+[doc(
+  '''
+fake]
+'''
+)]
+documented:
+    @echo literal
+public:
+    @echo literal
+`);
+    expect(tasks.map((task) => task.command)).toEqual(["just public"]);
+  });
+
+  it("shields recipe-looking data inside multiline strings and backticks", () => {
+    const tasks = parseJustfile(
+      "text := '''\nsetup:\n[private]\n'''\ncommand := `\ntest:\n`\n# Build\nbuild:\n    @echo literal\n"
+    );
+    expect(tasks.map((task) => [task.command, task.description])).toEqual([
+      ["just build", "Build"],
+    ]);
+  });
+
+  it("does not take attributes or comments from recipe bodies", () => {
+    expect(
+      parseJustfile("build:\n    [private]\n    # body comment\ntest:\n    @echo test\n").map(
+        (task) => [task.command, task.description]
+      )
+    ).toEqual([
+      ["just build", undefined],
+      ["just test", undefined],
+    ]);
+  });
+
+  it.each(["'''", '\"\"\"'])(
+    "shields indented multiline values inside parentheses with %s delimiters",
+    (quote) => {
+      const content = `example := (\n  ${quote}\nsetup:\n[private]\n${quote}\n)\nbuild:\n    @echo literal\n`;
+      expect(parseJustfile(content).map((task) => task.command)).toEqual(["just build"]);
+    }
+  );
+
+  it("shields multiline literal concatenations without evaluating them", () => {
+    expect(
+      parseJustfile(
+        "example := (\n  'prefix' + '''\nsetup:\n'''\n)\nbuild:\n    @echo literal\n"
+      ).map((task) => task.command)
+    ).toEqual(["just build"]);
+  });
+
+  it("shields multiline list data without evaluating unsupported expressions", () => {
+    expect(
+      parseJustfile(
+        "set unstable\nset lists\nexample := [\n  '''\nsetup:\n'''\n]\nbuild:\n    @echo literal\n"
+      ).map((task) => task.command)
+    ).toEqual(["just build"]);
+  });
+
+  it.each([
+    "build mode='x'+suffix:",
+    "build mode='x'other='y':",
+    "build *FILES extra='x':",
+    'build mode="bad\\z":',
+    'build mode="\\u{D800}":',
+    'build mode="\\u{110000}":',
+    "build $+FILES='one':",
+    "build mode=:",
+  ])("does not advertise unsupported or malformed signatures: %s", (header) => {
+    expect(parseJustfile(header + "\n    @echo literal\n")).toEqual([]);
+  });
+
+  it("keeps large literal defaults and example blocks bounded", () => {
+    const content =
+      "example := '''\n" +
+      "fake:\n".repeat(32_000) +
+      "'''\nbuild mode='" +
+      "literal ".repeat(32_000) +
+      "':\n    @echo literal\n";
+    expect(parseJustfile(content).map((task) => task.command)).toEqual(["just build"]);
   });
 });
 
@@ -838,6 +1032,38 @@ describe("detectPackageManager", () => {
 });
 
 describe("discoverTasks", () => {
+  it.each(["justfile", "Justfile", "JUSTFILE", ".justfile", ".JUSTFILE"])(
+    "uses one native case-insensitive Just filename entry: %s",
+    async (name) => {
+      const dir = await repoWith({ [name]: "build mode='debug':\n    @echo {{mode}}\n" });
+      expect((await discoverTasks(dir)).map((task) => task.command)).toEqual(["just build"]);
+    }
+  );
+
+  it("omits ambiguous default Just sources without affecting other ecosystems", async () => {
+    const dir = await repoWith({
+      justfile: "build:\n    @echo build\n",
+      ".justfile": "test:\n    @echo test\n",
+      Makefile: "verify:\n\t@echo verify\n",
+      "package.json": JSON.stringify({ scripts: { dev: "vite" } }),
+    });
+    expect((await discoverTasks(dir)).map((task) => task.command)).toEqual([
+      "npm run dev",
+      "make verify",
+    ]);
+  });
+
+  it("uses the selected child Justfile independently of ambiguous parent candidates", async () => {
+    const dir = await repoWith({
+      justfile: "outer:\n    @echo outer\n",
+      ".justfile": "other:\n    @echo other\n",
+      "packages/app/Justfile": "build mode='debug':\n    @echo {{mode}}\n",
+    });
+    expect((await discoverTasks(join(dir, "packages/app"))).map((task) => task.command)).toEqual([
+      "just build",
+    ]);
+  });
+
   it.each(["Makefile", "makefile"])("prefers GNUmakefile over %s like GNU Make", async (name) => {
     const dir = await repoWith({
       [name]: "build:\n\t@echo wrong-file\n",

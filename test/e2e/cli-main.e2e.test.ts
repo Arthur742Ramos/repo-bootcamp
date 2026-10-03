@@ -184,6 +184,71 @@ describe("bootcamp CLI", () => {
   });
 
   it.each(["standard", "fast"])(
+    "uses only public zero-argument Just commands in saved %s onboarding guidance",
+    async (mode) => {
+      const tempDir = await mkdtemp(join(tmpdir(), "bootcamp-just-kit-"));
+      tempDirs.push(tempDir);
+      const repo = join(tempDir, "repo");
+      const selected = join(repo, "packages", "app");
+      await mkdir(selected, { recursive: true });
+      await writeFile(join(repo, "justfile"), "outer:\n    @echo outer\n");
+      await writeFile(join(repo, ".justfile"), "other:\n    @echo other\n");
+      await writeFile(
+        join(selected, "Justfile"),
+        `dev target:
+    @echo {{target}}
+[private]
+setup:
+    @echo helper
+_helper:
+    @echo helper
+build mode='debug':
+    @echo {{mode}}
+test *FILES:
+    @echo {{FILES}}
+`
+      );
+      const facts = buildMockFacts(`local/${basename(repo)}`);
+      facts.stack.packageManager = undefined;
+      facts.quickstart.commands = [];
+      facts.quickstart.steps = ["Read the repository setup guide"];
+      const response = join(tempDir, "response.json");
+      const output = join(tempDir, "out");
+      await writeFile(response, JSON.stringify(facts));
+      const result = await runCli(
+        [
+          repo,
+          "--no-clone",
+          "--no-cache",
+          "--subdir",
+          "packages/app",
+          ...(mode === "fast" ? ["--fast"] : []),
+          "--output",
+          output,
+        ],
+        { NODE_ENV: "test", REPO_BOOTCAMP_TEST_LLM_RESPONSE_FILE: response }
+      );
+      expect(result.exitCode).toBe(0);
+      const generated = JSON.parse(await readFile(join(output, "repo_facts.json"), "utf8"));
+      expect(
+        generated.quickstart.commands.map((command: { command: string }) => command.command)
+      ).toEqual(["just build", "just test"]);
+      expect(generated.quickstart.steps).toEqual(facts.quickstart.steps);
+      const onboarding = await readFile(join(output, "ONBOARDING.md"), "utf8");
+      const bootcamp = await readFile(join(output, "BOOTCAMP.md"), "utf8");
+      for (const document of [onboarding, bootcamp]) {
+        expect(document).toContain("just build");
+        expect(document).toContain("just test");
+        expect(document).not.toContain("just dev");
+        expect(document).not.toContain("just setup");
+        expect(document).not.toContain("just _helper");
+        expect(document).not.toContain("just outer");
+      }
+    },
+    60_000
+  );
+
+  it.each(["standard", "fast"])(
     "uses scoped local Task commands when the saved %s response has no commands",
     async (mode) => {
       const tempDir = await mkdtemp(join(tmpdir(), "bootcamp-task-kit-"));
