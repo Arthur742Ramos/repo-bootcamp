@@ -202,7 +202,7 @@ describe("web routes analysis lifecycle", () => {
     expect(previewResponse.status).toBe(200);
     expect(previewResponse.headers["content-type"]).toContain("application/json");
     expect(previewResponse.body.content).toBe(fileResponse.text);
-    expect(previewResponse.body.html).toContain("<h1>");
+    expect(previewResponse.body.html).toMatch(/<h1 id="[^"]+">/);
     const jsonPreview = await http.get(`/api/jobs/${jobId}/files/repo_facts.json?view=preview`);
     expect(jsonPreview.body.html).toBeNull();
 

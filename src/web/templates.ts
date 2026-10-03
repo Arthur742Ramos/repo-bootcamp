@@ -1,6 +1,8 @@
 /**
  * Inline HTML for the demo page
  */
+import { getHeadingAnchor } from "../heading-anchors.js";
+
 function escapeHtmlAttribute(value: string): string {
   return value
     .replaceAll("&", "&amp;")
@@ -1451,6 +1453,8 @@ export function getIndexHtml(nonce?: string): string {
 
     // Build a fresh allowlisted DOM from an inert template. Never attach repository
     // HTML directly: discard active elements, attributes, images and unsafe URLs.
+    const getHeadingAnchor = ${getHeadingAnchor.toString()};
+
     function renderDocument(html) {
       const template = document.createElement('template');
       template.innerHTML = html;
@@ -1458,6 +1462,7 @@ export function getIndexHtml(nonce?: string): string {
         'PRE', 'CODE', 'STRONG', 'EM', 'DEL', 'BLOCKQUOTE', 'TABLE', 'THEAD', 'TBODY',
         'TR', 'TH', 'TD', 'HR', 'BR', 'DETAILS', 'SUMMARY', 'A']);
       const headingCounts = new Map();
+      const headingAnchors = new Set();
       const blocked = new Set(['SCRIPT', 'STYLE', 'IFRAME', 'OBJECT', 'EMBED', 'SVG', 'MATH', 'FORM', 'TEMPLATE']);
       function copy(node) {
         if (node.nodeType === Node.TEXT_NODE) return document.createTextNode(node.textContent);
@@ -1466,13 +1471,6 @@ export function getIndexHtml(nonce?: string): string {
           ? document.createElement('pre')
           : allowed.has(node.tagName)
             ? document.createElement(node.tagName.toLowerCase()) : document.createDocumentFragment();
-        if (/^H[1-6]$/.test(node.tagName)) {
-          const slug = node.textContent.toLowerCase().replace(/[^a-z0-9_ -]/g, '').trim().replace(/ +/g, '-');
-          const count = headingCounts.get(slug) || 0;
-          headingCounts.set(slug, count + 1);
-          element.dataset.anchor = slug + (count ? '-' + count : '');
-          element.tabIndex = -1;
-        }
         if (node.tagName === 'A') {
           const href = node.getAttribute('href') || '';
           if (/^https?:\\/\\//i.test(href)) {
@@ -1501,6 +1499,10 @@ export function getIndexHtml(nonce?: string): string {
           }
         }
         for (const child of node.childNodes) element.append(copy(child));
+        if (/^H[1-6]$/.test(node.tagName)) {
+          element.dataset.anchor = getHeadingAnchor(element.textContent, headingCounts, headingAnchors);
+          element.tabIndex = -1;
+        }
         return element;
       }
       const target = document.getElementById('renderedContent');

@@ -240,3 +240,37 @@ test("outline clears while a new file is pending and stays hidden on failed or r
   await openFile(page, "DATA.json");
   await expect(page.locator("#previewOutline")).toBeHidden();
 });
+
+test("fragment links distinguish suffix collisions and reach Unicode headings", async ({
+  page,
+}) => {
+  await mockDocuments(page, {
+    "GUIDE.md":
+      "# Guide\n\n[Suffix](#setup-1-1) [Unicode](#%E7%92%B0%E5%A2%83%E8%A8%AD%E5%AE%9A)\n\n## Setup\n\n## Setup\n\n## Setup-1\n\n## 環境設定",
+  });
+  await openFile(page, "GUIDE.md");
+  const anchors = await page
+    .locator("#renderedContent [data-anchor]")
+    .evaluateAll((elements) => elements.map((element) => (element as HTMLElement).dataset.anchor));
+  expect(anchors).toEqual(["guide", "setup", "setup-1", "setup-1-1", "環境設定"]);
+  await page.getByRole("link", { name: "Suffix", exact: true }).click();
+  await expect(page.locator('[data-anchor="setup-1-1"]')).toBeFocused();
+  await page.getByRole("link", { name: "Unicode", exact: true }).click();
+  await expect(page.locator('[data-anchor="環境設定"]')).toBeFocused();
+});
+
+test("heading anchors use sanitized visible text and ignore supplied IDs", async ({ page }) => {
+  await page.route("**/files/**", (route) =>
+    route.fulfill({
+      json: {
+        content: "source",
+        html: '<a href="#setup">Setup</a><h2 id="mainContent"><script>hidden</script>Setup</h2>',
+      },
+    })
+  );
+  await openFile(page, "GUIDE.md");
+  await expect(page.locator("#renderedContent h2")).toHaveAttribute("data-anchor", "setup");
+  await expect(page.locator("#renderedContent [id], #renderedContent script")).toHaveCount(0);
+  await page.getByRole("link", { name: "Setup", exact: true }).click();
+  await expect(page.locator("#renderedContent h2")).toBeFocused();
+});

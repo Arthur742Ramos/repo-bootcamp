@@ -8,6 +8,8 @@
 
 import { posix } from "node:path";
 
+import { getHeadingAnchor } from "./heading-anchors.js";
+
 /** Supported output formats */
 export type OutputFormat = "markdown" | "html" | "pdf";
 
@@ -194,6 +196,8 @@ export function markdownToHtml(md: string): string {
 
   const lines = processed.split("\n");
   const html: string[] = [];
+  const headingCounts = new Map<string, number>();
+  const headingAnchors = new Set<string>();
   let inList = false;
   let inOrderedList = false;
   let inTable = false;
@@ -268,7 +272,17 @@ export function markdownToHtml(md: string): string {
         inTable = false;
       }
       const level = headingMatch[1].length;
-      html.push(`<h${level}>${convertInlineFormatting(headingMatch[2])}</h${level}>`);
+      const headingHtml = convertInlineFormatting(headingMatch[2]);
+      // Match the textContent used by the reader: remove renderer-owned tags
+      // before decoding escaped text, so source HTML cannot become markup.
+      const headingText = headingHtml
+        .replace(/<[^>]*>/g, "")
+        .replace(/&quot;/g, '"')
+        .replace(/&lt;/g, "<")
+        .replace(/&gt;/g, ">")
+        .replace(/&amp;/g, "&");
+      const anchor = getHeadingAnchor(headingText, headingCounts, headingAnchors);
+      html.push(`<h${level} id="${escapeHtml(anchor)}">${headingHtml}</h${level}>`);
       continue;
     }
 
