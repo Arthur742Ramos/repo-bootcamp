@@ -1,0 +1,370 @@
+[
+  {
+    "name": "scalar-bare",
+    "toml": "[tool.poetry.dependencies]\nrequests = \"^2.28\"\n",
+    "runtime": [["requests", "^2.28"]],
+    "dev": [],
+    "decision": null,
+    "schemaErrors": []
+  },
+  {
+    "name": "scalar-basic",
+    "toml": "[\"tool\" . \"poetry\" . \"dependencies\"]\n\"requests\" = \"^2.28\"\n",
+    "runtime": [["requests", "^2.28"]],
+    "dev": [],
+    "decision": null,
+    "schemaErrors": []
+  },
+  {
+    "name": "scalar-literal",
+    "toml": "['tool'.'poetry'.'dependencies']\n'requests' = '^2.28'\n",
+    "runtime": [["requests", "^2.28"]],
+    "dev": [],
+    "decision": null,
+    "schemaErrors": []
+  },
+  {
+    "name": "scalar-escape",
+    "toml": "[\"to\\u006fl\" . poetry . dependencies]\n\"\\u0072equests\" = \"^2.28\"\n",
+    "runtime": [["requests", "^2.28"]],
+    "dev": [],
+    "decision": null,
+    "schemaErrors": []
+  },
+  {
+    "name": "object-inline",
+    "toml": "[tool.poetry.dependencies]\nrequests = { version = \" >= 1, < 3 \", extras = [\"security\"], markers = \"python_version >= \\\"3.10\\\"\", optional = true, source = \"owned\" }\n",
+    "runtime": [["requests", " >= 1, < 3 "]],
+    "dev": [],
+    "decision": null,
+    "schemaErrors": []
+  },
+  {
+    "name": "object-dotted",
+    "toml": "[tool.poetry.dependencies]\nrequests.version = \" >= 1, < 3 \"\nrequests.extras = [\"security\"]\nrequests.markers = \"python_version >= \\\"3.10\\\"\"\nrequests.optional = true\nrequests.source = \"owned\"\n",
+    "runtime": [["requests", " >= 1, < 3 "]],
+    "dev": [],
+    "decision": null,
+    "schemaErrors": []
+  },
+  {
+    "name": "object-nested",
+    "toml": "[tool.poetry.dependencies.requests]\nversion = \" >= 1, < 3 \"\nextras = [\"security\"]\nmarkers = \"python_version >= \\\"3.10\\\"\"\noptional = true\nsource = \"owned\"\n",
+    "runtime": [["requests", " >= 1, < 3 "]],
+    "dev": [],
+    "decision": null,
+    "schemaErrors": []
+  },
+  {
+    "name": "object-root",
+    "toml": "tool.poetry.dependencies.requests.version = \" >= 1, < 3 \"\ntool.poetry.dependencies.requests.extras = [\"security\"]\ntool.poetry.dependencies.requests.markers = \"python_version >= \\\"3.10\\\"\"\ntool.poetry.dependencies.requests.optional = true\ntool.poetry.dependencies.requests.source = \"owned\"\n",
+    "runtime": [["requests", " >= 1, < 3 "]],
+    "dev": [],
+    "decision": null,
+    "schemaErrors": []
+  },
+  {
+    "name": "object-parent",
+    "toml": "[tool.poetry]\ndependencies.requests.version = \" >= 1, < 3 \"\ndependencies.requests.extras = [\"security\"]\ndependencies.requests.markers = \"python_version >= \\\"3.10\\\"\"\ndependencies.requests.optional = true\ndependencies.requests.source = \"owned\"\n",
+    "runtime": [["requests", " >= 1, < 3 "]],
+    "dev": [],
+    "decision": null,
+    "schemaErrors": []
+  },
+  {
+    "name": "object-mixed-build",
+    "toml": "[tool.poetry.dependencies]\nrequests.source = \"owned\"\nfoo = \"^9\"\nrequests.version = \" >= 1, < 3 \"\nrequests.extras = [\"security\"]\nrequests.optional = true\nrequests.markers = 'python_version >= \"3.10\"'\n",
+    "runtime": [
+      ["requests", " >= 1, < 3 "],
+      ["foo", "^9"]
+    ],
+    "dev": [],
+    "decision": null,
+    "schemaErrors": []
+  },
+  {
+    "name": "dotted-name-inline",
+    "toml": "[tool.poetry.dependencies]\n\"zope.interface\" = {version = \"^6\"}\n",
+    "runtime": [["zope.interface", "^6"]],
+    "dev": [],
+    "decision": null,
+    "schemaErrors": []
+  },
+  {
+    "name": "dotted-name-path",
+    "toml": "[tool.poetry.dependencies]\n\"zope.interface\" . \"version\" = \"^6\"\n",
+    "runtime": [["zope.interface", "^6"]],
+    "dev": [],
+    "decision": null,
+    "schemaErrors": []
+  },
+  {
+    "name": "dotted-name-nested",
+    "toml": "[tool.poetry.dependencies.'zope.interface']\nversion = '^6'\n",
+    "runtime": [["zope.interface", "^6"]],
+    "dev": [],
+    "decision": null,
+    "schemaErrors": []
+  },
+  {
+    "name": "dotted-name-root",
+    "toml": "tool.poetry.dependencies.\"zope\\U0000002Einterface\".version = \"^6\"\n",
+    "runtime": [["zope.interface", "^6"]],
+    "dev": [],
+    "decision": null,
+    "schemaErrors": []
+  },
+  {
+    "name": "group-inline",
+    "toml": "[tool.poetry.group.\"docs.prod\".dependencies]\n\"zope.interface\" = {version = \"^6\"}\n",
+    "runtime": [["zope.interface", "^6"]],
+    "dev": [],
+    "decision": null,
+    "schemaErrors": []
+  },
+  {
+    "name": "group-nested",
+    "toml": "['tool'.poetry.group.'docs.prod'.dependencies.'zope.interface']\nversion = '^6'\n",
+    "runtime": [["zope.interface", "^6"]],
+    "dev": [],
+    "decision": null,
+    "schemaErrors": []
+  },
+  {
+    "name": "group-root",
+    "toml": "tool.poetry.group.\"docs\\u002eprod\".dependencies.\"zope.interface\".version = \"^6\"\n",
+    "runtime": [["zope.interface", "^6"]],
+    "dev": [],
+    "decision": null,
+    "schemaErrors": []
+  },
+  {
+    "name": "group-namespace-phantom",
+    "toml": "[tool.poetry.group.docs.prod.dependencies]\nsphinx = \"^8\"\n",
+    "runtime": [],
+    "dev": [],
+    "decision": null,
+    "schemaErrors": [
+      "{'prod': {'dependencies': {'sphinx': '^8'}}} is not valid under any of the given schemas",
+      "Additional properties are not allowed ('prod' was unexpected)"
+    ]
+  },
+  {
+    "name": "unknown-attribute",
+    "toml": "[tool.poetry.dependencies]\nfoo.bar = \"^1\"\n",
+    "runtime": [],
+    "dev": [],
+    "decision": null,
+    "schemaErrors": ["{'bar': '^1'} is not valid under any of the given schemas"]
+  },
+  {
+    "name": "unknown-plus-valid-version",
+    "toml": "[tool.poetry.dependencies]\nfoo.bar = \"^1\"\nfoo.version = \"^2\"\n",
+    "runtime": [],
+    "dev": [],
+    "decision": null,
+    "schemaErrors": ["{'bar': '^1', 'version': '^2'} is not valid under any of the given schemas"]
+  },
+  {
+    "name": "options-only",
+    "toml": "[tool.poetry.dependencies]\nrequests.source = \"owned\"\nrequests.markers = 'python_version >= \"3.10\"'\n",
+    "runtime": [["requests", "*"]],
+    "dev": [],
+    "decision": null,
+    "schemaErrors": []
+  },
+  {
+    "name": "empty-options",
+    "toml": "[tool.poetry.dependencies]\nrequests = {}\n",
+    "runtime": [["requests", "*"]],
+    "dev": [],
+    "decision": null,
+    "schemaErrors": []
+  },
+  {
+    "name": "version-type-invalid",
+    "toml": "[tool.poetry.dependencies.requests]\nversion = 1\n",
+    "runtime": [],
+    "dev": [],
+    "decision": null,
+    "schemaErrors": ["{'version': 1} is not valid under any of the given schemas"]
+  },
+  {
+    "name": "extras-only-invalid",
+    "toml": "[tool.poetry.dependencies]\nrequests.extras = [\"security\"]\n",
+    "runtime": [],
+    "dev": [],
+    "decision": null,
+    "schemaErrors": ["{'extras': ['security']} is not valid under any of the given schemas"]
+  },
+  {
+    "name": "all-origin-objects",
+    "toml": "[tool.poetry.dependencies]\ngitpkg = {git = \"https://example.invalid/owned.git\", rev = \"owned\", subdirectory = \"pkg\", develop = true}\nfilepkg = {file = \"./owned.whl\", subdirectory = \"pkg\"}\npathpkg = {path = \"./owned\", develop = true}\nurlpkg = {url = \"https://example.invalid/owned.whl#hash=owned\", subdirectory = \"pkg\"}\n",
+    "runtime": [
+      ["gitpkg", "*"],
+      ["filepkg", "*"],
+      ["pathpkg", "*"],
+      ["urlpkg", "*"]
+    ],
+    "dev": [],
+    "decision": null,
+    "schemaErrors": []
+  },
+  {
+    "name": "array-inline",
+    "toml": "[tool.poetry.dependencies]\nfoo = [{version = \"^1\", python = \">=3.8,<3.10\"}, {version = \"^2\", python = \">=3.10\"}]\n",
+    "runtime": null,
+    "dev": null,
+    "decision": "Multiple-constraint display is unresolved. Do not choose one branch, union constraints, or preserve current truncated tokens by inference.",
+    "schemaErrors": []
+  },
+  {
+    "name": "array-multiline",
+    "toml": "[tool.poetry.dependencies]\nfoo = [\n {version = \"^1\", python = \">=3.8,<3.10\"},\n {version = \"^2\", python = \">=3.10\"},\n]\n",
+    "runtime": null,
+    "dev": null,
+    "decision": "Multiple-constraint display is unresolved. Do not choose one branch, union constraints, or preserve current truncated tokens by inference.",
+    "schemaErrors": []
+  },
+  {
+    "name": "array-tables",
+    "toml": "[[tool.poetry.dependencies.foo]]\nversion = \"^1\"\npython = \">=3.8,<3.10\"\n[[tool.poetry.dependencies.foo]]\nversion = \"^2\"\npython = \">=3.10\"\n",
+    "runtime": null,
+    "dev": null,
+    "decision": "Multiple-constraint display is unresolved. Do not choose one branch, union constraints, or preserve current truncated tokens by inference.",
+    "schemaErrors": []
+  },
+  {
+    "name": "array-empty-invalid",
+    "toml": "[tool.poetry.dependencies]\nfoo = []\n",
+    "runtime": [],
+    "dev": [],
+    "decision": null,
+    "schemaErrors": ["[] is not valid under any of the given schemas"]
+  },
+  {
+    "name": "array-invalid-member",
+    "toml": "[tool.poetry.dependencies]\nfoo = [{version = \"^1\"}, {bar = \"^2\"}]\n",
+    "runtime": [],
+    "dev": [],
+    "decision": null,
+    "schemaErrors": [
+      "[{'version': '^1'}, {'bar': '^2'}] is not valid under any of the given schemas"
+    ]
+  },
+  {
+    "name": "array-origin-first",
+    "toml": "[tool.poetry.dependencies]\nfoo = [{url = \"https://example.invalid/owned.whl\", markers = 'sys_platform == \"linux\"'}, {version = \"^2\", markers = 'sys_platform == \"win32\"'}]\n",
+    "runtime": null,
+    "dev": null,
+    "decision": "Multiple-constraint display is unresolved. Do not choose one branch, union constraints, or preserve current truncated tokens by inference.",
+    "schemaErrors": []
+  },
+  {
+    "name": "group-order-metadata",
+    "toml": "[tool.poetry.group.docs]\noptional = true\n[tool.poetry.group.web.dependencies]\nalpha = \"^1\"\n[tool.poetry.group.docs.dependencies]\nALPHA = \"^9\"\n",
+    "runtime": [["alpha", "^1"]],
+    "dev": [],
+    "decision": null,
+    "schemaErrors": []
+  },
+  {
+    "name": "package-order-completion",
+    "toml": "[tool.poetry.dependencies]\nFoo_Bar.source = \"owned\"\nfoo-bar = \"^9\"\nFoo_Bar.version = \"^1\"\n",
+    "runtime": [["Foo_Bar", "^1"]],
+    "dev": [],
+    "decision": null,
+    "schemaErrors": []
+  },
+  {
+    "name": "invalid-before-valid-alias",
+    "toml": "[tool.poetry.dependencies]\nFoo_Bar.bar = \"^0\"\nfoo-bar = \"^9\"\n",
+    "runtime": [["foo-bar", "^9"]],
+    "dev": [],
+    "decision": null,
+    "schemaErrors": ["{'bar': '^0'} is not valid under any of the given schemas"]
+  },
+  {
+    "name": "nested-before-bare-alias",
+    "toml": "[tool.poetry.dependencies.Foo_Bar]\nsource = \"owned\"\nversion = \"^1\"\n[tool.poetry.dependencies]\nfoo-bar = \"^9\"\n",
+    "runtime": [["Foo_Bar", "^1"]],
+    "dev": [],
+    "decision": null,
+    "schemaErrors": []
+  },
+  {
+    "name": "hybrid-phase",
+    "toml": "[tool.poetry.group.test.dependencies]\nFoo_Bar = \"^8\"\n[project]\ndependencies = [\"foo-bar>=99\"]\n[tool.poetry.dependencies]\n\"foo.bar\" = \"^1\"\n[tool.poetry.dev-dependencies]\n\"foo.bar\" = \"^2\"\n",
+    "runtime": [["foo.bar", "^1"]],
+    "dev": [["foo.bar", "^2"]],
+    "decision": null,
+    "schemaErrors": []
+  },
+  {
+    "name": "fake-string-headers",
+    "toml": "[tool.poetry.dependencies]\ncontrol = \"^1\"\nrequests = {version = \"^2\", markers = '''\n[tool.poetry.dependencies]\nphantom = \"^99\"\n''' }\n",
+    "runtime": [
+      ["control", "^1"],
+      ["requests", "^2"]
+    ],
+    "dev": [],
+    "decision": null,
+    "schemaErrors": []
+  },
+  {
+    "name": "fake-nested-marker",
+    "toml": "[tool.poetry.dependencies.requests]\nversion = \"^2\"\nmarkers = '''\n[tool.poetry.dependencies]\nphantom = \"^99\"\n'''\n",
+    "runtime": [["requests", "^2"]],
+    "dev": [],
+    "decision": null,
+    "schemaErrors": []
+  },
+  {
+    "name": "fake-unrelated-metadata",
+    "toml": "[tool.other]\ndescription = \"\"\"\n[tool.poetry.dependencies]\nphantom = \"^99\"\n\"\"\"\n[tool.poetry.dependencies]\ncontrol = \"^1\"\n",
+    "runtime": [["control", "^1"]],
+    "dev": [],
+    "decision": null,
+    "schemaErrors": []
+  },
+  {
+    "name": "fake-inline-version",
+    "toml": "[tool.poetry.dependencies]\nrequests = {source = 'version = \"^99\"'}\n",
+    "runtime": [["requests", "*"]],
+    "dev": [],
+    "decision": null,
+    "schemaErrors": []
+  },
+  {
+    "name": "duplicate-key-invalid",
+    "toml": "[tool.poetry.dependencies]\nrequests = \"^1\"\n\"requests\" = \"^2\"\n",
+    "runtime": [],
+    "dev": [],
+    "decision": null,
+    "schemaErrors": ["TOML: Cannot overwrite a value (at line 3, column 18)"]
+  },
+  {
+    "name": "fake-only-unrelated-metadata",
+    "toml": "[tool.other]\ndescription = \"\"\"\n[tool.poetry.dependencies]\nphantom = \"^99\"\n\"\"\"\n",
+    "runtime": [],
+    "dev": [],
+    "decision": null,
+    "schemaErrors": []
+  },
+  {
+    "name": "namespace-single-component",
+    "toml": "\"tool.poetry\".dependencies.requests = \"^1\"\n",
+    "runtime": [],
+    "dev": [],
+    "decision": null,
+    "schemaErrors": []
+  },
+  {
+    "name": "fake-inline-marker",
+    "toml": "[tool.poetry.dependencies]\nrequests = { markers = \"\"\"os_name == \"version = '^99'\"\"\"\" }\n",
+    "runtime": [["requests", "*"]],
+    "dev": [],
+    "decision": null,
+    "schemaErrors": []
+  }
+]
