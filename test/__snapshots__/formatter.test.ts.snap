@@ -64,6 +64,7 @@ exports[`formatter snapshots > matches convertToPdf output 1`] = `
 <html lang="en">
 <head>
 <meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Snapshot Doc</title>
 <style>
   @page { size: A4; margin: 2cm; }
@@ -80,6 +81,10 @@ exports[`formatter snapshots > matches convertToPdf output 1`] = `
   a { color: #0969da; text-decoration: none; }
   img { max-width: 100%; }
   .mermaid { overflow-x: auto; }
+  @media screen {
+    .table-scroll { max-width: 100%; overflow-x: auto; }
+    .table-scroll:focus-visible { outline: 2px solid #0969da; outline-offset: 2px; }
+  }
 </style>
 </head>
 <body>

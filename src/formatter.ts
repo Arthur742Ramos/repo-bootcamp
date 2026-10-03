@@ -546,6 +546,7 @@ export function convertToPdf(markdown: string, title: string): string {
 <html lang="en">
 <head>
 <meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>${escapeHtml(title)}</title>
 <style>
   @page { size: A4; margin: 2cm; }
@@ -562,6 +563,10 @@ export function convertToPdf(markdown: string, title: string): string {
   a { color: #0969da; text-decoration: none; }
   img { max-width: 100%; }
   .mermaid { overflow-x: auto; }
+  @media screen {
+    .table-scroll { max-width: 100%; overflow-x: auto; }
+    .table-scroll:focus-visible { outline: 2px solid #0969da; outline-offset: 2px; }
+  }
 </style>
 </head>
 <body>
