@@ -775,13 +775,67 @@ const GO_SOURCE_ENTRY_LIMIT = 200;
 const GO_SOURCE_FILE_BYTES = 256 * 1024;
 const GO_SOURCE_TOTAL_BYTES = 1024 * 1024;
 
+// Go 1.27 internal/syslist KnownOS and KnownArch include historical and future
+// names used by go/build.goodOSArchFile, not only currently supported targets.
+const GO_FILENAME_CONSTRAINTS = new Set([
+  "aix",
+  "android",
+  "darwin",
+  "dragonfly",
+  "freebsd",
+  "hurd",
+  "illumos",
+  "ios",
+  "js",
+  "linux",
+  "nacl",
+  "netbsd",
+  "openbsd",
+  "plan9",
+  "solaris",
+  "wasip1",
+  "windows",
+  "zos",
+  "386",
+  "amd64",
+  "amd64p32",
+  "arm",
+  "armbe",
+  "arm64",
+  "arm64be",
+  "loong64",
+  "mips",
+  "mipsle",
+  "mips64",
+  "mips64le",
+  "mips64p32",
+  "mips64p32le",
+  "ppc",
+  "ppc64",
+  "ppc64le",
+  "riscv",
+  "riscv64",
+  "s390",
+  "s390x",
+  "sparc",
+  "sparc64",
+  "wasm",
+]);
+
 function goSourcePath(path: string): boolean {
   if (path.includes("\\") || path.includes("\0")) return false;
   const parts = path.split("/");
   if (parts.length > 64) return false;
   if (parts.some((part) => !part || part.startsWith(".") || part.startsWith("_"))) return false;
   if (parts.slice(0, -1).some((part) => part === "vendor" || part === "testdata")) return false;
-  return path.endsWith(".go") && !path.endsWith("_test.go");
+  if (!path.endsWith(".go") || path.endsWith("_test.go")) return false;
+  // Go checks the name before its first dot, and requires an underscore prefix:
+  // windows.go is ordinary, but demo_windows.go is implicitly constrained.
+  const name = parts.at(-1)!.split(".")[0];
+  if (!name.includes("_")) return true;
+  const suffixes = name.split("_");
+  if (suffixes.at(-1) === "test") suffixes.pop();
+  return !GO_FILENAME_CONSTRAINTS.has(suffixes.at(-1) ?? "");
 }
 
 /** Read only a literal leading package clause, never evaluate source or build constraints. */

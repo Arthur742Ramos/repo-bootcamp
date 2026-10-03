@@ -1124,6 +1124,70 @@ describe("parseGoMod", () => {
 
 describe("discoverTasks", () => {
   it.each([
+    "demo_windows.go",
+    "pkg/demo_linux_amd64.go",
+    "demo_amd64.go",
+    "demo_darwin.go",
+    "demo_darwin_arm64.go",
+    "demo_nacl.go",
+    "demo_zos.go",
+    "demo_amd64p32.go",
+    "demo_riscv.go",
+    "demo_windows.extra.go",
+    "demo_windows_test.extra.go",
+  ])("does not use implicitly constrained source as portable Go evidence: %s", async (name) => {
+    const dir = await repoWith({
+      "go.mod": "module example.invalid/demo\n",
+      [name]: "package demo\n",
+    });
+    expect(await discoverTasks(dir)).toEqual([]);
+    expect(await discoverTasks(dir, { taskfileFiles: new Set(["go.mod", name]) })).toEqual([]);
+  });
+
+  it.each([
+    "demo_custom.go",
+    "windows.go",
+    "amd64.go",
+    "demo_WINDOWS.go",
+    "demo_unix.go",
+    "demo_windows_custom.go",
+    "demo.extra_windows.go",
+  ])("retains ordinary Go filenames without known constraint suffixes: %s", async (name) => {
+    const dir = await repoWith({
+      "go.mod": "module example.invalid/demo\n",
+      [name]: "package demo\n",
+    });
+    expect((await discoverTasks(dir)).map((task) => task.command)).toEqual([
+      "go build ./...",
+      "go test ./...",
+    ]);
+  });
+
+  it("qualifies mixed Go packages through selected ordinary source and preserves callbacks", async () => {
+    const module = "module example.invalid/demo\n";
+    const dir = await repoWith({
+      "go.mod": module,
+      "demo_windows.go": "package demo\n",
+      "demo_custom.go": "package demo\n",
+    });
+    const reads: [string, string][] = [];
+    const evidence: [string, string][] = [];
+    const tasks = await discoverTasks(dir, {
+      onGoModRead: (path, content) => reads.push([path, content]),
+      onGoPackageEvidence: (path, content) => evidence.push([path, content]),
+      onTaskfileRead: () => {
+        throw new Error("Go evidence must not invoke the Taskfile callback");
+      },
+    });
+    expect(tasks.map((task) => task.command)).toEqual(["go build ./...", "go test ./..."]);
+    expect(reads).toEqual([["go.mod", module]]);
+    expect(evidence.map(([path]) => path)).toEqual([".", "demo_custom.go"]);
+    expect(
+      await discoverTasks(dir, { taskfileFiles: new Set(["go.mod", "demo_windows.go"]) })
+    ).toEqual([]);
+  });
+
+  it.each([
     {},
     { "nested/go.mod": "module example.invalid/nested\n", "nested/demo.go": "package demo\n" },
     { "vendor/demo.go": "package demo\n" },

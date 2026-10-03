@@ -86,6 +86,66 @@ const moduleFiles = {
 };
 
 describe("Go module conventions", () => {
+  it("omits known filename constraints through actual tasks CLI and retains ordinary filename evidence", async () => {
+    for (const name of ["demo_windows.go", "pkg/demo_linux_amd64.go", "demo_amd64.go"]) {
+      const { repo } = await fixture({
+        "go.mod": moduleFiles["go.mod"],
+        [name]: moduleFiles["demo.go"],
+      });
+      const constrained = await runCli(["tasks", repo, "--json"]);
+      expect(constrained.exitCode).toBe(0);
+      expect(JSON.parse(constrained.stdout).tasks).toEqual([]);
+      await writeFile(join(repo, "windows.go"), moduleFiles["demo.go"]);
+      const mixed = await runCli(["tasks", repo, "--json"]);
+      expect(mixed.exitCode).toBe(0);
+      expect(JSON.parse(mixed.stdout).gettingStarted).toEqual(["go build ./...", "go test ./..."]);
+    }
+  });
+
+  it.each([false, true])(
+    "omits constrained-only generated guidance in fast=%s and respects ordinary source exclusions",
+    async (fast) => {
+      const { repo, base, env } = await fixture({
+        "go.mod": moduleFiles["go.mod"],
+        "demo_darwin_arm64.go": moduleFiles["demo.go"],
+      });
+      const generate = async (name: string, args: string[] = []) => {
+        const output = join(base, name);
+        const result = await runCli(
+          [
+            repo,
+            "--no-clone",
+            "--no-cache",
+            "--output",
+            output,
+            ...(fast ? ["--fast"] : []),
+            ...args,
+          ],
+          env
+        );
+        expect(result.exitCode).toBe(0);
+        return {
+          commands: JSON.parse(await readFile(join(output, "repo_facts.json"), "utf8")).quickstart
+            .commands,
+          onboarding: await readFile(join(output, "ONBOARDING.md"), "utf8"),
+        };
+      };
+      const constrained = await generate("constrained");
+      expect(constrained.commands).toEqual([]);
+      expect(constrained.onboarding).not.toContain("go test ./...");
+      await writeFile(join(repo, "demo_custom.go"), moduleFiles["demo.go"]);
+      const mixed = await generate("mixed");
+      expect(mixed.commands.map(({ command }: { command: string }) => command)).toEqual([
+        "go build ./...",
+        "go test ./...",
+      ]);
+      expect(mixed.onboarding).toContain("go test ./...");
+      const excluded = await generate("excluded", ["--exclude", "demo_custom.go"]);
+      expect(excluded.commands).toEqual([]);
+      expect(excluded.onboarding).not.toContain("go test ./...");
+    }
+  );
+
   it("omits native-invalid module quotes and package-free or unsupported source roots", async () => {
     const cases: Record<string, Record<string, string>> = {
       empty: { "go.mod": moduleFiles["go.mod"] },

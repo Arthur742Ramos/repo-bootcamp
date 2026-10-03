@@ -854,8 +854,14 @@ omitted, even when the nested marker is excluded from the scan. Source reads use
 the selected scan inventory; standalone discovery walks at most 200 entries.
 Evidence is limited to 200 candidate files/ancestor checks, 64 path components,
 256 KiB per source and 1 MiB total source bytes. Symlink sources, test-only
-packages, files with explicit build constraints and `ignore` module directives
-do not qualify this conservative fallback.
+packages, files with explicit build constraints or known implicit GOOS/GOARCH
+filename suffixes (such as `demo_windows.go`, `demo_amd64.go` or
+`demo_linux_amd64.go`), and `ignore` module directives do not qualify this
+conservative fallback. Filename constraints are omitted even when they match
+the current host; mixed packages still qualify through ordinary source files.
+Unknown suffixes and names without a suffix underscore, such as
+`demo_custom.go` and `windows.go`, remain ordinary source evidence. The known
+suffix set includes Go's historical and future filename constraint names.
 
 The module reader accepts literal unquoted or double-quoted module paths,
 comments and supported directive blocks; raw quotes and escaped module-path

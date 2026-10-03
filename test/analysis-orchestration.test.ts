@@ -215,6 +215,47 @@ beforeEach(() => {
 });
 
 describe("orchestrateAnalysis", () => {
+  it("omits implicit Go filename constraints while preserving source, boundary and task cache identities", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "bootcamp-go-filename-cache-"));
+    try {
+      await mkdir(join(dir, "pkg"));
+      await writeFile(join(dir, "go.mod"), "module example.invalid/demo\n");
+      await writeFile(join(dir, "pkg/demo_amd64.go"), "package demo\n");
+      await writeFile(join(dir, "Taskfile.yml"), "tasks: {verify: 'echo verify'}\n");
+      const constrained = await scanRepo(dir, 100);
+      expect(constrained.commands.map(({ command }) => command)).toEqual(["task verify"]);
+      await writeFile(join(dir, "pkg/windows.go"), "package demo\n");
+      const mixed = await scanRepo(dir, 100);
+      expect(mixed.commands.map(({ command }) => command)).toEqual([
+        "task verify",
+        "go build ./...",
+        "go test ./...",
+      ]);
+      expect(mixed.goModFingerprint).toBe(constrained.goModFingerprint);
+      expect(mixed.goPackageFingerprint).not.toBe(constrained.goPackageFingerprint);
+      expect(mixed.taskfileFingerprint).toBe(constrained.taskfileFingerprint);
+      const excluded = await scanRepo(dir, 100, { exclude: ["pkg/windows.go"] });
+      expect(excluded.commands).toEqual(constrained.commands);
+      expect(excluded.goPackageFingerprint).toBe(constrained.goPackageFingerprint);
+      await writeFile(join(dir, "pkg/windows.go"), "// fake demo\n");
+      const changed = await scanRepo(dir, 100);
+      expect(changed.files).toEqual(mixed.files);
+      expect(changed.commands).toEqual(constrained.commands);
+      expect(changed.goModFingerprint).toBe(mixed.goModFingerprint);
+      expect(changed.goPackageFingerprint).not.toBe(mixed.goPackageFingerprint);
+      expect(changed.taskfileFingerprint).toBe(mixed.taskfileFingerprint);
+      await writeFile(join(dir, "pkg/windows.go"), "package demo\n");
+      await writeFile(join(dir, "pkg/go.mod"), "module example.invalid/nested\n");
+      const nested = await scanRepo(dir, 100, { exclude: ["pkg/go.mod"] });
+      expect(nested.commands).toEqual(constrained.commands);
+      expect(nested.goModFingerprint).toBe(mixed.goModFingerprint);
+      expect(nested.goPackageFingerprint).not.toBe(mixed.goPackageFingerprint);
+      expect(nested.taskfileFingerprint).toBe(mixed.taskfileFingerprint);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
   it("hydrates scoped Go conventions from live or cached empty facts, preserves explicit commands, and fingerprints loaded manifests", async () => {
     const dir = await mkdtemp(join(tmpdir(), "bootcamp-go-cache-"));
     try {
