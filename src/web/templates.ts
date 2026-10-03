@@ -293,12 +293,12 @@ export function getIndexHtml(nonce?: string): string {
     }
     .command-prefix { color: var(--success); font: 700 0.8rem var(--font-mono); }
     .command-row code { white-space: pre-wrap; min-width: 0; flex: 1; overflow-wrap: anywhere; color: var(--ink); font: 0.78rem var(--font-mono); }
-    .command-row .icon-btn { flex: 0 0 auto; }
+    .command-row .icon-btn, .quickstart-item .icon-btn { flex: 0 0 auto; }
     .quickstart-list { display: grid; gap: 0.5rem; margin-top: 0.65rem; }
     .quickstart-item { display: flex; align-items: center; gap: 0.65rem; min-width: 0; }
-    .quickstart-copy { display: flex; align-items: baseline; gap: 0.55rem; min-width: 0; flex: 1; }
-    .quickstart-name { flex: 0 0 auto; color: var(--ink-muted); font-size: 0.72rem; font-weight: 600; }
-    .quickstart-copy code { white-space: pre-wrap; min-width: 0; overflow-wrap: anywhere; color: var(--ink); font: 0.78rem var(--font-mono); }
+    .quickstart-copy { display: flex; align-items: flex-start; flex-direction: column; gap: 0.1rem; min-width: 0; flex: 1; }
+    .quickstart-name { flex: 0 0 auto; min-width: 0; max-width: 100%; overflow-wrap: anywhere; white-space: pre-wrap; color: var(--ink-muted); font-size: 0.72rem; font-weight: 600; }
+    .quickstart-copy code { white-space: pre-wrap; min-width: 0; max-width: 100%; overflow-wrap: anywhere; color: var(--ink); font: 0.78rem var(--font-mono); }
     .quickstart-source { color: var(--ink-subtle); font: 0.68rem var(--font-mono); }
     .command-row .icon-btn, .quickstart-item .icon-btn { padding: 0.35rem 0.6rem; font-size: 0.72rem; }
     .ask-panel { margin-top: 1rem; border-top: 1px solid var(--border); padding-top: 0.9rem; }

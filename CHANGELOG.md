@@ -16,7 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - Honor standalone task discovery `--subdir` in either global option position, validate the selected contained directory, and forward advertised `--keep-temp` while preserving root output and outer-checkout cleanup.
-- Preserve literal command spacing, tabs, and line breaks in web First commands, terminal handoff, and inline reader code while retaining fenced-code wrapping and raw Copy/Download output.
+- Preserve literal command spacing, tabs, and line breaks in web First commands, terminal handoff, and inline reader code; wrap full task labels and commands within their rows while retaining fenced-code wrapping and raw Copy/Download output.
 
 - Preserve literal task labels and command backticks, line breaks, and spacing in generated Markdown, HTML, and PDF-ready guides; match code fences only on complete closing lines and keep literal text out of formatting placeholders.
 - Reset kit and issue-preview download controls for new analyses, cancel obsolete requests and feedback timers, and prevent late responses from affecting a replacement run while preserving active same-job downloads.

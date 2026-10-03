@@ -12,8 +12,8 @@ const names = [
   "test`unit",
   "test " + "long-part-".repeat(28),
 ];
-const commands = names.map((name, index) => ({
-  name: index === names.length - 1 ? "long command" : name,
+const commands = names.map((name) => ({
+  name,
   command: `npm run '${name}'`,
   source: "package.json",
 }));
@@ -73,6 +73,7 @@ test("First commands visibly distinguish literal arguments and copy the same pay
   for (let i = 0; i < commands.length; i++) {
     expect(await codes.nth(i).textContent()).toBe(commands[i].command);
     expect(await codes.nth(i).innerText()).toBe(commands[i].command);
+    expect(await page.locator(".quickstart-name").nth(i).innerText()).toBe(commands[i].name);
     await page.locator("#quickstartCommands button").nth(i).click();
     await expect
       .poll(() => page.evaluate(() => (window as unknown as { copied: string }).copied))
@@ -140,4 +141,53 @@ test("inline reader commands preserve spacing while fences, Source, Copy and Dow
   await page.keyboard.press("Escape");
   await expect(page.locator("#modal")).toBeHidden();
   expect(errors).toEqual([]);
+});
+
+test("full namespaced and long labels fit readable rows with compact ordinary commands and keyboard Copy", async ({
+  page,
+}) => {
+  const labels = [
+    "test:integration:database:migrations:rollback:sqlite",
+    "test:integration:database:migrations:rollback:sqlite:" + "tenant-".repeat(7),
+    names.at(-1)!,
+    "test unit",
+  ];
+  const values = labels.map((name) => ({
+    name,
+    command: `npm run '${name}'`,
+    source: "package.json",
+  }));
+  await page.evaluate((values) => {
+    document.getElementById("results")!.classList.add("show");
+    (
+      window as unknown as { renderQuickstartCommands: (commands: typeof values) => number }
+    ).renderQuickstartCommands(values);
+  }, values);
+  for (let i = 0; i < values.length; i++) {
+    const row = page.locator(".quickstart-item").nth(i);
+    expect(await row.locator(".quickstart-name").innerText()).toBe(values[i].name);
+    expect(await row.locator("code").innerText()).toBe(values[i].command);
+    const size = await row.evaluate((el) => ({
+      width: el.clientWidth,
+      scrollWidth: el.scrollWidth,
+      height: el.clientHeight,
+      copyWidth: el.querySelector("button")!.getBoundingClientRect().width,
+    }));
+    expect(size.scrollWidth).toBeLessThanOrEqual(size.width);
+    expect(size.height).toBeLessThan(i === 2 ? 350 : 180);
+    expect(size.copyWidth).toBeLessThan(90);
+    const button = row.getByRole("button");
+    await button.focus();
+    await page.keyboard.press("Enter");
+    await expect
+      .poll(() => page.evaluate(() => (window as unknown as { copied: string }).copied))
+      .toBe(values[i].command);
+  }
+  expect(
+    await page
+      .locator(".quickstart-item")
+      .last()
+      .evaluate((el) => el.clientHeight)
+  ).toBeLessThan(80);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
 });
