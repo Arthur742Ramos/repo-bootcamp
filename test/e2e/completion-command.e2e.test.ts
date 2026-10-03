@@ -55,16 +55,13 @@ describe.skipIf(spawnSync("bash", ["--version"]).status !== 0)(
       ];
       for (const check of checks) {
         const words = check.words.map((word) => `'${word}'`).join(" ");
-        const output = execFileSync(
-          "bash",
-          [
-            "--noprofile",
-            "--norc",
-            "-c",
-            `${result.stdout}\nCOMP_WORDS=(bootcamp ${words})\nCOMP_CWORD=${check.words.length}\n_bootcamp_completions\nprintf '%s\\n' "\${COMPREPLY[@]}"`,
-          ],
-          { encoding: "utf8" }
-        );
+        const output = execFileSync("bash", ["--noprofile", "--norc", "-s"], {
+          encoding: "utf8",
+          // The live tree exceeds Windows' command-line length limit. Feed
+          // the exact same script through stdin so Git Bash still executes
+          // every completion scenario on Windows.
+          input: `${result.stdout}\nCOMP_WORDS=(bootcamp ${words})\nCOMP_CWORD=${check.words.length}\n_bootcamp_completions\nprintf '%s\\n' "\${COMPREPLY[@]}"`,
+        });
         for (const candidate of check.expected)
           expect(output.trim().split("\n")).toContain(candidate);
       }
