@@ -395,6 +395,13 @@ for (const mixed of [false, true]) {
         expect(
           await page.evaluate(() => Reflect.get(globalThis, "poetryInjected"))
         ).toBeUndefined();
+        // Negative package controls apply to the name column; "python" is a
+        // legitimate ecosystem provenance value in mixed tables.
+        const packageNames = await packages
+          .locator("tr")
+          .filter({ has: page.locator("td") })
+          .locator("td:first-child")
+          .allTextContents();
         for (const phantom of [
           "phantom",
           "foreign",
@@ -406,7 +413,7 @@ for (const mixed of [false, true]) {
           "optional",
           "ALPHA",
         ]) {
-          await expect(packages.getByRole("cell", { name: phantom, exact: true })).toHaveCount(0);
+          expect(packageNames).not.toContain(phantom);
         }
         const region = page
           .getByRole("region", { name: "Scrollable table", exact: true })
@@ -417,13 +424,22 @@ for (const mixed of [false, true]) {
         expect(await region.evaluate((element) => getComputedStyle(element).outlineWidth)).toBe(
           "2px"
         );
-        expect(await region.evaluate((element) => element.scrollWidth)).toBeGreaterThan(
-          await region.evaluate((element) => element.clientWidth)
-        );
+        const dimensions = await region.evaluate((element) => ({
+          scroll: element.scrollWidth,
+          client: element.clientWidth,
+        }));
+        // Narrow exports must contain real keyboard-scrollable overflow. Wide
+        // exports may fit naturally; ArrowRight must then leave page/table still.
+        if (width === 320) expect(dimensions.scroll).toBeGreaterThan(dimensions.client);
         await page.keyboard.press("ArrowRight");
-        await expect
-          .poll(() => region.evaluate((element) => element.scrollLeft))
-          .toBeGreaterThan(0);
+        if (dimensions.scroll > dimensions.client) {
+          await expect
+            .poll(() => region.evaluate((element) => element.scrollLeft))
+            .toBeGreaterThan(0);
+        } else {
+          expect(await region.evaluate((element) => element.scrollLeft)).toBe(0);
+        }
+        await expect(region).toBeFocused();
         expect(await page.evaluate(() => scrollX)).toBe(0);
         await expect(
           page.getByText("Ordered alternatives are descriptive and no branch is selected.", {
