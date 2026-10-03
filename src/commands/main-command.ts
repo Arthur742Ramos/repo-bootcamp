@@ -768,20 +768,22 @@ export async function runMainCommand(repoUrl: string, options: BootcampOptions):
   }
 
   if (options.interactive) {
-    await runInteractiveMode(
-      interactiveRepoPath,
-      repoInfo,
-      interactiveScanResult,
-      outputDir,
-      facts,
-      { verbose: options.verbose, saveTranscript: options.transcript, model: options.model }
-    );
-
-    if (!options.keepTemp && shouldCleanupRepo) {
-      try {
-        await cleanupRepository(repoPath);
-      } catch {
-        // Ignore cleanup errors
+    try {
+      await runInteractiveMode(
+        interactiveRepoPath,
+        repoInfo,
+        interactiveScanResult,
+        outputDir,
+        facts,
+        { verbose: options.verbose, saveTranscript: options.transcript, model: options.model }
+      );
+    } finally {
+      if (!options.keepTemp && shouldCleanupRepo) {
+        try {
+          await cleanupRepository(repoPath);
+        } catch {
+          // Best-effort cleanup must not replace an interactive failure.
+        }
       }
     }
   } else {

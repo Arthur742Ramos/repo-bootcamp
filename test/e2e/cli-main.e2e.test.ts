@@ -1,4 +1,6 @@
 import { execFileSync } from "child_process";
+import { once } from "events";
+import { pathToFileURL } from "url";
 import { mkdtemp, mkdir, readFile, readdir, realpath, rm, writeFile } from "fs/promises";
 import { tmpdir } from "os";
 import { basename, join } from "path";
@@ -6,7 +8,7 @@ import { basename, join } from "path";
 import { afterEach, describe, expect, it } from "vitest";
 
 import type { RepoFacts } from "../../src/types.js";
-import { runCli } from "./helpers.js";
+import { runCli, spawnCli, waitForOutput } from "./helpers.js";
 
 async function createFixtureRepo(baseDir: string): Promise<string> {
   const repoDir = join(baseDir, "fixture-cli-repo");
@@ -166,8 +168,17 @@ function buildMockFacts(repoName: string): RepoFacts {
 
 describe("bootcamp CLI", () => {
   const tempDirs: string[] = [];
+  const children: ReturnType<typeof spawnCli>[] = [];
 
   afterEach(async () => {
+    await Promise.all(
+      children.splice(0).map(async ({ child }) => {
+        if (child.exitCode === null && child.signalCode === null) {
+          child.kill("SIGTERM");
+          await once(child, "close");
+        }
+      })
+    );
     await Promise.all(tempDirs.map((dir) => rm(dir, { recursive: true, force: true })));
     tempDirs.length = 0;
   });
@@ -325,4 +336,70 @@ describe("bootcamp CLI", () => {
       JSON.parse(await readFile(join(repoPath, "package.json"), "utf-8")).dependencies
     ).toHaveProperty("express");
   }, 90_000);
+  it.each([
+    { isLocal: false, keepTemp: false },
+    { isLocal: false, keepTemp: true },
+    { isLocal: true, keepTemp: false },
+  ])(
+    "settles clone ownership after a real interactive transcript failure ($isLocal/$keepTemp)",
+    async ({ isLocal, keepTemp }) => {
+      const tempDir = await mkdtemp(join(tmpdir(), "bootcamp-interactive-failure-"));
+      tempDirs.push(tempDir);
+      const repoPath = await createFixtureRepo(tempDir);
+      const outputDir = join(tempDir, "output");
+      // Generation succeeds; the interactive transcript cannot replace this directory.
+      await mkdir(join(outputDir, "TRANSCRIPT.md"), { recursive: true });
+      await writeFile(
+        join(outputDir, "TRANSCRIPT.md", "preserve.txt"),
+        "Preserve existing output."
+      );
+      const responseFile = join(tempDir, "response.json");
+      await writeFile(responseFile, JSON.stringify(buildMockFacts("fixture-owner/fixture-repo")));
+      const spawned = spawnCli(
+        [
+          isLocal ? repoPath : "https://github.com/fixture-owner/fixture-repo",
+          "--output",
+          outputDir,
+          "--no-cache",
+          "--interactive",
+          "--transcript",
+          ...(isLocal ? ["--no-clone"] : []),
+          ...(keepTemp ? ["--keep-temp"] : []),
+        ],
+        {
+          NODE_ENV: "test",
+          REPO_BOOTCAMP_TEST_LLM_RESPONSE_FILE: responseFile,
+          GIT_CONFIG_COUNT: "1",
+          GIT_CONFIG_KEY_0: `url.${pathToFileURL(repoPath).href}.insteadOf`,
+          GIT_CONFIG_VALUE_0: "https://github.com/fixture-owner/fixture-repo.git",
+          HOME: join(tempDir, "home"),
+        },
+        tempDir
+      );
+      children.push(spawned);
+      const closed = once(spawned.child, "close");
+      await waitForOutput(spawned.getOutput, "Ready!", 60_000);
+      spawned.child.stdin.end("exit\n");
+      const [exitCode] = await closed;
+      expect(exitCode).toBe(1);
+      expect(spawned.getOutput().stderr).toContain("EISDIR");
+      expect(await readFile(join(outputDir, "TRANSCRIPT.md", "preserve.txt"), "utf8")).toBe(
+        "Preserve existing output."
+      );
+      expect(
+        JSON.parse(await readFile(join(outputDir, "ANALYSIS_MANIFEST.json"), "utf8"))
+      ).toHaveProperty("schemaVersion");
+      expect(await readFile(join(repoPath, "README.md"), "utf8")).toContain("Fixture CLI Repo");
+      if (!isLocal) {
+        const clones = await readdir(join(tempDir, ".tmp"));
+        expect(clones).toHaveLength(keepTemp ? 1 : 0);
+        if (keepTemp) {
+          expect(await readFile(join(tempDir, ".tmp", clones[0], "README.md"), "utf8")).toContain(
+            "Fixture CLI Repo"
+          );
+        }
+      }
+    },
+    90_000
+  );
 });
