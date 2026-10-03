@@ -45,6 +45,7 @@ export function getIndexHtml(nonce?: string): string {
       --dur-base: 200ms;
       --z-backdrop: 1000;
       --z-modal: 1100;
+      --z-reader-controls: 1;
       --z-toast: 1200;
       --z-tooltip: 1300;
     }
@@ -337,10 +338,11 @@ export function getIndexHtml(nonce?: string): string {
     .file:focus-visible { outline: none; border-color: var(--accent); box-shadow: 0 0 0 2px rgba(0, 217, 255, 0.25); }
     .file-name { font-family: var(--font-mono); font-weight: 600; font-size: 0.9rem; color: var(--ink); margin-bottom: 0.25rem; word-break: break-all; }
     .file-desc { color: var(--ink-muted); font-size: 0.8125rem; }
-    .modal { display: none; position: fixed; inset: 0; background: var(--scrim); z-index: var(--z-modal); padding: 2rem; overflow-y: auto; }
+    .modal { --reader-inset: 2rem; display: none; position: fixed; inset: 0; background: var(--scrim); z-index: var(--z-modal); padding: var(--reader-inset); overflow-y: auto; scroll-padding-top: calc(var(--reader-toolbar-height, 0px) + 0.75rem); }
     .modal.show { display: block; }
     #modalContent.load-error { color: var(--danger); }
     .modal-content { max-width: 900px; margin: 0 auto; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-md); padding: 1.5rem; }
+    .preview-toolbar { display: flow-root; position: sticky; top: calc(-1 * var(--reader-inset)); z-index: var(--z-reader-controls); background: var(--surface); margin: -1.5rem -1.5rem 0; padding: 1.5rem 1.5rem 0; border-bottom: 1px solid var(--border); border-radius: var(--r-md) var(--r-md) 0 0; }
     .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; gap: 1rem; }
     .modal-header h2 { font-family: var(--font-mono); font-size: 1rem; font-weight: 600; word-break: break-all; }
     .modal-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; }
@@ -383,7 +385,7 @@ export function getIndexHtml(nonce?: string): string {
       color: var(--ink);
     }
     [hidden] { display: none !important; }
-    .preview-controls { display: flex; gap: 0.5rem; margin-bottom: 1rem; }
+    .preview-controls { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 1rem; }
     .preview-controls [aria-pressed="true"] { border-color: var(--accent); }
     .preview-outline { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem 0.75rem; margin-bottom: 1rem; }
     .preview-outline label { color: var(--ink-muted); font-size: 0.8125rem; font-weight: 600; }
@@ -412,8 +414,9 @@ export function getIndexHtml(nonce?: string): string {
       body { padding: 1.25rem; }
       .input-group { flex-direction: column; }
       #analyzeBtn { width: 100%; }
-      .modal { padding: 0.75rem; }
+      .modal { --reader-inset: 0.75rem; }
       .modal-content { padding: 1rem; }
+      .preview-toolbar { margin: -1rem -1rem 0; padding: 1rem 1rem 0; }
       .modal-header { align-items: flex-start; flex-direction: column; }
       .modal-actions { width: 100%; }
       .icon-btn { flex: 1; }
@@ -435,6 +438,15 @@ export function getIndexHtml(nonce?: string): string {
     }
     @media (min-width: 641px) and (max-width: 820px) {
       .stats { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    }
+    @media (max-height: 480px) {
+      .modal { --reader-inset: 0.5rem; }
+      .preview-toolbar { display: flex; flex-wrap: wrap; gap: 0.5rem; padding-top: 0.5rem; }
+      .modal-header { width: 100%; margin-bottom: 0; gap: 0.5rem; }
+      .preview-controls { margin-bottom: 0.5rem; }
+      .preview-outline { flex: 1 1 180px; margin-bottom: 0.5rem; }
+      .preview-outline label { display: none; }
+      .preview-outline select { padding: 0.45rem 0.75rem; }
     }
     @media (prefers-reduced-motion: reduce) {
       * { transition: none !important; animation: none !important; scroll-behavior: auto !important; }
@@ -613,6 +625,7 @@ export function getIndexHtml(nonce?: string): string {
     aria-hidden="true"
   >
     <div class="modal-content">
+      <div class="preview-toolbar" id="previewToolbar">
       <div class="modal-header">
         <h2 id="modalTitle"></h2>
         <div class="modal-actions">
@@ -630,6 +643,7 @@ export function getIndexHtml(nonce?: string): string {
         <label for="previewSection">Jump to section</label>
         <select id="previewSection"><option value="">Choose a section…</option></select>
       </div>
+      </div>
       <article id="renderedContent" class="markdown-preview" tabindex="0" aria-label="Rendered document" hidden></article>
       <pre id="modalContent" tabindex="0"></pre>
       <button class="icon-btn" type="button" id="retryPreviewBtn" hidden>Retry preview</button>
@@ -645,6 +659,10 @@ export function getIndexHtml(nonce?: string): string {
     let previewTarget = null;
     const previewHistory = [];
     const previewHistoryLimit = 20;
+    // Update a rule in the nonce-authorized stylesheet, never a style attribute.
+    const readerStylesheet = document.querySelector('style').sheet;
+    const readerOffsetRuleIndex = readerStylesheet.insertRule('.modal { --reader-toolbar-height: 0px; }', readerStylesheet.cssRules.length);
+    let readerToolbarHeight = 0;
     let lastFocused = null;
     let currentEventSource = null;
     let latestResult = null;
@@ -1404,6 +1422,14 @@ export function getIndexHtml(nonce?: string): string {
       return Array.from(document.querySelectorAll('#renderedContent [data-anchor]'));
     }
 
+    function updatePreviewToolbarHeight() {
+      const height = Math.ceil(document.getElementById('previewToolbar').getBoundingClientRect().height);
+      if (height === readerToolbarHeight) return;
+      readerToolbarHeight = height;
+      readerStylesheet.deleteRule(readerOffsetRuleIndex);
+      readerStylesheet.insertRule('.modal { --reader-toolbar-height: ' + height + 'px; }', readerOffsetRuleIndex);
+    }
+
     function focusPreviewHeading(heading) {
       if (!heading) return;
       // A heading inside a closed disclosure cannot receive focus. Reveal all
@@ -1411,7 +1437,8 @@ export function getIndexHtml(nonce?: string): string {
       for (let parent = heading.parentElement; parent && parent.id !== 'renderedContent'; parent = parent.parentElement) {
         if (parent.tagName === 'DETAILS') parent.open = true;
       }
-      heading.focus();
+      updatePreviewToolbarHeight();
+      heading.focus({ preventScroll: true });
       heading.scrollIntoView({ block: 'start' });
       if (previewTarget) previewTarget.fragment = heading.dataset.anchor;
       document.getElementById('previewSection').value = String(previewHeadings().indexOf(heading));
@@ -1536,6 +1563,7 @@ export function getIndexHtml(nonce?: string): string {
       document.getElementById('renderedBtn').setAttribute('aria-pressed', String(rendered));
       document.getElementById('sourceBtn').setAttribute('aria-pressed', String(!rendered));
       document.getElementById('previewOutline').hidden = !rendered || previewHeadings().length < 2;
+      updatePreviewToolbarHeight();
     }
 
     function updatePreviewBack() {
@@ -1904,6 +1932,7 @@ export function getIndexHtml(nonce?: string): string {
       const modal = document.getElementById('modal');
       modal.classList.add('show');
       modal.setAttribute('aria-hidden', 'false');
+      updatePreviewToolbarHeight();
       document.getElementById('closeBtn').focus();
     }
 
@@ -1978,6 +2007,8 @@ export function getIndexHtml(nonce?: string): string {
     document.getElementById('sourceBtn').addEventListener('click', () => setPreviewMode(false));
     document.getElementById('downloadBtn').addEventListener('click', downloadFile);
     document.getElementById('closeBtn').addEventListener('click', closeModal);
+    new ResizeObserver(updatePreviewToolbarHeight).observe(document.getElementById('previewToolbar'));
+    window.addEventListener('resize', updatePreviewToolbarHeight);
     document.getElementById('modal').addEventListener('click', (event) => {
       if (event.target === document.getElementById('modal')) closeModal();
     });
