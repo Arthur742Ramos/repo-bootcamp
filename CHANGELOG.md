@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Count `.mts`, `.cts`, `.mjs`, and `.cjs` modules in the large-codebase onboarding-risk factor so modern JS/TS repositories receive the same radar reports and CI gate outcomes as equivalent `.ts`/`.js` repositories.
 - Keep document preview navigation and file actions visible while reading long documents, with linked headings below the controls and compact controls on short screens.
 - Preserve explicit onboarding install commands and use setup-documentation guidance when a non-Node installation command is unknown; identify Poetry and uv from lockfiles in the selected scan root instead of treating every Python project as Poetry.
 - Select development, test, and build guidance from command roles and known runner invocations instead of substrings in installation flags, file paths, or unrelated names; keep setup commands out of the build/verify step.
