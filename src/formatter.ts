@@ -360,10 +360,11 @@ export function markdownToHtml(md: string): string {
 
     // Table row
     if (/^\|/.test(line)) {
+      const tableLine = line.trimEnd();
       // Skip separator rows (e.g. |---|---|)
-      if (/^\|[\s-:|]+\|$/.test(line)) continue;
+      if (/^\|[\s-:|]+\|$/.test(tableLine)) continue;
 
-      const cells = readTableCells(line);
+      const cells = readTableCells(tableLine);
       if (!inTable) {
         html.push(
           '<div class="table-scroll" tabindex="0" role="region" aria-label="Scrollable table"><table>'

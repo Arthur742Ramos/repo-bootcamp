@@ -607,7 +607,7 @@ export function generateDependencyDiagram(deps: DependencyAnalysis, projectName:
  */
 /** Keep manifest text inside one Markdown table cell. */
 function dependencyTableCell(value: string): string {
-  return value
+  return String(value)
     .replace(/\\/g, "\\\\")
     .replace(/\|/g, "\\|")
     .replace(/[\r\n]+/g, " ");

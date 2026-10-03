@@ -235,6 +235,16 @@ describe("markdownToHtml", () => {
     expect(html).toContain(String.raw`<tr><td>a\</td><td>b\|c</td></tr>`);
   });
 
+  it("ignores trailing whitespace and CRLF without dropping intentional empty cells", () => {
+    const html = markdownToHtml("| A | B |   \r\n|---|---|  \r\n| x | y |  \r\n| z | | \r\n");
+    expect(html).toContain("<tr><th>A</th><th>B</th></tr>");
+    expect(html).toContain("<tr><td>x</td><td>y</td></tr>");
+    expect(html).toContain("<tr><td>z</td><td></td></tr>");
+    expect(html).not.toContain("---");
+    expect(html.match(/<th>/g)).toHaveLength(2);
+    expect(html.match(/<td>/g)).toHaveLength(4);
+  });
+
   it("passes through HTML tags", () => {
     const md = "<details>\n<summary>Click</summary>\n\nContent\n\n</details>";
     const html = markdownToHtml(md);
