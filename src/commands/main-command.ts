@@ -193,7 +193,11 @@ async function finalizeOutputs(
     "utf8"
   );
   const emittedFiles = [
-    ...new Set([...generation.emittedFiles, "ANALYSIS_MANIFEST.json", "summary.json"]),
+    ...new Set(
+      [...generation.emittedFiles, "ANALYSIS_MANIFEST.json", "summary.json"].map((name) =>
+        relative(outputDir, join(outputDir, name)).split(sep).join("/")
+      )
+    ),
   ];
   await writeRunSummary({ outputDir, repoInfo, ...generation, emittedFiles });
   return emittedFiles;

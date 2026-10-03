@@ -320,6 +320,7 @@ test *FILES:
     ["json", "html"],
     ["quiet-json", "html"],
     ["preview", "html"],
+    ["aliases", "html"],
   ])("reports only emitted files for %s (%s)", async (mode, format) => {
     const tempDir = await mkdtemp(join(tmpdir(), "bootcamp-output-summary-"));
     tempDirs.push(tempDir);
@@ -339,11 +340,13 @@ test *FILES:
         })
       );
     }
-    if (mode === "plugin") {
+    if (mode === "plugin" || mode === "aliases") {
       const plugin = join(tempDir, "formatter.mjs");
       await writeFile(
         plugin,
-        "export default {type:'formatter',name:'summary-fixture',formatDocuments(docs){return docs.filter(d=>d.name!=='SECURITY.md').map(d=>d.name==='BOOTCAMP.md'?{...d,name:'WELCOME.md'}:d).concat({name:'PLUGIN_GUIDE.md',content:'# Plugin guide'},{name:'summary.json',content:'plugin metadata'},{name:'ANALYSIS_MANIFEST.json',content:'plugin metadata'});}};"
+        mode === "aliases"
+          ? "export default {type:'formatter',name:'summary-aliases',formatDocuments(docs){return docs.filter(d=>d.name==='BOOTCAMP.md').flatMap(d=>[d,{...d,name:'./BOOTCAMP.md'}]).concat({name:'./summary.json',content:'plugin metadata'},{name:'./ANALYSIS_MANIFEST.json',content:'plugin metadata'});}};"
+          : "export default {type:'formatter',name:'summary-fixture',formatDocuments(docs){return docs.filter(d=>d.name!=='SECURITY.md').map(d=>d.name==='BOOTCAMP.md'?{...d,name:'WELCOME.md'}:d).concat({name:'PLUGIN_GUIDE.md',content:'# Plugin guide'},{name:'summary.json',content:'plugin metadata'},{name:'ANALYSIS_MANIFEST.json',content:'plugin metadata'});}};"
       );
       await writeFile(join(tempDir, ".bootcamprc.json"), JSON.stringify({ plugins: [plugin] }));
     }
@@ -408,6 +411,8 @@ test *FILES:
     if (jsonOnly)
       expect(files).toEqual(["ANALYSIS_MANIFEST.json", "repo_facts.json", "summary.json"]);
     if (mode === "preview") expect(files).toContain("ISSUES_PREVIEW.html");
+    if (mode === "aliases")
+      expect(files).toEqual(["ANALYSIS_MANIFEST.json", "BOOTCAMP.html", "summary.json"]);
   });
 
   it("generates the onboarding kit through the real CLI process", async () => {

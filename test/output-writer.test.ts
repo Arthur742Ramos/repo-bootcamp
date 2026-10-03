@@ -1,5 +1,6 @@
 import { join } from "path";
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import { join } from "path";
 
 vi.mock("chalk", () => {
   const makeChalk = (): any =>
@@ -25,7 +26,7 @@ vi.mock("../src/issues.js", () => ({
 }));
 
 vi.mock("../src/diagrams.js", () => ({
-  renderOutputDiagrams: vi.fn().mockResolvedValue({ rendered: true, files: ["arch.svg"] }),
+  renderOutputDiagrams: vi.fn().mockResolvedValue({ rendered: true, files: ["/tmp/out/arch.svg"] }),
 }));
 
 vi.mock("../src/progress.js", () => ({
@@ -150,7 +151,7 @@ describe("writeGeneratedOutputs", () => {
     expect(result.documentCount).toBe(3);
     expect(result.emittedFiles).toEqual(["WELCOME.html", "PLUGIN.html"]);
     expect(writeFile).toHaveBeenLastCalledWith(
-      "/tmp/out/WELCOME.html",
+      join("/tmp/out", "WELCOME.html"),
       "<h1>Updated</h1>",
       "utf-8"
     );
@@ -160,7 +161,7 @@ describe("writeGeneratedOutputs", () => {
     const { applyOutputFormat } = await import("../src/formatter.js");
     vi.mocked(applyOutputFormat)
       .mockReturnValueOnce([])
-      .mockReturnValueOnce([{ name: "ISSUES_PREVIEW.html", content: "<h1>Preview</h1>" }]);
+      .mockReturnValueOnce([{ name: "./ISSUES_PREVIEW.html", content: "<h1>Preview</h1>" }]);
     const result = await writeGeneratedOutputs(
       makeParams({
         outputFormat: "html",
@@ -176,7 +177,7 @@ describe("writeGeneratedOutputs", () => {
     const { renderOutputDiagrams } = await import("../src/diagrams.js");
     vi.mocked(renderOutputDiagrams).mockResolvedValueOnce({
       rendered: false,
-      files: ["/tmp/out/architecture.svg"],
+      files: [join("/tmp/out", "diagrams", "..", "architecture.svg")],
       error: "second diagram failed",
     });
     const result = await writeGeneratedOutputs(makeParams({ options: { renderDiagrams: true } }));
@@ -199,6 +200,35 @@ describe("writeGeneratedOutputs", () => {
     vi.mocked(writeFile).mockRejectedValueOnce(new Error("disk full"));
     await expect(writeGeneratedOutputs(makeParams())).rejects.toThrow("disk full");
     expect(writeFile).toHaveBeenCalledTimes(1);
+  });
+
+  it("deduplicates lexical aliases of the actual written destinations", async () => {
+    const { applyOutputFormat } = await import("../src/formatter.js");
+    vi.mocked(applyOutputFormat).mockReturnValueOnce([
+      { name: "BOOTCAMP.html", content: "first" },
+      { name: "./BOOTCAMP.html", content: "last" },
+      { name: "./summary.json", content: "metadata" },
+    ]);
+    const result = await writeGeneratedOutputs(makeParams());
+    expect(result.documentCount).toBe(3);
+    expect(result.emittedFiles).toEqual(["BOOTCAMP.html", "summary.json"]);
+    expect(writeFile).toHaveBeenNthCalledWith(
+      2,
+      join("/tmp/out", "BOOTCAMP.html"),
+      "last",
+      "utf-8"
+    );
+  });
+
+  it("keeps literal POSIX backslashes and uses platform separators for Windows names", async () => {
+    const result = await writeGeneratedOutputs(
+      makeParams({
+        documents: [{ name: "notes\\GUIDE.html", content: "guide" }],
+      })
+    );
+    expect(result.emittedFiles).toEqual(
+      process.platform === "win32" ? ["notes/GUIDE.html"] : ["notes\\GUIDE.html"]
+    );
   });
 });
 
