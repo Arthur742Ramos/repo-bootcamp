@@ -558,6 +558,99 @@ describe("bootcamp CLI", () => {
     90_000
   );
 
+  it.each(
+    (["markdown", "html", "pdf"] as const).flatMap((format) =>
+      [false, true].map((reports) => ({ format, reports }))
+    )
+  )(
+    "links only emitted optional documents in $format output (reports=$reports)",
+    async ({ format, reports }) => {
+      const tempDir = await mkdtemp(join(tmpdir(), "bootcamp-optional-navigation-"));
+      tempDirs.push(tempDir);
+      const repoPath = await createFixtureRepo(tempDir);
+      if (!reports) {
+        await Promise.all(
+          ["package.json", "src", "test", ".github"].map((name) =>
+            rm(join(repoPath, name), { recursive: true, force: true })
+          )
+        );
+      }
+      const responseFile = join(tempDir, "response.json");
+      await writeFile(responseFile, JSON.stringify(buildMockFacts(`local/${basename(repoPath)}`)));
+      const outputDir = join(tempDir, "output");
+      const result = await runCli(
+        [
+          repoPath,
+          "--no-clone",
+          "--no-cache",
+          "--output",
+          outputDir,
+          "--format",
+          format,
+          ...(reports ? ["--style", "corporate"] : []),
+        ],
+        { NODE_ENV: "test", REPO_BOOTCAMP_TEST_LLM_RESPONSE_FILE: responseFile }
+      );
+      expect(result.exitCode).toBe(0);
+      const extension = format === "markdown" ? "md" : "html";
+      const files = await readdir(outputDir);
+      const content = await readFile(join(outputDir, `BOOTCAMP.${extension}`), "utf-8");
+      const navigation =
+        format === "markdown"
+          ? content.slice(content.lastIndexOf("## Next Steps"))
+          : content.slice(content.lastIndexOf(">Next Steps</h2>"));
+      for (const name of ["DEPENDENCIES", "IMPACT"]) {
+        expect(files.includes(`${name}.${extension}`)).toBe(reports);
+        expect(navigation.includes(`./${name}.${extension}`)).toBe(reports);
+        if (reports)
+          expect(
+            (await readFile(join(outputDir, `${name}.${extension}`), "utf-8")).length
+          ).toBeGreaterThan(100);
+      }
+      expect(navigation).toContain(`./ONBOARDING.${extension}`);
+      expect(content).not.toContain("bootcamp-navigation:");
+      const links =
+        format === "markdown"
+          ? [...navigation.matchAll(/\]\(\.\/([^)]*)\)/g)].map((match) => match[1])
+          : [...navigation.matchAll(/href="\.\/([^"?#]*)"/g)].map((match) => match[1]);
+      for (const target of links) expect(files).toContain(target);
+    },
+    90_000
+  );
+
+  it("omits excluded core and optional navigation while preserving explicit repository links", async () => {
+    const tempDir = await mkdtemp(join(tmpdir(), "bootcamp-excluded-navigation-"));
+    tempDirs.push(tempDir);
+    const repoPath = await createFixtureRepo(tempDir);
+    await writeFile(
+      join(repoPath, ".bootcamprc.json"),
+      JSON.stringify({
+        output: { excludeDocs: ["ONBOARDING.md", "DEPENDENCIES.md", "IMPACT.md"] },
+      })
+    );
+    const input = buildMockFacts(`local/${basename(repoPath)}`);
+    input.description = "Explicit repository instructions: [DEPENDENCIES.md](./DEPENDENCIES.md)";
+    const responseFile = join(tempDir, "response.json");
+    await writeFile(responseFile, JSON.stringify(input));
+    const outputDir = join(tempDir, "output");
+    const result = await runCli(
+      [repoPath, "--no-clone", "--no-cache", "--output", outputDir, "--style", "corporate"],
+      { NODE_ENV: "test", REPO_BOOTCAMP_TEST_LLM_RESPONSE_FILE: responseFile },
+      60_000,
+      repoPath
+    );
+    expect(result.exitCode).toBe(0);
+    const files = await readdir(outputDir);
+    const content = await readFile(join(outputDir, "BOOTCAMP.md"), "utf-8");
+    expect(content).toContain(input.description);
+    const navigation = content.slice(content.lastIndexOf("## Next Steps"));
+    for (const name of ["ONBOARDING.md", "DEPENDENCIES.md", "IMPACT.md"]) {
+      expect(files).not.toContain(name);
+      expect(navigation).not.toContain(`./${name}`);
+    }
+    expect(navigation).toContain("./ARCHITECTURE.md");
+  }, 90_000);
+
   it("generates extended analysis from the selected package instead of the outer manifest", async () => {
     const tempDir = await mkdtemp(join(tmpdir(), "bootcamp-scoped-cli-"));
     tempDirs.push(tempDir);
