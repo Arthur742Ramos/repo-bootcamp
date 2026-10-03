@@ -58,3 +58,23 @@ test("the sanitized web reader preserves table and code keyboard scroll regions"
   await page.keyboard.press("Escape");
   await expect(page.locator("#modal")).toBeHidden();
 });
+
+test("printed HTML exports retain all table columns and wrap long commands", async ({ page }) => {
+  await page.setContent(convertToHtml(markdown, "Code map"));
+  await page.emulateMedia({ media: "print" });
+  const table = page.getByRole("region", { name: "Scrollable table" });
+  expect(await table.evaluate((element) => getComputedStyle(element).overflowX)).toBe("visible");
+  const bounds = await page
+    .locator("th")
+    .evaluateAll((elements) => elements.map((element) => element.getBoundingClientRect().right));
+  const right = await page
+    .locator("body")
+    .evaluate((element) => element.getBoundingClientRect().right);
+  expect(Math.max(...bounds)).toBeLessThanOrEqual(right + 1);
+  await expect(page.locator("th").last()).toHaveText("Imported by");
+  const code = page.getByRole("region", { name: "Code block" });
+  expect(await code.evaluate((element) => element.scrollWidth <= element.clientWidth + 1)).toBe(
+    true
+  );
+  expect(await code.innerText()).toContain(filename);
+});

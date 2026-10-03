@@ -438,6 +438,12 @@ export function wrapHtmlPage(body: string, title: string): string {
   .mermaid { overflow-x: auto; }
   details { margin: 0.5em 0; }
   summary { cursor: pointer; }
+  @media print {
+    .table-scroll { overflow: visible; }
+    table { table-layout: fixed; }
+    th, td { overflow-wrap: anywhere; }
+    pre { white-space: pre-wrap; overflow: visible; }
+  }
 </style>
 </head>
 <body>
