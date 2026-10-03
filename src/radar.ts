@@ -142,7 +142,8 @@ function calculateOnboardingRisk(
 
   // Complexity signals
   const sourceFiles = files.filter(
-    (f) => /\.(ts|js|tsx|jsx|py|go|rs)$/.test(f.path) && !f.path.includes("node_modules")
+    (f) =>
+      /\.(ts|js|tsx|jsx|mts|cts|mjs|cjs|py|go|rs)$/.test(f.path) && !f.path.includes("node_modules")
   );
   if (sourceFiles.length > 500) {
     risk += 10;

@@ -77,4 +77,57 @@ describe("radar accuracy", () => {
       "No test files detected"
     );
   });
+
+  it.each([
+    "ts",
+    "js",
+    "tsx",
+    "jsx",
+    "mts",
+    "cts",
+    "mjs",
+    "cjs",
+    "py",
+    "go",
+    "rs",
+    "d.ts",
+    "d.mts",
+    "d.cts",
+  ])("counts .%s files at the existing large-codebase boundary", (extension) => {
+    const files: FileInfo[] = Array.from({ length: 500 }, (_, i) => ({
+      path: `src/module${i}.${extension}`,
+      size: 1,
+      isDirectory: false,
+    }));
+    // A test path provides the independent test-presence signal without
+    // being one of the extensions counted as source for this risk factor.
+    files.push({ path: "tests/smoke.txt", size: 1, isDirectory: false });
+    const risk = () => generateTechRadar(stack(), files, null, null, true, true).onboardingRisk;
+
+    expect(risk()).toEqual({ score: 0, grade: "A", factors: [] });
+    files.push({ path: `src/extra.${extension}`, size: 1, isDirectory: false });
+    expect(risk()).toEqual({
+      score: 10,
+      grade: "A",
+      factors: ["Large codebase (501 source files)"],
+    });
+  });
+
+  it("keeps non-source extensions and node_modules out of the source-size factor", () => {
+    const files: FileInfo[] = Array.from({ length: 501 }, (_, i) => ({
+      path: `src/module${i}.${["md", "mtss", "ctsx", "mjsx", "cjsx"][i % 5]}`,
+      size: 1,
+      isDirectory: false,
+    }));
+    for (const extension of ["ts", "js", "mts", "cts", "mjs", "cjs"]) {
+      files.push({ path: `node_modules/pkg/index.${extension}`, size: 1, isDirectory: false });
+    }
+    files.push({ path: "tests/smoke.txt", size: 1, isDirectory: false });
+
+    expect(generateTechRadar(stack(), files, null, null, true, true).onboardingRisk).toEqual({
+      score: 0,
+      grade: "A",
+      factors: [],
+    });
+  });
 });

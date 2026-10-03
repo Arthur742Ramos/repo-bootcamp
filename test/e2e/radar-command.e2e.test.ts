@@ -91,4 +91,57 @@ describe("radar command", () => {
     expect(failing.exitCode).toBe(1);
     expect(`${failing.stdout}\n${failing.stderr}`).toContain("exceeds the maximum");
   }, 60_000);
+
+  it("applies the source-size gate equally to classic and modern JS/TS modules", async () => {
+    for (const extension of ["ts", "js", "mts", "cts", "mjs", "cjs"]) {
+      const tempDir = await mkdtemp(join(tmpdir(), "bootcamp-radar-source-size-e2e-"));
+      tempDirs.push(tempDir);
+      const files: Record<string, string> = {
+        "package.json": JSON.stringify({ name: "source-size-oracle", version: "1.0.0" }),
+        "README.md": `# Source-size oracle\n\n${"Onboarding docs. ".repeat(20)}`,
+        "CONTRIBUTING.md": "# Contributing\n\nRun tests before submitting changes.\n",
+        ".github/workflows/ci.yml":
+          "name: CI\non: [push]\njobs:\n  test:\n    runs-on: ubuntu-latest\n    steps:\n      - run: npm test\n",
+        "tests/smoke.txt": "Test-presence oracle; no extra source-file count.\n",
+      };
+      for (let i = 0; i < 500; i++) {
+        files[`src/module${i}.${extension}`] = "export const value = 1;\n";
+      }
+      // Preserve the existing .d.ts counting semantics for .d.mts/.d.cts.
+      const extraFile = ["ts", "mts", "cts"].includes(extension)
+        ? `src/types.d.${extension}`
+        : `src/extra.${extension}`;
+      files[extraFile] = extension.endsWith("ts")
+        ? "export declare const value: number;\n"
+        : "export const value = 1;\n";
+      const repoPath = await createRepo(tempDir, files);
+      const args = [
+        "radar",
+        repoPath,
+        "--json",
+        "--max-files",
+        "1000",
+        "--check",
+        "--max-risk",
+        "5",
+      ];
+
+      const aboveBoundary = await runCli(args);
+      expect(aboveBoundary.exitCode, extension).toBe(1);
+      expect(JSON.parse(aboveBoundary.stdout).onboardingRisk, extension).toEqual({
+        score: 10,
+        grade: "A",
+        factors: ["Large codebase (501 source files)"],
+      });
+
+      await rm(join(repoPath, extraFile));
+      const atBoundary = await runCli(args);
+      expect(atBoundary.exitCode, extension).toBe(0);
+      expect(JSON.parse(atBoundary.stdout).onboardingRisk, extension).toEqual({
+        score: 0,
+        grade: "A",
+        factors: [],
+      });
+    }
+  }, 60_000);
 });
