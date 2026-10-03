@@ -219,7 +219,7 @@ describe("proven original-root pnpm manager context", () => {
     const { dir, root } = await setup();
     for (const exclude of [
       ["pnpm-workspace.yaml"],
-      [join(root, "pnpm-workspace.yaml")],
+      [join(root, "pnpm-workspace.yaml").replaceAll("\\", "/")],
       ["package.json"],
     ])
       expect(
