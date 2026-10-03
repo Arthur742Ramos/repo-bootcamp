@@ -284,6 +284,15 @@ The Copilot SDK transforms what would be a simple template-filler into an intell
 - **Diagram Rendering** - Convert Mermaid to SVG/PNG with mermaid-cli
 - **Watch Mode** - Re-run analysis automatically when new commits are detected
 
+Generated onboarding setup instructions preserve an explicit `install` command from the
+analyzed quickstart. Without one, only npm, pnpm, Yarn, and Bun get a conventional install
+command; other or unknown tools get guidance to the repository's README or contribution
+guide. A package-manager label alone does not establish a runnable installation command.
+Within the selected scan root, `poetry.lock` and `uv.lock` identify those Python workflows;
+`requirements.txt` or a plain `pyproject.toml` retain the generic `pip` indication. This
+does not parse TOML workflow configuration or establish whether Poetry or uv is used
+without a lockfile. Poetry can also use standard `[project]` metadata.
+
 ## Example Output
 
 <details>

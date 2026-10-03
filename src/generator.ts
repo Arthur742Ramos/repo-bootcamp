@@ -457,6 +457,14 @@ export function generateOnboarding(
       checkoutCommands = `# Clone the repository\ngit clone -- ${quoteBashArgument(cloneUrl)}\ncd -- ${quoteBashArgument(directory)}`;
     }
   }
+  const documentedInstall = facts.quickstart.commands.find((c) => c.name === "install");
+  const manager = facts.stack.packageManager;
+  const installCommand =
+    documentedInstall?.command ||
+    (manager && ["npm", "pnpm", "yarn", "bun"].includes(manager) ? `${manager} install` : null);
+  const installation = installCommand
+    ? `\n\n# Install dependencies\n${installCommand}\n\`\`\``
+    : `\n\`\`\`\n\nFollow the repository's README or contribution guide for dependency installation and environment setup.`;
 
   return `# Onboarding Guide: ${facts.repoName}
 
@@ -467,11 +475,7 @@ ${prereqs}
 ## ${checkoutTitle}
 
 \`\`\`bash
-${checkoutCommands}
-
-# Install dependencies
-${facts.quickstart.commands.find((c) => c.name === "install")?.command || `${facts.stack.packageManager || "npm"} install`}
-\`\`\`
+${checkoutCommands}${installation}
 
 ## Available Commands
 

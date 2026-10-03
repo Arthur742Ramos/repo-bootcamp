@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Preserve explicit onboarding install commands and use setup-documentation guidance when a non-Node installation command is unknown; identify Poetry and uv from lockfiles in the selected scan root instead of treating every Python project as Poetry.
+
 - Stop elapsed analysis progress on failed starts, malformed streams, and exhausted status recovery; clear the active step marker on terminal outcomes while keeping time running during reconnection.
 - Clean up owned temporary clones after main-command interactive failures, including transcript write errors; preserve local checkouts, explicit `--keep-temp`, generated output, and the original failure.
 - Honor ownerless CODEOWNERS overrides, root and globstar matching, and wildcard depth; report each area's owners from actual scanned-file assignments.

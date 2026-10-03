@@ -167,9 +167,50 @@ describe("ingest parsers", () => {
   it("keeps Poetry package-manager evidence when no JavaScript manifest exists", async () => {
     const dir = await repoWith({
       "pyproject.toml": "[tool.poetry]\nname = 'fixture'\n",
+      "poetry.lock": "# Poetry lockfile\n",
       "app.py": "print('hi')\n",
     });
     expect((await scanRepo(dir, 100)).stack.packageManager).toBe("poetry");
+  });
+
+  it.each([
+    ["requirements.txt", "pip"],
+    ["pyproject.toml", "pip"],
+    ["Cargo.toml", "cargo"],
+  ])("keeps the generic installer indication for %s", async (manifest, expected) => {
+    const dir = await repoWith({ [manifest]: "# Generic project metadata\n" });
+    expect((await scanRepo(dir, 100)).stack.packageManager).toBe(expected);
+  });
+
+  it.each([
+    ["uv.lock", "uv"],
+    ["poetry.lock", "poetry"],
+  ])("uses root %s workflow evidence before generic requirements", async (lockfile, expected) => {
+    const dir = await repoWith({
+      "pyproject.toml": "[project]\nname = 'fixture'\n",
+      "requirements.txt": "# Exported requirements\n",
+      [lockfile]: "# Lockfile\n",
+    });
+    expect((await scanRepo(dir, 100)).stack.packageManager).toBe(expected);
+  });
+
+  it("does not borrow nested or outer Python workflow evidence for the selected scope", async () => {
+    const dir = await repoWith({
+      "poetry.lock": "# Outer Poetry lockfile\n",
+      "packages/app/pyproject.toml": "[project]\nname = 'app'\n",
+      "packages/app/other/uv.lock": "# Nested uv project\n",
+    });
+    expect((await scanRepo(dir, 100, { subdir: "packages/app" })).stack.packageManager).toBe("pip");
+    expect((await scanRepo(dir, 100, { subdir: "packages/app/other" })).stack.packageManager).toBe(
+      "uv"
+    );
+    const nestedOnly = await repoWith({ "child/poetry.lock": "# Nested lockfile\n" });
+    expect((await scanRepo(nestedOnly, 100)).stack.packageManager).toBeNull();
+  });
+
+  it("does not treat a directory named uv.lock as package-manager evidence", async () => {
+    const dir = await repoWith({ "uv.lock/notes.txt": "Not a lockfile\n" });
+    expect((await scanRepo(dir, 100)).stack.packageManager).toBeNull();
   });
 
   it("workflow `on:` block form yields top-level triggers (not nested keys)", async () => {
