@@ -138,6 +138,68 @@ describe("writeGeneratedOutputs", () => {
     );
     expect(createIssuesFromTasks).not.toHaveBeenCalled();
   });
+
+  it("reports the final formatted names once, including formatter-added files", async () => {
+    const { applyOutputFormat } = await import("../src/formatter.js");
+    vi.mocked(applyOutputFormat).mockReturnValueOnce([
+      { name: "WELCOME.html", content: "<h1>Welcome</h1>" },
+      { name: "PLUGIN.html", content: "<h1>Plugin</h1>" },
+      { name: "WELCOME.html", content: "<h1>Updated</h1>" },
+    ]);
+    const result = await writeGeneratedOutputs(makeParams({ outputFormat: "html" }));
+    expect(result.documentCount).toBe(3);
+    expect(result.emittedFiles).toEqual(["WELCOME.html", "PLUGIN.html"]);
+    expect(writeFile).toHaveBeenLastCalledWith(
+      "/tmp/out/WELCOME.html",
+      "<h1>Updated</h1>",
+      "utf-8"
+    );
+  });
+
+  it("reports JSON-only and converted issue-preview writes without advertising unused documents", async () => {
+    const { applyOutputFormat } = await import("../src/formatter.js");
+    vi.mocked(applyOutputFormat)
+      .mockReturnValueOnce([])
+      .mockReturnValueOnce([{ name: "ISSUES_PREVIEW.html", content: "<h1>Preview</h1>" }]);
+    const result = await writeGeneratedOutputs(
+      makeParams({
+        outputFormat: "html",
+        options: { jsonOnly: true, createIssues: true, dryRun: true },
+        facts: { firstTasks: [{ title: "Preview only" }] },
+      })
+    );
+    expect(result.emittedFiles).toEqual(["repo_facts.json", "ISSUES_PREVIEW.html"]);
+    expect(writeFile).toHaveBeenCalledTimes(2);
+  });
+
+  it("includes successfully rendered files even when another diagram fails", async () => {
+    const { renderOutputDiagrams } = await import("../src/diagrams.js");
+    vi.mocked(renderOutputDiagrams).mockResolvedValueOnce({
+      rendered: false,
+      files: ["/tmp/out/architecture.svg"],
+      error: "second diagram failed",
+    });
+    const result = await writeGeneratedOutputs(makeParams({ options: { renderDiagrams: true } }));
+    expect(result.emittedFiles).toEqual(["BOOTCAMP.md", "repo_facts.json", "architecture.svg"]);
+  });
+
+  it("keeps output-target delivery separate from local file ownership", async () => {
+    const target = { name: "external", writeOutput: vi.fn().mockResolvedValue(undefined) };
+    const result = await writeGeneratedOutputs(makeParams({ outputTargets: [target] }));
+    expect(result.emittedFiles).toEqual(["BOOTCAMP.md", "repo_facts.json"]);
+    expect(target.writeOutput).toHaveBeenCalledWith(
+      expect.objectContaining({
+        documents: makeParams().documents,
+        outputDir: "/tmp/out",
+      })
+    );
+  });
+
+  it("does not return a successful inventory after a failed local write", async () => {
+    vi.mocked(writeFile).mockRejectedValueOnce(new Error("disk full"));
+    await expect(writeGeneratedOutputs(makeParams())).rejects.toThrow("disk full");
+    expect(writeFile).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe("issue result propagation", () => {

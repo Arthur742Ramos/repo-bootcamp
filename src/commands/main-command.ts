@@ -19,11 +19,7 @@ import {
 } from "../services/clone-service.js";
 import { updateSourcePathPrefix } from "../services/scan-scope.js";
 import { resolveRunConfiguration } from "../services/config-resolution.js";
-import {
-  orchestrateAnalysis,
-  prepareOutputDocuments,
-  type GeneratedDoc,
-} from "../services/analysis-orchestration.js";
+import { orchestrateAnalysis, prepareOutputDocuments } from "../services/analysis-orchestration.js";
 import { writeGeneratedOutputs } from "../services/output-writer.js";
 import type { BootcampOptions, RepoFacts, RepoInfo, ScanResult } from "../types.js";
 import type { StyleConfig } from "../plugins.js";
@@ -41,7 +37,7 @@ interface RunStats {
 }
 
 interface GenerationResult {
-  documentCount: number;
+  emittedFiles: string[];
   security: Awaited<ReturnType<typeof prepareOutputDocuments>>["security"];
   radar: Awaited<ReturnType<typeof prepareOutputDocuments>>["radar"];
   deps: Awaited<ReturnType<typeof prepareOutputDocuments>>["deps"];
@@ -67,9 +63,7 @@ interface GenerateOutputsParams {
 interface WriteRunSummaryParams {
   outputDir: string;
   repoInfo: RepoInfo;
-  options: BootcampOptions;
-  outputFormat: OutputFormat;
-  documents: GeneratedDoc[];
+  emittedFiles: string[];
   security: GenerationResult["security"];
   radar: GenerationResult["radar"];
   deps: GenerationResult["deps"];
@@ -86,9 +80,7 @@ interface WriteRunSummaryParams {
 async function writeRunSummary({
   outputDir,
   repoInfo,
-  options,
-  outputFormat,
-  documents,
+  emittedFiles,
   security,
   radar,
   deps,
@@ -99,12 +91,7 @@ async function writeRunSummary({
     repo: repoInfo.fullName,
     commitSha: repoInfo.commitSha ?? null,
     generatedAt: new Date().toISOString(),
-    files: [
-      ...(options.jsonOnly
-        ? ["repo_facts.json"]
-        : documents.map((doc) => formatDocName(doc.name, outputFormat))),
-      "ANALYSIS_MANIFEST.json",
-    ],
+    files: emittedFiles,
     scores: {
       security: security
         ? {
@@ -171,7 +158,7 @@ async function generateOutputs({
     progress,
   });
 
-  const { documentCount } = await writeGeneratedOutputs({
+  const { emittedFiles } = await writeGeneratedOutputs({
     documents,
     repoInfo,
     facts: preparedFacts,
@@ -183,30 +170,91 @@ async function generateOutputs({
     outputTargets,
   });
 
-  // Always emit a machine-readable summary so CI can read the scores without
-  // re-cloning via `scan`. Written from here (not writeGeneratedOutputs) so the
-  // deterministic score objects are already in scope.
-  await writeRunSummary({
-    outputDir,
-    repoInfo,
-    options,
-    outputFormat,
-    documents,
-    security,
-    radar,
-    deps,
-    metrics,
-    health,
-  });
-
   return {
-    documentCount,
+    emittedFiles,
     security,
     radar,
     deps,
     metrics,
     health,
   };
+}
+
+/** Finalize run-owned metadata before reporting a successful completion. */
+async function finalizeOutputs(
+  generation: GenerationResult,
+  outputDir: string,
+  repoInfo: RepoInfo,
+  manifest: ReturnType<typeof createAnalysisManifest>
+): Promise<string[]> {
+  await writeFile(
+    join(outputDir, "ANALYSIS_MANIFEST.json"),
+    JSON.stringify(manifest, null, 2),
+    "utf8"
+  );
+  const emittedFiles = [
+    ...new Set([...generation.emittedFiles, "ANALYSIS_MANIFEST.json", "summary.json"]),
+  ];
+  await writeRunSummary({ outputDir, repoInfo, ...generation, emittedFiles });
+  return emittedFiles;
+}
+
+const DOCUMENT_DESCRIPTIONS: [string, string][] = [
+  ["BOOTCAMP.md", "1-page overview (start here!)"],
+  ["ONBOARDING.md", "Full setup guide"],
+  ["ARCHITECTURE.md", "System design & diagrams"],
+  ["CODEMAP.md", "Directory tour"],
+  ["FIRST_TASKS.md", "Starter issues"],
+  ["RUNBOOK.md", "Operations guide"],
+  ["DEPENDENCIES.md", "Dependency graph"],
+  ["SECURITY.md", "Security findings"],
+  ["RADAR.md", "Tech radar & risk score"],
+  ["IMPACT.md", "Change impact analysis"],
+  ["METRICS.md", "Codebase metrics & hotspots"],
+  ["HEALTH.md", "Onboarding-readiness health check"],
+  ["DIFF.md", "Version comparison"],
+];
+const ARTIFACT_DESCRIPTIONS: [string, string][] = [
+  ["diagrams.mmd", "Mermaid diagrams"],
+  ["repo_facts.json", "Structured data"],
+  ["summary.json", "Scores & emitted files"],
+  ["ANALYSIS_MANIFEST.json", "Run metadata & evidence"],
+];
+
+function printGeneratedFiles(emittedFiles: string[]): void {
+  const known = (descriptions: [string, string][]) =>
+    descriptions.flatMap(([name, description]) =>
+      emittedFiles
+        .filter(
+          (file) => file === name || (name.endsWith(".md") && file === formatDocName(name, "html"))
+        )
+        .map((file) => [file, description] as const)
+    );
+  const documents = known(DOCUMENT_DESCRIPTIONS);
+  const artifacts = known(ARTIFACT_DESCRIPTIONS);
+  const named = new Set([...documents, ...artifacts].map(([name]) => name));
+  const extraFiles = emittedFiles
+    .filter((name) => !named.has(name))
+    .map((name) => [name, ""] as const);
+  const rows = [...documents, ...extraFiles, ...artifacts];
+  console.log(chalk.dim("  Generated files:"));
+  rows.forEach(([name, description], index) => {
+    console.log(
+      chalk.white(index === rows.length - 1 ? "  └── " : "  ├── ") +
+        chalk.cyan(name) +
+        (description ? chalk.dim(`  → ${description}`) : "")
+    );
+  });
+  console.log();
+}
+
+function nextStepFile(emittedFiles: string[]): string | undefined {
+  return (
+    emittedFiles.find((name) => name === "BOOTCAMP.md" || name === "BOOTCAMP.html") ??
+    emittedFiles.find((name) => /\.(md|html)$/.test(name)) ??
+    emittedFiles.find((name) => name === "repo_facts.json") ??
+    emittedFiles[0]
+  );
 }
 
 export async function runMainCommand(repoUrl: string, options: BootcampOptions): Promise<void> {
@@ -389,10 +437,11 @@ export async function runMainCommand(repoUrl: string, options: BootcampOptions):
     process.exit(1);
   }
 
+  let emittedFiles: string[] = [];
   const generateStart = Date.now();
-  progress.startPhase("generate", options.jsonOnly ? "JSON only" : "12+ files");
+  progress.startPhase("generate", options.jsonOnly ? "JSON only" : "Writing selected documents");
   try {
-    const { documentCount, security, radar, deps, metrics, health } = await generateOutputs({
+    const generation = await generateOutputs({
       repoPath: analysisRepoPath,
       repositoryRoot: repoPath,
       repoInfo,
@@ -406,6 +455,8 @@ export async function runMainCommand(repoUrl: string, options: BootcampOptions):
       progress,
     });
 
+    const { security, radar, deps, metrics, health } = generation;
+
     const manifest = createAnalysisManifest({
       repoInfo,
       scanResult,
@@ -416,14 +467,10 @@ export async function runMainCommand(repoUrl: string, options: BootcampOptions):
       model: analysisStats.model,
       toolCalls: analysisStats.toolCalls.length,
     });
-    await writeFile(
-      join(outputDir, "ANALYSIS_MANIFEST.json"),
-      JSON.stringify(manifest, null, 2),
-      "utf8"
-    );
+    emittedFiles = await finalizeOutputs(generation, outputDir, repoInfo, manifest);
 
     runStats.generateTime = Date.now() - generateStart;
-    progress.succeed(`Generated ${documentCount + 1} files (including manifest)`);
+    progress.succeed(`Generated ${emittedFiles.length} files (including manifest)`);
 
     if (!quiet && !options.jsonOnly) {
       const grade = getSecurityGrade(security.score, security.sourceFilesScanned);
@@ -533,101 +580,7 @@ export async function runMainCommand(repoUrl: string, options: BootcampOptions):
   }
 
   if (!quiet && !options.jsonOnly) {
-    const formatName = (name: string) => formatDocName(name, outputFormat);
-    console.log(chalk.dim("  Generated files:"));
-    console.log(
-      chalk.white("  ├── ") +
-        chalk.cyan(formatName("BOOTCAMP.md")) +
-        chalk.dim("      → 1-page overview (start here!)")
-    );
-    console.log(
-      chalk.white("  ├── ") +
-        chalk.cyan(formatName("ONBOARDING.md")) +
-        chalk.dim("    → Full setup guide")
-    );
-    console.log(
-      chalk.white("  ├── ") +
-        chalk.cyan(formatName("ARCHITECTURE.md")) +
-        chalk.dim("  → System design & diagrams")
-    );
-    console.log(
-      chalk.white("  ├── ") +
-        chalk.cyan(formatName("CODEMAP.md")) +
-        chalk.dim("       → Directory tour")
-    );
-    console.log(
-      chalk.white("  ├── ") +
-        chalk.cyan(formatName("FIRST_TASKS.md")) +
-        chalk.dim("   → Starter issues")
-    );
-    if (styleConfig.sections.showRunbook) {
-      console.log(
-        chalk.white("  ├── ") +
-          chalk.cyan(formatName("RUNBOOK.md")) +
-          chalk.dim("       → Operations guide")
-      );
-    }
-    if (styleConfig.sections.showDependencyGraph) {
-      console.log(
-        chalk.white("  ├── ") +
-          chalk.cyan(formatName("DEPENDENCIES.md")) +
-          chalk.dim("  → Dependency graph")
-      );
-    }
-    if (styleConfig.sections.showSecurityDetails) {
-      console.log(
-        chalk.white("  ├── ") +
-          chalk.cyan(formatName("SECURITY.md")) +
-          chalk.dim("      → Security findings")
-      );
-    }
-    if (styleConfig.sections.showRadar) {
-      console.log(
-        chalk.white("  ├── ") +
-          chalk.cyan(formatName("RADAR.md")) +
-          chalk.dim("         → Tech radar & risk score")
-      );
-    }
-    if (styleConfig.sections.showImpact) {
-      console.log(
-        chalk.white("  ├── ") +
-          chalk.cyan(formatName("IMPACT.md")) +
-          chalk.dim("        → Change impact analysis")
-      );
-    }
-    if (styleConfig.sections.showMetrics) {
-      console.log(
-        chalk.white("  ├── ") +
-          chalk.cyan(formatName("METRICS.md")) +
-          chalk.dim("       → Codebase metrics & hotspots")
-      );
-    }
-    if (styleConfig.sections.showHealth) {
-      console.log(
-        chalk.white("  ├── ") +
-          chalk.cyan(formatName("HEALTH.md")) +
-          chalk.dim("        → Onboarding-readiness health check")
-      );
-    }
-    if (options.compare) {
-      console.log(
-        chalk.white("  ├── ") +
-          chalk.cyan(formatName("DIFF.md")) +
-          chalk.dim("          → Version comparison")
-      );
-    }
-    console.log(
-      chalk.white("  ├── ") + chalk.cyan("diagrams.mmd") + chalk.dim("     → Mermaid diagrams")
-    );
-    console.log(
-      chalk.white("  ├── ") + chalk.cyan("repo_facts.json") + chalk.dim("  → Structured data")
-    );
-    console.log(
-      chalk.white("  └── ") +
-        chalk.cyan("ANALYSIS_MANIFEST.json") +
-        chalk.dim("  → Run metadata & evidence")
-    );
-    console.log();
+    printGeneratedFiles(emittedFiles);
   }
 
   if (options.stats) {
@@ -656,11 +609,12 @@ export async function runMainCommand(repoUrl: string, options: BootcampOptions):
     }
   }
 
-  if (!quiet) {
+  const nextFile = nextStepFile(emittedFiles);
+  if (!quiet && nextFile) {
     console.log(
       chalk.white("  🚀 ") +
         chalk.white.bold("Next step: ") +
-        chalk.cyan(`open ${outputDir}/${formatDocName("BOOTCAMP.md", outputFormat)}`)
+        chalk.cyan(`open ${outputDir}/${nextFile}`)
     );
     console.log();
   }
@@ -706,8 +660,8 @@ export async function runMainCommand(repoUrl: string, options: BootcampOptions):
         };
         wp.succeed("Analysis complete");
 
-        wp.startPhase("generate", options.jsonOnly ? "JSON only" : "12+ files");
-        const { documentCount } = await generateOutputs({
+        wp.startPhase("generate", options.jsonOnly ? "JSON only" : "Writing selected documents");
+        const generation = await generateOutputs({
           repoPath: analysisRepoPath,
           repositoryRoot: repoPath,
           repoInfo,
@@ -731,12 +685,8 @@ export async function runMainCommand(repoUrl: string, options: BootcampOptions):
           model: result.stats.model,
           toolCalls: result.stats.toolCalls.length,
         });
-        await writeFile(
-          join(outputDir, "ANALYSIS_MANIFEST.json"),
-          JSON.stringify(manifest, null, 2),
-          "utf8"
-        );
-        wp.succeed(`Regenerated ${documentCount + 1} files (including manifest)`);
+        const regeneratedFiles = await finalizeOutputs(generation, outputDir, repoInfo, manifest);
+        wp.succeed(`Regenerated ${regeneratedFiles.length} files (including manifest)`);
         wp.stop();
       },
     });

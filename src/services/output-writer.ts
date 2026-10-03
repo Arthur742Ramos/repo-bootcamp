@@ -24,6 +24,8 @@ interface WriteGeneratedOutputsParams {
 
 export interface WriteGeneratedOutputsResult {
   documentCount: number;
+  /** Local files successfully written by this run, excluding arbitrary output-target destinations. */
+  emittedFiles: string[];
 }
 
 export async function writeGeneratedOutputs({
@@ -39,11 +41,13 @@ export async function writeGeneratedOutputs({
 }: WriteGeneratedOutputsParams): Promise<WriteGeneratedOutputsResult> {
   const factsDoc = documents.find((doc) => doc.name === "repo_facts.json");
   const formattedDocuments = applyOutputFormat(documents, outputFormat);
+  const emittedFiles = new Set<string>();
 
   if (!options.jsonOnly) {
     for (const doc of formattedDocuments) {
       progress.update(doc.name);
       await writeFile(join(outputDir, doc.name), doc.content, "utf-8");
+      emittedFiles.add(doc.name);
     }
   } else {
     await writeFile(
@@ -51,6 +55,7 @@ export async function writeGeneratedOutputs({
       factsDoc?.content || JSON.stringify(facts, null, 2),
       "utf-8"
     );
+    emittedFiles.add("repo_facts.json");
   }
 
   if (allowIssueCreation && options.createIssues && facts.firstTasks.length > 0) {
@@ -62,6 +67,7 @@ export async function writeGeneratedOutputs({
         outputFormat
       );
       await writeFile(join(outputDir, previewDoc.name), previewDoc.content, "utf-8");
+      emittedFiles.add(previewDoc.name);
       console.log(chalk.yellow(`Issue preview saved to ${previewDoc.name}`));
     }
     const results = await createIssuesFromTasks(facts.firstTasks, repoInfo, {
@@ -80,6 +86,7 @@ export async function writeGeneratedOutputs({
     progress.update("Rendering diagrams...");
     const format = options.diagramFormat || "svg";
     const renderResult = await renderOutputDiagrams(outputDir, format);
+    for (const file of renderResult.files) emittedFiles.add(basename(file));
     if (renderResult.rendered) {
       if (!options.quiet) {
         console.log(
@@ -115,5 +122,6 @@ export async function writeGeneratedOutputs({
 
   return {
     documentCount: options.jsonOnly ? 1 : formattedDocuments.length,
+    emittedFiles: [...emittedFiles],
   };
 }

@@ -128,6 +128,7 @@ Onboarding Risk: 18/100 (A) 🟢
   ├── HEALTH.md        → Onboarding-readiness health check
   ├── diagrams.mmd     → Mermaid diagrams
   ├── repo_facts.json  → Structured data
+  ├── summary.json     → Scores & emitted files
   └── ANALYSIS_MANIFEST.json → Run metadata and evidence map
 
   🚀 Next step: open ./bootcamp-ky/BOOTCAMP.md
@@ -402,12 +403,18 @@ Request → Options Merge → Hooks (before) → Fetch → Retry? → Hooks (aft
 | `DIFF.md`                | Version comparison (with `--compare`)                                |
 | `diagrams.mmd`           | Mermaid diagram sources                                              |
 | `repo_facts.json`        | Structured data for automation                                       |
+| `summary.json`           | Scores and the local files emitted by this run                       |
 | `ANALYSIS_MANIFEST.json` | Reproducibility metadata, scan coverage, and evidence sources        |
 
 Optional reports depend on the selected style and available analysis. BOOTCAMP's
 generated Next Steps links include only documents in the assembled kit, including
 output exclusions and formatter removals. Explicit repository or formatter text
 is preserved; a formatter that replaces the navigation owns its links.
+
+The completion file list and `summary.json` inventory describe successful local
+writes from the current run, including converted or plugin-provided document
+names and run metadata. Existing unrelated files and external output-target
+destinations are omitted. Quiet and JSON-only modes keep the detailed list hidden.
 
 ## Quick Start
 

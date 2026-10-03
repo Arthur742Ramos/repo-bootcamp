@@ -310,6 +310,106 @@ test *FILES:
     60_000
   );
 
+  it.each([
+    ["default", "markdown"],
+    ["default", "html"],
+    ["default", "pdf"],
+    ["excluded", "html"],
+    ["plugin", "pdf"],
+    ["quiet", "html"],
+    ["json", "html"],
+    ["quiet-json", "html"],
+    ["preview", "html"],
+  ])("reports only emitted files for %s (%s)", async (mode, format) => {
+    const tempDir = await mkdtemp(join(tmpdir(), "bootcamp-output-summary-"));
+    tempDirs.push(tempDir);
+    const repo = join(tempDir, "repo");
+    const output = join(tempDir, "out");
+    await mkdir(repo);
+    await mkdir(output);
+    await writeFile(join(repo, "README.md"), "# Output summary fixture\n");
+    await writeFile(join(output, "UNRELATED.txt"), "Keep this pre-existing file");
+    const response = join(tempDir, "response.json");
+    await writeFile(response, JSON.stringify(buildMockFacts("local/summary-fixture")));
+    if (mode === "excluded") {
+      await writeFile(
+        join(tempDir, ".bootcamprc.json"),
+        JSON.stringify({
+          output: { excludeDocs: ["BOOTCAMP.md", "ONBOARDING.md", "SECURITY.md"] },
+        })
+      );
+    }
+    if (mode === "plugin") {
+      const plugin = join(tempDir, "formatter.mjs");
+      await writeFile(
+        plugin,
+        "export default {type:'formatter',name:'summary-fixture',formatDocuments(docs){return docs.filter(d=>d.name!=='SECURITY.md').map(d=>d.name==='BOOTCAMP.md'?{...d,name:'WELCOME.md'}:d).concat({name:'PLUGIN_GUIDE.md',content:'# Plugin guide'},{name:'summary.json',content:'plugin metadata'},{name:'ANALYSIS_MANIFEST.json',content:'plugin metadata'});}};"
+      );
+      await writeFile(join(tempDir, ".bootcamprc.json"), JSON.stringify({ plugins: [plugin] }));
+    }
+    const quiet = mode === "quiet" || mode === "quiet-json";
+    const jsonOnly = mode === "json" || mode === "quiet-json";
+    const result = await runCli(
+      [
+        repo,
+        "--no-clone",
+        "--no-cache",
+        "--format",
+        format,
+        "--output",
+        output,
+        ...(quiet ? ["--quiet"] : []),
+        ...(jsonOnly ? ["--json-only"] : []),
+        ...(mode === "preview" ? ["--create-issues", "--dry-run"] : []),
+      ],
+      { NODE_ENV: "test", REPO_BOOTCAMP_TEST_LLM_RESPONSE_FILE: response },
+      60_000,
+      tempDir
+    );
+    expect(result.exitCode).toBe(0);
+    const files = (await readdir(output)).filter((name) => name !== "UNRELATED.txt").sort();
+    const summary = JSON.parse(await readFile(join(output, "summary.json"), "utf8"));
+    expect([...summary.files].sort()).toEqual(files);
+    expect(new Set(summary.files).size).toBe(files.length);
+    expect(summary.repo).toMatch(/^local\//);
+    const manifest = JSON.parse(await readFile(join(output, "ANALYSIS_MANIFEST.json"), "utf8"));
+    expect(manifest.schemaVersion).toBe(1);
+    expect(manifest.repository.fullName).toBe(summary.repo);
+    expect(await readFile(join(output, "UNRELATED.txt"), "utf8")).toBe(
+      "Keep this pre-existing file"
+    );
+    const stdout = result.stdout.replace(/\x1b\[[0-9;]*m/g, "");
+    const combined = (result.stdout + result.stderr).replace(/\x1b\[[0-9;]*m/g, "");
+    const advertised = [...stdout.matchAll(/^  [├└]── (.+?)(?: +→.*)?$/gm)].map(
+      (match) => match[1]
+    );
+    if (quiet || jsonOnly) expect(advertised).toEqual([]);
+    else expect(advertised.sort()).toEqual(files);
+    if (quiet) {
+      expect(stdout.trim()).toBe(jsonOnly ? "" : output);
+      expect(stdout).not.toContain("Next step");
+    } else {
+      expect(combined).toContain(`Generated ${files.length} files (including manifest)`);
+      const next = stdout.match(/Next step: open (.+)/)?.[1];
+      expect(next).toBeDefined();
+      expect(await readFile(next!, "utf8")).not.toBe("");
+    }
+    expect(files).not.toContain("DEPENDENCIES.html");
+    expect(files).not.toContain("DEPENDENCIES.md");
+    if (mode === "excluded") {
+      expect(advertised).not.toContain("BOOTCAMP.html");
+      expect(stdout).not.toContain(`open ${output}/BOOTCAMP.html`);
+    }
+    if (mode === "plugin") {
+      expect(files).toContain("WELCOME.html");
+      expect(files).toContain("PLUGIN_GUIDE.html");
+      expect(stdout).not.toContain(`open ${output}/BOOTCAMP.html`);
+    }
+    if (jsonOnly)
+      expect(files).toEqual(["ANALYSIS_MANIFEST.json", "repo_facts.json", "summary.json"]);
+    if (mode === "preview") expect(files).toContain("ISSUES_PREVIEW.html");
+  });
+
   it("generates the onboarding kit through the real CLI process", async () => {
     const tempDir = await mkdtemp(join(tmpdir(), "bootcamp-cli-e2e-"));
     tempDirs.push(tempDir);
