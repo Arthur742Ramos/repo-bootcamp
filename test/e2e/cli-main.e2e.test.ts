@@ -221,6 +221,38 @@ describe("bootcamp CLI", () => {
     const bootcamp = await readFile(join(outputDir, "BOOTCAMP.md"), "utf-8");
     expect(bootcamp).toContain("fixture-cli-repo");
   }, 90_000);
+  it.each(["html", "pdf"] as const)(
+    "generates a navigable %s kit through the real CLI",
+    async (format) => {
+      const tempDir = await mkdtemp(join(tmpdir(), "bootcamp-export-cli-"));
+      tempDirs.push(tempDir);
+      const repoPath = await createFixtureRepo(tempDir);
+      const outputDir = join(tempDir, "output");
+      const responseFile = join(tempDir, "mock-response.json");
+      await writeFile(responseFile, JSON.stringify(buildMockFacts(`local/${basename(repoPath)}`)));
+      const result = await runCli(
+        [repoPath, "--no-clone", "--no-cache", "--output", outputDir, "--format", format],
+        { NODE_ENV: "test", REPO_BOOTCAMP_TEST_LLM_RESPONSE_FILE: responseFile }
+      );
+      expect(result.exitCode).toBe(0);
+      const files = await readdir(outputDir);
+      expect(files).toContain("ONBOARDING.html");
+      expect(files).not.toContain("ONBOARDING.md");
+      const bootcamp = await readFile(join(outputDir, "BOOTCAMP.html"), "utf-8");
+      expect(bootcamp).toContain('href="./ONBOARDING.html"');
+      expect(bootcamp).toContain('href="./ARCHITECTURE.html"');
+      const tasks = await readFile(join(outputDir, "FIRST_TASKS.html"), "utf-8");
+      expect(tasks).toContain('href="./ARCHITECTURE.html"');
+      for (const file of files.filter((name) => name.endsWith(".html"))) {
+        const content = await readFile(join(outputDir, file), "utf-8");
+        for (const match of content.matchAll(/href="\.\/([^"?#]+\.html)(?:[?#][^"]*)?"/g)) {
+          expect(files).toContain(decodeURIComponent(match[1]));
+        }
+      }
+    },
+    90_000
+  );
+
   it("generates extended analysis from the selected package instead of the outer manifest", async () => {
     const tempDir = await mkdtemp(join(tmpdir(), "bootcamp-scoped-cli-"));
     tempDirs.push(tempDir);
