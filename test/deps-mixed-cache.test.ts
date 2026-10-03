@@ -24,6 +24,69 @@ afterAll(async () => {
 });
 
 describe("mixed dependency projection cache identity", () => {
+  it("misses pre-direct-reference-fix deps entries and keeps complete direct URLs on a warm run", async () => {
+    const repo = "references/cache";
+    const sha = "unchanged-reference-commit";
+    const dir = await mkdtemp(join(tmpdir(), "bootcamp-reference-cache-repo-"));
+    const hash = (seed: string) => createHash("sha256").update(seed).digest("hex").slice(0, 16);
+    try {
+      await writeFile(
+        join(dir, "pyproject.toml"),
+        '[project]\ndependencies = ["sample @ https://example.invalid/package.whl;owned#sha256=abc", "flask>=2.0"]'
+      );
+      const oldValue = {
+        packageManager: "pip",
+        totalCount: 2,
+        runtime: [
+          { name: "sample", version: "@ https://example.invalid/package.whl", type: "runtime" },
+          { name: "flask", version: ">=2.0", type: "runtime" },
+        ],
+        dev: [],
+        peer: [],
+        categories: [],
+      };
+      await writePhaseCache("deps", repo, sha, oldValue);
+      const entry = (await listCacheEntries()).find(
+        (entry) => entry.entry?.phase === "deps" && entry.entry.repoFullName === repo
+      )!;
+      const oldPath = join(
+        getCacheDir(),
+        `references-cache-deps-${hash(`${repo}@${sha}|phase=deps|projection=mixed-ecosystems-v3-toml-literals`)}.json`
+      );
+      const oldBytes = await readFile(entry.path);
+      await writeFile(oldPath, oldBytes);
+      if (entry.path !== oldPath) await rm(entry.path);
+      expect((await readPhaseCache("deps", repo, sha)).hit).toBe(false);
+      const spy = vi.spyOn(depsModule, "extractDependencies");
+      try {
+        const cold = await runParallelAnalysis(dir, await scanRepo(dir, 100), undefined, {
+          repoFullName: repo,
+          commitSha: sha,
+        });
+        expect(cold.deps?.totalCount).toBe(2);
+        expect(cold.deps?.runtime).toEqual([
+          {
+            name: "sample",
+            version: "@ https://example.invalid/package.whl;owned#sha256=abc",
+            type: "runtime",
+          },
+          { name: "flask", version: ">=2.0", type: "runtime" },
+        ]);
+        const warm = await runParallelAnalysis(dir, await scanRepo(dir, 100), undefined, {
+          repoFullName: repo,
+          commitSha: sha,
+        });
+        expect(warm.deps).toEqual(cold.deps);
+        expect(spy).toHaveBeenCalledTimes(1);
+        expect(await readFile(oldPath)).toEqual(oldBytes);
+      } finally {
+        spy.mockRestore();
+      }
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
   it("misses pre-literal-fix deps entries and keeps decoded counts on a warm run", async () => {
     const repo = "literals/cache";
     const sha = "unchanged-literal-commit";

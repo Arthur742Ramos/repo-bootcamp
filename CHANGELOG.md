@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Preserve literal semicolons, query parameters and hashes in pyproject.toml direct-reference URLs while removing only whitespace-delimited environment markers.
+
 - Decode complete Python TOML requirement literals before projecting dependencies, retaining escaped markers, quoted brackets, Unicode names and multiline continuations without phantom packages or stale cached counts.
 
 - Ignore quoted package examples and delimiters in Python manifest comments when analyzing dependency arrays, while retaining literal URL fragments and requirement values.
