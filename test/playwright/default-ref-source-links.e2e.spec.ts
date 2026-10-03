@@ -99,6 +99,9 @@ for (const [ref, encodedRef] of [
     const docs = await exportFixture(ref);
     const expected = `${remote}/blob/${encodedRef}/packages/ref%20app/src/index.ts`;
     const intercepted: string[] = [];
+    // Register fallback first: later owned routes take precedence, while
+    // injected Mermaid imports, favicons and other assets cannot reach the network.
+    await page.route("**/*", (route) => route.abort());
     await page.route(`${remote}/**`, (route) => {
       intercepted.push(route.request().url());
       return route.fulfill({
