@@ -26,6 +26,95 @@ const MAX_REMOVED_EXPORTS_PER_FILE = 3;
 /** Maximum files shown in diff docs listings */
 const MAX_DIFF_DOC_FILES = 30;
 const MAX_DIFF_DOC_MODIFIED = 50;
+/** Three targeted history increases; never fetch every branch or unshallow the whole clone. */
+const PR_HISTORY_DEEPEN_STEPS = [32, 128, 512] as const;
+
+async function findMergeBase(
+  repoPath: string,
+  baseRef: string,
+  headRef: string
+): Promise<string | null> {
+  try {
+    const { stdout } = await execFileAsync("git", ["merge-base", baseRef, headRef], {
+      cwd: repoPath,
+      maxBuffer: FILE_DIFF_MAX_BUFFER,
+    });
+    return stdout.trim() || null;
+  } catch {
+    return null;
+  }
+}
+
+/** A shallow cutoff above or alongside a candidate can hide a nearer ancestor. */
+async function findCompleteMergeBase(
+  repoPath: string,
+  baseRef: string,
+  headRef: string
+): Promise<string | null> {
+  const candidate = await findMergeBase(repoPath, baseRef, headRef);
+  if (!candidate) return null;
+  const { stdout: shallow } = await execFileAsync("git", ["rev-parse", "--is-shallow-repository"], {
+    cwd: repoPath,
+    maxBuffer: FILE_DIFF_MAX_BUFFER,
+  });
+  if (shallow.trim() === "false") return candidate;
+  if (shallow.trim() !== "true") throw new Error("Could not verify Git history completeness.");
+  // Shallow commits pretend to be roots. Excluding the candidate's known
+  // ancestors leaves any cutoffs that could conceal another comparison base.
+  // A genuine incomparable root is also conservative uncertainty while shallow.
+  const { stdout: roots } = await execFileAsync(
+    "git",
+    ["rev-list", "--max-parents=0", "--max-count=1", baseRef, headRef, `^${candidate}`],
+    { cwd: repoPath, maxBuffer: FILE_DIFF_MAX_BUFFER }
+  );
+  return roots.trim() ? null : candidate;
+}
+
+/** Recover only the two fetched PR histories, with a fixed depth budget. */
+async function ensurePullRequestMergeBase(
+  repoPath: string,
+  baseRef: string,
+  headRef: string,
+  baseSource: string,
+  headSource: string,
+  env?: NodeJS.ProcessEnv
+): Promise<void> {
+  if (await findCompleteMergeBase(repoPath, baseRef, headRef)) return;
+  for (const depth of PR_HISTORY_DEEPEN_STEPS) {
+    const { stdout } = await execFileAsync("git", ["rev-parse", "--is-shallow-repository"], {
+      cwd: repoPath,
+      maxBuffer: FILE_DIFF_MAX_BUFFER,
+    });
+    if (stdout.trim() !== "true") {
+      throw new Error(
+        "Cannot compare PR refs: no common ancestor. Verify that the base and head share Git history."
+      );
+    }
+    try {
+      await execFileAsync(
+        "git",
+        [
+          "fetch",
+          "--quiet",
+          `--deepen=${depth}`,
+          "origin",
+          `${baseSource}:${baseRef}`,
+          `${headSource}:${headRef}`,
+        ],
+        { cwd: repoPath, maxBuffer: FILE_DIFF_MAX_BUFFER, env }
+      );
+    } catch (error: unknown) {
+      throw new Error(
+        `Could not recover PR history for comparison. Retry with --full-clone. ${error instanceof Error ? error.message : String(error)}`,
+        { cause: error }
+      );
+    }
+    if (await findCompleteMergeBase(repoPath, baseRef, headRef)) return;
+  }
+  throw new Error(
+    "Cannot compare PR refs within the bounded history limit (672 additional ancestry levels). Retry with --full-clone; the refs may have unrelated histories."
+  );
+}
 
 /**
  * Read package.json content at a specific git ref.
@@ -62,7 +151,7 @@ export async function getChangedFiles(
   try {
     const { stdout } = await execFileAsync(
       "git",
-      ["diff", "--name-status", `${baseRef}...${headRef}`],
+      ["diff", "--name-status", "-z", `${baseRef}...${headRef}`],
       { cwd: repoPath, maxBuffer: DIFF_MAX_BUFFER }
     );
 
@@ -70,12 +159,13 @@ export async function getChangedFiles(
     const removed: string[] = [];
     const modified: string[] = [];
 
-    for (const line of stdout.trim().split("\n")) {
-      if (!line) continue;
-      const parts = line.split("\t");
-      const status = parts[0];
-      // Renames/copies emit `R<score>\toldpath\tnewpath`; the new path is last.
-      const path = parts[parts.length - 1];
+    // NUL records preserve literal tabs, newlines and Git-quoted characters.
+    const fields = stdout.split("\0");
+    for (let index = 0; index < fields.length - 1;) {
+      const status = fields[index++];
+      let path = fields[index++];
+      // Renames/copies have two path fields; keep the existing new-path API.
+      if (status.startsWith("R") || status.startsWith("C")) path = fields[index++];
 
       switch (status[0]) {
         case "A":
@@ -110,7 +200,7 @@ async function getFileDiff(
   try {
     const { stdout } = await execFileAsync(
       "git",
-      ["diff", `${baseRef}...${headRef}`, "--", filePath],
+      ["--literal-pathspecs", "diff", `${baseRef}...${headRef}`, "--", filePath],
       { cwd: repoPath, maxBuffer: FILE_DIFF_MAX_BUFFER }
     );
     return stdout;
@@ -317,7 +407,7 @@ async function detectBreakingChanges(
       for (const line of removedExports.slice(0, MAX_REMOVED_EXPORTS_PER_FILE)) {
         const match = line.match(/export\s+(?:const|function|class|type|interface)\s+(\w+)/);
         if (match) {
-          breakingChanges.push(`Removed export: ${match[1]} in ${file}`);
+          breakingChanges.push(`Removed export: ${match[1]} in ${diffPathDescription(file)}`);
         }
       }
     } catch (err: unknown) {
@@ -472,11 +562,14 @@ export async function fetchPullRequestRefs(
       }
     : undefined;
 
+  let baseSource = baseSha;
+  let headSource = `pull/${prNumber}/head`;
   try {
-    await fetchGitRef(repoPath, baseSha, baseRef, fetchEnv);
+    await fetchGitRef(repoPath, baseSource, baseRef, fetchEnv);
   } catch {
     try {
-      await fetchGitRef(repoPath, baseRefName, baseRef, fetchEnv);
+      baseSource = baseRefName;
+      await fetchGitRef(repoPath, baseSource, baseRef, fetchEnv);
     } catch (fallbackError: unknown) {
       throw new Error(`Failed to fetch PR base ref: ${(fallbackError as Error).message}`, {
         cause: fallbackError,
@@ -485,16 +578,19 @@ export async function fetchPullRequestRefs(
   }
 
   try {
-    await fetchGitRef(repoPath, `pull/${prNumber}/head`, headRef, fetchEnv);
+    await fetchGitRef(repoPath, headSource, headRef, fetchEnv);
   } catch {
     try {
-      await fetchGitRef(repoPath, `refs/pull/${prNumber}/head`, headRef, fetchEnv);
+      headSource = `refs/pull/${prNumber}/head`;
+      await fetchGitRef(repoPath, headSource, headRef, fetchEnv);
     } catch (fallbackError: unknown) {
       throw new Error(`Failed to fetch PR head ref: ${(fallbackError as Error).message}`, {
         cause: fallbackError,
       });
     }
   }
+
+  await ensurePullRequestMergeBase(repoPath, baseRef, headRef, baseSource, headSource, fetchEnv);
 
   return {
     baseRef,
@@ -519,13 +615,20 @@ export async function analyzeDiff(
   baseRef: string,
   headRef: string = "HEAD"
 ): Promise<DiffSummary> {
-  // Get changed files
-  const { added, removed, modified } = await getChangedFiles(repoPath, baseRef, headRef);
+  // Use the same merge-base snapshot for files, manifests, environment and exports.
+  // Keep public ref labels in the returned summary instead of exposing the internal SHA.
+  const comparisonBase = await findCompleteMergeBase(repoPath, baseRef, headRef);
+  if (!comparisonBase) {
+    throw new Error(
+      "Cannot compare refs: no common ancestor available with sufficiently complete history. Verify the refs and fetch their history (or retry with --full-clone)."
+    );
+  }
+  const { added, removed, modified } = await getChangedFiles(repoPath, comparisonBase, headRef);
   const allChanged = [...added, ...modified];
 
   // Read package.json at both refs ONCE (shared by dep, command, and breaking change analysis)
   const [basePkg, headPkg] = await Promise.all([
-    getPackageJsonAtRef(repoPath, baseRef),
+    getPackageJsonAtRef(repoPath, comparisonBase),
     getPackageJsonAtRef(repoPath, headRef),
   ]);
 
@@ -533,8 +636,8 @@ export async function analyzeDiff(
   const depChanges = extractDependencyChanges(basePkg, headPkg);
   const newCommands = extractCommandChanges(basePkg, headPkg);
   const [newEnvVars, breakingChanges] = await Promise.all([
-    extractEnvVarChanges(repoPath, baseRef, headRef, allChanged),
-    detectBreakingChanges(basePkg, headPkg, repoPath, baseRef, headRef, allChanged),
+    extractEnvVarChanges(repoPath, comparisonBase, headRef, allChanged),
+    detectBreakingChanges(basePkg, headPkg, repoPath, comparisonBase, headRef, allChanged),
   ]);
 
   return {
@@ -552,6 +655,26 @@ export async function analyzeDiff(
       breakingChanges,
     },
   };
+}
+
+/** Escape control characters only in display labels, retaining exact API paths. */
+function diffPathLabel(path: string): string {
+  const isControl = (code: number) =>
+    code < 32 || (code >= 127 && code <= 159) || code === 0x2028 || code === 0x2029;
+  if (![...path].some((character) => isControl(character.codePointAt(0)!))) return path;
+  // JSON handles ASCII controls; explicitly escape the remaining line/control marks.
+  const parts: string[] = [];
+  for (const character of JSON.stringify(path)) {
+    const code = character.codePointAt(0)!;
+    parts.push(isControl(code) ? `\\u${code.toString(16).padStart(4, "0")}` : character);
+  }
+  return parts.join("");
+}
+
+/** Keep ordinary descriptions unchanged; delimit names with Markdown punctuation. */
+function diffPathDescription(path: string): string {
+  const label = diffPathLabel(path);
+  return /[`*_[\]]/.test(label) ? markdownCodeSpan(label) : label;
 }
 
 /**
@@ -658,7 +781,7 @@ export function generateDiffDocs(diff: DiffSummary, projectName: string): string
     lines.push("## Files Added");
     lines.push("");
     for (const file of diff.filesAdded.slice(0, MAX_DIFF_DOC_FILES)) {
-      lines.push(`- \`${file}\``);
+      lines.push(`- ${markdownCodeSpan(diffPathLabel(file))}`);
     }
     if (diff.filesAdded.length > MAX_DIFF_DOC_FILES) {
       lines.push(`- ... and ${diff.filesAdded.length - MAX_DIFF_DOC_FILES} more`);
@@ -670,7 +793,7 @@ export function generateDiffDocs(diff: DiffSummary, projectName: string): string
     lines.push("## Files Removed");
     lines.push("");
     for (const file of diff.filesRemoved.slice(0, MAX_DIFF_DOC_FILES)) {
-      lines.push(`- \`${file}\``);
+      lines.push(`- ${markdownCodeSpan(diffPathLabel(file))}`);
     }
     if (diff.filesRemoved.length > MAX_DIFF_DOC_FILES) {
       lines.push(`- ... and ${diff.filesRemoved.length - MAX_DIFF_DOC_FILES} more`);
@@ -682,7 +805,7 @@ export function generateDiffDocs(diff: DiffSummary, projectName: string): string
     lines.push("## Files Modified");
     lines.push("");
     for (const file of diff.filesModified.slice(0, MAX_DIFF_DOC_MODIFIED)) {
-      lines.push(`- \`${file}\``);
+      lines.push(`- ${markdownCodeSpan(diffPathLabel(file))}`);
     }
     if (diff.filesModified.length > MAX_DIFF_DOC_MODIFIED) {
       lines.push(`- ... and ${diff.filesModified.length - MAX_DIFF_DOC_MODIFIED} more`);
