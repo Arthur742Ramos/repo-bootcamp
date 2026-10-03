@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Rewrite links between generated kit documents to their exported HTML filenames, including PDF-ready HTML, while preserving links to repository files and code examples.
 - Keep inline-code source links clickable and formatted in HTML exports, including bracketed route filenames; preserve escaping and prevent nested anchors.
 
 - Prefix scoped source links in generated documentation and issue previews with the selected repository directory, preserving GitHub, GitLab, and Bitbucket links.
