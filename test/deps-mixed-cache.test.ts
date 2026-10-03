@@ -24,6 +24,70 @@ afterAll(async () => {
 });
 
 describe("mixed dependency projection cache identity", () => {
+  it("misses pre-Python-identity-fix deps entries and keeps canonical identities and spaced extras on a warm run", async () => {
+    const repo = "identity/cache";
+    const sha = "unchanged-identity-commit";
+    const dir = await mkdtemp(join(tmpdir(), "bootcamp-identity-cache-repo-"));
+    const hash = (seed: string) => createHash("sha256").update(seed).digest("hex").slice(0, 16);
+    try {
+      await writeFile(
+        join(dir, "pyproject.toml"),
+        '[project]\ndependencies = ["Requests [security]>=2.28", "requests==99", "foo_bar>=1", "foo-bar==99", "foo.bar==100", "foobar>=2"]'
+      );
+      const oldValue = {
+        packageManager: "pip",
+        totalCount: 6,
+        runtime: [
+          { name: "Requests", version: "[security]>=2.28", type: "runtime" },
+          { name: "requests", version: "==99", type: "runtime" },
+          { name: "foo_bar", version: ">=1", type: "runtime" },
+          { name: "foo-bar", version: "==99", type: "runtime" },
+          { name: "foo.bar", version: "==100", type: "runtime" },
+          { name: "foobar", version: ">=2", type: "runtime" },
+        ],
+        dev: [],
+        peer: [],
+        categories: [],
+      };
+      await writePhaseCache("deps", repo, sha, oldValue);
+      const entry = (await listCacheEntries()).find(
+        (entry) => entry.entry?.phase === "deps" && entry.entry.repoFullName === repo
+      )!;
+      const oldPath = join(
+        getCacheDir(),
+        `identity-cache-deps-${hash(`${repo}@${sha}|phase=deps|projection=mixed-ecosystems-v4-direct-reference-markers`)}.json`
+      );
+      const oldBytes = await readFile(entry.path);
+      await writeFile(oldPath, oldBytes);
+      if (entry.path !== oldPath) await rm(entry.path);
+      expect((await readPhaseCache("deps", repo, sha)).hit).toBe(false);
+      const spy = vi.spyOn(depsModule, "extractDependencies");
+      try {
+        const cold = await runParallelAnalysis(dir, await scanRepo(dir, 100), undefined, {
+          repoFullName: repo,
+          commitSha: sha,
+        });
+        expect(cold.deps?.totalCount).toBe(3);
+        expect(cold.deps?.runtime).toEqual([
+          { name: "Requests", version: ">=2.28", type: "runtime" },
+          { name: "foo_bar", version: ">=1", type: "runtime" },
+          { name: "foobar", version: ">=2", type: "runtime" },
+        ]);
+        const warm = await runParallelAnalysis(dir, await scanRepo(dir, 100), undefined, {
+          repoFullName: repo,
+          commitSha: sha,
+        });
+        expect(warm.deps).toEqual(cold.deps);
+        expect(spy).toHaveBeenCalledTimes(1);
+        expect(await readFile(oldPath)).toEqual(oldBytes);
+      } finally {
+        spy.mockRestore();
+      }
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
   it("misses pre-direct-reference-fix deps entries and keeps complete direct URLs on a warm run", async () => {
     const repo = "references/cache";
     const sha = "unchanged-reference-commit";
