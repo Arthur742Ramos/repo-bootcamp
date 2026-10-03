@@ -1,7 +1,7 @@
 import { execFileSync } from "child_process";
 import { once } from "events";
 import { createServer, type Server } from "http";
-import { mkdtemp, mkdir, readFile, rm, writeFile } from "fs/promises";
+import { mkdtemp, mkdir, readFile, readdir, realpath, rm, stat, writeFile } from "fs/promises";
 import { tmpdir } from "os";
 import { join } from "path";
 import { pathToFileURL } from "url";
@@ -264,4 +264,50 @@ describe("diff command", () => {
     expect(htmlDoc).toContain("<");
     expect(htmlDoc).toContain("Fixture PR");
   }, 90_000);
+
+  it.each([false, true])(
+    "settles clone ownership before a real failure exit (keep-temp: %s)",
+    async (keepTemp) => {
+      const tempDir = await mkdtemp(join(tmpdir(), "bootcamp-diff-e2e-"));
+      tempDirs.push(tempDir);
+      const { bareRepoPath, baseSha, headSha } = await createDiffFixture(tempDir);
+      const { server, apiBaseUrl } = await startPullRequestApiServer(baseSha, headSha);
+      servers.push(server);
+      const outputPath = join(tempDir, "occupied-output");
+      await writeFile(outputPath, "Preserve this existing file.");
+      const result = await runCli(
+        [
+          "diff",
+          `${FIXTURE_OWNER}/${FIXTURE_REPO}#${PR_NUMBER}`,
+          "--output",
+          outputPath,
+          ...(keepTemp ? ["--keep-temp"] : []),
+        ],
+        {
+          GIT_CONFIG_COUNT: "1",
+          GIT_CONFIG_KEY_0: `url.${pathToFileURL(bareRepoPath).href}.insteadOf`,
+          GIT_CONFIG_VALUE_0: `https://github.com/${FIXTURE_OWNER}/${FIXTURE_REPO}.git`,
+          REPO_BOOTCAMP_GITHUB_API_BASE_URL: apiBaseUrl,
+        },
+        60_000,
+        tempDir
+      );
+      expect(result.exitCode).toBe(1);
+      expect(result.stderr).toContain("Failed to create output directory:");
+      expect(result.stdout).not.toContain("PR Diff Generated Successfully");
+      expect(await readFile(outputPath, "utf-8")).toBe("Preserve this existing file.");
+      const clones = await readdir(join(tempDir, ".tmp"));
+      expect(clones).toHaveLength(keepTemp ? 1 : 0);
+      if (keepTemp) {
+        const clonePath = join(tempDir, ".tmp", clones[0]);
+        expect((await stat(join(clonePath, ".git"))).isDirectory()).toBe(true);
+        const reportedPath = stripAnsi(result.stdout).match(
+          /^Temporary clone kept at: (.+)$/m
+        )?.[1];
+        expect(reportedPath).toBeTruthy();
+        expect(await realpath(reportedPath!)).toBe(await realpath(clonePath));
+      }
+    },
+    90_000
+  );
 });

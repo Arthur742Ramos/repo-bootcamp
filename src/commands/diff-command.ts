@@ -75,51 +75,42 @@ export async function runPullRequestDiff(
     process.exit(1);
   }
 
+  let exitCode = 0;
+  let failureLabel = "Diff failed";
   try {
     progress.startPhase("diff", `PR #${targetInfo.prNumber}`);
-    let diffSummary: DiffSummary;
-    try {
-      const refs = await fetchPullRequestRefs(repoPath, repoInfo, targetInfo.prNumber);
-      const rawDiffSummary = await analyzeDiff(repoPath, refs.baseRef, refs.headRef);
-      diffSummary = {
-        ...rawDiffSummary,
-        baseRef: refs.baseName,
-        headRef: refs.headName
-          ? `PR #${targetInfo.prNumber} (${refs.headName})`
-          : `PR #${targetInfo.prNumber}`,
-        prNumber: targetInfo.prNumber,
-        prTitle: refs.title,
-        prUrl: refs.url,
-      };
-      progress.succeed(`Analyzed PR #${targetInfo.prNumber}`);
-    } catch (error: unknown) {
-      progress.fail(`Diff failed: ${(error as Error).message}`);
-      process.exit(1);
-    }
+    const refs = await fetchPullRequestRefs(repoPath, repoInfo, targetInfo.prNumber);
+    const rawDiffSummary = await analyzeDiff(repoPath, refs.baseRef, refs.headRef);
+    const diffSummary: DiffSummary = {
+      ...rawDiffSummary,
+      baseRef: refs.baseName,
+      headRef: refs.headName
+        ? `PR #${targetInfo.prNumber} (${refs.headName})`
+        : `PR #${targetInfo.prNumber}`,
+      prNumber: targetInfo.prNumber,
+      prTitle: refs.title,
+      prUrl: refs.url,
+    };
+    progress.succeed(`Analyzed PR #${targetInfo.prNumber}`);
 
-    try {
-      await mkdir(outputDir, { recursive: true });
-    } catch (error: unknown) {
-      console.error(chalk.red(`Failed to create output directory: ${(error as Error).message}`));
-      process.exit(1);
-    }
+    failureLabel = "Failed to create output directory";
+    await mkdir(outputDir, { recursive: true });
 
     progress.startPhase("generate", "DIFF.md");
-    try {
-      const formattedDocs = applyOutputFormat(
-        [{ name: "DIFF.md", content: generateDiffDocs(diffSummary, repoInfo.repo) }],
-        outputFormat
-      );
-      for (const doc of formattedDocs) {
-        await writeFile(join(outputDir, doc.name), doc.content, "utf-8");
-      }
-      progress.succeed(
-        `Generated ${formattedDocs.length} file${formattedDocs.length === 1 ? "" : "s"}`
-      );
-    } catch (error: unknown) {
-      progress.fail(`Write failed: ${(error as Error).message}`);
-      process.exit(1);
+    failureLabel = "Write failed";
+    const formattedDocs = applyOutputFormat(
+      [{ name: "DIFF.md", content: generateDiffDocs(diffSummary, repoInfo.repo) }],
+      outputFormat
+    );
+    for (const doc of formattedDocs) {
+      await writeFile(join(outputDir, doc.name), doc.content, "utf-8");
     }
+    progress.succeed(
+      `Generated ${formattedDocs.length} file${formattedDocs.length === 1 ? "" : "s"}`
+    );
+  } catch (error: unknown) {
+    progress.fail(`${failureLabel}: ${error instanceof Error ? error.message : String(error)}`);
+    exitCode = 1;
   } finally {
     if (!options.keepTemp) {
       progress.startPhase("cleanup");
@@ -132,9 +123,13 @@ export async function runPullRequestDiff(
     } else {
       console.log(chalk.gray(`Temporary clone kept at: ${repoPath}`));
     }
+    progress.stop();
   }
 
-  progress.stop();
+  if (exitCode !== 0) {
+    process.exit(exitCode);
+    return;
+  }
 
   console.log();
   console.log(chalk.green("  ╔══════════════════════════════════════════════════════╗"));
