@@ -83,7 +83,7 @@ import { generateOnboarding } from "../src/generator.js";
 import { ProgressTracker } from "../src/progress.js";
 import { readCache, writeCache } from "../src/cache.js";
 import { scanRepo } from "../src/ingest.js";
-import { mkdtemp, rm, writeFile } from "fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "fs/promises";
 import { tmpdir } from "os";
 import { join } from "path";
 
@@ -215,6 +215,116 @@ beforeEach(() => {
 });
 
 describe("orchestrateAnalysis", () => {
+  it("hydrates scoped Go conventions from live or cached empty facts, preserves explicit commands, and fingerprints loaded manifests", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "bootcamp-go-cache-"));
+    try {
+      await mkdir(join(dir, "packages/app/pkg"), { recursive: true });
+      await writeFile(join(dir, "go.work"), "go 1.22\nuse ./packages/app\n");
+      await writeFile(join(dir, "packages/app/go.mod"), "module example.invalid/app-a\ngo 1.22\n");
+      await writeFile(join(dir, "packages/app/pkg/demo.go"), "package demo\n");
+      const root = await scanRepo(dir, 100);
+      const first = await scanRepo(dir, 100, { subdir: "packages/app" });
+      await writeFile(join(dir, "packages/app/go.mod"), "module example.invalid/app-b\ngo 1.22\n");
+      const edited = await scanRepo(dir, 100, { subdir: "packages/app" });
+      await writeFile(join(dir, "packages/app/pkg/demo.go"), "// fake demo\n");
+      const sourceChanged = await scanRepo(dir, 100, { subdir: "packages/app" });
+      await writeFile(join(dir, "packages/app/pkg/demo.go"), "package demo\n");
+      const sourceExcluded = await scanRepo(dir, 100, {
+        subdir: "packages/app",
+        exclude: ["**/*.go"],
+      });
+      const limited = await scanRepo(dir, 1, { subdir: "packages/app" });
+      const excluded = await scanRepo(dir, 100, { subdir: "packages/app", exclude: ["go.mod"] });
+      const ancestor = await scanRepo(dir, 100, { subdir: "packages/app/pkg" });
+      expect(root.commands).toEqual([]);
+      expect(ancestor.commands).toEqual([]);
+      expect(excluded.commands).toEqual([]);
+      expect(first.commands.map(({ command }) => command)).toEqual([
+        "go build ./...",
+        "go test ./...",
+      ]);
+      expect(first.commands).toEqual(edited.commands);
+      expect(first.files).toEqual(edited.files);
+      expect(first.goModFingerprint).not.toBe(edited.goModFingerprint);
+      expect(sourceChanged.files).toEqual(edited.files);
+      expect(sourceChanged.commands).toEqual([]);
+      expect(sourceChanged.goModFingerprint).toBe(edited.goModFingerprint);
+      expect(sourceChanged.goPackageFingerprint).not.toBe(edited.goPackageFingerprint);
+      expect(sourceExcluded.commands).toEqual([]);
+      expect(limited.commands).toEqual([]);
+      expect(first.taskfileFingerprint).toBeUndefined();
+      expect(edited.taskfileFingerprint).toBeUndefined();
+      expect(excluded.goModFingerprint).toBeUndefined();
+      expect(excluded.taskfileFingerprint).toBeUndefined();
+      const fingerprints: string[] = [];
+      for (const cached of [false, true]) {
+        for (const scanResult of [first, edited, sourceChanged, excluded]) {
+          const facts = structuredClone(mockFacts);
+          if (cached) vi.mocked(readCache).mockResolvedValue(facts);
+          else {
+            vi.mocked(readCache).mockResolvedValue(null);
+            analyzeRepoMock.mockResolvedValue({
+              facts,
+              stats: { toolCalls: [], model: "fixture" },
+            });
+          }
+          const result = await orchestrateAnalysis({
+            repoPath: join(dir, "packages/app"),
+            repoInfo: mockRepoInfo,
+            scanResult,
+            options: { ...defaultOptions, subdir: "packages/app" },
+            styleConfig: defaultStyleConfig,
+            progress: { update: vi.fn(), succeed: vi.fn(), recordToolCall: vi.fn() } as any,
+            analysisStart: Date.now(),
+          });
+          expect(result.facts.quickstart.commands).toEqual(scanResult.commands);
+          fingerprints.push(vi.mocked(readCache).mock.calls.at(-1)![2]!.scanFingerprint!);
+        }
+      }
+      expect(new Set(fingerprints).size).toBe(4);
+      const explicit = structuredClone(mockFacts);
+      explicit.quickstart.commands = [
+        { name: "documented", command: "go test -race ./...", source: "README.md" },
+      ];
+      vi.mocked(readCache).mockResolvedValue(explicit);
+      const result = await orchestrateAnalysis({
+        repoPath: dir,
+        repoInfo: mockRepoInfo,
+        scanResult: first,
+        options: defaultOptions,
+        styleConfig: defaultStyleConfig,
+        progress: { update: vi.fn(), succeed: vi.fn(), recordToolCall: vi.fn() } as any,
+        analysisStart: Date.now(),
+      });
+      expect(result.facts).toBe(explicit);
+      expect(result.facts.quickstart.commands).toEqual(explicit.quickstart.commands);
+      await writeFile(
+        join(dir, "packages/app/Taskfile.yml"),
+        "includes: {checks: './checks.yml'}\n"
+      );
+      await writeFile(join(dir, "packages/app/checks.yml"), "tasks: {verify: 'echo verify'}\n");
+      const withTasks = await scanRepo(dir, 100, { subdir: "packages/app" });
+      await writeFile(join(dir, "packages/app/go.mod"), "module example.invalid/app-c\ngo 1.22\n");
+      const changedGo = await scanRepo(dir, 100, { subdir: "packages/app" });
+      const hiddenGo = await scanRepo(dir, 100, { subdir: "packages/app", exclude: ["go.mod"] });
+      const hiddenTasks = await scanRepo(dir, 100, {
+        subdir: "packages/app",
+        exclude: ["checks.yml"],
+      });
+      expect(withTasks.taskfileFingerprint).toBeDefined();
+      expect(changedGo.taskfileFingerprint).toBe(withTasks.taskfileFingerprint);
+      expect(hiddenGo.taskfileFingerprint).toBe(withTasks.taskfileFingerprint);
+      expect(changedGo.goModFingerprint).not.toBe(withTasks.goModFingerprint);
+      expect(changedGo.goPackageFingerprint).toBe(withTasks.goPackageFingerprint);
+      expect(hiddenGo.goModFingerprint).toBeUndefined();
+      expect(hiddenTasks.taskfileFingerprint).toBeDefined();
+      expect(hiddenTasks.taskfileFingerprint).not.toBe(withTasks.taskfileFingerprint);
+      expect(hiddenTasks.goModFingerprint).toBe(changedGo.goModFingerprint);
+      expect(hiddenTasks.goPackageFingerprint).toBe(changedGo.goPackageFingerprint);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
   it.each([false, true])(
     "hydrates Cargo defaults without mutating raw facts for cached=%s",
     async (cached) => {

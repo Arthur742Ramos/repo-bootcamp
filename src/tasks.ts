@@ -8,6 +8,8 @@
  * justfile, go-task Taskfile, docker-compose, pyproject, composer.json) and maps
  * each declared task to the exact shell command that invokes it. Qualifying
  * Cargo manifests additionally expose native build/test conventions.
+ * A literal go.mod at the selected root also qualifies native Go build/test
+ * conventions, appended after declared tasks without executing Go.
  *
  * Every parser is a pure `string -> DiscoveredTask[]` function so it can be unit
  * tested in isolation. `discoverTasks` is the only IO boundary; it reads the
@@ -27,6 +29,7 @@ import { isPathInsideDir } from "./utils.js";
 import { pythonScriptDeclarations } from "./python-script-declarations.js";
 import { hasCargoTasks } from "./cargo-tasks.js";
 import { packageScriptCommand } from "./package-script-command.js";
+import { walkRepositoryFiles } from "./scan-walk.js";
 
 /** Coarse grouping used for report sections and getting-started ordering. */
 export type TaskCategory =
@@ -57,7 +60,7 @@ export interface DiscoverTasksOptions {
    * passes its resolved manager so stack metadata and task commands agree.
    */
   packageManager?: PackageManager;
-  /** Selected, scanned file paths (POSIX relative paths); restricts included Taskfiles. */
+  /** Selected, scanned file paths (POSIX relative paths); restricts Taskfiles and Go evidence. */
   taskfileFiles?: ReadonlySet<string>;
   /** Successful contained Taskfile reads, for effective scan fingerprints. */
   onTaskfileRead?: (path: string, content: string) => void;
@@ -65,6 +68,10 @@ export interface DiscoverTasksOptions {
   cargoFiles?: ReadonlySet<string>;
   /** Contained Cargo manifests loaded during qualification, for cache evidence. */
   onCargoRead?: (path: string, content: string) => void;
+  /** Successful contained Go module reads, for effective scan fingerprints. */
+  onGoModRead?: (path: string, content: string) => void;
+  /** Bounded source/boundary observations used to qualify Go package conventions. */
+  onGoPackageEvidence?: (path: string, evidence: string) => void;
 }
 
 /**
@@ -709,11 +716,186 @@ function dedupeTasks(tasks: DiscoveredTask[]): DiscoveredTask[] {
 }
 
 /**
+ * Native build/test conventions for a literal Go module declaration. This is
+ * qualification, not a complete Go parser or a guarantee that packages build.
+ * No workspace/ancestor lookup, dependency resolution, or executable inference.
+ */
+export function parseGoMod(content: string): DiscoveredTask[] {
+  let modulePath: string | null = null;
+  let inBlock = false;
+  for (const rawLine of content.split(/\r?\n/)) {
+    const line = rawLine.trim();
+    if (!line || line.startsWith("//")) continue;
+    if (inBlock) {
+      if (/^\)\s*(?:\/\/.*)?$/.test(line)) inBlock = false;
+      continue;
+    }
+    // Ignore directives change package selection; do not evaluate their patterns.
+    if (/^ignore(?:\s|$)/.test(line)) return [];
+    if (/^(?:require|replace|exclude|retract|godebug|tool)\s*\(\s*(?:\/\/.*)?$/.test(line)) {
+      inBlock = true;
+      continue;
+    }
+    if (!/^module(?:\s|$)/.test(line)) {
+      if (!/^(?:go|toolchain|godebug|require|replace|exclude|retract|tool)\s+/.test(line))
+        return [];
+      continue;
+    }
+    if (modulePath !== null) return [];
+    const declaration = /^module\s+(?:"([^"\\]+)"|([^\s]+))\s*(?:\/\/.*)?$/.exec(line);
+    const path = declaration?.[1] ?? declaration?.[2];
+    if (
+      !path ||
+      !/^[A-Za-z0-9._~-]+(?:\/[A-Za-z0-9._~-]+)*$/.test(path) ||
+      path.split("/").some((part) => part.startsWith(".") || part.endsWith("."))
+    )
+      return [];
+    modulePath = path;
+  }
+  if (!modulePath || inBlock) return [];
+  return [
+    {
+      name: "build",
+      command: "go build ./...",
+      source: "go.mod",
+      category: "build",
+      description: "Go module convention: compile packages in this directory and its descendants",
+    },
+    {
+      name: "test",
+      command: "go test ./...",
+      source: "go.mod",
+      category: "test",
+      description: "Go module convention: test packages in this directory and its descendants",
+    },
+  ];
+}
+
+const GO_SOURCE_ENTRY_LIMIT = 200;
+const GO_SOURCE_FILE_BYTES = 256 * 1024;
+const GO_SOURCE_TOTAL_BYTES = 1024 * 1024;
+
+function goSourcePath(path: string): boolean {
+  if (path.includes("\\") || path.includes("\0")) return false;
+  const parts = path.split("/");
+  if (parts.length > 64) return false;
+  if (parts.some((part) => !part || part.startsWith(".") || part.startsWith("_"))) return false;
+  if (parts.slice(0, -1).some((part) => part === "vendor" || part === "testdata")) return false;
+  return path.endsWith(".go") && !path.endsWith("_test.go");
+}
+
+/** Read only a literal leading package clause, never evaluate source or build constraints. */
+function hasGoPackageClause(content: string): boolean {
+  let offset = 0;
+  while (offset < content.length) {
+    while (/\s/.test(content[offset] ?? "")) offset++;
+    if (content.startsWith("//", offset)) {
+      const end = content.indexOf("\n", offset);
+      const comment = content.slice(offset, end < 0 ? content.length : end);
+      if (/^\/\/\s*(?:go:build|\+build)(?:\s|$)/.test(comment)) return false;
+      offset = end < 0 ? content.length : end + 1;
+    } else if (content.startsWith("/*", offset)) {
+      const end = content.indexOf("*/", offset + 2);
+      if (end < 0) return false;
+      offset = end + 2;
+    } else {
+      const name = /^package\s+([A-Za-z_][A-Za-z0-9_]*)\b/.exec(content.slice(offset))?.[1];
+      return !!name && name !== "_" && name !== "documentation";
+    }
+  }
+  return false;
+}
+
+/** Bound source reads to selected ordinary packages, stopping at nested module markers. */
+async function hasGoPackageEvidence(
+  repoPath: string,
+  opts: DiscoverTasksOptions
+): Promise<boolean> {
+  const entries =
+    opts.taskfileFiles ??
+    new Set(
+      (
+        await walkRepositoryFiles(repoPath, GO_SOURCE_ENTRY_LIMIT, [
+          "**/vendor/**",
+          "**/testdata/**",
+          "**/.*/**",
+          "**/_*/**",
+        ])
+      )
+        .filter((file) => !file.isDirectory)
+        .map((file) => file.path)
+    );
+  // Sort the selected inventory before applying the read budget, so equivalent
+  // scan sets produce identical qualification regardless of insertion order.
+  const candidates = [...entries].filter(goSourcePath).sort().slice(0, GO_SOURCE_ENTRY_LIMIT);
+  const record = (path: string, evidence: object) =>
+    opts.onGoPackageEvidence?.(path, JSON.stringify(evidence));
+  record(".", { candidates });
+  const boundaries = new Map<string, boolean>();
+  let bytes = 0;
+  for (const path of candidates) {
+    let blocked = false;
+    const parts = path.split("/");
+    for (let index = 1; index < parts.length; index++) {
+      const directory = parts.slice(0, index).join("/");
+      if (!boundaries.has(directory)) {
+        if (boundaries.size >= GO_SOURCE_ENTRY_LIMIT) {
+          record(directory, { omitted: "boundary budget" });
+          blocked = true;
+          break;
+        }
+        let boundary: boolean;
+        try {
+          // Reject links as evidence even if they currently remain contained.
+          if (!(await lstat(join(repoPath, directory))).isDirectory()) boundary = true;
+          else {
+            const marker = await lstat(join(repoPath, directory, "go.mod"));
+            boundary = !marker.isDirectory();
+          }
+        } catch (error) {
+          boundary = (error as NodeJS.ErrnoException).code !== "ENOENT";
+        }
+        boundaries.set(directory, boundary);
+        record(directory, { boundary });
+      }
+      if (boundaries.get(directory)) {
+        blocked = true;
+        break;
+      }
+    }
+    if (blocked) continue;
+    try {
+      const metadata = await lstat(join(repoPath, path));
+      if (
+        !metadata.isFile() ||
+        metadata.size > GO_SOURCE_FILE_BYTES ||
+        bytes + metadata.size > GO_SOURCE_TOTAL_BYTES
+      ) {
+        record(path, { omitted: "source budget or nonregular file" });
+        continue;
+      }
+      const content = await readContainedFile(repoPath, path);
+      const size = Buffer.byteLength(content);
+      if (size > GO_SOURCE_FILE_BYTES || bytes + size > GO_SOURCE_TOTAL_BYTES) {
+        record(path, { omitted: "source budget" });
+        continue;
+      }
+      bytes += size;
+      record(path, { content });
+      if (hasGoPackageClause(content)) return true;
+    } catch {
+      record(path, { omitted: "unreadable source" });
+    }
+  }
+  return false;
+}
+
+/**
  * Discover every runnable task in a repository by parsing the task-definition
  * files it ships. Reads are symlink-safe and best-effort: an unreadable or
  * malformed file contributes no tasks rather than throwing. Results are ordered
  * package.json → Makefile → justfile → Taskfile → docker-compose → pyproject →
- * composer.json → Cargo.toml so the ingest pipeline keeps emitting stable command lists.
+ * composer.json → Cargo.toml → Go module conventions so the ingest pipeline keeps emitting stable command lists.
  */
 export async function discoverTasks(
   repoPath: string,
@@ -772,6 +954,18 @@ export async function discoverTasks(
       { name: "build", command: "cargo build", source: "Cargo.toml", category: "build" },
       { name: "test", command: "cargo test", source: "Cargo.toml", category: "test" }
     );
+  }
+
+  // Only the selected root's manifest qualifies. Respect excluded/truncated
+  // scan evidence, and fingerprint the exact contained read even when invalid.
+  if (!opts.taskfileFiles || opts.taskfileFiles.has("go.mod")) {
+    const goMod = await read("go.mod");
+    if (goMod !== null) {
+      opts.onGoModRead?.("go.mod", goMod);
+      const conventions = parseGoMod(goMod);
+      if (conventions.length && (await hasGoPackageEvidence(repoPath, opts)))
+        tasks.push(...conventions);
+    }
   }
 
   return dedupeTasks(tasks);

@@ -783,7 +783,7 @@ program
 program
   .command("tasks <repo-url>")
   .description(
-    'Answer "what can I run?": discover commands from package.json, Makefile, justfile, Taskfile, docker-compose, pyproject, composer & qualifying Cargo manifests (supports local paths)'
+    'Answer "what can I run?": discover commands from package.json, Makefile, justfile, Taskfile, docker-compose, pyproject, composer, qualifying Cargo manifests & Go modules (supports local paths)'
   )
   .option("-b, --branch <branch>", "Branch to analyze", "")
   .option("--subdir <path>", "Discover tasks in a repository directory")

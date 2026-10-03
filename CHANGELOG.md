@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - Discover native Cargo build/test conventions from qualifying selected-root packages and literal contained workspaces, preserving explicit guidance and honoring scanned evidence, exclusions, limits, and cache identity.
+- Discover native Go module build/test conventions at the selected root, retaining declared-command precedence and respecting scanned/excluded manifest evidence without executing Go or expanding workspaces.
 
 - Select a package directory in web Run options, with scoped commands, documentation, source links, follow-up questions, cache identity, restored jobs, and a shell-quoted `--subdir` in the copied CLI command.
 

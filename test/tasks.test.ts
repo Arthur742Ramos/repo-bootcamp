@@ -11,6 +11,7 @@ import {
   discoverTasks,
   parseComposer,
   parseDockerCompose,
+  parseGoMod,
   parseJustfile,
   parseMakefile,
   parsePackageJsonScripts,
@@ -1077,7 +1078,206 @@ describe("detectPackageManager", () => {
   });
 });
 
+describe("parseGoMod", () => {
+  it.each([
+    "module example.invalid/demo\ngo 1.22\n",
+    '// module ignored.invalid/example\nmodule "example.invalid/demo" // selected\n',
+    "module example.invalid/demo\nrequire (\n example.invalid/dependency v1.0.0\n) // dependencies\n",
+    "module example.invalid/demo\r\ngo 1.22\r\ntoolchain go1.22.0\r\n",
+    "module example.invalid/demo\ngo 1.23\ngodebug (\n default=go1.23\n)\n",
+  ])("qualifies literal module declarations without interpolating their path (%j)", (content) => {
+    const tasks = parseGoMod(content);
+    expect(
+      tasks.map(({ name, command, source, category }) => ({ name, command, source, category }))
+    ).toEqual([
+      { name: "build", command: "go build ./...", source: "go.mod", category: "build" },
+      { name: "test", command: "go test ./...", source: "go.mod", category: "test" },
+    ]);
+    expect(tasks.every((task) => task.description?.startsWith("Go module convention:"))).toBe(true);
+  });
+
+  it.each([
+    "",
+    "module `example.invalid/demo`\n",
+    "module example.invalid/demo\nignore ./pkg\n",
+    "// module example.invalid/demo",
+    "go 1.22\n",
+    "module",
+    "module ()",
+    'module "example.invalid/demo',
+    'module "example.invalid/demo\\n"',
+    "module example.invalid/../demo",
+    "module example.invalid/.hidden",
+    "module example.invalid/demo/",
+    "module example.invalid/demo;echo injected",
+    "module example.invalid/$(echo injected)",
+    "module example.invalid/demo\nmodule example.invalid/other",
+    "module example.invalid/demo extra",
+    "require (\nmodule example.invalid/fake\n)\n",
+    "module example.invalid/demo\nrequire (\n",
+    "module example.invalid/demo\nunknown directive\n",
+    "/* module example.invalid/demo */",
+  ])("declines missing, malformed or ambiguous module qualification (%j)", (content) => {
+    expect(parseGoMod(content)).toEqual([]);
+  });
+});
+
 describe("discoverTasks", () => {
+  it.each([
+    {},
+    { "nested/go.mod": "module example.invalid/nested\n", "nested/demo.go": "package demo\n" },
+    { "vendor/demo.go": "package demo\n" },
+    { "testdata/demo.go": "package demo\n" },
+    { "_private/demo.go": "package demo\n" },
+    { ".private/demo.go": "package demo\n" },
+    { "_demo.go": "package demo\n" },
+    { ".demo.go": "package demo\n" },
+    { "demo_test.go": "package demo\n" },
+    { "demo.go": "" },
+    { "demo.go": "// package demo\n" },
+    { "demo.go": "/* package demo */" },
+    { "demo.go": "//go:build ignore\n\npackage demo\n" },
+    { "demo.go": "package documentation\n" },
+  ])(
+    "does not advertise Go conventions without supported in-module package evidence (%j)",
+    async (files) => {
+      const dir = await repoWith({ "go.mod": "module example.invalid/demo\ngo 1.22\n", ...files });
+      expect(await discoverTasks(dir)).toEqual([]);
+    }
+  );
+
+  it("honors source exclusions/budgets and nested markers absent from inventory", async () => {
+    const dir = await repoWith({
+      "go.mod": "module example.invalid/demo\n",
+      "pkg/demo.go": "package demo\n",
+    });
+    expect(await discoverTasks(dir, { taskfileFiles: new Set(["go.mod"]) })).toEqual([]);
+    const sourceInventory = new Set(["go.mod", "pkg/demo.go"]);
+    expect((await discoverTasks(dir, { taskfileFiles: sourceInventory })).length).toBe(2);
+    await writeFile(join(dir, "pkg/go.mod"), "module example.invalid/nested\n");
+    expect(await discoverTasks(dir, { taskfileFiles: sourceInventory })).toEqual([]);
+    await rm(join(dir, "pkg/go.mod"));
+    await writeFile(join(dir, "pkg/demo.go"), " ".repeat(256 * 1024) + "package demo\n");
+    expect(await discoverTasks(dir, { taskfileFiles: sourceInventory })).toEqual([]);
+  });
+
+  it("bounds total source reads and skips symlink source trees", async () => {
+    const padding = "/*" + "x".repeat(256 * 1024 - 4) + "*/";
+    const dir = await repoWith({
+      "go.mod": "module example.invalid/demo\n",
+      "a.go": padding,
+      "b.go": padding,
+      "c.go": padding,
+      "d.go": padding,
+      "z.go": "package demo\n",
+    });
+    expect(await discoverTasks(dir)).toEqual([]);
+    await rm(join(dir, "a.go"));
+    expect((await discoverTasks(dir)).length).toBe(2);
+    const linked = await repoWith({
+      "go.mod": "module example.invalid/linked\n",
+      "real/demo.go": "package demo\n",
+    });
+    await symlink(join(linked, "real"), join(linked, "alias"), "junction");
+    expect(
+      await discoverTasks(linked, { taskfileFiles: new Set(["go.mod", "alias/demo.go"]) })
+    ).toEqual([]);
+  });
+  it("uses the same bounded Go evidence regardless of selected inventory order", async () => {
+    const dir = await repoWith({
+      "go.mod": "module example.invalid/demo\n",
+      "a.go": "// no package\n",
+      "z.go": "package demo\n",
+    });
+    const observe = async (paths: string[]) => {
+      const evidence: [string, string][] = [];
+      const tasks = await discoverTasks(dir, {
+        taskfileFiles: new Set(paths),
+        onGoPackageEvidence: (path, value) => evidence.push([path, value]),
+      });
+      return { tasks, evidence };
+    };
+    expect(await observe(["go.mod", "a.go", "z.go"])).toEqual(
+      await observe(["z.go", "go.mod", "a.go"])
+    );
+  });
+
+  it("appends Go conventions after declared tasks and keeps the explicit first-session sequence", async () => {
+    const dir = await repoWith({
+      "go.mod": "module example.invalid/demo\ngo 1.22\n",
+      "demo.go": "package demo\n",
+      Makefile: "build:\n\t@echo build\ntest:\n\t@echo test\n",
+    });
+    const tasks = await discoverTasks(dir);
+    expect(tasks.map((task) => task.command)).toEqual([
+      "make build",
+      "make test",
+      "go build ./...",
+      "go test ./...",
+    ]);
+    expect(suggestGettingStarted(tasks).map((task) => task.command)).toEqual([
+      "make build",
+      "make test",
+    ]);
+  });
+
+  it("qualifies only the selected module root and never a workspace or ancestor", async () => {
+    const dir = await repoWith({
+      "go.work": "go 1.22\nuse ./packages/app\n",
+      "packages/app/go.mod": "module example.invalid/app\n",
+      "packages/app/pkg/demo.go": "package demo\n",
+    });
+    expect(await discoverTasks(dir)).toEqual([]);
+    expect((await discoverTasks(join(dir, "packages/app"))).map((task) => task.command)).toEqual([
+      "go build ./...",
+      "go test ./...",
+    ]);
+    expect(await discoverTasks(join(dir, "packages/app/pkg"))).toEqual([]);
+  });
+
+  it("honors selected scan evidence and reports exact loaded module content for fingerprints", async () => {
+    const content = "module example.invalid/demo\ngo 1.22\n";
+    const dir = await repoWith({ "go.mod": content, "demo.go": "package demo\n" });
+    const reads: [string, string][] = [];
+    const omitted = await discoverTasks(dir, {
+      taskfileFiles: new Set(["demo.go"]),
+      onGoModRead: (path, text) => reads.push([path, text]),
+    });
+    expect(omitted).toEqual([]);
+    expect(reads).toEqual([]);
+    expect(
+      (
+        await discoverTasks(dir, {
+          taskfileFiles: new Set(["go.mod", "demo.go"]),
+          onGoModRead: (path, text) => reads.push([path, text]),
+          onTaskfileRead: () => {
+            throw new Error("Go evidence must not invoke the Taskfile callback");
+          },
+        })
+      ).length
+    ).toBe(2);
+    expect(reads).toEqual([["go.mod", content]]);
+    await writeFile(join(dir, "go.mod"), "malformed\n");
+    expect(
+      await discoverTasks(dir, { onGoModRead: (path, text) => reads.push([path, text]) })
+    ).toEqual([]);
+    expect(reads.at(-1)).toEqual(["go.mod", "malformed\n"]);
+  });
+
+  it("does not read an external Go manifest or a directory masquerading as one", async () => {
+    const external = await repoWith({ "go.mod": "module example.invalid/external\n" });
+    const dir = await repoWith({ "demo.go": "package demo\n" });
+    if (process.platform !== "win32") {
+      await symlink(join(external, "go.mod"), join(dir, "go.mod"));
+      expect(await discoverTasks(dir)).toEqual([]);
+      await rm(join(dir, "go.mod"));
+    }
+    await symlink(external, join(dir, "go.mod"), "junction");
+    expect(await discoverTasks(dir)).toEqual([]);
+    await rm(join(dir, "go.mod"));
+    await mkdir(join(dir, "go.mod"));
+    expect(await discoverTasks(dir)).toEqual([]);
+  });
   it.each(["justfile", "Justfile", "JUSTFILE", ".justfile", ".JUSTFILE"])(
     "uses one native case-insensitive Just filename entry: %s",
     async (name) => {

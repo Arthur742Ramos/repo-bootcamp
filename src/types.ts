@@ -323,6 +323,10 @@ export interface ScanResult {
   taskfileFingerprint?: string;
   /** Loaded Cargo manifest evidence used to qualify build/test conventions. */
   cargoFingerprint?: string;
+  /** Content identity of contained selected-root Go module evidence. */
+  goModFingerprint?: string;
+  /** Content identity of bounded selected Go package source/boundary evidence. */
+  goPackageFingerprint?: string;
   ciWorkflows: CIWorkflow[];
   readme: string | null;
   contributing: string | null;
