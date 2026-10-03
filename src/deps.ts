@@ -15,6 +15,9 @@ export interface Dependency {
   version: string;
   type: "runtime" | "dev" | "peer" | "optional";
   description?: string;
+  /** Present only when multiple ecosystems contribute dependencies. */
+  ecosystem?: "node" | "rust" | "python" | "go";
+  sourceFile?: string;
 }
 
 /**
@@ -30,6 +33,8 @@ export interface DependencyCategory {
  */
 export interface DependencyAnalysis {
   packageManager: string;
+  /** Ordered contributing managers; omitted for single-ecosystem results. */
+  packageManagers?: string[];
   totalCount: number;
   runtime: Dependency[];
   dev: Dependency[];
@@ -260,11 +265,15 @@ async function extractCargoDependencies(repoPath: string): Promise<DependencyAna
 /**
  * Extract dependencies from pyproject.toml (Python)
  */
-async function extractPythonDependencies(repoPath: string): Promise<DependencyAnalysis | null> {
+async function extractPythonDependencies(
+  repoPath: string,
+  recordSource?: (sourceFile: string) => void
+): Promise<DependencyAnalysis | null> {
   try {
     // Try pyproject.toml first
     let content: string;
     let packageManager = "poetry";
+    let sourceFile = "pyproject.toml";
 
     try {
       content = await readFile(join(repoPath, "pyproject.toml"), "utf-8");
@@ -273,6 +282,7 @@ async function extractPythonDependencies(repoPath: string): Promise<DependencyAn
       try {
         content = await readFile(join(repoPath, "requirements.txt"), "utf-8");
         packageManager = "pip";
+        sourceFile = "requirements.txt";
       } catch {
         return null;
       }
@@ -446,6 +456,7 @@ async function extractPythonDependencies(repoPath: string): Promise<DependencyAn
     }
 
     if (runtime.length === 0 && dev.length === 0) return null;
+    recordSource?.(sourceFile);
 
     return {
       packageManager,
@@ -525,20 +536,61 @@ async function extractGoDependencies(repoPath: string): Promise<DependencyAnalys
  * Extract dependencies from the repository
  */
 export async function extractDependencies(repoPath: string): Promise<DependencyAnalysis | null> {
-  // Try each package manager in order
-  const extractors = [
-    extractNpmDependencies,
-    extractCargoDependencies,
-    extractPythonDependencies,
-    extractGoDependencies,
-  ];
-
-  for (const extractor of extractors) {
-    const result = await extractor(repoPath);
-    if (result) return result;
+  // Keep each extractor's own precedence and parsing rules. Only combine
+  // ecosystems that actually contribute records at the selected root.
+  let pythonSource = "pyproject.toml";
+  const results = [
+    {
+      result: await extractNpmDependencies(repoPath),
+      ecosystem: "node",
+      sourceFile: "package.json",
+    },
+    {
+      result: await extractCargoDependencies(repoPath),
+      ecosystem: "rust",
+      sourceFile: "Cargo.toml",
+    },
+    {
+      result: await extractPythonDependencies(repoPath, (source) => {
+        pythonSource = source;
+      }),
+      ecosystem: "python",
+      sourceFile: pythonSource,
+    },
+    { result: await extractGoDependencies(repoPath), ecosystem: "go", sourceFile: "go.mod" },
+  ] as const;
+  const contributing = results.filter(({ result }) => result && result.totalCount > 0);
+  // Return the original object for single ecosystems, including an empty npm
+  // manifest when none of the other extractors finds dependencies.
+  if (contributing.length < 2) {
+    return contributing[0]?.result ?? results.find(({ result }) => result)?.result ?? null;
   }
 
-  return null;
+  const combined: DependencyAnalysis = {
+    packageManager: contributing[0].result!.packageManager,
+    packageManagers: contributing.map(({ result }) => result!.packageManager),
+    totalCount: 0,
+    runtime: [],
+    dev: [],
+    peer: [],
+    categories: [],
+  };
+  const categoryMap = new Map<string, string[]>();
+  for (const { result, ecosystem, sourceFile } of contributing) {
+    for (const type of ["runtime", "dev", "peer"] as const) {
+      combined[type].push(...result![type].map((dep) => ({ ...dep, ecosystem, sourceFile })));
+    }
+    for (const category of result!.categories) {
+      const names = categoryMap.get(category.name) ?? [];
+      names.push(...category.deps.map((name) => `${name} (${ecosystem})`));
+      categoryMap.set(category.name, names);
+    }
+    combined.totalCount += result!.totalCount;
+  }
+  combined.categories = Array.from(categoryMap, ([name, deps]) => ({ name, deps })).sort(
+    (a, b) => b.deps.length - a.deps.length
+  );
+  return combined;
 }
 
 /**
@@ -551,6 +603,47 @@ export function generateDependencyDiagram(deps: DependencyAnalysis, projectName:
   lines.push(`    APP[("${projectName}")]`);
   lines.push("  end");
   lines.push("");
+
+  if (deps.packageManagers && deps.packageManagers.length > 1) {
+    lines.unshift("---", "config:", "  flowchart:", "    padding: 5", "---");
+    // Mixed results use the existing flat-list caps, rather than letting a
+    // recognized Node category hide uncategorized records from other languages.
+    const label = (value: string): string =>
+      value
+        .replace(/&/g, "#amp;")
+        .replace(/"/g, "#quot;")
+        .replace(/</g, "#lt;")
+        .replace(/>/g, "#gt;")
+        .replace(/[\r\n]+/g, " ");
+    let previousGroup: string | undefined;
+    for (const [group, title, list, cap] of [
+      ["Runtime", "Runtime Dependencies", deps.runtime, 10],
+      ["Dev", "Dev Dependencies", deps.dev, 8],
+      ["Peer", "Peer Dependencies", deps.peer, 8],
+    ] as const) {
+      if (!list.length) continue;
+      lines.push(`  subgraph ${group}["${title}"]`, "    direction TB");
+      list.slice(0, cap).forEach((dep, index) => {
+        lines.push(`    ${group}_${index}["${label(dep.name)} (${label(dep.ecosystem ?? "")})"]`);
+      });
+      const nodeIds = list.slice(0, cap).map((_, index) => `${group}_${index}`);
+      if (list.length > cap) {
+        lines.push(`    ${group}_more["+${list.length - cap} more"]`);
+        nodeIds.push(`${group}_more`);
+      }
+      // Invisible links constrain layout only; unrelated packages have no
+      // visible dependency edges between them.
+      for (let index = 1; index < nodeIds.length; index++) {
+        lines.push(`    ${nodeIds[index - 1]} ~~~ ${nodeIds[index]}`);
+      }
+      lines.push("  end");
+      if (previousGroup) lines.push(`  ${previousGroup} ~~~ ${group}`);
+      else lines.push(`  APP --> ${group}`);
+      previousGroup = group;
+      lines.push("");
+    }
+    return lines.join("\n");
+  }
 
   // Group by categories
   if (deps.categories.length > 0) {
@@ -615,6 +708,11 @@ function dependencyTableCell(value: string): string {
 
 export function generateDependencyDocs(deps: DependencyAnalysis, projectName: string): string {
   const lines: string[] = [];
+  const mixed = (deps.packageManagers?.length ?? 0) > 1;
+  const provenance = (dep: Dependency): string =>
+    mixed
+      ? ` | ${dependencyTableCell(dep.ecosystem ?? "")} | ${dependencyTableCell(dep.sourceFile ?? "")}`
+      : "";
 
   lines.push("# Dependency Overview");
   lines.push("");
@@ -622,6 +720,11 @@ export function generateDependencyDocs(deps: DependencyAnalysis, projectName: st
     `This document provides an overview of the ${deps.totalCount} dependencies used in ${projectName}.`
   );
   lines.push("");
+
+  if (mixed) {
+    lines.push(`Package managers: ${deps.packageManagers!.join(", ")}.`);
+    lines.push("");
+  }
 
   // Summary table
   lines.push("## Summary");
@@ -660,13 +763,15 @@ export function generateDependencyDocs(deps: DependencyAnalysis, projectName: st
   lines.push("## Runtime Dependencies");
   lines.push("");
   if (deps.runtime.length > 0) {
-    lines.push("| Package | Version |");
-    lines.push("|---------|---------|");
+    lines.push(mixed ? "| Package | Version | Ecosystem | Manifest |" : "| Package | Version |");
+    lines.push(mixed ? "|---------|---------|-----------|----------|" : "|---------|---------|");
     for (const dep of deps.runtime.slice(0, 50)) {
-      lines.push(`| ${dependencyTableCell(dep.name)} | ${dependencyTableCell(dep.version)} |`);
+      lines.push(
+        `| ${dependencyTableCell(dep.name)} | ${dependencyTableCell(dep.version)}${provenance(dep)} |`
+      );
     }
     if (deps.runtime.length > 50) {
-      lines.push(`| ... | +${deps.runtime.length - 50} more |`);
+      lines.push(`| ... | +${deps.runtime.length - 50} more${mixed ? " | |" : ""} |`);
     }
   } else {
     lines.push("No runtime dependencies found.");
@@ -677,18 +782,36 @@ export function generateDependencyDocs(deps: DependencyAnalysis, projectName: st
   lines.push("## Development Dependencies");
   lines.push("");
   if (deps.dev.length > 0) {
-    lines.push("| Package | Version |");
-    lines.push("|---------|---------|");
+    lines.push(mixed ? "| Package | Version | Ecosystem | Manifest |" : "| Package | Version |");
+    lines.push(mixed ? "|---------|---------|-----------|----------|" : "|---------|---------|");
     for (const dep of deps.dev.slice(0, 30)) {
-      lines.push(`| ${dependencyTableCell(dep.name)} | ${dependencyTableCell(dep.version)} |`);
+      lines.push(
+        `| ${dependencyTableCell(dep.name)} | ${dependencyTableCell(dep.version)}${provenance(dep)} |`
+      );
     }
     if (deps.dev.length > 30) {
-      lines.push(`| ... | +${deps.dev.length - 30} more |`);
+      lines.push(`| ... | +${deps.dev.length - 30} more${mixed ? " | |" : ""} |`);
     }
   } else {
     lines.push("No development dependencies found.");
   }
   lines.push("");
+
+  if (mixed && deps.peer.length) {
+    lines.push(
+      "## Peer Dependencies",
+      "",
+      "| Package | Version | Ecosystem | Manifest |",
+      "|---------|---------|-----------|----------|"
+    );
+    for (const dep of deps.peer.slice(0, 30)) {
+      lines.push(
+        `| ${dependencyTableCell(dep.name)} | ${dependencyTableCell(dep.version)}${provenance(dep)} |`
+      );
+    }
+    if (deps.peer.length > 30) lines.push(`| ... | +${deps.peer.length - 30} more | | |`);
+    lines.push("");
+  }
 
   return lines.join("\n");
 }

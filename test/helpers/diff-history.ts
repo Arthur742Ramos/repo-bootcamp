@@ -3,7 +3,7 @@ import { mkdir, writeFile } from "fs/promises";
 import { join } from "path";
 
 export function fixtureGit(cwd: string, args: string[], input?: string): string {
-  return execFileSync("git", args, {
+  return execFileSync("git", ["-c", "maintenance.auto=false", ...args], {
     cwd,
     input,
     encoding: "utf8",
@@ -81,7 +81,7 @@ export async function createDiffHistory(base: string, extraMainCommits = 0) {
   fixtureGit(repo, ["commit", "--no-gpg-sign", "-m", "unrelated"]);
   const unrelated = fixtureGit(repo, ["rev-parse", "HEAD"]);
   fixtureGit(repo, ["checkout", "main"]);
-  fixtureGit(base, ["clone", "--bare", repo, remote]);
+  fixtureGit(base, ["clone", "--bare", "--no-local", repo, remote]);
   for (const [number, sha] of [
     [1, readme],
     [2, feature],
@@ -169,7 +169,7 @@ export async function createMergedDiffHistory(base: string, crossed = false, top
   fixtureGit(repo, ["commit", "--no-gpg-sign", "-am", "feature docs"]);
   const feature = fixtureGit(repo, ["rev-parse", "HEAD"]);
   fixtureGit(repo, ["checkout", "main"]);
-  fixtureGit(base, ["clone", "--bare", repo, remote]);
+  fixtureGit(base, ["clone", "--bare", "--no-local", repo, remote]);
   fixtureGit(remote, ["update-ref", "refs/pull/1/head", feature]);
   return { repo, remote, ancestor, newerBase, main, readme: feature, feature, unrelated: feature };
 }
