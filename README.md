@@ -838,6 +838,38 @@ commands as task discovery; `package.json` declarations take precedence over
 lockfiles, including Bun’s `bun.lock` and `bun.lockb`. Answers the most common Day-1 question: _"how do I build, test, and
 run this?"_
 
+At a selected root with a literal `go.mod` module declaration and contained
+non-test Go source with a leading package clause, discovery also
+offers native Go conventions: `go build ./...` and `go test ./...`. Declared
+commands stay first; existing nonempty analysis commands remain unchanged.
+Onboarding `--subdir packages/app` uses that directory's module evidence, and
+excluded or unscanned manifests do not qualify. For standalone discovery, pass
+the module directory itself (`bootcamp tasks ./packages/app`).
+
+Go discovery does not run Go, resolve dependencies, search parent modules or
+expand `go.work`. Workspace-only, ancestor-only, empty and nested-module-only
+roots contribute no Go conventions. Source behind nested module markers or in
+`vendor`, `testdata`, dot/underscore directories or dot/underscore files is
+omitted, even when the nested marker is excluded from the scan. Source reads use
+the selected scan inventory; standalone discovery walks at most 200 entries.
+Evidence is limited to 200 candidate files/ancestor checks, 64 path components,
+256 KiB per source and 1 MiB total source bytes. Symlink sources, test-only
+packages, files with explicit build constraints or known implicit GOOS/GOARCH
+filename suffixes (such as `demo_windows.go`, `demo_amd64.go` or
+`demo_linux_amd64.go`), and `ignore` module directives do not qualify this
+conservative fallback. Filename constraints are omitted even when they match
+the current host; mixed packages still qualify through ordinary source files.
+Unknown suffixes and names without a suffix underscore, such as
+`demo_custom.go` and `windows.go`, remain ordinary source evidence. The known
+suffix set includes Go's historical and future filename constraint names.
+
+The module reader accepts literal unquoted or double-quoted module paths,
+comments and supported directive blocks; raw quotes and escaped module-path
+spellings are omitted. Package evidence uses a literal ASCII package clause,
+not full source/manifest, platform or toolchain validation. Building/testing can
+still require dependencies, platform tools or a newer Go version. No install,
+tidy, generate, formatting or application entrypoint is inferred.
+
 Taskfile discovery preserves shell-safe namespaced and quoted task names, omits internal helpers, and reads descriptions from YAML without executing task commands or templates.
 
 Package script commands retain each declared name as one POSIX shell argument,
