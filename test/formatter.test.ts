@@ -99,6 +99,14 @@ describe("markdownToHtml", () => {
     );
   });
 
+  it("handles long malformed labels without repeated suffix scans", () => {
+    const source = "[[x] ".repeat(32000);
+    const start = performance.now();
+    const html = markdownToHtml(source);
+    expect(performance.now() - start).toBeLessThan(1000);
+    expect(html).toBe(`<p>${source}</p>`);
+  });
+
   it("renders label formatting without nested anchors or unsafe URLs", () => {
     const html = markdownToHtml(
       "[**source** `a]b.ts`](javascript:alert) [outer [inner](https://example.com)](./outer.html)"

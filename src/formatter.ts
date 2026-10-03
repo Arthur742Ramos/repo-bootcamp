@@ -53,32 +53,6 @@ function convertInlineFormatting(line: string): string {
     return trimmed.startsWith("#") || trimmed.startsWith("./") || trimmed.startsWith("../");
   };
 
-  // Labels can contain inline code with closing brackets (e.g. [id] routes).
-  // Read the label as balanced text rather than stopping inside a code span.
-  const readLink = (
-    source: string,
-    allowEmptyLabel = false
-  ): { text: string; url: string; length: number } | null => {
-    if (!source.startsWith("[")) return null;
-    let depth = 1;
-    for (let index = 1; index < source.length; index++) {
-      if (source[index] === "`") {
-        const close = source.indexOf("`", index + 1);
-        if (close > index + 1) {
-          index = close;
-          continue;
-        }
-      }
-      if (source[index] === "[") depth++;
-      if (source[index] !== "]" || --depth !== 0) continue;
-      if ((!allowEmptyLabel && index === 1) || source[index + 1] !== "(") return null;
-      const end = source.indexOf(")", index + 2);
-      if (end <= index + 2) return null;
-      return { text: source.slice(1, index), url: source.slice(index + 2, end), length: end + 1 };
-    }
-    return null;
-  };
-
   // Render protected inline constructs as output fragments while walking the
   // source. This avoids textual placeholders entirely: user content can never
   // be mistaken for an internal token during restoration.
@@ -86,12 +60,56 @@ function convertInlineFormatting(line: string): string {
     let output = "";
     let index = 0;
 
+    // Index boundaries once: repeatedly scanning unmatched labels would make
+    // bracket-heavy repository text quadratic. Code spans protect brackets.
+    const nextBacktick = new Int32Array(source.length);
+    const nextParen = new Int32Array(source.length);
+    let backtick = -1;
+    let paren = -1;
+    for (let cursor = source.length - 1; cursor >= 0; cursor--) {
+      nextBacktick[cursor] = backtick;
+      nextParen[cursor] = paren;
+      if (source[cursor] === "`") backtick = cursor;
+      if (source[cursor] === ")") paren = cursor;
+    }
+    const labelEnds = new Map<number, number>();
+    const labelStarts: number[] = [];
+    for (let cursor = 0; cursor < source.length; cursor++) {
+      if (source[cursor] === "`" && nextBacktick[cursor] > cursor + 1) {
+        cursor = nextBacktick[cursor];
+      } else if (source[cursor] === "[") {
+        labelStarts.push(cursor);
+      } else if (source[cursor] === "]" && labelStarts.length) {
+        labelEnds.set(labelStarts.pop()!, cursor);
+      }
+    }
+    const readLink = (
+      start: number,
+      allowEmptyLabel = false
+    ): { text: string; url: string; length: number } | null => {
+      const close = labelEnds.get(start);
+      if (
+        close === undefined ||
+        (!allowEmptyLabel && close === start + 1) ||
+        source[close + 1] !== "("
+      ) {
+        return null;
+      }
+      const end = nextParen[close + 1];
+      if (end <= close + 2) return null;
+      return {
+        text: source.slice(start + 1, close),
+        url: source.slice(close + 2, end),
+        length: end - start + 1,
+      };
+    };
+
     while (index < source.length) {
       const remainder = source.slice(index);
 
       // Images must be checked before links so the leading `!` is not treated
       // as ordinary text. Unsafe image URLs are rendered as escaped alt text.
-      const imageMatch = remainder.startsWith("!") ? readLink(remainder.slice(1), true) : null;
+      const imageMatch = source[index] === "!" ? readLink(index + 1, true) : null;
       if (imageMatch) {
         const { text: alt, url, length } = imageMatch;
         output += isSafeUrl(url, false)
@@ -101,7 +119,7 @@ function convertInlineFormatting(line: string): string {
         continue;
       }
 
-      const linkMatch = allowLinks ? readLink(remainder) : null;
+      const linkMatch = allowLinks ? readLink(index) : null;
       if (linkMatch) {
         const { text, url, length } = linkMatch;
         output += isSafeUrl(url, true)
