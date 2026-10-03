@@ -645,50 +645,89 @@ export function generateDependencyDiagram(deps: DependencyAnalysis, projectName:
     return lines.join("\n");
   }
 
+  lines.unshift("---", "config:", "  flowchart:", "    padding: 5", "    nodeSpacing: 5", "---");
+
+  // Invisible links constrain vertical layout without adding dependency edges.
+  const orderNodes = (nodeIds: string[]): void => {
+    for (let index = 1; index < nodeIds.length; index++) {
+      lines.push(`    ${nodeIds[index - 1]} ~~~ ${nodeIds[index]}`);
+    }
+  };
+
   // Group by categories
   if (deps.categories.length > 0) {
+    const usedIds = new Set(
+      deps.categories
+        .slice(0, 8)
+        .flatMap((cat) => [
+          cat.name.replace(/[^a-zA-Z0-9]/g, ""),
+          ...cat.deps.slice(0, 5).map((dep) => dep.replace(/[^a-zA-Z0-9]/g, "_")),
+          `${cat.name.replace(/[^a-zA-Z0-9]/g, "")}_more`,
+        ])
+    );
+    usedIds.add(projectName);
+    let collectionId = "DependencyCategories";
+    while (usedIds.has(collectionId)) collectionId += "_";
+    lines.push(`  subgraph ${collectionId}["Dependency Categories"]`, "    direction TB");
+    let previousCategory: string | undefined;
     for (const cat of deps.categories.slice(0, 8)) {
       // Top 8 categories
       const safeName = cat.name.replace(/[^a-zA-Z0-9]/g, "");
-      lines.push(`  subgraph ${safeName}["${cat.name}"]`);
+      lines.push(`  subgraph ${safeName}["${cat.name}"]`, "    direction TB");
+      const nodeIds: string[] = [];
 
       // Show up to 5 deps per category
       for (const dep of cat.deps.slice(0, 5)) {
         const safeDepName = dep.replace(/[^a-zA-Z0-9]/g, "_");
         lines.push(`    ${safeDepName}["${dep}"]`);
+        nodeIds.push(safeDepName);
       }
       if (cat.deps.length > 5) {
         lines.push(`    ${safeName}_more["+${cat.deps.length - 5} more"]`);
+        nodeIds.push(`${safeName}_more`);
       }
+      orderNodes(nodeIds);
       lines.push("  end");
-      lines.push(`  APP --> ${safeName}`);
+      if (previousCategory) lines.push(`  ${previousCategory} ~~~ ${safeName}`);
+      previousCategory = safeName;
       lines.push("");
     }
+    lines.push("  end");
+    lines.push(`  APP --> ${collectionId}`);
   } else {
     // Fallback: show top runtime dependencies
-    lines.push('  subgraph Runtime["Runtime Dependencies"]');
+    lines.push('  subgraph Runtime["Runtime Dependencies"]', "    direction TB");
+    const runtimeIds: string[] = [];
     for (const dep of deps.runtime.slice(0, 10)) {
       const safeDepName = dep.name.replace(/[^a-zA-Z0-9]/g, "_");
       lines.push(`    ${safeDepName}["${dep.name}"]`);
+      runtimeIds.push(safeDepName);
     }
     if (deps.runtime.length > 10) {
       lines.push(`    runtime_more["+${deps.runtime.length - 10} more"]`);
+      runtimeIds.push("runtime_more");
     }
+    orderNodes(runtimeIds);
     lines.push("  end");
     lines.push("  APP --> Runtime");
     lines.push("");
 
     if (deps.dev.length > 0) {
-      lines.push('  subgraph Dev["Dev Dependencies"]');
+      lines.push('  subgraph Dev["Dev Dependencies"]', "    direction TB");
+      const devIds: string[] = [];
       for (const dep of deps.dev.slice(0, 8)) {
         const safeDepName = dep.name.replace(/[^a-zA-Z0-9]/g, "_");
         lines.push(`    ${safeDepName}["${dep.name}"]`);
+        devIds.push(safeDepName);
       }
       if (deps.dev.length > 8) {
         lines.push(`    dev_more["+${deps.dev.length - 8} more"]`);
+        devIds.push("dev_more");
       }
+      orderNodes(devIds);
       lines.push("  end");
       lines.push("  APP -.-> Dev");
+      lines.push("  Runtime ~~~ Dev");
     }
   }
 
