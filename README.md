@@ -491,6 +491,13 @@ bootcamp https://github.com/owner/repo --compare v1.0.0
 
 ### PR Diff Mode
 
+Diff guidance compares the common ancestor of the requested refs with the head, so files,
+dependencies, scripts, and version changes describe the same feature history. Public ref labels
+remain in the report. PR mode starts with the usual shallow clone and deepens only its base/head
+histories when needed, with three bounded increases (32, 128, then 512 ancestry levels).
+If that budget is exhausted, retry with `--full-clone`; unrelated histories fail with a clear error.
+Local `--compare` uses available checkout history without fetching it.
+
 ```bash
 # Analyze onboarding impact of a pull request
 bootcamp diff owner/repo#123
