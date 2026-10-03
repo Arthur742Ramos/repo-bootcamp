@@ -895,6 +895,7 @@ export function generateRunbook(facts: RepoFacts): string {
       !facts.runbook?.incidents?.length);
 
   if (notApplicable) {
+    const buildCommand = findGuidanceCommand(facts.quickstart.commands, "build");
     return `# Runbook: ${facts.repoName}
 
 > This repository is a library/tool and does not require operational runbook documentation.
@@ -903,11 +904,7 @@ For usage instructions, see [ONBOARDING.md](./ONBOARDING.md).
 
 ## Build & Release
 
-${
-  facts.quickstart.commands.find((c) => c.name === "build")?.command
-    ? markdownCodeBlock(facts.quickstart.commands.find((c) => c.name === "build")!.command, "bash")
-    : "_No build command detected_"
-}
+${buildCommand?.command ? markdownCodeBlock(buildCommand.command, "bash") : "_No build command detected_"}
 
 ## Publishing (if applicable)
 
