@@ -19,6 +19,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Reset kit and issue-preview download controls for new analyses, cancel obsolete requests and feedback timers, and prevent late responses from affecting a replacement run while preserving active same-job downloads.
 
 - Import local plugins through file URLs so Windows drive paths and literal spaces, `#`, and `%` filenames select the intended module while package and explicit URL imports retain their behavior.
+- Reconnecting an active web analysis restores its requested branch or tag, package directory, focus, audience, and scan limit for the terminal handoff and next run. Editing a repository draft leaves the displayed and copied command tied to the analyzed repository.
+
 - Discover public Just recipes with supported literal defaults and zero required arguments; omit private helpers and ambiguous default Justfile sources from runnable onboarding guidance.
 - Recreate the analyzed branch or tag in remote onboarding clone instructions, including selected packages that exist only on that ref; detached tag source links use the known analyzed commit.
 - Quote package script names as one literal POSIX shell argument in task discovery and npm diff guidance, preserving names with spaces, quotes, and punctuation and using `run --` for leading-hyphen names.

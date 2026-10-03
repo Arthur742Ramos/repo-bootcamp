@@ -677,6 +677,7 @@ export function getIndexHtml(nonce?: string): string {
     let lastFocused = null;
     let currentEventSource = null;
     let latestResult = null;
+    let currentRunRepoUrl = '';
     let currentRunOptions = {};
     let progressStartedAt = null;
     let progressTimer = null;
@@ -784,6 +785,24 @@ export function getIndexHtml(nonce?: string): string {
         maxFiles: Number.isFinite(maxFiles) && maxFiles > 0 ? maxFiles : 200,
         format: 'markdown',
       };
+    }
+
+    function restoreRunOptions(job) {
+      // Keep the requested ref: a tag's checkout reports HEAD, not its tag name.
+      // Older job responses only supply subdir; their other fields stay default.
+      const options = job.options && typeof job.options === 'object' && !Array.isArray(job.options)
+        ? job.options : {};
+      document.getElementById('branch').value = typeof options.branch === 'string' ? options.branch : '';
+      document.getElementById('subdir').value = typeof options.subdir === 'string'
+        ? options.subdir : typeof job.subdir === 'string' ? job.subdir : '';
+      document.getElementById('focus').value = ['all', 'onboarding', 'architecture', 'contributing'].includes(options.focus)
+        ? options.focus : 'all';
+      document.getElementById('audience').value = ['all', 'backend', 'frontend', 'sre'].includes(options.audience)
+        ? options.audience : 'all';
+      const maxFiles = Number(options.maxFiles);
+      document.getElementById('maxFiles').value = Number.isFinite(maxFiles) && maxFiles > 0
+        ? Math.min(1000, Math.max(1, Math.floor(maxFiles))) : 200;
+      currentRunOptions = getRunOptions();
     }
 
     function rememberJob(jobId) {
@@ -907,6 +926,7 @@ export function getIndexHtml(nonce?: string): string {
 
       const status = document.getElementById('statusMsg');
       const runToken = beginRun();
+      currentRunRepoUrl = repoUrl;
       currentRunOptions = getRunOptions();
       setAnalysisBusy(true);
       document.getElementById('retryBtn').hidden = true;
@@ -1824,8 +1844,7 @@ export function getIndexHtml(nonce?: string): string {
     }
 
     function buildCliCommand() {
-      const repoUrl = document.getElementById('repoUrl').value.trim();
-      const parts = ['bootcamp', repoUrl];
+      const parts = ['bootcamp', currentRunRepoUrl];
       if (currentRunOptions.branch) parts.push('--branch', currentRunOptions.branch);
       if (currentRunOptions.subdir) parts.push('--subdir', quoteCliArgument(currentRunOptions.subdir));
       if (currentRunOptions.focus && currentRunOptions.focus !== 'all') parts.push('--focus', currentRunOptions.focus);
@@ -1946,8 +1965,8 @@ export function getIndexHtml(nonce?: string): string {
         const runToken = beginRun();
         currentJobId = job.id;
         if (job.repoUrl) document.getElementById('repoUrl').value = job.repoUrl;
-        document.getElementById('subdir').value = typeof job.subdir === 'string' ? job.subdir : '';
-        currentRunOptions = { ...currentRunOptions, subdir: document.getElementById('subdir').value };
+        currentRunRepoUrl = document.getElementById('repoUrl').value.trim();
+        restoreRunOptions(job);
         document.getElementById('emptyState').hidden = true;
         document.getElementById('results').classList.remove('show');
         resetPhaseRail();
