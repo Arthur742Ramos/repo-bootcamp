@@ -151,15 +151,16 @@
   },
   "dependencies": {
     "@github/copilot-sdk": "^1.0.13",
+    "brace-expansion": "5.0.12",
     "chalk": "^6.0.0",
     "commander": "^15.0.0",
     "cosmiconfig": "^10.0.1",
     "cosmiconfig-typescript-loader": "^6.3.0",
     "express": "^5.2.1",
     "express-rate-limit": "^8.7.0",
-    "fast-glob": "^3.3.3",
     "helmet": "^8.3.0",
     "ora": "^9.4.1",
+    "picomatch": "4.0.7",
     "zod": "^4.6.2"
   },
   "devDependencies": {
@@ -167,6 +168,7 @@
     "@playwright/test": "^1.63.0",
     "@types/express": "^5.0.6",
     "@types/node": "^26.6.3",
+    "@types/picomatch": "4.0.3",
     "@types/supertest": "^7.2.1",
     "@typescript-eslint/eslint-plugin": "^8.70.1",
     "@typescript-eslint/parser": "^8.69.0",

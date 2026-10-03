@@ -7,8 +7,6 @@ import { execFile } from "child_process";
 import { promisify } from "util";
 import { mkdir, readFile, rm, realpath, stat, mkdtemp } from "fs/promises";
 import { join, basename, resolve, relative, isAbsolute, dirname } from "path";
-import fg from "fast-glob";
-import { Readable } from "stream";
 import type {
   RepoInfo,
   FileInfo,
@@ -22,6 +20,7 @@ import type {
 import { SKIP_DIRS, isPathInsideDir } from "./utils.js";
 import { readContainedFile } from "./fs-safe.js";
 import { discoverTasks, toCommands } from "./tasks.js";
+import { walkRepositoryFiles } from "./scan-walk.js";
 import frameworkMaps from "./data/framework-maps.json" with { type: "json" };
 
 const execFileAsync = promisify(execFile);
@@ -336,7 +335,7 @@ export async function cloneRepo(
 }
 
 /**
- * Scan directory tree using fast-glob
+ * Scan directory tree with bounded native directory iteration
  */
 async function scanDirectory(
   basePath: string,
@@ -373,40 +372,7 @@ async function scanDirectory(
     ...exclude,
   ];
 
-  // Stream entries lazily so `maxFiles` bounds the actual directory walk and its
-  // stat() calls — not just how many results we retain. Destroying the stream
-  // halts the remaining traversal in the underlying @nodelib/fs.walk source.
-  const stream = fg.stream("**/*", {
-    cwd: scanRoot,
-    onlyFiles: false,
-    stats: true,
-    dot: true,
-    unique: true,
-    objectMode: true,
-    followSymbolicLinks: false,
-    suppressErrors: true,
-    ignore: ignorePatterns,
-  }) as Readable;
-
-  const files: FileInfo[] = [];
-  for await (const entry of stream as AsyncIterable<fg.Entry>) {
-    // Symlinks are untrusted: a repo can commit `pkg.json -> /etc/passwd`, which
-    // fast-glob (with followSymbolicLinks:false) still reports as a file entry.
-    // Skip them so they never enter the file set and are never read downstream.
-    if (entry.dirent?.isSymbolicLink()) continue;
-    const isDirectory = entry.dirent?.isDirectory() ?? false;
-    files.push({
-      path: entry.path,
-      size: isDirectory ? 0 : (entry.stats?.size ?? 0),
-      isDirectory,
-    });
-    if (files.length >= maxFiles) {
-      stream.destroy();
-      break;
-    }
-  }
-
-  return files;
+  return walkRepositoryFiles(scanRoot, maxFiles, ignorePatterns);
 }
 
 /**

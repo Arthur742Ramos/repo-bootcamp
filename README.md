@@ -889,6 +889,8 @@ cache ls` is an alias for `list`.
 
 ## CLI Options
 
+Repository scanning stops directory traversal and file metadata reads when `--max-files` is reached. Excluded dependency trees are pruned, and symbolic links and special filesystem entries are skipped. Exclude patterns support glob, extglob, and brace syntax; a pattern expanding beyond 10,000 brace alternatives is rejected with an error.
+
 | Option                       | Description                                                                  | Default             |
 | ---------------------------- | ---------------------------------------------------------------------------- | ------------------- |
 | `-b, --branch <branch>`      | Branch to analyze                                                            | default branch      |
