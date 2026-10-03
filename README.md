@@ -870,6 +870,8 @@ bootcamp https://github.com/owner/repo --create-issues --dry-run
 bootcamp https://github.com/owner/repo --create-issues
 ```
 
+Live creation supports matching GitHub repository metadata and explicitly targets `github.com/owner/repo`, independently of `GH_HOST`. GitLab, Bitbucket, and local repositories can use `--create-issues --dry-run` to export task titles and bodies for manual issue creation. Existing titles and titles successfully created in the same batch are skipped. Any creation failure makes the CLI exit unsuccessfully while preserving generated documents and honoring normal temporary-clone cleanup and `--keep-temp`.
+
 ### Web Demo Server
 
 ```bash

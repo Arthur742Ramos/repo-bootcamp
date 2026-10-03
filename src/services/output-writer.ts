@@ -64,10 +64,16 @@ export async function writeGeneratedOutputs({
       await writeFile(join(outputDir, previewDoc.name), previewDoc.content, "utf-8");
       console.log(chalk.yellow(`Issue preview saved to ${previewDoc.name}`));
     }
-    await createIssuesFromTasks(facts.firstTasks, repoInfo, {
+    const results = await createIssuesFromTasks(facts.firstTasks, repoInfo, {
       dryRun: options.dryRun,
       verbose: options.verbose,
     });
+    const failed = results.filter((result) => !result.success).length;
+    if (failed > 0) {
+      throw new Error(
+        `${failed} starter issue${failed === 1 ? "" : "s"} could not be created. Generated documents have been preserved.`
+      );
+    }
   }
 
   if (options.renderDiagrams && !options.jsonOnly) {
