@@ -3,6 +3,9 @@
  */
 
 import { describe, it, expect } from "vitest";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { pathToFileURL } from "node:url";
 import {
   generateBootcamp,
   generateOnboarding,
@@ -13,6 +16,7 @@ import {
   generateRunbook,
 } from "../src/generator.js";
 import { markdownToHtml } from "../src/formatter.js";
+import { parseGitHubUrl } from "../src/ingest.js";
 import type { RepoFacts, BootcampOptions } from "../src/types.js";
 
 const mockFacts: RepoFacts = {
@@ -168,6 +172,64 @@ describe("generateOnboarding", () => {
     const result = generateOnboarding(mockFacts);
     expect(result).toContain("git clone");
     expect(result).toContain("test/repo");
+    expect(result).toContain("git clone https://github.com/test/repo.git\ncd repo");
+  });
+
+  it.each([
+    "https://github.com/owner/project",
+    "https://gitlab.com/group/team/project",
+    "https://bitbucket.org/team/project",
+  ])("uses the actual remote and scoped checkout for %s", (url) => {
+    const repoInfo = { ...parseGitHubUrl(url), sourcePathPrefix: "packages/my app" };
+    const result = generateOnboarding(mockFacts, undefined, { repoInfo });
+    expect(result).toContain(`git clone -- '${url}.git'\ncd -- 'project/packages/my app'`);
+    expect(result).not.toContain("git clone https://github.com/test/repo");
+    expect(result).not.toContain("cd team");
+    expect(result).toContain("Check existing repository issues");
+    expect(result).not.toContain("Check existing issues on GitHub");
+  });
+
+  it("uses an existing local scope and quotes shell metacharacters", () => {
+    const result = generateOnboarding(mockFacts, undefined, {
+      repoInfo: {
+        ...parseGitHubUrl("owner/project"),
+        url: "file:///checkout",
+        sourcePathPrefix: "packages/app",
+      },
+      localPath: "/checkout/My app's $data;folder",
+    });
+    expect(result).toContain("## Checkout & Install");
+    expect(result).toContain(`cd -- '/checkout/My app'"'"'s $data;folder'`);
+    expect(result).not.toContain("git clone");
+    expect(result).not.toContain("github.com/local/");
+  });
+
+  it("retains literal POSIX backslashes and formats Windows paths for the Bash instructions", () => {
+    const repoInfo = { ...parseGitHubUrl("owner/project"), url: "file:///checkout" };
+    expect(
+      generateOnboarding(mockFacts, undefined, { repoInfo, localPath: "/checkout/back\\slash" })
+    ).toContain("cd -- '/checkout/back\\slash'");
+    expect(
+      generateOnboarding(mockFacts, undefined, { repoInfo, localPath: "C:\\Users\\Arthur\\My app" })
+    ).toContain("cd -- 'C:/Users/Arthur/My app'");
+  });
+
+  it("uses the local URL and selected prefix when no explicit checkout path is supplied", () => {
+    const root = join(tmpdir(), "My app#notes");
+    const result = generateOnboarding(mockFacts, undefined, {
+      repoInfo: {
+        ...parseGitHubUrl("owner/project"),
+        url: pathToFileURL(root).href,
+        sourcePathPrefix: "packages/my app",
+      },
+    });
+    const selectedPath = join(root, "packages/my app");
+    const bashPath = /^[A-Za-z]:\\/.test(selectedPath)
+      ? selectedPath.replace(/\\/g, "/")
+      : selectedPath;
+    expect(result).toContain(`cd -- '${bashPath}'`);
+    expect(result).not.toContain("My%20app%23notes");
+    expect(result).not.toContain("git clone");
   });
 
   it("includes commands", () => {

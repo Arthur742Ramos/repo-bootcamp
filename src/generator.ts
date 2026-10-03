@@ -4,6 +4,8 @@
  */
 
 import type { RepoFacts, BootcampOptions, RepoInfo } from "./types.js";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { getStyleConfig, type StyleConfig } from "./plugins.js";
 import { markdownToHtml } from "./formatter.js";
 import { buildBlobUrl } from "./source-links.js";
@@ -19,6 +21,16 @@ const MAX_AUDIENCE_TASKS = 3;
 
 type Audience = BootcampOptions["audience"];
 type RepoTask = RepoFacts["firstTasks"][number];
+
+/** Checkout metadata for setup instructions; paths describe the selected scope. */
+export interface OnboardingCheckoutContext {
+  repoInfo: RepoInfo;
+  localPath?: string;
+}
+
+function quoteBashArgument(value: string): string {
+  return `'${value.replace(/'/g, `'"'"'`)}'`;
+}
 
 const AUDIENCE_PROFILES: Record<
   Audience,
@@ -386,7 +398,8 @@ ${nextStepLinks}
  */
 export function generateOnboarding(
   facts: RepoFacts,
-  options?: Pick<BootcampOptions, "audience">
+  options?: Pick<BootcampOptions, "audience">,
+  checkout?: OnboardingCheckoutContext
 ): string {
   const profile = getAudienceProfile(options?.audience);
   const prereqs = facts.quickstart.prerequisites.map((p) => `- [ ] ${p}`).join("\n");
@@ -425,18 +438,36 @@ export function generateOnboarding(
     ? `Start the dev server/watch mode (\`${devCommand.command}\`)`
     : "Build the project and run it to verify your setup";
 
+  const isLocal = checkout?.repoInfo.url.startsWith("file://") ?? false;
+  const checkoutTitle = isLocal ? "Checkout & Install" : "Clone & Install";
+  let checkoutCommands = `# Clone the repository\ngit clone https://github.com/${facts.repoName}.git\ncd ${facts.repoName.split("/")[1]}`;
+  if (checkout) {
+    if (isLocal) {
+      const localPath =
+        checkout.localPath ??
+        join(fileURLToPath(checkout.repoInfo.url), checkout.repoInfo.sourcePathPrefix ?? "");
+      const bashPath = /^[A-Za-z]:\\/.test(localPath) ? localPath.replace(/\\/g, "/") : localPath;
+      checkoutCommands = `# Use the existing checkout\ncd -- ${quoteBashArgument(bashPath)}`;
+    } else {
+      const repositoryUrl = checkout.repoInfo.url.replace(/\/$/, "");
+      const cloneUrl = repositoryUrl.endsWith(".git") ? repositoryUrl : `${repositoryUrl}.git`;
+      const directory = [checkout.repoInfo.repo, checkout.repoInfo.sourcePathPrefix]
+        .filter(Boolean)
+        .join("/");
+      checkoutCommands = `# Clone the repository\ngit clone -- ${quoteBashArgument(cloneUrl)}\ncd -- ${quoteBashArgument(directory)}`;
+    }
+  }
+
   return `# Onboarding Guide: ${facts.repoName}
 
 ## Prerequisites Checklist
 
 ${prereqs}
 
-## Clone & Install
+## ${checkoutTitle}
 
 \`\`\`bash
-# Clone the repository
-git clone https://github.com/${facts.repoName}.git
-cd ${facts.repoName.split("/")[1]}
+${checkoutCommands}
 
 # Install dependencies
 ${facts.quickstart.commands.find((c) => c.name === "install")?.command || `${facts.stack.packageManager || "npm"} install`}
@@ -484,7 +515,7 @@ Recommended extensions:
 
 ## Getting Help
 
-- Check existing issues on GitHub
+- ${checkout ? "Check existing repository issues" : "Check existing issues on GitHub"}
 - Read through the docs in \`${facts.structure.docsDirs[0] || "docs/"}\`
 - Look at existing code for patterns
 
