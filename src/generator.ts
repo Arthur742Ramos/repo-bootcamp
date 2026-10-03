@@ -10,6 +10,7 @@ import { getStyleConfig, type StyleConfig } from "./plugins.js";
 import { markdownToHtml } from "./formatter.js";
 import { buildBlobUrl } from "./source-links.js";
 import { findGuidanceCommand } from "./command-guidance.js";
+import { isMultilineCode, markdownCodeBlock, markdownCodeSpan } from "./markdown-code.js";
 
 /** Maximum items shown in summary sections of BOOTCAMP.md */
 const MAX_BOOTCAMP_SUMMARY_ITEMS = 5;
@@ -303,10 +304,10 @@ export function generateBootcamp(
   const depthLimits = getSectionDepthLimits(resolvedStyle.sectionDepth);
   const prereqs = facts.quickstart.prerequisites.map((p) => `- ${p}`).join("\n");
   const steps = facts.quickstart.steps.map((s, i) => `${i + 1}. ${s}`).join("\n");
-  const commands = facts.quickstart.commands
-    .slice(0, depthLimits.summaryItems)
-    .map((c) => `\`${c.command}\``)
-    .join(", ");
+  const summaryCommands = facts.quickstart.commands.slice(0, depthLimits.summaryItems);
+  const commands = summaryCommands.some((c) => isMultilineCode(c.command))
+    ? "\n\n" + summaryCommands.map((c) => markdownCodeBlock(c.command, "bash")).join("\n\n")
+    : summaryCommands.map((c) => markdownCodeSpan(c.command)).join(", ");
 
   const keyDirs = facts.structure.keyDirs
     .slice(0, depthLimits.summaryItems)
@@ -326,10 +327,19 @@ export function generateBootcamp(
   const fallbackCommand =
     findGuidanceCommand(facts.quickstart.commands, "build")?.command ??
     findGuidanceCommand(facts.quickstart.commands, "test")?.command;
+  const verifyCommand = devCommand?.command ?? fallbackCommand;
+  const multilineVerification =
+    verifyCommand && isMultilineCode(verifyCommand)
+      ? `\n\n**Command for step 2:**\n\n${markdownCodeBlock(verifyCommand, "bash")}`
+      : "";
   const runVerifyStep = devCommand
-    ? `Run the dev server: \`${devCommand.command}\``
+    ? isMultilineCode(devCommand.command)
+      ? "Run the dev server using the command below"
+      : `Run the dev server: ${markdownCodeSpan(devCommand.command)}`
     : fallbackCommand
-      ? `Build/verify: \`${fallbackCommand}\``
+      ? isMultilineCode(fallbackCommand)
+        ? "Build/verify using the command below"
+        : `Build/verify: ${markdownCodeSpan(fallbackCommand)}`
       : "Build/verify the project to confirm your setup works";
 
   const links: [string, string, string, boolean | undefined][] = [
@@ -390,7 +400,7 @@ ${keyDirs}
 2. ${runVerifyStep}
 3. Pick one of these starter tasks:
 
-${quickTasks || "- _No beginner tasks suggested_"}
+${quickTasks || "- _No beginner tasks suggested_"}${multilineVerification}
 
 ## Next Steps
 
@@ -414,7 +424,7 @@ export function generateOnboarding(
   const commands = facts.quickstart.commands
     .map(
       (c) =>
-        `### ${c.name}\n\`\`\`bash\n${c.command}\n\`\`\`\n${c.description ? `> ${c.description}` : ""}`
+        `### ${c.name}\n${markdownCodeBlock(c.command, "bash")}\n${c.description ? `> ${c.description}` : ""}`
     )
     .join("\n\n");
 
@@ -439,7 +449,9 @@ export function generateOnboarding(
   // exists; libraries get a build/verify loop instead.
   const devCommand = findGuidanceCommand(facts.quickstart.commands, "dev");
   const devLoopStep = devCommand
-    ? `Start the dev server/watch mode (\`${devCommand.command}\`)`
+    ? isMultilineCode(devCommand.command)
+      ? "Start the dev server/watch mode using Available Commands above"
+      : `Start the dev server/watch mode (${markdownCodeSpan(devCommand.command)})`
     : "Build the project and run it to verify your setup";
 
   const isLocal = checkout?.repoInfo.url.startsWith("file://") ?? false;
@@ -469,8 +481,12 @@ export function generateOnboarding(
     documentedInstall?.command ||
     (manager && ["npm", "pnpm", "yarn", "bun"].includes(manager) ? `${manager} install` : null);
   const installation = installCommand
-    ? `\n\n# Install dependencies\n${installCommand}\n\`\`\``
-    : `\n\`\`\`\n\nFollow the repository's README or contribution guide for dependency installation and environment setup.`;
+    ? ""
+    : "\n\nFollow the repository's README or contribution guide for dependency installation and environment setup.";
+  const checkoutBlock = markdownCodeBlock(
+    checkoutCommands + (installCommand ? `\n\n# Install dependencies\n${installCommand}` : ""),
+    "bash"
+  );
 
   return `# Onboarding Guide: ${facts.repoName}
 
@@ -480,8 +496,7 @@ ${prereqs}
 
 ## ${checkoutTitle}
 
-\`\`\`bash
-${checkoutCommands}${installation}
+${checkoutBlock}${installation}
 
 ## Available Commands
 
@@ -506,7 +521,7 @@ ${audienceTasks || "- `_No tasks available yet_`"}
 
 ## Running Tests
 
-${testCmd ? `\`\`\`bash\n${testCmd.command}\n\`\`\`` : "_No test command detected_"}
+${testCmd ? markdownCodeBlock(testCmd.command, "bash") : "_No test command detected_"}
 
 Test directories:
 ${testDirs || "_No test directories detected_"}
@@ -885,7 +900,7 @@ For usage instructions, see [ONBOARDING.md](./ONBOARDING.md).
 
 ${
   facts.quickstart.commands.find((c) => c.name === "build")?.command
-    ? `\`\`\`bash\n${facts.quickstart.commands.find((c) => c.name === "build")?.command}\n\`\`\``
+    ? markdownCodeBlock(facts.quickstart.commands.find((c) => c.name === "build")!.command, "bash")
     : "_No build command detected_"
 }
 

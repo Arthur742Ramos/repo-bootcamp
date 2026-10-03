@@ -27,14 +27,39 @@ function escapeHtml(text: string): string {
 /**
  * Convert a fenced code block to an HTML <pre><code> block.
  */
-function convertCodeBlocks(match: string): string {
-  return match.replace(/```(\w*)\n([\s\S]*?)```/g, (_m, lang, code) => {
-    if (lang === "mermaid") {
-      return `<div class="mermaid">\n${escapeHtml(code.trimEnd())}\n</div>`;
+function convertCodeBlock(code: string, language: string): string {
+  if (language === "mermaid") {
+    return `<div class="mermaid">\n${escapeHtml(code)}\n</div>`;
+  }
+  const cls = language ? ` class="language-${escapeHtml(language)}"` : "";
+  return `<pre tabindex="0" role="region" aria-label="Code block"><code${cls}>${escapeHtml(code)}</code></pre>`;
+}
+
+interface CodeRun {
+  length: number;
+  close: number;
+}
+
+/** Index equal-length maximal backtick runs once, including unmatched runs. */
+function indexCodeRuns(source: string): Map<number, CodeRun> {
+  const runs: { start: number; length: number }[] = [];
+  for (let cursor = 0; cursor < source.length;) {
+    if (source[cursor] !== "`") {
+      cursor++;
+      continue;
     }
-    const cls = lang ? ` class="language-${lang}"` : "";
-    return `<pre tabindex="0" role="region" aria-label="Code block"><code${cls}>${escapeHtml(code.trimEnd())}</code></pre>`;
-  });
+    const start = cursor;
+    while (source[cursor] === "`") cursor++;
+    runs.push({ start, length: cursor - start });
+  }
+  const nearest = new Map<number, number>();
+  const index = new Map<number, CodeRun>();
+  for (let cursor = runs.length - 1; cursor >= 0; cursor--) {
+    const { start, length } = runs[cursor];
+    index.set(start, { length, close: nearest.get(length) ?? -1 });
+    nearest.set(length, start);
+  }
+  return index;
 }
 
 function getMermaidRuntime(body: string): string {
@@ -67,14 +92,11 @@ function convertInlineFormatting(line: string): string {
     // Index delimiters and memoize labels: unmatched brackets must not rescan
     // each suffix. Find labels on demand so consumed URLs cannot start code
     // spans that hide subsequent links.
-    const nextBacktick = new Int32Array(source.length);
+    const codeRuns = indexCodeRuns(source);
     const nextParen = new Int32Array(source.length);
-    let backtick = -1;
     let paren = -1;
     for (let cursor = source.length - 1; cursor >= 0; cursor--) {
-      nextBacktick[cursor] = backtick;
       nextParen[cursor] = paren;
-      if (source[cursor] === "`") backtick = cursor;
       if (source[cursor] === ")") paren = cursor;
     }
     const labelEnds = new Map<number, number | null>();
@@ -83,8 +105,9 @@ function convertInlineFormatting(line: string): string {
       if (labelEnds.has(start)) return labelEnds.get(start)!;
       const labelStarts = [start];
       for (let cursor = start + 1; cursor < source.length; cursor++) {
-        if (source[cursor] === "`" && nextBacktick[cursor] > cursor + 1) {
-          cursor = nextBacktick[cursor];
+        const codeRun = codeRuns.get(cursor);
+        if (codeRun && codeRun.close >= 0) {
+          cursor = codeRun.close + codeRun.length - 1;
         } else if (source[cursor] === "[") {
           if (labelEnds.has(cursor)) {
             const knownEnd = labelEnds.get(cursor);
@@ -147,10 +170,21 @@ function convertInlineFormatting(line: string): string {
         continue;
       }
 
-      const codeMatch = remainder.match(/^`([^`]+)`/);
-      if (codeMatch) {
-        output += `<code>${escapeHtml(codeMatch[1])}</code>`;
-        index += codeMatch[0].length;
+      const codeRun = codeRuns.get(index);
+      if (codeRun) {
+        if (codeRun.close < 0) {
+          output += "`".repeat(codeRun.length);
+          index += codeRun.length;
+          continue;
+        }
+        let code = source.slice(index + codeRun.length, codeRun.close);
+        // Markdown strips one padding space only when both ends are spaces
+        // and the payload contains something other than spaces.
+        if (code.startsWith(" ") && code.endsWith(" ") && /[^ ]/.test(code)) {
+          code = code.slice(1, -1);
+        }
+        output += `<code>${escapeHtml(code)}</code>`;
+        index = codeRun.close + codeRun.length;
         continue;
       }
 
@@ -183,15 +217,13 @@ function readTableCells(line: string): string[] {
   const cells: string[] = [];
   let cell = "";
   let codeEnd = -1;
+  const codeRuns = indexCodeRuns(line);
   let endedWithSeparator = true;
   for (let index = 1; index < line.length; index++) {
     const character = line[index];
-    if (character === "`" && index >= codeEnd) {
-      if (index === codeEnd) codeEnd = -1;
-      else {
-        const close = line.indexOf("`", index + 1);
-        if (close > index + 1) codeEnd = close;
-      }
+    const codeRun = codeRuns.get(index);
+    if (codeRun && codeRun.close >= 0 && index >= codeEnd) {
+      codeEnd = codeRun.close + codeRun.length;
     }
     if (character === "\\" && (line[index + 1] === "|" || line[index + 1] === "\\")) {
       const escaped = line[++index];
@@ -221,46 +253,48 @@ function readTableCells(line: string): string[] {
  * passthrough, and horizontal rules.
  */
 export function markdownToHtml(md: string): string {
-  // Pull out code blocks so they aren't processed line-by-line
-  const codeBlockPlaceholders: string[] = [];
-  const processed = md.replace(/```(\w*)\n([\s\S]*?)```/g, (match) => {
-    const idx = codeBlockPlaceholders.length;
-    codeBlockPlaceholders.push(convertCodeBlocks(match));
-    return `\x00CODEBLOCK_${idx}\x00`;
-  });
-
-  const lines = processed.split("\n");
+  const lines = md.split("\n");
   const html: string[] = [];
   const headingCounts = new Map<string, number>();
   const headingAnchors = new Set<string>();
   let inList = false;
   let inOrderedList = false;
   let inTable = false;
-  const placeholderPrefix = "\x00CODEBLOCK_";
-  const placeholderSuffix = "\x00";
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
 
-    // Restore code block placeholders
-    if (line.startsWith(placeholderPrefix) && line.endsWith(placeholderSuffix)) {
-      const indexText = line.slice(placeholderPrefix.length, -placeholderSuffix.length);
-      if (/^\d+$/.test(indexText)) {
-        if (inList) {
-          html.push("</ul>");
-          inList = false;
+    // Fence delimiters occupy their own lines. Runs within commands, a shorter
+    // delimiter, or trailing literal text cannot close the block.
+    const fence = line.match(/^( {0,3})(`{3,}|~{3,})(.*)$/);
+    if (fence && !(fence[2][0] === "`" && fence[3].includes("`"))) {
+      const code: string[] = [];
+      const indentation = fence[1].length;
+      let end = i + 1;
+      for (; end < lines.length; end++) {
+        const closing = lines[end].match(/^ {0,3}(`{3,}|~{3,})[ \t]*\r?$/);
+        if (closing && closing[1][0] === fence[2][0] && closing[1].length >= fence[2].length) {
+          break;
         }
-        if (inOrderedList) {
-          html.push("</ol>");
-          inOrderedList = false;
-        }
-        if (inTable) {
-          html.push("</table></div>");
-          inTable = false;
-        }
-        html.push(codeBlockPlaceholders[parseInt(indexText, 10)]);
-        continue;
+        const leadingSpaces = lines[end].match(/^ */)![0].length;
+        code.push(lines[end].slice(Math.min(indentation, leadingSpaces)));
       }
+      if (inList) {
+        html.push("</ul>");
+        inList = false;
+      }
+      if (inOrderedList) {
+        html.push("</ol>");
+        inOrderedList = false;
+      }
+      if (inTable) {
+        html.push("</table></div>");
+        inTable = false;
+      }
+      const language = fence[3].trim().split(/\s+/)[0];
+      html.push(convertCodeBlock(code.join("\n"), language));
+      i = end;
+      continue;
     }
 
     // Preserve only the disclosure tags emitted by the generator. Other raw
@@ -457,7 +491,7 @@ export function wrapHtmlPage(body: string, title: string): string {
   h1, h2, h3, h4 { margin-top: 1.5em; }
   pre { background: #f6f8fa; padding: 1em; border-radius: 6px; overflow-x: auto; }
   code { font-family: "SFMono-Regular", Consolas, monospace; font-size: 0.9em; }
-  :not(pre) > code { background: #f6f8fa; padding: 0.2em 0.4em; border-radius: 3px; }
+  :not(pre) > code { white-space: pre-wrap; background: #f6f8fa; padding: 0.2em 0.4em; border-radius: 3px; }
   .table-scroll { max-width: 100%; overflow-x: auto; margin: 1em 0; }
   table { border-collapse: collapse; width: 100%; overflow-wrap: normal; }
   pre:focus-visible, .table-scroll:focus-visible { outline: 2px solid #0969da; outline-offset: 2px; }
@@ -514,7 +548,7 @@ export function convertToPdf(markdown: string, title: string): string {
   h1, h2, h3, h4 { margin-top: 1.5em; page-break-after: avoid; }
   pre { background: #f6f8fa; padding: 1em; border-radius: 6px; overflow-x: auto; page-break-inside: avoid; }
   code { font-family: "SFMono-Regular", Consolas, monospace; font-size: 0.9em; }
-  :not(pre) > code { background: #f6f8fa; padding: 0.2em 0.4em; border-radius: 3px; }
+  :not(pre) > code { white-space: pre-wrap; background: #f6f8fa; padding: 0.2em 0.4em; border-radius: 3px; }
   table { border-collapse: collapse; width: 100%; margin: 1em 0; page-break-inside: avoid; }
   th, td { border: 1px solid #d0d7de; padding: 0.5em 1em; text-align: left; }
   th { background: #f6f8fa; }

@@ -15,7 +15,7 @@ import {
   getFirstTaskRecommendations,
   generateRunbook,
 } from "../src/generator.js";
-import { markdownToHtml } from "../src/formatter.js";
+import { convertToHtml, convertToPdf, markdownToHtml } from "../src/formatter.js";
 import { parseGitHubUrl } from "../src/ingest.js";
 import type { RepoFacts, BootcampOptions } from "../src/types.js";
 
@@ -873,5 +873,79 @@ describe("generated HTML source links", () => {
     expect(html).toContain(
       '<a href="https://github.com/owner/project/blob/main/packages/app/src/routes/%5Bid%5D/page.ts"><code>src/routes/[id]/page.ts</code></a>'
     );
+  });
+});
+
+describe("literal generated command presentation", () => {
+  const commands = [
+    "npm run test",
+    "npm run 'test`literal`'",
+    "npm run 'dev```literal```'",
+    "npm run 'test  unit'",
+    "printf '%s\\n' 'first\n```\nlast'",
+    "printf '%s' '<img src=x onerror=alert(1)>&'",
+    "echo '[source](./ONBOARDING.md)'",
+    "echo 'left|right'",
+    "  npm run test  ",
+    "printf 'literal'  ",
+    "`literal`",
+  ];
+  const codePayloads = (html: string) =>
+    [...html.matchAll(/<code(?: [^>]*)?>([\s\S]*?)<\/code>/g)].map((match) =>
+      match[1]
+        .replaceAll("&quot;", '"')
+        .replaceAll("&lt;", "<")
+        .replaceAll("&gt;", ">")
+        .replaceAll("&amp;", "&")
+    );
+
+  it.each(commands)("preserves original command %j in every affected guide format", (command) => {
+    const facts: RepoFacts = {
+      ...mockFacts,
+      quickstart: {
+        ...mockFacts.quickstart,
+        commands: ["build", "test", "dev"].map((name) => ({ name, command, source: "README.md" })),
+      },
+      runbook: { ...mockFacts.runbook!, applicable: false },
+    };
+    const before = JSON.stringify(facts);
+    for (const markdown of [
+      generateBootcamp(facts),
+      generateOnboarding(facts),
+      generateRunbook(facts),
+    ]) {
+      for (const html of [
+        markdownToHtml(markdown),
+        convertToHtml(markdown, "Guide"),
+        convertToPdf(markdown, "Guide"),
+      ]) {
+        expect(codePayloads(html)).toContain(command);
+        expect(html).not.toContain("<img src=x");
+        expect(html).not.toContain('<a href="./ONBOARDING.md">source</a>');
+      }
+    }
+    expect(JSON.stringify(facts)).toBe(before);
+  });
+
+  it("retains a multiline verification command outside the limited summary", () => {
+    const command = "printf 'first\n```\nlast'";
+    const facts: RepoFacts = {
+      ...mockFacts,
+      quickstart: {
+        ...mockFacts.quickstart,
+        commands: [
+          ...Array.from({ length: 5 }, (_, i) => ({
+            name: "unrelated" + i,
+            command: "echo literal" + i,
+            source: "README.md",
+          })),
+          { name: "dev", command, source: "README.md" },
+        ],
+      },
+    };
+    const markdown = generateBootcamp(facts);
+    expect(markdown).toContain("Run the dev server using the command below");
+    expect(markdown).toContain("**Command for step 2:**");
+    expect(codePayloads(markdownToHtml(markdown))).toContain(command);
   });
 });

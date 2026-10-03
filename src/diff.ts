@@ -7,6 +7,7 @@ import { execFile } from "child_process";
 import { promisify } from "util";
 import type { DiffSummary, RepoInfo } from "./types.js";
 import { packageScriptCommand } from "./package-script-command.js";
+import { isMultilineCode, markdownCodeBlock, markdownCodeSpan } from "./markdown-code.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -631,7 +632,8 @@ export function generateDiffDocs(diff: DiffSummary, projectName: string): string
     lines.push("### New Commands");
     lines.push("");
     for (const cmd of deltas.newCommands) {
-      lines.push(`- \`${cmd}\``);
+      if (isMultilineCode(cmd)) lines.push("", markdownCodeBlock(cmd, "bash"), "");
+      else lines.push(`- ${markdownCodeSpan(cmd)}`);
     }
     lines.push("");
   }
