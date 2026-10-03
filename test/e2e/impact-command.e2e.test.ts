@@ -81,4 +81,30 @@ describe("impact command", () => {
     expect(result.exitCode).toBe(1);
     expect(`${result.stdout}\n${result.stderr}`).toContain("File not found");
   }, 60_000);
+
+  it("finds impact and fails the cycle gate through exact aliases ahead of broad mappings", async () => {
+    const tempDir = await mkdtemp(join(tmpdir(), "bootcamp-impact-e2e-"));
+    tempDirs.push(tempDir);
+    const repoPath = await createRepo(tempDir, {
+      "tsconfig.json": JSON.stringify({
+        compilerOptions: {
+          paths: {
+            "*": ["src/fallback.ts"],
+            "@app/core": ["src/core.ts"],
+          },
+        },
+      }),
+      "main.ts": 'import "@app/core";',
+      "src/core.ts": 'import "../main.js";',
+      "src/fallback.ts": "export {};",
+    });
+    const impact = await runCli(["impact", repoPath, "src/core.ts", "--json"]);
+    expect(impact.exitCode).toBe(0);
+    expect(JSON.parse(impact.stdout).impacts[0].importedBy).toContain("main.ts");
+    const cycles = await runCli(["cycles", repoPath, "--json", "--check"]);
+    expect(cycles.exitCode).toBe(1);
+    const report = JSON.parse(cycles.stdout);
+    expect(report.cycleCount).toBe(1);
+    expect(report.cycles[0].files.sort()).toEqual(["main.ts", "src/core.ts"]);
+  }, 60_000);
 });

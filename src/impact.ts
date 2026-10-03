@@ -4,7 +4,7 @@
  */
 
 import { readFile } from "fs/promises";
-import { join, dirname, basename } from "path";
+import { join, dirname, basename, posix } from "path";
 import { readContainedFile } from "./fs-safe.js";
 import type { FileInfo, ChangeImpact } from "./types.js";
 import type { CyclesSummary } from "./cycles.js";
@@ -104,8 +104,8 @@ interface GraphContext {
   goDirFiles: Map<string, string[]>;
   /** tsconfig `baseUrl` as a repo-relative dir ("" = root), or null if unset. */
   tsBaseDir: string | null;
-  /** tsconfig `paths` aliases, pre-split into prefix + targets. */
-  tsPaths: Array<{ prefix: string; wildcard: boolean; targets: string[] }>;
+  /** tsconfig `paths` aliases, pre-split around the optional single wildcard. */
+  tsPaths: Array<{ prefix: string; suffix: string; wildcard: boolean; targets: string[] }>;
   /** Python source roots to probe for absolute imports (repo root first). */
   pythonRoots: string[];
 }
@@ -122,12 +122,62 @@ function parseJsonc(text: string): unknown {
     // fall through to lenient cleanup
   }
   try {
-    const stripped = text
-      .replace(/\/\*[\s\S]*?\*\//g, "")
-      // Line comments, but keep the `//` in a `scheme://` inside a string.
-      .replace(/(^|[^:])\/\/[^\n\r]*/g, "$1")
-      .replace(/,(\s*[}\]])/g, "$1");
-    return JSON.parse(stripped) as unknown;
+    // Preserve quoted paths such as "src/*/test" and "src//lib/*" while
+    // removing comments. Keep whitespace so comments cannot join tokens.
+    const chunks: string[] = [];
+    let start = 0;
+    let quoted = false;
+    let escaped = false;
+    for (let i = 0; i < text.length; i++) {
+      const char = text[i];
+      if (quoted) {
+        if (escaped) escaped = false;
+        else if (char === "\\") escaped = true;
+        else if (char === '"') quoted = false;
+      } else if (char === '"') {
+        quoted = true;
+      } else if (char === "/" && text[i + 1] === "/") {
+        let end = i + 2;
+        while (end < text.length && text[end] !== "\r" && text[end] !== "\n") end++;
+        chunks.push(text.slice(start, i), " ");
+        start = end;
+        i = end - 1;
+      } else if (char === "/" && text[i + 1] === "*") {
+        const end = text.indexOf("*/", i + 2);
+        if (end === -1) return null;
+        chunks.push(text.slice(start, i), " ");
+        start = end + 2;
+        i = end + 1;
+      }
+    }
+    chunks.push(text.slice(start));
+    const stripped = chunks.join("");
+
+    // Remove trailing commas only outside strings; commas in path values
+    // (including a literal ",}") are part of the configuration.
+    const normalized: string[] = [];
+    start = 0;
+    quoted = false;
+    escaped = false;
+    for (let i = 0; i < stripped.length; i++) {
+      const char = stripped[i];
+      if (quoted) {
+        if (escaped) escaped = false;
+        else if (char === "\\") escaped = true;
+        else if (char === '"') quoted = false;
+      } else if (char === '"') {
+        quoted = true;
+      } else if (char === ",") {
+        let next = i + 1;
+        while (next < stripped.length && /\s/.test(stripped[next])) next++;
+        if (stripped[next] === "}" || stripped[next] === "]") {
+          normalized.push(stripped.slice(start, i));
+          start = i + 1;
+        }
+      }
+    }
+    normalized.push(stripped.slice(start));
+    return JSON.parse(normalized.join("")) as unknown;
   } catch {
     return null;
   }
@@ -135,16 +185,13 @@ function parseJsonc(text: string): unknown {
 
 /** Normalize a repo-relative directory: leading "./" and "." → "" (repo root). */
 function normalizeRepoDir(dir: string): string {
-  return dir
-    .replace(/\\/g, "/")
-    .replace(/^\.\/?/, "")
-    .replace(/\/+$/, "");
+  const normalized = posix.normalize(dir.replace(/\\/g, "/"));
+  return normalized === "." ? "" : normalized.replace(/\/+$/, "");
 }
 
 /** Join a repo-relative base dir with a repo-relative path (base "" = root). */
 function joinRepo(base: string, rel: string): string {
-  const cleaned = rel.replace(/^\.\//, "");
-  return normalizeRepoDir(base ? `${base}/${cleaned}` : cleaned);
+  return normalizeRepoDir(posix.join(base, rel.replace(/\\/g, "/")));
 }
 
 /**
@@ -190,16 +237,18 @@ async function buildGraphContext(
         tsBaseDir = normalizeRepoDir(options.baseUrl);
       }
       if (options.paths && typeof options.paths === "object") {
-        // Modern TS allows `paths` without an explicit `baseUrl` (resolved
-        // relative to tsconfig, i.e. the repo root here).
-        if (tsBaseDir === null) tsBaseDir = "";
+        // Paths without baseUrl resolve their targets relative to tsconfig;
+        // they do not enable a baseUrl fallback for unrelated bare imports.
         for (const [key, value] of Object.entries(options.paths as Record<string, unknown>)) {
           if (!Array.isArray(value)) continue;
           const targets = value.filter((t): t is string => typeof t === "string");
           if (targets.length === 0) continue;
-          const wildcard = key.includes("*");
-          const prefix = wildcard ? key.slice(0, key.indexOf("*")) : key;
-          tsPaths.push({ prefix, wildcard, targets });
+          const star = key.indexOf("*");
+          if (star !== key.lastIndexOf("*")) continue;
+          const wildcard = star !== -1;
+          const prefix = wildcard ? key.slice(0, star) : key;
+          const suffix = wildcard ? key.slice(star + 1) : "";
+          tsPaths.push({ prefix, suffix, wildcard, targets });
         }
       }
     }
@@ -362,24 +411,30 @@ function resolveGoImport(importPath: string, fromFile: string, ctx: GraphContext
  */
 function resolveTsAliasImport(spec: string, ctx: GraphContext): string | null {
   const baseDir = ctx.tsBaseDir;
-  for (const { prefix, wildcard, targets } of ctx.tsPaths) {
-    if (wildcard) {
-      if (!spec.startsWith(prefix)) continue;
-      const tail = spec.slice(prefix.length);
-      for (const target of targets) {
-        const hit = probeResolved(
-          joinRepo(baseDir ?? "", target.replace("*", tail)),
-          ctx.filePathSet
-        );
-        if (hit) return hit;
-      }
-    } else {
-      if (spec !== prefix) continue;
-      for (const target of targets) {
-        const hit = probeResolved(joinRepo(baseDir ?? "", target), ctx.filePathSet);
-        if (hit) return hit;
+  // TypeScript selects one mapping: exact first, otherwise the longest prefix.
+  // A missing target may try that mapping's fallbacks, never a broader alias.
+  let selected = ctx.tsPaths.find((alias) => !alias.wildcard && spec === alias.prefix);
+  if (!selected) {
+    for (const alias of ctx.tsPaths) {
+      if (
+        alias.wildcard &&
+        spec.length >= alias.prefix.length + alias.suffix.length &&
+        spec.startsWith(alias.prefix) &&
+        spec.endsWith(alias.suffix) &&
+        (!selected || alias.prefix.length > selected.prefix.length)
+      ) {
+        selected = alias;
       }
     }
+  }
+  if (selected) {
+    const tail = spec.slice(selected.prefix.length, spec.length - selected.suffix.length);
+    for (const target of selected.targets) {
+      const mapped = selected.wildcard ? target.replace("*", tail) : target;
+      const hit = probeResolved(joinRepo(baseDir ?? "", mapped), ctx.filePathSet);
+      if (hit) return hit;
+    }
+    return null;
   }
   if (baseDir !== null) {
     const hit = probeResolved(joinRepo(baseDir, spec), ctx.filePathSet);
