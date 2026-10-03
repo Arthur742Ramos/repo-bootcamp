@@ -56,32 +56,90 @@ function convertInlineFormatting(line: string): string {
   // Render protected inline constructs as output fragments while walking the
   // source. This avoids textual placeholders entirely: user content can never
   // be mistaken for an internal token during restoration.
-  const render = (source: string): string => {
+  const render = (source: string, allowLinks = true): string => {
     let output = "";
     let index = 0;
+
+    // Index delimiters and memoize labels: unmatched brackets must not rescan
+    // each suffix. Find labels on demand so consumed URLs cannot start code
+    // spans that hide subsequent links.
+    const nextBacktick = new Int32Array(source.length);
+    const nextParen = new Int32Array(source.length);
+    let backtick = -1;
+    let paren = -1;
+    for (let cursor = source.length - 1; cursor >= 0; cursor--) {
+      nextBacktick[cursor] = backtick;
+      nextParen[cursor] = paren;
+      if (source[cursor] === "`") backtick = cursor;
+      if (source[cursor] === ")") paren = cursor;
+    }
+    const labelEnds = new Map<number, number | null>();
+    const findLabelEnd = (start: number): number | null => {
+      if (source[start] !== "[") return null;
+      if (labelEnds.has(start)) return labelEnds.get(start)!;
+      const labelStarts = [start];
+      for (let cursor = start + 1; cursor < source.length; cursor++) {
+        if (source[cursor] === "`" && nextBacktick[cursor] > cursor + 1) {
+          cursor = nextBacktick[cursor];
+        } else if (source[cursor] === "[") {
+          if (labelEnds.has(cursor)) {
+            const knownEnd = labelEnds.get(cursor);
+            if (knownEnd === null) break;
+            cursor = knownEnd!;
+          } else {
+            labelStarts.push(cursor);
+          }
+        } else if (source[cursor] === "]") {
+          labelEnds.set(labelStarts.pop()!, cursor);
+          if (!labelStarts.length) return cursor;
+        }
+      }
+      for (const unmatched of labelStarts) labelEnds.set(unmatched, null);
+      return null;
+    };
+    const readLink = (
+      start: number,
+      allowEmptyLabel = false
+    ): { text: string; url: string; length: number } | null => {
+      const close = findLabelEnd(start);
+      if (
+        close === null ||
+        (!allowEmptyLabel && close === start + 1) ||
+        source[close + 1] !== "("
+      ) {
+        return null;
+      }
+      const end = nextParen[close + 1];
+      if (end <= close + 2) return null;
+      return {
+        text: source.slice(start + 1, close),
+        url: source.slice(close + 2, end),
+        length: end - start + 1,
+      };
+    };
 
     while (index < source.length) {
       const remainder = source.slice(index);
 
       // Images must be checked before links so the leading `!` is not treated
       // as ordinary text. Unsafe image URLs are rendered as escaped alt text.
-      const imageMatch = remainder.match(/^!\[([^\]]*)\]\(([^)]+)\)/);
+      const imageMatch = source[index] === "!" ? readLink(index + 1, true) : null;
       if (imageMatch) {
-        const [, alt, url] = imageMatch;
+        const { text: alt, url, length } = imageMatch;
         output += isSafeUrl(url, false)
           ? `<img src="${escapeHtml(url.trim())}" alt="${escapeHtml(alt)}" />`
           : escapeHtml(alt);
-        index += imageMatch[0].length;
+        index += length + 1;
         continue;
       }
 
-      const linkMatch = remainder.match(/^\[([^\]]+)\]\(([^)]+)\)/);
+      const linkMatch = allowLinks ? readLink(index) : null;
       if (linkMatch) {
-        const [, text, url] = linkMatch;
+        const { text, url, length } = linkMatch;
         output += isSafeUrl(url, true)
-          ? `<a href="${escapeHtml(url.trim())}">${escapeHtml(text)}</a>`
-          : escapeHtml(text);
-        index += linkMatch[0].length;
+          ? `<a href="${escapeHtml(url.trim())}">${render(text, false)}</a>`
+          : render(text, false);
+        index += length;
         continue;
       }
 
@@ -94,14 +152,14 @@ function convertInlineFormatting(line: string): string {
 
       const boldMatch = remainder.match(/^\*\*(.+?)\*\*/);
       if (boldMatch) {
-        output += `<strong>${render(boldMatch[1])}</strong>`;
+        output += `<strong>${render(boldMatch[1], allowLinks)}</strong>`;
         index += boldMatch[0].length;
         continue;
       }
 
       const italicMatch = remainder.match(/^\*(.+?)\*/);
       if (italicMatch) {
-        output += `<em>${render(italicMatch[1])}</em>`;
+        output += `<em>${render(italicMatch[1], allowLinks)}</em>`;
         index += italicMatch[0].length;
         continue;
       }

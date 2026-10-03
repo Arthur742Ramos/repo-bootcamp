@@ -83,6 +83,70 @@ describe("markdownToHtml", () => {
     expect(html).toContain('<a href="https://example.com">text</a>');
   });
 
+  it("renders linked inline-code route filenames containing brackets", () => {
+    const url = "https://github.com/owner/project/blob/main/src/routes/%5Bid%5D/page.ts";
+    const html = markdownToHtml(`- [\`src/routes/[id]/page.ts\`](${url})`);
+    expect(html).toContain(`<a href="${url}"><code>src/routes/[id]/page.ts</code></a>`);
+    expect(html).not.toContain(`](${url})`);
+  });
+
+  it("supports balanced label brackets and preserves unmatched backticks as text", () => {
+    expect(markdownToHtml("[Route [id]](./route.html)")).toContain(
+      '<a href="./route.html">Route [id]</a>'
+    );
+    expect(markdownToHtml("[literal ` tick](./route.html)")).toContain(
+      '<a href="./route.html">literal ` tick</a>'
+    );
+  });
+
+  it("does not treat backticks inside consumed URLs as later code delimiters", () => {
+    const html = markdownToHtml("[first](./`file) [second](./two) `after`");
+    expect(html).toContain('<a href="./`file">first</a> <a href="./two">second</a>');
+    expect(html).toContain("<code>after</code>");
+    expect(markdownToHtml("[`first`](./`file) [`second`](./two)")).toContain(
+      '<a href="./two"><code>second</code></a>'
+    );
+    expect(markdownToHtml("![first](https://example.com/`file) [second](./two) `after`")).toContain(
+      '<a href="./two">second</a> <code>after</code>'
+    );
+    expect(markdownToHtml("[unmatched [first](./`file) [second](./two) `after`")).toContain(
+      '<a href="./two">second</a> <code>after</code>'
+    );
+  });
+
+  it("handles long malformed labels without repeated suffix scans", () => {
+    const source = "[[x] ".repeat(32000);
+    const start = performance.now();
+    const html = markdownToHtml(source);
+    expect(performance.now() - start).toBeLessThan(1000);
+    expect(html).toBe(`<p>${source}</p>`);
+  });
+
+  it("renders label formatting without nested anchors or unsafe URLs", () => {
+    const html = markdownToHtml(
+      "[**source** `a]b.ts`](javascript:alert) [outer [inner](https://example.com)](./outer.html)"
+    );
+    expect(html).toContain("<strong>source</strong> <code>a]b.ts</code>");
+    expect(html).not.toContain('href="javascript:');
+    expect(html.match(/<a /g)).toHaveLength(1);
+    expect(html).toContain('href="./outer.html"');
+  });
+
+  it("preserves image syntax for balanced or empty alt labels", () => {
+    const html = markdownToHtml(
+      "![Route [id]](https://example.com/route.png) ![](https://example.com/empty.png)"
+    );
+    expect(html).toContain('<img src="https://example.com/route.png" alt="Route [id]" />');
+    expect(html).toContain('<img src="https://example.com/empty.png" alt="" />');
+    expect(html).not.toContain("<a ");
+  });
+
+  it("escapes raw HTML inside linked code labels", () => {
+    const html = markdownToHtml("[`<img src=x onerror=alert(1)>`](https://example.com)");
+    expect(html).toContain("<code>&lt;img src=x onerror=alert(1)&gt;</code>");
+    expect(html).not.toContain("<img");
+  });
+
   it("preserves literal placeholder-shaped text", () => {
     const html = markdownToHtml("@@INLINE_999@@\n\n@@INLINE_0@@ [link](https://example.com)");
     expect(html).toContain("<p>@@INLINE_999@@</p>");
