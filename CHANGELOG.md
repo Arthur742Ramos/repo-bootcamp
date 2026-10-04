@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Cargo dependency extraction decodes complete quoted/dotted/detailed TOML declarations, preserving target grouping and declared versions without reading fake metadata headers or version text from paths; refreshes dependency-cache identity
+
 - Project equivalent quoted, dotted and nested Poetry dependency declarations from typed complete values, retaining actual constraints and descriptive source/marker metadata without fabricated versions or packages.
 
 - Honor spaced Python extras and canonical package identities in pyproject dependency projections, retaining first-accepted spelling/version per runtime/dev target and the existing pip duplicate/operator behavior.

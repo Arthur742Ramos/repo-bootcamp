@@ -381,4 +381,66 @@ dependencies = ["requests>=2.28; python_version >= \"3.10\" and platform_system 
       await rm(dir, { recursive: true, force: true });
     }
   });
+  it("misses pre-Cargo-literal deps entries and preserves decoded records on a warm run", async () => {
+    const repo = "cargo/cache";
+    const sha = "unchanged-cargo-commit";
+    const dir = await mkdtemp(join(tmpdir(), "bootcamp-cargo-cache-repo-"));
+    const hash = (seed: string) => createHash("sha256").update(seed).digest("hex").slice(0, 16);
+    try {
+      await writeFile(
+        join(dir, "Cargo.toml"),
+        `[dependencies]
+"serde"="1.0"
+regex.version="2.0"
+[package.metadata.audit]
+text = '''[dependencies]
+phantom="9.9"
+'''
+`
+      );
+      const oldValue = {
+        packageManager: "cargo",
+        totalCount: 1,
+        runtime: [{ name: "phantom", version: "9.9", type: "runtime" }],
+        dev: [],
+        peer: [],
+        categories: [],
+      };
+      await writePhaseCache("deps", repo, sha, oldValue);
+      const entry = (await listCacheEntries()).find(
+        (entry) => entry.entry?.phase === "deps" && entry.entry.repoFullName === repo
+      )!;
+      const oldPath = join(
+        getCacheDir(),
+        `cargo-cache-deps-${hash(`${repo}@${sha}|phase=deps|projection=mixed-ecosystems-v6-poetry-projection`)}.json`
+      );
+      const oldBytes = await readFile(entry.path);
+      await writeFile(oldPath, oldBytes);
+      if (entry.path !== oldPath) await rm(entry.path);
+      expect((await readPhaseCache("deps", repo, sha)).hit).toBe(false);
+      const spy = vi.spyOn(depsModule, "extractDependencies");
+      try {
+        const cold = await runParallelAnalysis(dir, await scanRepo(dir, 100), undefined, {
+          repoFullName: repo,
+          commitSha: sha,
+        });
+        expect(cold.deps?.runtime).toEqual([
+          { name: "serde", version: "1.0", type: "runtime" },
+          { name: "regex", version: "2.0", type: "runtime" },
+        ]);
+        expect(cold.deps?.totalCount).toBe(2);
+        const warm = await runParallelAnalysis(dir, await scanRepo(dir, 100), undefined, {
+          repoFullName: repo,
+          commitSha: sha,
+        });
+        expect(warm.deps).toEqual(cold.deps);
+        expect(spy).toHaveBeenCalledTimes(1);
+        expect(await readFile(oldPath)).toEqual(oldBytes);
+      } finally {
+        spy.mockRestore();
+      }
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
 });
