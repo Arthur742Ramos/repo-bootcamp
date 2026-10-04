@@ -6,6 +6,7 @@
 import { readFile } from "fs/promises";
 import { join } from "path";
 import { scanTomlMetadata } from "./toml-metadata-scan.js";
+import { projectCargoDependencies } from "./cargo-projection.js";
 import { POETRY_METADATA_PREFIX, projectPoetryDependencies } from "./poetry-projection.js";
 import { tomlArrayBodies, tomlArrayStrings } from "./toml-string-scan.js";
 import categoryPatternsJson from "./data/category-patterns.json" with { type: "json" };
@@ -65,22 +66,6 @@ function categorizeDependency(name: string): string | null {
     }
   }
   return null;
-}
-
-/**
- * Extract a version string from a TOML dependency value, which may be a quoted
- * scalar (`"1.0"`) or an inline table (`{ version = "1.0", features = [...] }`).
- */
-function parseTomlVersion(value: string): string {
-  const trimmed = value.trim();
-  if (trimmed.startsWith("{")) {
-    const inline = /version\s*=\s*["']([^"']+)["']/.exec(trimmed);
-    return inline ? inline[1] : "*";
-  }
-  const quoted = /^["']([^"']+)["']/.exec(trimmed);
-  if (quoted) return quoted[1];
-  const token = trimmed.split(/[\s,]/)[0];
-  return token || "*";
 }
 
 /** PEP 508 URL markers require whitespace; URI semicolons are literal data. */
@@ -215,8 +200,8 @@ async function extractCargoDependencies(repoPath: string): Promise<DependencyAna
 
     const runtime: Dependency[] = [];
     const dev: Dependency[] = [];
-    // Keyed `${section}:${name}` so a `[dependencies.<crate>]` table can fill in
-    // the version recorded by its header without creating a duplicate entry.
+    // Preserve the legacy section/name slots and last non-* version update
+    // across global and target declarations; this is not constraint resolution.
     const seen = new Map<string, Dependency>();
 
     const record = (
@@ -243,56 +228,8 @@ async function extractCargoDependencies(repoPath: string): Promise<DependencyAna
       (section === "dependencies" ? runtime : dev).push(dep);
     };
 
-    let section: "dependencies" | "dev-dependencies" | "build-dependencies" | "" = "";
-    let tableCrate: string | null = null;
-
-    for (const raw of content.split("\n")) {
-      const line = raw.trim();
-      if (!line || line.startsWith("#")) continue;
-
-      const header = /^\[+([^\]]+)\]+$/.exec(line);
-      if (header) {
-        tableCrate = null;
-        // Accept top-level and platform-specific dependency tables:
-        //   [dependencies] / [dev-dependencies] / [build-dependencies]
-        //   [target.<triple-or-cfg>.<kind>]  (e.g. [target.'cfg(windows)'.dependencies])
-        // and their detailed `.<crate>` forms. The optional `target.<spec>.`
-        // prefix backtracks so the kind alternation anchors correctly even when
-        // the target spec contains dots/quotes/parens.
-        const sub =
-          /^(?:target\..+\.)?(dependencies|dev-dependencies|build-dependencies)(?:\.(.+))?$/.exec(
-            header[1].trim()
-          );
-        if (sub) {
-          section = sub[1] as "dependencies" | "dev-dependencies" | "build-dependencies";
-          if (sub[2]) {
-            // `[<kind>.<crate>]` detailed table — record the crate now;
-            // its version arrives on a later `version = "..."` line.
-            tableCrate = sub[2];
-            record(section, tableCrate, "*");
-          }
-        } else {
-          // Any other table (`[features]`, `[profile.release]`, `[[bin]]`, …)
-          // clears state so its keys are not parsed as dependencies.
-          section = "";
-        }
-        continue;
-      }
-
-      if (!section) continue;
-
-      const kv = /^([A-Za-z0-9_-]+)\s*=\s*(.+)$/.exec(line);
-      if (!kv) continue;
-
-      if (tableCrate) {
-        if (kv[1] === "version") {
-          const v = /["']([^"']+)["']/.exec(kv[2]);
-          record(section, tableCrate, v ? v[1] : "*");
-        }
-        continue;
-      }
-
-      record(section, kv[1], parseTomlVersion(kv[2]));
+    for (const dependency of projectCargoDependencies(scanTomlMetadata(content))) {
+      record(dependency.section, dependency.name, dependency.version);
     }
 
     if (runtime.length === 0 && dev.length === 0) return null;
