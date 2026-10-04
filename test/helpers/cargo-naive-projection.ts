@@ -1,8 +1,9 @@
+// Exact pre-index reference from main208 (35a6750), retained only for equivalence.
 import type {
   scanTomlMetadata,
   TomlMetadataTable,
   TomlMetadataValue,
-} from "./toml-metadata-scan.js";
+} from "../../src/toml-metadata-scan.js";
 
 type CargoKind = "dependencies" | "dev-dependencies" | "build-dependencies";
 export interface CargoDependencyDeclaration {
@@ -38,7 +39,7 @@ function declaredVersion(value: TomlMetadataValue): string | null {
 }
 
 /** Complete semantic declarations in source order; caller retains legacy dedup. */
-export function projectCargoDependencies(
+export function naiveCargoProjection(
   document: ReturnType<typeof scanTomlMetadata>
 ): CargoDependencyDeclaration[] {
   if (!document.complete) return [];
@@ -54,39 +55,19 @@ export function projectCargoDependencies(
   if (targets instanceof Map) {
     for (const [target, table] of targets) if (table instanceof Map) add(table, ["target", target]);
   }
-  // Prefix lookups previously scanned every occurrence for every package. Keep
-  // the first matching source offset in one pass. Separate scope/section/name
-  // maps avoid ambiguous joined keys and repeating long target strings per key.
-  const offsets = new Map<string | null, Map<CargoKind, Map<string, number>>>();
-  for (const entry of document.occurrences) {
-    const path = entry.path;
-    let scope: string | null;
-    let section: CargoKind;
-    let name: string;
-    if (path.length >= 2 && kinds.includes(path[0] as CargoKind)) {
-      scope = null;
-      section = path[0] as CargoKind;
-      name = path[1];
-    } else if (path.length >= 4 && path[0] === "target" && kinds.includes(path[2] as CargoKind)) {
-      scope = path[1];
-      section = path[2] as CargoKind;
-      name = path[3];
-    } else continue;
-    let sections = offsets.get(scope);
-    if (!sections) offsets.set(scope, (sections = new Map()));
-    let packages = sections.get(section);
-    if (!packages) sections.set(section, (packages = new Map()));
-    if (!packages.has(name)) packages.set(name, entry.offset);
-  }
   const ordered: (CargoDependencyDeclaration & { offset: number })[] = [];
   for (const family of families) {
     for (const [name, value] of family.table) {
       if (!validName(name)) continue;
       const version = declaredVersion(value);
       if (version === null) continue;
-      const scope = family.path.length === 1 ? null : family.path[1];
-      const offset = offsets.get(scope)?.get(family.section)?.get(name);
-      if (offset !== undefined) ordered.push({ section: family.section, name, version, offset });
+      const path = [...family.path, name];
+      const occurrence = document.occurrences.find(
+        (entry) =>
+          entry.path.length >= path.length && path.every((key, index) => entry.path[index] === key)
+      );
+      if (occurrence)
+        ordered.push({ section: family.section, name, version, offset: occurrence.offset });
     }
   }
   return ordered

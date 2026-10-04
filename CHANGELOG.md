@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Index Cargo declaration offsets in one occurrence pass, preserving exact inventory/source ordering while avoiding repeated scans for large manifests.
+
 - Decode valid quoted Go require module/version tokens and isolate lexical comments, retaining first-occurrence declared inventory without quote characters or comment suffixes; refresh dependency-cache identity
 
 - Cargo dependency extraction decodes complete quoted/dotted/detailed TOML declarations, preserving target grouping and declared versions without reading fake metadata headers or version text from paths; refreshes dependency-cache identity
