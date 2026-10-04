@@ -104,6 +104,59 @@ describe("bounded unnamed root local-reference admission", () => {
   ])("retains existing named declarations and ambiguous plain names: %j", (line) => {
     expect(isRootLocalRequirementReference(line)).toBe(false);
   });
+  it("preserves the prior bounded suffix classification across malformed bracket arrangements", () => {
+    const reference = (line: string) => {
+      if (/^(?:[A-Za-z]:|file:)/i.test(line)) return true;
+      if (/^[A-Za-z0-9._-]+(?:[ \t]*\[[^\]]*\])?\s*(?:[=<>!~@]|\()/.test(line)) return false;
+      if (/[/\\]/.test(line)) return true;
+      const filename = line
+        .replace(/\[[^\]]+\]$/, "")
+        .trimEnd()
+        .toLowerCase();
+      return extensions.some((extension) => filename.endsWith(extension));
+    };
+    const tails = [
+      "",
+      "[",
+      "]",
+      "[]",
+      "[ ]",
+      "[x]",
+      "[[x]",
+      "[x]]",
+      "[x][y]",
+      "[[[]",
+      "[x]y]",
+      " ",
+      "\n",
+      "\r\n",
+      "\u2028",
+      "é",
+      "🙂",
+    ];
+    for (const stem of [
+      "pkg",
+      "artifact.whl",
+      "artifact.tar.gz",
+      "pkg[extra]",
+      "pkg==opaque",
+      "named @ literal",
+    ])
+      for (const first of tails)
+        for (const second of tails) {
+          const line = stem + first + second;
+          expect(isRootLocalRequirementReference(line), JSON.stringify(line)).toBe(reference(line));
+        }
+  });
+  it.each(["", "x]]"])(
+    "classifies long unmatched bracket data without suffix rescanning: %j",
+    (tail) => {
+      expect(isRootLocalRequirementReference("pkg" + "[".repeat(100_000) + tail)).toBe(false);
+      expect(isRootLocalRequirementReference("artifact.whl" + "[".repeat(100_000) + tail)).toBe(
+        false
+      );
+    }
+  );
   it("omits local origins without deriving names from nested project metadata", async () => {
     const deps = await extract(
       [
