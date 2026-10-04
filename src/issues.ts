@@ -7,7 +7,7 @@ import { execFile } from "child_process";
 import { promisify } from "util";
 import chalk from "chalk";
 import type { FirstTask, RepoInfo } from "./types.js";
-import { buildBlobUrl } from "./source-links.js";
+import { buildBlobUrl, sourcePathCode } from "./source-links.js";
 import { parseGitHubUrl } from "./ingest.js";
 
 const execFileAsync = promisify(execFile);
@@ -47,7 +47,8 @@ function supportsAutomaticIssues(repoInfo: RepoInfo): boolean {
 /** Render a file path as a clickable remote link when possible, else bare code. */
 function fileLink(filePath: string, repoInfo: RepoInfo): string {
   const url = buildBlobUrl(repoInfo, filePath);
-  return url ? `[\`${filePath}\`](${url})` : `\`${filePath}\``;
+  const label = sourcePathCode(filePath);
+  return url ? `[${label}](${url})` : label;
 }
 
 /**

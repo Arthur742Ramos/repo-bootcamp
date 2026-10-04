@@ -8,7 +8,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { getStyleConfig, type StyleConfig } from "./plugins.js";
 import { markdownToHtml } from "./formatter.js";
-import { buildBlobUrl } from "./source-links.js";
+import { buildBlobUrl, buildRelativeSourceUrl, sourcePathCode } from "./source-links.js";
 import { findGuidanceCommand } from "./command-guidance.js";
 import {
   isMultilineCode,
@@ -281,7 +281,7 @@ function sourcesSection(sources?: string[], label = "Sources"): string {
 <details>
 <summary>${label}</summary>
 
-${sources.map((s) => `- \`${s}\``).join("\n")}
+${sources.map((s) => `- ${sourcePathCode(s)}`).join("\n")}
 
 </details>
 `;
@@ -291,9 +291,11 @@ ${sources.map((s) => `- \`${s}\``).join("\n")}
  * Render a file path as a clickable markdown link to its remote blob when a
  * remote is known, otherwise as a bare inline-code span (local reading).
  */
-function fileLink(filePath: string, repoInfo?: RepoInfo): string {
-  const url = buildBlobUrl(repoInfo, filePath);
-  return url ? `[\`${filePath}\`](${url})` : `\`${filePath}\``;
+function fileLink(filePath: string, repoInfo?: RepoInfo, table = false, relative = false): string {
+  const url =
+    buildBlobUrl(repoInfo, filePath) ?? (relative ? buildRelativeSourceUrl(filePath) : null);
+  const label = sourcePathCode(filePath, table);
+  return url ? `[${label}](${url})` : label;
 }
 
 /**
@@ -316,7 +318,7 @@ export function generateBootcamp(
 
   const keyDirs = facts.structure.keyDirs
     .slice(0, depthLimits.summaryItems)
-    .map((d) => `- \`${d.path}\` - ${d.purpose}`)
+    .map((d) => `- ${sourcePathCode(d.path)} - ${d.purpose}`)
     .join("\n");
 
   const quickTasks = facts.firstTasks
@@ -437,16 +439,16 @@ export function generateOnboarding(
     facts.quickstart.commonErrors?.map((e) => `### ${e.error}\n**Fix:** ${e.fix}`).join("\n\n") ||
     "*No common errors documented*";
 
-  const testDirs = facts.structure.testDirs.map((d) => `- \`${d}\``).join("\n");
+  const testDirs = facts.structure.testDirs.map((d) => `- ${sourcePathCode(d)}`).join("\n");
   const testCmd = findGuidanceCommand(facts.quickstart.commands, "test");
   const audienceFiles = getAudienceFiles(facts, options?.audience)
-    .map((file) => `- \`${file}\``)
+    .map((file) => `- ${sourcePathCode(file)}`)
     .join("\n");
   const audienceTasks = getAudienceTasks(facts, options?.audience)
     .slice(0, MAX_AUDIENCE_TASKS)
     .map(
       (task) =>
-        `- **${task.title}** (${task.category}) - ${task.files[0] ? `start in \`${task.files[0]}\`` : "pick the implementation file from FIRST_TASKS.md"}`
+        `- **${task.title}** (${task.category}) - ${task.files[0] ? `start in ${sourcePathCode(task.files[0])}` : "pick the implementation file from FIRST_TASKS.md"}`
     )
     .join("\n");
 
@@ -510,7 +512,7 @@ ${commands}
 ## Development Loop
 
 1. ${devLoopStep}
-2. Make changes to files in \`${facts.structure.keyDirs[0]?.path || "src/"}\`
+2. Make changes to files in ${sourcePathCode(facts.structure.keyDirs[0]?.path || "src/")}
 3. Changes should hot-reload (if applicable)
 4. Run tests before committing
 
@@ -546,7 +548,7 @@ Recommended extensions:
 ## Getting Help
 
 - ${checkout ? "Check existing repository issues" : "Check existing issues on GitHub"}
-- Read through the docs in \`${facts.structure.docsDirs[0] || "docs/"}\`
+- Read through the docs in ${sourcePathCode(facts.structure.docsDirs[0] || "docs/")}
 - Look at existing code for patterns
 
 ---
@@ -564,7 +566,9 @@ export function generateArchitecture(
 ): string {
   const profile = getAudienceProfile(options?.audience);
   const components = facts.architecture.components
-    .map((c) => `### ${c.name}\n\n**Directory:** \`${c.directory}\`\n\n${c.description}`)
+    .map(
+      (c) => `### ${c.name}\n\n**Directory:** ${sourcePathCode(c.directory)}\n\n${c.description}`
+    )
     .join("\n\n");
 
   const abstractions =
@@ -598,7 +602,7 @@ export function generateArchitecture(
 
         return `### ${ex.title}
 
-**File:** \`${ex.file}\`
+**File:** ${sourcePathCode(ex.file)}
 
 \`\`\`${lang}
 ${ex.code}
@@ -626,11 +630,11 @@ ${examples}
         ) > 0
     )
     .slice(0, MAX_AUDIENCE_TASKS)
-    .map((component) => `- **${component.name}** (\`${component.directory}\`)`)
+    .map((component) => `- **${component.name}** (${sourcePathCode(component.directory)})`)
     .join("\n");
   const audienceFiles = getAudienceFiles(facts, options?.audience)
     .slice(0, MAX_AUDIENCE_TASKS)
-    .map((file) => `- \`${file}\``)
+    .map((file) => `- ${sourcePathCode(file)}`)
     .join("\n");
   const audienceChecklist = profile.architectureChecklist.map((item) => `- ${item}`).join("\n");
 
@@ -682,7 +686,7 @@ ${abstractions}
 ${
   facts.structure.entrypoints.length > 0
     ? facts.structure.entrypoints
-        .map((e) => `| ${fileLink(e.path, repoInfo)} | ${e.type} | ${e.description || "-"} |`)
+        .map((e) => `| ${fileLink(e.path, repoInfo, true)} | ${e.type} | ${e.description || "-"} |`)
         .join("\n")
     : "| *None detected* | - | - |"
 }
@@ -691,10 +695,10 @@ ${
 
 | Task | Location |
 |------|----------|
-| Add a new feature | \`${facts.structure.keyDirs.find((d) => d.purpose.toLowerCase().includes("source") || d.purpose.toLowerCase().includes("main"))?.path || "src/"}\` |
-| Add tests | \`${facts.structure.testDirs[0] || "tests/"}\` |
+| Add a new feature | ${sourcePathCode(facts.structure.keyDirs.find((d) => d.purpose.toLowerCase().includes("source") || d.purpose.toLowerCase().includes("main"))?.path || "src/", true)} |
+| Add tests | ${sourcePathCode(facts.structure.testDirs[0] || "tests/", true)} |
 | Modify build | \`${facts.stack.buildSystem === "npm" ? "package.json" : "build config"}\` |
-| Update CI | \`${facts.ci.workflows[0]?.file || ".github/workflows/"}\` |
+| Update CI | ${sourcePathCode(facts.ci.workflows[0]?.file || ".github/workflows/", true)} |
 
 ---
 *Generated by [Repo Bootcamp](https://github.com/repo-bootcamp)*
@@ -733,7 +737,7 @@ export function generateCodemap(facts: RepoFacts, repoInfo?: RepoInfo): string {
   const dirs = facts.structure.keyDirs
     .map((d) => {
       const files = d.keyFiles?.map((f) => `  - ${fileLink(f, repoInfo)}`).join("\n") || "";
-      return `### \`${d.path}\`
+      return `### ${sourcePathCode(d.path)}
 
 ${d.purpose}
 
@@ -742,10 +746,7 @@ ${files ? `Key files:\n${files}` : ""}`;
     .join("\n\n");
 
   const entrypoints = facts.structure.entrypoints
-    .map(
-      (e) =>
-        `- [\`${e.path}\`](${buildBlobUrl(repoInfo, e.path) ?? `./${e.path}`}) - ${e.description || e.type}`
-    )
+    .map((e) => `- ${fileLink(e.path, repoInfo, false, true)} - ${e.description || e.type}`)
     .join("\n");
 
   return `# Code Map: ${facts.repoName}
@@ -768,7 +769,7 @@ ${dirs}
 |-----------|---------|
 ${
   facts.structure.testDirs.length > 0
-    ? facts.structure.testDirs.map((d) => `| \`${d}\` | Test files |`).join("\n")
+    ? facts.structure.testDirs.map((d) => `| ${sourcePathCode(d, true)} | Test files |`).join("\n")
     : "| *None detected* | - |"
 }
 
@@ -779,7 +780,7 @@ ${
 ${
   facts.ci.workflows.length > 0
     ? facts.ci.workflows
-        .map((w) => `| \`${w.file}\` | ${w.triggers.join(", ") || "-"} |`)
+        .map((w) => `| ${sourcePathCode(w.file, true)} | ${w.triggers.join(", ") || "-"} |`)
         .join("\n")
     : "| *None detected* | - |"
 }
@@ -787,7 +788,7 @@ ${
 ## Reading Order for New Contributors
 
 1. Start with the README
-2. Look at the main entry point: \`${facts.structure.entrypoints[0]?.path || "src/index.ts"}\`
+2. Look at the main entry point: ${sourcePathCode(facts.structure.entrypoints[0]?.path || "src/index.ts")}
 3. Trace through one user flow
 4. Read the tests to understand expected behavior
 5. Check CI to understand quality gates
