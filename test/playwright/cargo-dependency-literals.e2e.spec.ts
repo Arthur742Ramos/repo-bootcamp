@@ -65,7 +65,9 @@ for (const mixed of [false, true]) {
           scroll: element.scrollWidth,
           client: element.clientWidth,
         }));
-        if (width === 320) expect(dimensions.scroll).toBeGreaterThan(dimensions.client);
+        // The short two-column Cargo table fits even on narrow screens. Mixed
+        // provenance adds genuine overflow and remains the positive scroll control.
+        if (width === 320 && mixed) expect(dimensions.scroll).toBeGreaterThan(dimensions.client);
         await page.keyboard.press("ArrowRight");
         if (dimensions.scroll > dimensions.client)
           await expect
