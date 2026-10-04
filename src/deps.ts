@@ -4,6 +4,7 @@
  */
 
 import { readFile } from "fs/promises";
+import { isWellFormedSourceText, sourcePathCode } from "./source-links.js";
 import { join } from "path";
 import { scanTomlMetadata } from "./toml-metadata-scan.js";
 import { projectCargoDependencies } from "./cargo-projection.js";
@@ -710,10 +711,26 @@ export function generateDependencyDocs(deps: DependencyAnalysis, projectName: st
     dep.description?.startsWith(POETRY_METADATA_PREFIX)
       ? dep.description.slice(POETRY_METADATA_PREFIX.length)
       : undefined;
-  const versionCell = (dep: Dependency): string =>
-    declaration(dep) === undefined
-      ? dependencyTableCell(dep.version)
-      : literalDependencyCell(dep.version);
+  const versionCell = (dep: Dependency): string => {
+    const value = String(dep.version);
+    // Declaration metadata is data, even when a local filename contains inline
+    // syntax. Plain legacy cells keep their existing Markdown representation.
+    if (!isWellFormedSourceText(value)) return sourcePathCode(value, true);
+    for (const character of value) {
+      const code = character.charCodeAt(0);
+      if (code < 32 || code === 127) return sourcePathCode(value, true);
+    }
+    if (declaration(dep) !== undefined) return literalDependencyCell(value);
+    if (value.trim() !== value) return sourcePathCode(value, true);
+    if (
+      ["`", "_", "[", "]", "\\", "&"].some((token) => value.includes(token)) ||
+      value.includes("~~") ||
+      /<(?:[A-Za-z!/?]|[^<> \t\r\n]*@)/.test(value) ||
+      /\*[\s\S]+\*/.test(value)
+    )
+      return sourcePathCode(value, true);
+    return dependencyTableCell(value);
+  };
   const provenance = (dep: Dependency): string =>
     mixed
       ? ` | ${dependencyTableCell(dep.ecosystem ?? "")} | ${dependencyTableCell(dep.sourceFile ?? "")}`

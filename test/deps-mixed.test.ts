@@ -174,7 +174,7 @@ describe("selected-root mixed dependencies", () => {
     ))!;
     const html = markdownToHtml(generateDependencyDocs(result, "app"));
     expect(html).toContain("<td>shared|name\\x</td>");
-    expect(html).toContain("<td>^1 || ^2\\path</td>");
+    expect(html).toContain("<td><code>^1 || ^2\\path</code></td>");
     expect(html).toContain("<td>node</td><td>package.json</td>");
     const diagram = generateDependencyDiagram(result, "app");
     expect(diagram).toContain("Runtime_0[");
