@@ -20,7 +20,7 @@ export function isRootLocalRequirementReference(line: string): boolean {
   if (/^(?:[A-Za-z]:|file:)/i.test(line)) return true;
   // Preserve the existing projection of declared comparison/parenthesized
   // suffixes and named references. Their values remain literal metadata.
-  if (/^[A-Za-z0-9._-]+(?:[ \t]*\[[^\]]*\])?\s*(?:\(\s*)?[=<>!~@]/.test(line)) return false;
+  if (/^[A-Za-z0-9._-]+(?:[ \t]*\[[^\]]*\])?\s*(?:[=<>!~@]|\()/.test(line)) return false;
   if (/[/\\]/.test(line)) return true;
   // pip permits extras on a local reference. A bare same-named directory is
   // ambiguous with a real package, so never consult its existence to decide.
