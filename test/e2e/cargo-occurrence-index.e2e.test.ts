@@ -34,7 +34,10 @@ describe("actual indexed Cargo inventory", () => {
             row.length === 2 &&
             !["Type", "Runtime", "Development", "**Total**", "Total", "Package"].includes(row[0])
         );
-        expect(rows).toEqual(Array.from({ length: 50 }, (_, i) => [`owned_${i}`, "1.0"]));
+        expect(rows).toEqual([
+          ...Array.from({ length: 50 }, (_, i) => [`owned_${i}`, "1.0"]),
+          ["...", `+${count - 50} more`],
+        ]);
         expect(summary.deps).toEqual({ total: count, runtime: count, dev: 0 });
         expect(rows.some(([name]) => name === "owned_50")).toBe(false);
       }
