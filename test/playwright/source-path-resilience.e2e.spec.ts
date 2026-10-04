@@ -103,7 +103,7 @@ test("hosted actual source-path exports preserve exact labels, literal controls 
             "Type",
             "Description",
           ]);
-          const rows = entryTable.locator("tbody tr");
+          const rows = entryTable.locator("tr").filter({ has: page.locator("td") });
           await expect(rows).toHaveCount(validFiles.length + rejectedPaths.length);
           for (const [index, path] of [...validFiles, ...rejectedPaths].entries()) {
             const label = rejectedPaths.slice(0, 2).includes(path) ? JSON.stringify(path) : path;
