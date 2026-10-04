@@ -87,7 +87,9 @@ describe("generateDependencyDocs", () => {
     expect(docs).toContain(String.raw`| runtime-package | ^1.0.0 \|\| ^2.0.0 |`);
     const html = markdownToHtml(docs);
     expect(html).toContain("<tr><td>runtime-package</td><td>^1.0.0 || ^2.0.0</td></tr>");
-    expect(html).toContain(String.raw`<tr><td>dev-package</td><td>file:..\local\|notes</td></tr>`);
+    expect(html).toContain(
+      String.raw`<tr><td>dev-package</td><td><code>file:..\local\|notes</code></td></tr>`
+    );
   });
 
   it("should include summary table", () => {
