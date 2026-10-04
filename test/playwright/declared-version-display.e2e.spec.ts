@@ -112,7 +112,8 @@ for (const config of configurations) {
         } else expect(names).not.toContain("...");
         const region = page
           .getByRole("region", { name: "Scrollable table", exact: true })
-          .filter({ has: packages.first() });
+          .filter({ has: page.getByRole("cell", { name: "owned-local", exact: true }) });
+        await expect(region).toHaveCount(1);
         await region.focus();
         await expect(region).toBeFocused();
         expect(await region.evaluate((element) => getComputedStyle(element).outlineWidth)).toBe(
