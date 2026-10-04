@@ -723,8 +723,9 @@ export function generateDependencyDocs(deps: DependencyAnalysis, projectName: st
     if (declaration(dep) !== undefined) return literalDependencyCell(value);
     if (value.trim() !== value) return sourcePathCode(value, true);
     if (
-      ["`", "_", "[", "]", "\\", "<", "&"].some((token) => value.includes(token)) ||
+      ["`", "_", "[", "]", "\\", "&"].some((token) => value.includes(token)) ||
       value.includes("~~") ||
+      /<(?:[A-Za-z!/?]|[^<> \t\r\n]*@)/.test(value) ||
       /\*[\s\S]+\*/.test(value)
     )
       return sourcePathCode(value, true);

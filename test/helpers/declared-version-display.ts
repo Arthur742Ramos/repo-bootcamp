@@ -108,7 +108,7 @@ export const peerDeclarations: Declaration[] = [
     display: "literal",
     target: "packages/[peer](target)",
   },
-  { name: "peer-control", value: ">=3 <4", display: "literal" },
+  { name: "peer-control", value: ">=3 <4", display: "plain" },
   {
     name: "peer-hostile",
     value: "![peer](https://example.invalid/image)<b>literal</b>",
