@@ -17,7 +17,7 @@ require "example.invalid/owned" v2.0.0
 require example.invalid/quoted_version "v3.0.0"
 require (
  "example.invalid/\u0065scaped" "v4\x2e0.0"// indirect
- "example.invalid/long-component/keyboard-containment" "v5.0.0"
+ "example.invalid/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" "v5.0.0"
  example.invalid/after_comment v6.0.0 // note (123)
  "example.invalid/shared" v9.9.9 // retain first
 )
@@ -32,7 +32,7 @@ export const goRuntime = [
   ["example.invalid/owned", "v2.0.0"],
   ["example.invalid/quoted_version", "v3.0.0"],
   ["example.invalid/escaped", "v4.0.0"],
-  ["example.invalid/long-component/keyboard-containment", "v5.0.0"],
+  ["example.invalid/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "v5.0.0"],
   ["example.invalid/after_comment", "v6.0.0"],
 ];
 export function goExpectedRows(mixed: boolean) {
