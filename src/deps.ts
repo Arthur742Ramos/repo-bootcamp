@@ -725,7 +725,7 @@ export function generateDependencyDocs(deps: DependencyAnalysis, projectName: st
     if (
       ["`", "_", "[", "]", "\\", "<", "&"].some((token) => value.includes(token)) ||
       value.includes("~~") ||
-      /\*[^*\r\n]+\*/.test(value)
+      /\*[\s\S]+\*/.test(value)
     )
       return sourcePathCode(value, true);
     return dependencyTableCell(value);

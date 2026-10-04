@@ -34,6 +34,9 @@ describe("literal declared-version display", () => {
     "file:packages/<img src=x onerror=alert(1)>",
     "file:packages/*emphasis*",
     "*.*",
+    "file:packages/***",
+    "file:packages/*****",
+    "***",
     "file:packages/_name_",
     "file:packages/~~name~~",
     String.raw`file:packages/a\|b`,
@@ -86,6 +89,7 @@ describe("literal declared-version display", () => {
   it.each([
     "^1.2.3",
     "*",
+    "**",
     "1.*",
     "~1.2.3",
     "v1.2.3",
