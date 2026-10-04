@@ -11,7 +11,8 @@ describe("actual indexed Cargo inventory", () => {
   it("retains complete large JSON counts/order and existing export caps", async () => {
     const count = 4000;
     const source =
-      "[dependencies]\n" + Array.from({ length: count }, (_, i) => `owned_${i}="1.0"`).join("\n");
+      '[package]\nname="owned-index"\nversion="1.0.0"\nedition="2021"\n[dependencies]\n' +
+      Array.from({ length: count }, (_, i) => `owned_${i}="1.0"`).join("\n");
     const owned = await cargoFixture(false, source);
     try {
       const result = await cargoCli(owned, ["deps", owned.repo, "--json"]);
