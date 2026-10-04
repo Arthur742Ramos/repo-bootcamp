@@ -52,9 +52,17 @@ describe("root requirements projection cache migration", () => {
       await writeFile(oldPath, oldBytes);
       await rm(current.path);
       expect(await readPhaseCache("deps", repo, sha)).toEqual({ hit: false });
+      const reference = await runParallelAnalysis(dir, await scanRepo(dir, 100));
       const retained = [];
       for (const phase of ["facts", "security", "impact", "cycles"] as const) {
-        const value = { marker: `owned-${phase}` };
+        const value =
+          phase === "security"
+            ? reference.security
+            : phase === "impact"
+              ? reference.impacts
+              : phase === "cycles"
+                ? reference.cycles
+                : { marker: "owned-facts" };
         await writePhaseCache(phase, repo, sha, value);
         const seed = phase === "facts" ? `${repo}@${sha}` : `${repo}@${sha}|phase=${phase}`;
         const path = join(
