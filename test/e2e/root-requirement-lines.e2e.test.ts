@@ -136,8 +136,8 @@ describe("actual bounded root requirements logical-line exports", () => {
           .digest("hex")
           .slice(0, 16)}.json`;
       const v8 = filename("deps", "|projection=mixed-ecosystems-v8-go-literals");
-      const v9 = filename("deps", "|projection=mixed-ecosystems-v9-pip-logical-lines");
-      expect(deps!.file).toBe(v9);
+      const current = filename("deps", "|projection=mixed-ecosystems-v10-root-local-references");
+      expect(deps!.file).toBe(current);
       const second = await ownedProcess(owned);
       expect(second.home).not.toBe(first.owner.home);
       await mkdir(second.cache, { recursive: true });
@@ -166,10 +166,10 @@ describe("actual bounded root requirements logical-line exports", () => {
       };
       const stale = JSON.stringify(entry, null, 2);
       await writeFile(join(second.cache, v8), stale);
-      await expect(readFile(join(second.cache, v9))).rejects.toMatchObject({ code: "ENOENT" });
+      await expect(readFile(join(second.cache, current))).rejects.toMatchObject({ code: "ENOENT" });
       const regenerated = await requirementExport(owned, "markdown", second, true);
       strictDocument(regenerated.doc, config, true);
-      expect(JSON.parse(await readFile(join(second.cache, v9), "utf8")).value.runtime).toEqual(
+      expect(JSON.parse(await readFile(join(second.cache, current), "utf8")).value.runtime).toEqual(
         expectedInventory(config).runtime
       );
       expect(await readFile(join(second.cache, v8), "utf8")).toBe(stale);

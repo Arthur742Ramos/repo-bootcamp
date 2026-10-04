@@ -10,6 +10,7 @@ import { scanTomlMetadata } from "./toml-metadata-scan.js";
 import { projectCargoDependencies } from "./cargo-projection.js";
 import { scanGoDependencyDeclarations } from "./go-dependency-literals.js";
 import { rootRequirementLogicalLines } from "./requirements-logical-lines.js";
+import { isRootLocalRequirementReference } from "./root-requirement-admission.js";
 import { POETRY_METADATA_PREFIX, projectPoetryDependencies } from "./poetry-projection.js";
 import { tomlArrayBodies, tomlArrayStrings } from "./toml-string-scan.js";
 import categoryPatternsJson from "./data/category-patterns.json" with { type: "json" };
@@ -301,7 +302,8 @@ async function extractPythonDependencies(
           cleaned.includes("://") ||
           /^(?:git|hg|svn|bzr)\+/.test(cleaned) ||
           cleaned.startsWith(".") ||
-          cleaned.startsWith("/")
+          cleaned.startsWith("/") ||
+          isRootLocalRequirementReference(cleaned)
         ) {
           continue;
         }
