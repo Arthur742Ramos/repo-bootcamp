@@ -33,7 +33,9 @@ function quotedValue(line: string, start: number): { value: string; end: number 
     if (char === '"') {
       try {
         return {
-          value: new TextDecoder("utf-8", { fatal: true }).decode(new Uint8Array(bytes)),
+          value: new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(
+            new Uint8Array(bytes)
+          ),
           end: cursor,
         };
       } catch {
@@ -51,7 +53,7 @@ function quotedValue(line: string, start: number): { value: string; end: number 
       append(escapes[escape]);
       continue;
     }
-    let count = 0;
+    let count: number;
     let radix = 16;
     if (escape === "x") count = 2;
     else if (escape === "u") count = 4;
@@ -121,7 +123,14 @@ export function scanGoDependencyDeclarations(content: string): GoDependencyDecla
     const [name, version] = tokens.map((token) => token.value);
     // Retain the existing v-prefixed declared-version contract, without semver
     // canonicalization or a new resolver/schema validation policy.
-    if (!name || /[\s\x00-\x1f\x7f]/.test(name + version) || !version.startsWith("v")) return;
+    if (
+      !name ||
+      [...(name + version)].some(
+        (char) => /\s/.test(char) || char.charCodeAt(0) < 32 || char.charCodeAt(0) === 127
+      ) ||
+      !version.startsWith("v")
+    )
+      return;
     declarations.push({ name, version });
   };
   for (const line of content.split("\n")) {
