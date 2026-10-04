@@ -5,6 +5,8 @@
 
 import { readFile } from "fs/promises";
 import { join } from "path";
+import { scanTomlMetadata } from "./toml-metadata-scan.js";
+import { POETRY_METADATA_PREFIX, projectPoetryDependencies } from "./poetry-projection.js";
 import { tomlArrayBodies, tomlArrayStrings } from "./toml-string-scan.js";
 import categoryPatternsJson from "./data/category-patterns.json" with { type: "json" };
 
@@ -370,33 +372,30 @@ async function extractPythonDependencies(
         }
       }
     } else {
-      // Parse pyproject.toml. We split the file into TOML sections keyed by
-      // their table header so each section's body ends cleanly at the next
-      // `[header]` line (values like `extras = ["d"]` contain mid-line brackets
-      // that naive regexes terminate on).
+      const metadata = scanTomlMetadata(content);
+      const poetry = projectPoetryDependencies(metadata);
+      // Actual structural headers only: strings cannot invent section state.
+      // Keep PEP array parsing/marker conventions separate from Poetry values.
       const sections = new Map<string, string>();
-      let currentHeader = "";
-      let currentLines: string[] = [];
-      const flush = (): void => {
-        if (currentHeader) sections.set(currentHeader, currentLines.join("\n"));
-      };
-      // Comments may contain quoted examples, brackets, or entire dependency
-      // declarations. Remove them before section/array parsing, keeping hashes
-      // in strings such as direct-reference URL fragments untouched.
-      for (const line of stripTomlComments(content).split("\n")) {
-        // Allow a trailing inline comment after the table header
-        // (e.g. `[project]  # metadata`), which TOML permits.
-        const header = line.trim().match(/^\[\[?([^\]]+)\]\]?\s*(?:#.*)?$/);
-        if (header) {
-          flush();
-          currentHeader = header[1].trim();
-          currentLines = [];
-        } else {
-          currentLines.push(line);
+      const stripped = stripTomlComments(content);
+      const safeHeaders = scanTomlMetadata(stripped).declarations.filter(
+        (entry) => entry.kind === "table"
+      );
+      for (let index = 0; index < safeHeaders.length; index++) {
+        const header = safeHeaders[index];
+        for (const path of [
+          ["project"],
+          ["project", "optional-dependencies"],
+          ["dependency-groups"],
+        ]) {
+          if (JSON.stringify(header.path) === JSON.stringify(path)) {
+            sections.set(
+              path.join("."),
+              stripped.slice(header.end, safeHeaders[index + 1]?.offset ?? stripped.length)
+            );
+          }
         }
       }
-      flush();
-
       // PyPI identity is case-insensitive and folds separator runs; retain
       // the first accepted spelling/version independently in each target.
       const identities = new Map<Dependency[], Set<string>>();
@@ -404,7 +403,8 @@ async function extractPythonDependencies(
         name: string,
         version: string,
         type: "runtime" | "dev",
-        target: Dependency[]
+        target: Dependency[],
+        description?: string
       ): void => {
         const identity = name.toLowerCase().replace(/[-_.]+/g, "-");
         let seen = identities.get(target);
@@ -414,19 +414,7 @@ async function extractPythonDependencies(
         }
         if (seen.has(identity)) return;
         seen.add(identity);
-        target.push({ name, version, type });
-      };
-
-      // `key = value` TOML tables (legacy Poetry + dependency groups).
-      const parseTable = (body: string, type: "runtime" | "dev", target: Dependency[]): void => {
-        for (const line of body.split("\n")) {
-          const trimmed = line.trim();
-          if (!trimmed || trimmed.startsWith("#")) continue;
-          const match = trimmed.match(/^([A-Za-z0-9._-]+)\s*=\s*(.+)$/);
-          if (!match) continue;
-          if (type === "runtime" && match[1] === "python") continue;
-          addDependency(match[1], parseTomlVersion(match[2]), type, target);
-        }
+        target.push({ name, version, type, ...(description === undefined ? {} : { description }) });
       };
 
       // PEP 508 array-of-strings (`["flask>=2.0", "requests[security]>=2.28"]`).
@@ -449,22 +437,14 @@ async function extractPythonDependencies(
         }
       };
 
-      // Legacy Poetry (`[tool.poetry.dependencies]` / `dev-dependencies`).
-      if (sections.has("tool.poetry.dependencies")) {
-        parseTable(sections.get("tool.poetry.dependencies")!, "runtime", runtime);
-      }
-      if (sections.has("tool.poetry.dev-dependencies")) {
-        parseTable(sections.get("tool.poetry.dev-dependencies")!, "dev", dev);
-      }
-
-      // Poetry 1.2+ dependency groups: `[tool.poetry.group.<name>.dependencies]`.
-      // `dev`/`test` groups → dev; everything else → runtime.
-      for (const [header, body] of sections) {
-        const groupMatch = header.match(/^tool\.poetry\.group\.([A-Za-z0-9._-]+)\.dependencies$/);
-        if (!groupMatch) continue;
-        const groupName = groupMatch[1].toLowerCase();
-        const isDev = groupName === "dev" || groupName === "test";
-        parseTable(body, isDev ? "dev" : "runtime", isDev ? dev : runtime);
+      for (const dependency of poetry.dependencies) {
+        addDependency(
+          dependency.name,
+          dependency.version,
+          dependency.type,
+          dependency.type === "runtime" ? runtime : dev,
+          dependency.description
+        );
       }
 
       // PEP 621 `[project]` (uv, hatch, pdm, setuptools, modern Poetry): the
@@ -495,7 +475,7 @@ async function extractPythonDependencies(
       }
 
       // Prefer a more specific package-manager label when detectable.
-      if ([...sections.keys()].some((h) => h.startsWith("tool.poetry"))) {
+      if (poetry.sawPoetry) {
         packageManager = "poetry";
       } else if (sections.has("project") || sections.has("dependency-groups")) {
         packageManager = "pip";
@@ -802,9 +782,28 @@ function dependencyTableCell(value: string): string {
     .replace(/[\r\n]+/g, " ");
 }
 
+/** Literal code spans cannot reinterpret declaration data as links/emphasis. */
+function literalDependencyCell(value: string): string {
+  if (!value) return "";
+  let width = 1;
+  for (const run of value.matchAll(/`+/g)) width = Math.max(width, run[0].length + 1);
+  const fence = "`".repeat(width);
+  // All-space code payloads retain Markdown padding; omit it in that case.
+  if (/^ +$/.test(value)) return `${fence}${value}${fence}`;
+  return `${fence} ${value.replace(/\|/g, "\\|").replace(/[\r\n]+/g, " ")} ${fence}`;
+}
+
 export function generateDependencyDocs(deps: DependencyAnalysis, projectName: string): string {
   const lines: string[] = [];
   const mixed = (deps.packageManagers?.length ?? 0) > 1;
+  const declaration = (dep: Dependency): string | undefined =>
+    dep.description?.startsWith(POETRY_METADATA_PREFIX)
+      ? dep.description.slice(POETRY_METADATA_PREFIX.length)
+      : undefined;
+  const versionCell = (dep: Dependency): string =>
+    declaration(dep) === undefined
+      ? dependencyTableCell(dep.version)
+      : literalDependencyCell(dep.version);
   const provenance = (dep: Dependency): string =>
     mixed
       ? ` | ${dependencyTableCell(dep.ecosystem ?? "")} | ${dependencyTableCell(dep.sourceFile ?? "")}`
@@ -862,9 +861,7 @@ export function generateDependencyDocs(deps: DependencyAnalysis, projectName: st
     lines.push(mixed ? "| Package | Version | Ecosystem | Manifest |" : "| Package | Version |");
     lines.push(mixed ? "|---------|---------|-----------|----------|" : "|---------|---------|");
     for (const dep of deps.runtime.slice(0, 50)) {
-      lines.push(
-        `| ${dependencyTableCell(dep.name)} | ${dependencyTableCell(dep.version)}${provenance(dep)} |`
-      );
+      lines.push(`| ${dependencyTableCell(dep.name)} | ${versionCell(dep)}${provenance(dep)} |`);
     }
     if (deps.runtime.length > 50) {
       lines.push(`| ... | +${deps.runtime.length - 50} more${mixed ? " | |" : ""} |`);
@@ -881,9 +878,7 @@ export function generateDependencyDocs(deps: DependencyAnalysis, projectName: st
     lines.push(mixed ? "| Package | Version | Ecosystem | Manifest |" : "| Package | Version |");
     lines.push(mixed ? "|---------|---------|-----------|----------|" : "|---------|---------|");
     for (const dep of deps.dev.slice(0, 30)) {
-      lines.push(
-        `| ${dependencyTableCell(dep.name)} | ${dependencyTableCell(dep.version)}${provenance(dep)} |`
-      );
+      lines.push(`| ${dependencyTableCell(dep.name)} | ${versionCell(dep)}${provenance(dep)} |`);
     }
     if (deps.dev.length > 30) {
       lines.push(`| ... | +${deps.dev.length - 30} more${mixed ? " | |" : ""} |`);
@@ -901,11 +896,38 @@ export function generateDependencyDocs(deps: DependencyAnalysis, projectName: st
       "|---------|---------|-----------|----------|"
     );
     for (const dep of deps.peer.slice(0, 30)) {
-      lines.push(
-        `| ${dependencyTableCell(dep.name)} | ${dependencyTableCell(dep.version)}${provenance(dep)} |`
-      );
+      lines.push(`| ${dependencyTableCell(dep.name)} | ${versionCell(dep)}${provenance(dep)} |`);
     }
     if (deps.peer.length > 30) lines.push(`| ... | +${deps.peer.length - 30} more | | |`);
+    lines.push("");
+  }
+
+  const described = [
+    ...deps.runtime.slice(0, 50),
+    ...deps.dev.slice(0, 30),
+    ...deps.peer.slice(0, 20),
+  ].filter((dep) => declaration(dep) !== undefined);
+  if (described.length) {
+    lines.push("## Declared Poetry metadata", "");
+    lines.push(
+      "These are complete declared values, not resolved versions. A * version means no version constraint is declared; source, path, Git and marker restrictions remain in the metadata below. Ordered alternatives are descriptive and no branch is selected.",
+      ""
+    );
+    lines.push(
+      mixed
+        ? "| Dependency | Kind | Declaration | Ecosystem | Manifest |"
+        : "| Dependency | Kind | Declaration |"
+    );
+    lines.push(
+      mixed
+        ? "|------------|------|-------------|-----------|----------|"
+        : "|------------|------|-------------|"
+    );
+    for (const dep of described) {
+      lines.push(
+        `| ${literalDependencyCell(dep.name)} | ${dep.type} | ${literalDependencyCell(declaration(dep)!)}${provenance(dep)} |`
+      );
+    }
     lines.push("");
   }
 

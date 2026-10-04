@@ -281,6 +281,9 @@ function expectAnalysis(
         version,
         type: kind,
         ...(mixed ? { ecosystem, sourceFile } : {}),
+        ...(mode === "hybrid" && kind === "runtime" && name === "foo_bar"
+          ? { description: 'Declared Poetry metadata: {"extras":["fast"],"version":">= 21"}' }
+          : {}),
       }))
     );
   }
@@ -360,7 +363,49 @@ describe("actual Python requirement-prefix and identity exports", () => {
     try {
       const result = await cli(owned, ["deps", owned.repo, "--json"]);
       expect(result.status, result.stdout + result.stderr).toBe(0);
-      expectAnalysis(JSON.parse(result.stdout), false, "hybrid");
+      const rows = expectAnalysis(JSON.parse(result.stdout), false, "hybrid");
+      for (const format of ["markdown", "html", "pdf"] as const) {
+        const output = join(owned.base, format);
+        const generated = await cli(owned, [
+          owned.repo,
+          "--no-clone",
+          "--no-cache",
+          "--quiet",
+          "--format",
+          format,
+          "--output",
+          output,
+        ]);
+        expect(generated.status, generated.stdout + generated.stderr).toBe(0);
+        const doc = await readFile(
+          join(output, "DEPENDENCIES" + (format === "markdown" ? ".md" : ".html")),
+          "utf8"
+        );
+        const allRows = documentRows(doc, format === "markdown");
+        const packageRows = allRows.filter(
+          (row) =>
+            row.length === 2 &&
+            !["Type", "Runtime", "Development", "**Total**", "Total", "Package"].includes(row[0])
+        );
+        expect(packageRows).toEqual(
+          [...rows.runtime, ...rows.dev].map(([name, version]) => [
+            name,
+            format === "markdown" && name === "foo_bar" ? "` >= 21 `" : version,
+          ])
+        );
+        const metadata = '{"extras":["fast"],"version":">= 21"}';
+        expect(allRows.filter((row) => row.length === 3 && row[0] !== "Dependency")).toEqual([
+          format === "markdown"
+            ? ["` foo_bar `", "runtime", "` " + metadata + " `"]
+            : ["foo_bar", "runtime", metadata],
+        ]);
+        const summary = JSON.parse(await readFile(join(output, "summary.json"), "utf8"));
+        expect(summary.deps).toEqual({
+          total: rows.runtime.length + rows.dev.length,
+          runtime: rows.runtime.length,
+          dev: rows.dev.length,
+        });
+      }
     } finally {
       await rm(owned.base, { recursive: true, force: true });
     }

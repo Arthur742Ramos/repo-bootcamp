@@ -24,6 +24,60 @@ afterAll(async () => {
 });
 
 describe("mixed dependency projection cache identity", () => {
+  it("misses pre-Poetry-projection-fix deps entries and keeps complete quoted/nested Poetry metadata on a warm run", async () => {
+    const repo = "poetry/cache";
+    const sha = "unchanged-poetry-commit";
+    const dir = await mkdtemp(join(tmpdir(), "bootcamp-poetry-cache-repo-"));
+    const hash = (seed: string) => createHash("sha256").update(seed).digest("hex").slice(0, 16);
+    try {
+      await writeFile(
+        join(dir, "pyproject.toml"),
+        '[tool.poetry.dependencies]\n"requests"="^2.28"\n"zope.interface".version="^6"\n"zope.interface".extras=["feature"]'
+      );
+      const oldValue = null;
+      await writePhaseCache("deps", repo, sha, oldValue);
+      const entry = (await listCacheEntries()).find(
+        (entry) => entry.entry?.phase === "deps" && entry.entry.repoFullName === repo
+      )!;
+      const oldPath = join(
+        getCacheDir(),
+        `poetry-cache-deps-${hash(`${repo}@${sha}|phase=deps|projection=mixed-ecosystems-v5-python-identity`)}.json`
+      );
+      const oldBytes = await readFile(entry.path);
+      await writeFile(oldPath, oldBytes);
+      if (entry.path !== oldPath) await rm(entry.path);
+      expect((await readPhaseCache("deps", repo, sha)).hit).toBe(false);
+      const spy = vi.spyOn(depsModule, "extractDependencies");
+      try {
+        const cold = await runParallelAnalysis(dir, await scanRepo(dir, 100), undefined, {
+          repoFullName: repo,
+          commitSha: sha,
+        });
+        expect(cold.deps?.totalCount).toBe(2);
+        expect(cold.deps?.runtime).toEqual([
+          { name: "requests", version: "^2.28", type: "runtime" },
+          {
+            name: "zope.interface",
+            version: "^6",
+            type: "runtime",
+            description: 'Declared Poetry metadata: {"extras":["feature"],"version":"^6"}',
+          },
+        ]);
+        const warm = await runParallelAnalysis(dir, await scanRepo(dir, 100), undefined, {
+          repoFullName: repo,
+          commitSha: sha,
+        });
+        expect(warm.deps).toEqual(cold.deps);
+        expect(spy).toHaveBeenCalledTimes(1);
+        expect(await readFile(oldPath)).toEqual(oldBytes);
+      } finally {
+        spy.mockRestore();
+      }
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
   it("misses pre-Python-identity-fix deps entries and keeps canonical identities and spaced extras on a warm run", async () => {
     const repo = "identity/cache";
     const sha = "unchanged-identity-commit";

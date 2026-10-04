@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Project equivalent quoted, dotted and nested Poetry dependency declarations from typed complete values, retaining actual constraints and descriptive source/marker metadata without fabricated versions or packages.
+
 - Honor spaced Python extras and canonical package identities in pyproject dependency projections, retaining first-accepted spelling/version per runtime/dev target and the existing pip duplicate/operator behavior.
 
 - Preserve literal semicolons, query parameters and hashes in pyproject.toml direct-reference URLs while removing only whitespace-delimited environment markers.
