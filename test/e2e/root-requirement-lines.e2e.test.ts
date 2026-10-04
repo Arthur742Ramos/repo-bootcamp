@@ -136,7 +136,10 @@ describe("actual bounded root requirements logical-line exports", () => {
           .digest("hex")
           .slice(0, 16)}.json`;
       const v8 = filename("deps", "|projection=mixed-ecosystems-v8-go-literals");
-      const current = filename("deps", "|projection=mixed-ecosystems-v10-root-local-references");
+      const current = filename(
+        "deps",
+        "|projection=mixed-ecosystems-v11-tooling-pyproject-fallback"
+      );
       expect(deps!.file).toBe(current);
       const second = await ownedProcess(owned);
       expect(second.home).not.toBe(first.owner.home);
