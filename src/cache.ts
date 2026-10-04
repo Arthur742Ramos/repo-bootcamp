@@ -129,7 +129,7 @@ function cacheKey(
   // other phase retain their existing cache identity.
   const phaseSeed = phase === "facts" ? baseSeed : `${baseSeed}|phase=${phase}`;
   const hashSeed =
-    phase === "deps" ? `${phaseSeed}|projection=mixed-ecosystems-v7-cargo-literals` : phaseSeed;
+    phase === "deps" ? `${phaseSeed}|projection=mixed-ecosystems-v8-go-literals` : phaseSeed;
 
   const hash = createHash("sha256").update(hashSeed).digest("hex").substring(0, 16);
   const safeName = repoFullName.replace(/\//g, "-");
