@@ -9,6 +9,7 @@ import { join } from "path";
 import { scanTomlMetadata } from "./toml-metadata-scan.js";
 import { projectCargoDependencies } from "./cargo-projection.js";
 import { scanGoDependencyDeclarations } from "./go-dependency-literals.js";
+import { rootRequirementLogicalLines } from "./requirements-logical-lines.js";
 import { POETRY_METADATA_PREFIX, projectPoetryDependencies } from "./poetry-projection.js";
 import { tomlArrayBodies, tomlArrayStrings } from "./toml-string-scan.js";
 import categoryPatternsJson from "./data/category-patterns.json" with { type: "json" };
@@ -282,7 +283,7 @@ async function extractPythonDependencies(
 
     if (packageManager === "pip") {
       // Parse requirements.txt
-      for (const rawLine of content.split("\n")) {
+      for (const rawLine of rootRequirementLogicalLines(content)) {
         const trimmed = rawLine.trim();
         // Skip blanks, comments, and pip option/include lines
         // (`-r`, `-e`, `-c`, `--hash`, `--index-url`, …).
