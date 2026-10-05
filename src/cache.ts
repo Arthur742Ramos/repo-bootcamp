@@ -130,7 +130,7 @@ function cacheKey(
   const phaseSeed = phase === "facts" ? baseSeed : `${baseSeed}|phase=${phase}`;
   const hashSeed =
     phase === "deps"
-      ? `${phaseSeed}|projection=mixed-ecosystems-v10-root-local-references`
+      ? `${phaseSeed}|projection=mixed-ecosystems-v11-tooling-pyproject-fallback`
       : phaseSeed;
 
   const hash = createHash("sha256").update(hashSeed).digest("hex").substring(0, 16);

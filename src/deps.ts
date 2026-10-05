@@ -11,6 +11,7 @@ import { projectCargoDependencies } from "./cargo-projection.js";
 import { scanGoDependencyDeclarations } from "./go-dependency-literals.js";
 import { rootRequirementLogicalLines } from "./requirements-logical-lines.js";
 import { isRootLocalRequirementReference } from "./root-requirement-admission.js";
+import { isToolingOnlyPyproject } from "./tooling-pyproject.js";
 import { POETRY_METADATA_PREFIX, projectPoetryDependencies } from "./poetry-projection.js";
 import { tomlArrayBodies, tomlArrayStrings } from "./toml-string-scan.js";
 import categoryPatternsJson from "./data/category-patterns.json" with { type: "json" };
@@ -265,9 +266,20 @@ async function extractPythonDependencies(
     let content: string;
     let packageManager = "poetry";
     let sourceFile = "pyproject.toml";
+    let pyprojectMetadata: ReturnType<typeof scanTomlMetadata> | undefined;
 
     try {
       content = await readFile(join(repoPath, "pyproject.toml"), "utf-8");
+      pyprojectMetadata = scanTomlMetadata(content);
+      if (isToolingOnlyPyproject(pyprojectMetadata)) {
+        try {
+          content = await readFile(join(repoPath, "requirements.txt"), "utf-8");
+          packageManager = "pip";
+          sourceFile = "requirements.txt";
+        } catch {
+          // No root requirements: retain the existing empty tooling projection.
+        }
+      }
     } catch {
       // Fall back to requirements.txt
       try {
@@ -314,7 +326,7 @@ async function extractPythonDependencies(
         }
       }
     } else {
-      const metadata = scanTomlMetadata(content);
+      const metadata = pyprojectMetadata ?? scanTomlMetadata(content);
       const poetry = projectPoetryDependencies(metadata);
       // Actual structural headers only: strings cannot invent section state.
       // Keep PEP array parsing/marker conventions separate from Poetry values.

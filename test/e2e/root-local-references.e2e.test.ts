@@ -242,8 +242,11 @@ describe("actual bounded root local-reference admission exports", () => {
           .digest("hex")
           .slice(0, 16)}.json`;
       const v9 = filename("deps", "|projection=mixed-ecosystems-v9-pip-logical-lines");
-      const v10 = filename("deps", "|projection=mixed-ecosystems-v10-root-local-references");
-      expect(deps!.file).toBe(v10);
+      const current = filename(
+        "deps",
+        "|projection=mixed-ecosystems-v11-tooling-pyproject-fallback"
+      );
+      expect(deps!.file).toBe(current);
       const second = await ownedProcess(owned);
       expect(second.home).not.toBe(first.owner.home);
       await mkdir(second.cache, { recursive: true });
@@ -273,12 +276,12 @@ describe("actual bounded root local-reference admission exports", () => {
       };
       const stale = JSON.stringify(entry, null, 2);
       await writeFile(join(second.cache, v9), stale);
-      await expect(readFile(join(second.cache, v10))).rejects.toMatchObject({ code: "ENOENT" });
+      await expect(readFile(join(second.cache, current))).rejects.toMatchObject({ code: "ENOENT" });
       const regenerated = await localReferenceExport(owned, "markdown", second, true);
       strictDocument(regenerated.doc, config, true);
       expect(regenerated.facts).toEqual(first.facts);
       expect(regenerated.summary.deps).toEqual(first.summary.deps);
-      expect(JSON.parse(await readFile(join(second.cache, v10), "utf8")).value).toEqual({
+      expect(JSON.parse(await readFile(join(second.cache, current), "utf8")).value).toEqual({
         packageManager: "pip",
         totalCount: exactJson(config).totalCount,
         ...expectedLocalInventory(config),
@@ -288,7 +291,7 @@ describe("actual bounded root local-reference admission exports", () => {
       for (const other of retained)
         expect(await readFile(join(second.cache, other.file), "utf8")).toBe(other.text);
       expect((await readdir(second.cache)).filter((file) => file.endsWith(".json")).sort()).toEqual(
-        [v9, v10, ...retained.map(({ file }) => file)].sort()
+        [v9, current, ...retained.map(({ file }) => file)].sort()
       );
     } finally {
       await rm(owned.base, { recursive: true, force: true });
