@@ -67,6 +67,7 @@ async function generate(owned: Awaited<ReturnType<typeof fixture>>, format: "mar
       },
     }
   );
+  expect(result.error, result.stderr + result.stdout).toBeUndefined();
   expect(result.status, result.stderr + result.stdout).toBe(0);
   expect(process.env.HOME).toBe(originalHome);
   const extension = format === "markdown" ? ".md" : ".html";
