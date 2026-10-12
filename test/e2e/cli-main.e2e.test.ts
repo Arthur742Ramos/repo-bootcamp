@@ -557,7 +557,7 @@ test *FILES:
 `
       );
       const facts = buildMockFacts(`local/${basename(repo)}`);
-      facts.stack.packageManager = undefined;
+      facts.stack.packageManager = null;
       facts.quickstart.commands = [];
       facts.quickstart.steps = ["Read the repository setup guide"];
       const response = join(tempDir, "response.json");
@@ -771,7 +771,7 @@ test *FILES:
         "version: '3'\ntasks: {secret: 'echo secret'}"
       );
       const facts = buildMockFacts(`local/${basename(repo)}`);
-      facts.stack.packageManager = undefined;
+      facts.stack.packageManager = null;
       facts.quickstart.commands = [];
       facts.quickstart.steps = ["Read the repository setup guide"];
       const response = join(tempDir, "response.json");

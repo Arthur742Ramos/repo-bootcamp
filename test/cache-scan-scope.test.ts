@@ -94,7 +94,7 @@ describe("scan scope cache isolation", () => {
     { ...scope, focus: "", style: "", model: "", audience: "", maxFiles: 0 },
     { ...scope, focus: "", style: "", model: "", audience: "", exclude: [17] },
   ])("rejects incomplete or malformed current identity: %j", async (identity) => {
-    const repo = `scope/malformed-${String(identity?.maxFiles)}`;
+    const repo = `scope/malformed-${String(identity && "maxFiles" in identity ? identity.maxFiles : undefined)}`;
     await writePhaseCache("facts", repo, "sha", "value");
     const summary = (await listCacheEntries()).find((entry) => entry.entry?.repoFullName === repo)!;
     const entry = JSON.parse(await readFile(summary.path, "utf-8"));

@@ -72,11 +72,12 @@ const mockFiles: FileInfo[] = [{ path: "src/index.ts", size: 500, isDirectory: f
 const mockScanResult: ScanResult = {
   files: mockFiles,
   stack: {
-    languages: [{ name: "TypeScript", percentage: 100 }],
+    languages: ["TypeScript"],
     frameworks: [],
-    buildTools: [],
-    testFrameworks: [],
-    linters: [],
+    buildSystem: "",
+    packageManager: null,
+    hasDocker: false,
+    hasCi: false,
   },
   monorepo: null,
   commands: [],

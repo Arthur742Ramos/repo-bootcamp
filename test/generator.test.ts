@@ -18,6 +18,7 @@ import {
 import { convertToHtml, convertToPdf, markdownToHtml } from "../src/formatter.js";
 import { parsePackageJsonScripts } from "../src/tasks.js";
 import { parseGitHubUrl } from "../src/ingest.js";
+import { makeOptions } from "./helpers/fixtures.js";
 import type { RepoFacts, BootcampOptions } from "../src/types.js";
 
 const mockFacts: RepoFacts = {
@@ -568,9 +569,9 @@ describe("generateFirstTasks", () => {
   it("gives repeated task objects separate section numbers and respects minimal style limits", () => {
     const task = { ...mockFacts.firstTasks[0], title: "Repeated task" };
     const input = { ...mockFacts, firstTasks: [task, task, task, task] };
-    const picks = getFirstTaskRecommendations(input, { style: "minimal" });
+    const picks = getFirstTaskRecommendations(input, { style: "minimal", audience: "all" });
     expect(picks.map((task) => task.taskNumber)).toEqual([1, 2, 3]);
-    const doc = generateFirstTasks(input, { style: "minimal" });
+    const doc = generateFirstTasks(input, { style: "minimal", audience: "all" });
     expect(doc).toContain("### 3. Repeated task");
     expect(doc).not.toContain("### 4.");
   });
@@ -854,11 +855,11 @@ describe("scoped remote documentation links", () => {
 describe("generated HTML source links", () => {
   it("keeps bracketed route sources clickable with code formatting", () => {
     const path = "src/routes/[id]/page.ts";
-    const facts = {
+    const facts: RepoFacts = {
       ...mockFacts,
       structure: {
         ...mockFacts.structure,
-        entrypoints: [{ path, type: "route", description: "Dynamic route" }],
+        entrypoints: [{ path, type: "web", description: "Dynamic route" }],
       },
     };
     const repoInfo = {
@@ -977,7 +978,7 @@ describe("literal generated command presentation", () => {
     };
     const runbookBefore = JSON.stringify(runbookFacts);
     for (const { markdown, expectedCommand } of [
-      { markdown: generateBootcamp(facts), expectedCommand: command },
+      { markdown: generateBootcamp(facts, makeOptions()), expectedCommand: command },
       { markdown: generateOnboarding(facts), expectedCommand: command },
       { markdown: generateRunbook(runbookFacts), expectedCommand: runbookCommand },
     ]) {
@@ -1011,7 +1012,7 @@ describe("literal generated command presentation", () => {
         ],
       },
     };
-    const markdown = generateBootcamp(facts);
+    const markdown = generateBootcamp(facts, makeOptions());
     expect(markdown).toContain("Run the dev server using the command below");
     expect(markdown).toContain("**Command for step 2:**");
     expect(codePayloads(markdownToHtml(markdown))).toContain(command);

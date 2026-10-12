@@ -1191,7 +1191,7 @@ describe("discoverTasks", () => {
     ).toEqual([]);
   });
 
-  it.each([
+  it.each<Record<string, string>>([
     {},
     { "nested/go.mod": "module example.invalid/nested\n", "nested/demo.go": "package demo\n" },
     { "vendor/demo.go": "package demo\n" },

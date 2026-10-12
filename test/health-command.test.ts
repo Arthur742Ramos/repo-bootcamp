@@ -1,3 +1,4 @@
+import type { MockInstance } from "vitest";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
 vi.mock("chalk", () => {
@@ -83,8 +84,8 @@ describe("runHealthCommand", () => {
   const mockExit = vi.spyOn(process, "exit").mockImplementation((() => {
     throw new Error("process.exit");
   }) as any);
-  let logSpy: ReturnType<typeof vi.spyOn>;
-  let errorSpy: ReturnType<typeof vi.spyOn>;
+  let logSpy: MockInstance<typeof console.log>;
+  let errorSpy: MockInstance<typeof console.error>;
 
   beforeEach(() => {
     vi.clearAllMocks();

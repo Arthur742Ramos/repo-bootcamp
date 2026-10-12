@@ -3,6 +3,7 @@ import {
   generateDependencyDiagram,
   generateDependencyDocs,
   type DependencyAnalysis,
+  type Dependency,
 } from "../src/deps.js";
 
 const analysis = (overrides: Partial<DependencyAnalysis> = {}): DependencyAnalysis => ({
@@ -78,11 +79,16 @@ describe("single-ecosystem dependency diagram layout", () => {
   );
 
   it("retains fallback runtime/dev relationship kinds and capped literal records", () => {
-    const runtime = Array.from({ length: 13 }, (_, index) => ({
+    const runtime: Dependency[] = Array.from({ length: 13 }, (_, index) => ({
       name: `runtime-${index}`,
       version: "1",
+      type: "runtime",
     }));
-    const dev = Array.from({ length: 11 }, (_, index) => ({ name: `dev-${index}`, version: "1" }));
+    const dev: Dependency[] = Array.from({ length: 11 }, (_, index) => ({
+      name: `dev-${index}`,
+      version: "1",
+      type: "dev",
+    }));
     const graph = generateDependencyDiagram(analysis({ runtime, dev, totalCount: 24 }), "Project");
     expect(visibleEdges(graph)).toEqual(["APP --> Runtime", "APP -.-> Dev"]);
     for (let index = 0; index < 10; index++)
@@ -101,13 +107,13 @@ describe("single-ecosystem dependency diagram layout", () => {
     const deps = analysis({
       packageManager: "Cargo",
       runtime: [
-        { name: "serde", version: "1" },
-        { name: "tokio", version: "1" },
+        { name: "serde", version: "1", type: "runtime" },
+        { name: "tokio", version: "1", type: "runtime" },
       ],
       dev: [
-        { name: "serde", version: "1" },
-        { name: "proptest", version: "1" },
-        { name: "serde", version: "1" },
+        { name: "serde", version: "1", type: "dev" },
+        { name: "proptest", version: "1", type: "dev" },
+        { name: "serde", version: "1", type: "dev" },
       ],
       totalCount: 5,
     });
@@ -125,8 +131,8 @@ describe("single-ecosystem dependency diagram layout", () => {
     const graph = generateDependencyDiagram(
       analysis({
         runtime: [
-          { name: "uncategorized", version: "1" },
-          { name: "uncategorized", version: "2" },
+          { name: "uncategorized", version: "1", type: "runtime" },
+          { name: "uncategorized", version: "2", type: "runtime" },
         ],
         totalCount: 2,
       }),
@@ -142,8 +148,8 @@ describe("single-ecosystem dependency diagram layout", () => {
     const graph = generateDependencyDiagram(
       analysis({
         runtime: [
-          { name, version: "1" },
-          { name: other, version: "2" },
+          { name, version: "1", type: "runtime" },
+          { name: other, version: "2", type: "runtime" },
         ],
         totalCount: 2,
       }),
@@ -168,7 +174,7 @@ describe("single-ecosystem dependency diagram layout", () => {
       const tiny = generateDependencyDiagram(
         analysis({
           packageManager,
-          runtime: [{ name: "one-library", version: "1" }],
+          runtime: [{ name: "one-library", version: "1", type: "runtime" }],
           totalCount: 1,
         }),
         "Tiny"

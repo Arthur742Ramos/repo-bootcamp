@@ -58,7 +58,11 @@ async function setup() {
     preload,
     `import os from 'node:os';import {syncBuiltinESMExports} from 'node:module';os.homedir=()=>${JSON.stringify(join(temp, "home"))};syncBuiltinESMExports();`
   );
-  const env = { ...process.env, NODE_ENV: "test", REPO_BOOTCAMP_TEST_LLM_RESPONSE_FILE: response };
+  const env: NodeJS.ProcessEnv = {
+    ...process.env,
+    NODE_ENV: "test",
+    REPO_BOOTCAMP_TEST_LLM_RESPONSE_FILE: response,
+  };
   delete env.NODE_OPTIONS;
   const run = (args: string[]) =>
     execFileSync(

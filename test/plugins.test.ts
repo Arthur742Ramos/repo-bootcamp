@@ -1,6 +1,7 @@
 import { mkdtemp, rm, writeFile } from "fs/promises";
 import { tmpdir } from "os";
 import { join } from "path";
+import { makeScanResult, makeRepoFacts, makeOptions } from "./helpers/fixtures.js";
 import { describe, it, expect } from "vitest";
 import {
   STYLE_PACKS,
@@ -315,7 +316,13 @@ describe("plugins extra branch coverage", () => {
         extraData: { key: "value" },
       }),
     };
-    const result = await runPlugins([mockPlugin] as any, "/repo", {} as any, {} as any);
+    const result = await runPlugins(
+      [mockPlugin],
+      "/repo",
+      makeScanResult(),
+      makeRepoFacts(),
+      makeOptions()
+    );
     expect(result.extraData["test-extra"]).toEqual({ key: "value" });
   });
 
@@ -326,7 +333,13 @@ describe("plugins extra branch coverage", () => {
       analyze: vi.fn().mockRejectedValue(new Error("plugin crash")),
     };
     const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
-    const result = await runPlugins([mockPlugin] as any, "/repo", {} as any, {} as any);
+    const result = await runPlugins(
+      [mockPlugin],
+      "/repo",
+      makeScanResult(),
+      makeRepoFacts(),
+      makeOptions()
+    );
     expect(warnSpy).toHaveBeenCalled();
     warnSpy.mockRestore();
   });
