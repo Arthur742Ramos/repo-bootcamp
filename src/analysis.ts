@@ -1,4 +1,5 @@
 import { readContainedFile } from "./fs-safe.js";
+import { isValidAnalysisCacheValue } from "./cache-payloads.js";
 
 import {
   pruneCache,
@@ -61,10 +62,12 @@ export async function runParallelAnalysis(
   ): Promise<T> => {
     if (useCache) {
       const cached = await readPhaseCache<T>(phase, cacheRepo, cacheSha, generationOptions);
-      if (cached.hit) {
+      if (cached.hit && isValidAnalysisCacheValue(phase, cached.value)) {
         progress?.update(`${label} ✓ (cache)`);
         return cached.value;
       }
+      if (cached.hit && process.env.DEBUG)
+        console.error(`[cache] Invalid ${phase} payload; recomputing.`);
     }
 
     const value = await compute();
