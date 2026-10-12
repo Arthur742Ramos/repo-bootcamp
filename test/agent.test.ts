@@ -41,6 +41,19 @@ vi.mock("chalk", () => {
 });
 
 // Mock fs module for fast mode tests
+vi.mock("../src/fs-safe.js", async () => {
+  const actual = await vi.importActual<typeof import("../src/fs-safe.js")>("../src/fs-safe.js");
+  const fs = await import("fs");
+  const path = await import("path");
+  return {
+    ...actual,
+    readContainedFileSync: (root: string, relative: string) => {
+      const file = path.join(root, relative);
+      if (!fs.existsSync(file)) throw new Error("missing prompt");
+      return fs.readFileSync(file, "utf-8");
+    },
+  };
+});
 vi.mock("fs", async () => {
   const actual = await vi.importActual<typeof import("fs")>("fs");
   return {
@@ -1528,6 +1541,9 @@ describe("readCustomPrompt", () => {
 
   it("returns null when override path does not exist", () => {
     (fs.existsSync as Mock).mockReturnValue(false);
+    (fs.readFileSync as Mock).mockImplementation(() => {
+      throw new Error("ENOENT");
+    });
 
     expect(readCustomPrompt("/some/repo", "/missing/prompts.md")).toBeNull();
   });

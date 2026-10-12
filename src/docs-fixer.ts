@@ -15,7 +15,8 @@ import type {
   FrameworkIssue,
   CLIDrift,
 } from "./docs-analyzer.js";
-import { readFileSafe, escapeRegex, README_NAMES } from "./utils.js";
+import { escapeRegex, README_NAMES } from "./utils.js";
+import { readContainedFileOrNull } from "./fs-safe.js";
 
 export interface FixResult {
   file: string;
@@ -34,9 +35,8 @@ export interface FixSummary {
  */
 async function getReadmePath(repoPath: string): Promise<string | null> {
   for (const name of README_NAMES) {
-    const path = join(repoPath, name);
-    const content = await readFileSafe(path);
-    if (content !== null) return path;
+    const content = await readContainedFileOrNull(repoPath, name);
+    if (content !== null) return name;
   }
   return null;
 }
@@ -57,7 +57,7 @@ export async function updateVersionNumbers(
   const readmePath = await getReadmePath(repoPath);
   if (!readmePath) return result;
 
-  const initialContent = await readFileSafe(readmePath);
+  const initialContent = await readContainedFileOrNull(repoPath, readmePath);
   if (!initialContent) return result;
 
   let content: string = initialContent;
@@ -100,7 +100,7 @@ export async function updateVersionNumbers(
   }
 
   if (result.changes.length > 0) {
-    await writeFile(readmePath, content, "utf-8");
+    await writeFile(join(repoPath, readmePath), content, "utf-8");
     result.success = true;
   }
 
@@ -125,7 +125,7 @@ export async function addMissingFrameworks(
   const readmePath = await getReadmePath(repoPath);
   if (!readmePath) return result;
 
-  let content = await readFileSafe(readmePath);
+  let content = await readContainedFileOrNull(repoPath, readmePath);
   if (!content) return result;
 
   // Find or create a "Tech Stack" or "Built With" section
@@ -198,7 +198,7 @@ export async function addMissingFrameworks(
   }
 
   if (result.changes.length > 0) {
-    await writeFile(readmePath, content, "utf-8");
+    await writeFile(join(repoPath, readmePath), content, "utf-8");
     result.success = true;
   }
 
@@ -224,7 +224,7 @@ export async function updateCLIUsage(repoPath: string, drift: CLIDrift[]): Promi
   const readmePath = await getReadmePath(repoPath);
   if (!readmePath) return result;
 
-  let content = await readFileSafe(readmePath);
+  let content = await readContainedFileOrNull(repoPath, readmePath);
   if (!content) return result;
 
   // Find Usage section
@@ -264,7 +264,7 @@ export async function updateCLIUsage(repoPath: string, drift: CLIDrift[]): Promi
   }
 
   if (result.changes.length > 0) {
-    await writeFile(readmePath, content, "utf-8");
+    await writeFile(join(repoPath, readmePath), content, "utf-8");
     result.success = true;
   }
 

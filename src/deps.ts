@@ -3,9 +3,8 @@
  * Extracts and visualizes dependencies from various package managers
  */
 
-import { readFile } from "fs/promises";
+import { readContainedFile } from "./fs-safe.js";
 import { isWellFormedSourceText, sourcePathCode } from "./source-links.js";
-import { join } from "path";
 import { scanTomlMetadata } from "./toml-metadata-scan.js";
 import { projectCargoDependencies } from "./cargo-projection.js";
 import { scanGoDependencyDeclarations } from "./go-dependency-literals.js";
@@ -125,7 +124,7 @@ function stripTomlComments(content: string): string {
  */
 async function extractNpmDependencies(repoPath: string): Promise<DependencyAnalysis | null> {
   try {
-    const content = await readFile(join(repoPath, "package.json"), "utf-8");
+    const content = await readContainedFile(repoPath, "package.json");
     const pkg = JSON.parse(content);
 
     const runtime: Dependency[] = [];
@@ -201,7 +200,7 @@ async function extractNpmDependencies(repoPath: string): Promise<DependencyAnaly
  */
 async function extractCargoDependencies(repoPath: string): Promise<DependencyAnalysis | null> {
   try {
-    const content = await readFile(join(repoPath, "Cargo.toml"), "utf-8");
+    const content = await readContainedFile(repoPath, "Cargo.toml");
 
     const runtime: Dependency[] = [];
     const dev: Dependency[] = [];
@@ -269,11 +268,11 @@ async function extractPythonDependencies(
     let pyprojectMetadata: ReturnType<typeof scanTomlMetadata> | undefined;
 
     try {
-      content = await readFile(join(repoPath, "pyproject.toml"), "utf-8");
+      content = await readContainedFile(repoPath, "pyproject.toml");
       pyprojectMetadata = scanTomlMetadata(content);
       if (isToolingOnlyPyproject(pyprojectMetadata)) {
         try {
-          content = await readFile(join(repoPath, "requirements.txt"), "utf-8");
+          content = await readContainedFile(repoPath, "requirements.txt");
           packageManager = "pip";
           sourceFile = "requirements.txt";
         } catch {
@@ -283,7 +282,7 @@ async function extractPythonDependencies(
     } catch {
       // Fall back to requirements.txt
       try {
-        content = await readFile(join(repoPath, "requirements.txt"), "utf-8");
+        content = await readContainedFile(repoPath, "requirements.txt");
         packageManager = "pip";
         sourceFile = "requirements.txt";
       } catch {
@@ -457,7 +456,7 @@ async function extractPythonDependencies(
  */
 async function extractGoDependencies(repoPath: string): Promise<DependencyAnalysis | null> {
   try {
-    const content = await readFile(join(repoPath, "go.mod"), "utf-8");
+    const content = await readContainedFile(repoPath, "go.mod");
 
     const runtime: Dependency[] = [];
     const seen = new Set<string>();

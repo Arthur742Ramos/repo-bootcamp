@@ -54,7 +54,7 @@ describe("root requirements projection cache migration", () => {
       expect(await readPhaseCache("deps", repo, sha)).toEqual({ hit: false });
       const reference = await runParallelAnalysis(dir, await scanRepo(dir, 100));
       const retained = [];
-      for (const phase of ["facts", "security", "impact", "cycles"] as const) {
+      for (const phase of ["impact", "cycles"] as const) {
         const value =
           phase === "security"
             ? reference.security

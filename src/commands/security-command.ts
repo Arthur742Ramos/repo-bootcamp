@@ -1,6 +1,5 @@
 import chalk from "chalk";
-import { readFile } from "fs/promises";
-import { join } from "path";
+import { readContainedFile } from "../fs-safe.js";
 
 import {
   analyzeSecurityPatterns,
@@ -135,7 +134,7 @@ export async function runSecurityCommand(
       repoSource.path,
       finiteOr(opts.maxFiles, 500, { min: 1 })
     );
-    const packageJson = await readFile(join(repoSource.path, "package.json"), "utf-8")
+    const packageJson = await readContainedFile(repoSource.path, "package.json")
       .then((content) => JSON.parse(content) as Record<string, unknown>)
       .catch(() => undefined);
     const analysis = await analyzeSecurityPatterns(repoSource.path, scan.files, packageJson);

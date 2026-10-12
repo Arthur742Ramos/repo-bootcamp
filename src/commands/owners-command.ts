@@ -1,6 +1,5 @@
 import { execFile } from "child_process";
-import { readFile } from "fs/promises";
-import { join } from "path";
+import { readContainedFile } from "../fs-safe.js";
 import { promisify } from "util";
 
 import chalk from "chalk";
@@ -205,7 +204,7 @@ export async function runOwnersCommand(repoUrl: string, opts: OwnersCommandOptio
     let codeownersPath: string | null = null;
     for (const loc of CODEOWNERS_LOCATIONS) {
       try {
-        codeownersContent = await readFile(join(repoSource.path, loc), "utf-8");
+        codeownersContent = await readContainedFile(repoSource.path, loc);
         codeownersPath = loc;
         break;
       } catch {

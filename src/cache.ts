@@ -125,13 +125,16 @@ function cacheKey(
     optionsFingerprint === serializeGenerationOptions(normalizeGenerationOptions())
       ? `${repoFullName}@${commitSha}`
       : `${repoFullName}@${commitSha}|${optionsFingerprint}`;
-  // Dependency projection changes must miss stale results; facts and every
-  // other phase retain their existing cache identity.
+  // Invalidate only projections that could retain formerly uncontained reads.
   const phaseSeed = phase === "facts" ? baseSeed : `${baseSeed}|phase=${phase}`;
   const hashSeed =
     phase === "deps"
-      ? `${phaseSeed}|projection=mixed-ecosystems-v11-tooling-pyproject-fallback`
-      : phaseSeed;
+      ? `${phaseSeed}|projection=mixed-ecosystems-v12-contained-metadata`
+      : phase === "facts"
+        ? `${phaseSeed}|projection=facts-v1-contained-prompts`
+        : phase === "security"
+          ? `${phaseSeed}|projection=security-v1-contained-metadata`
+          : phaseSeed;
 
   const hash = createHash("sha256").update(hashSeed).digest("hex").substring(0, 16);
   const safeName = repoFullName.replace(/\//g, "-");

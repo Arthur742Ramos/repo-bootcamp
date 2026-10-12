@@ -20,6 +20,7 @@ import { getStyleConfig, type StyleConfig } from "./plugins.js";
 import { getRepoTools } from "./tools.js";
 import { validateRepoFacts, getMissingFieldsSummary, type ValidatedRepoFacts } from "./schema.js";
 import { getErrorMessage } from "./utils.js";
+import { readContainedFileSync } from "./fs-safe.js";
 
 /**
  * System prompt for the repo analysis agent
@@ -264,15 +265,14 @@ ${disabled.length > 0 ? `- Keep these lightweight or omitted when not useful: ${
 }
 
 export function readCustomPrompt(repoPath: string, overridePath?: string): string | null {
-  const promptPath = overridePath
-    ? path.resolve(overridePath)
-    : path.join(repoPath, CUSTOM_PROMPT_FILE);
-  if (!fs.existsSync(promptPath)) {
-    return null;
-  }
-
   try {
-    const content = fs.readFileSync(promptPath, "utf-8").trim();
+    // An explicit override is deliberately allowed outside the repository.
+    // Implicit guidance uses the same containment/cap policy as other metadata.
+    const content = (
+      overridePath
+        ? fs.readFileSync(path.resolve(overridePath), "utf-8")
+        : readContainedFileSync(repoPath, CUSTOM_PROMPT_FILE)
+    ).trim();
     if (!content) {
       return null;
     }
@@ -534,9 +534,10 @@ function createFastAnalysisPrompt(
     const filePath = path.join(repoPath, filename);
     if (fs.existsSync(filePath)) {
       try {
-        const content = fs
-          .readFileSync(filePath, "utf-8")
-          .substring(0, promptBudget.maxKeyFileChars);
+        const content = readContainedFileSync(repoPath, filename).substring(
+          0,
+          promptBudget.maxKeyFileChars
+        );
         inlineContents.push(`### ${filename}\n\`\`\`\n${content}\n\`\`\``);
       } catch (err: unknown) {
         // Skip unreadable files
@@ -559,9 +560,10 @@ function createFastAnalysisPrompt(
     const filePath = path.join(repoPath, entry);
     if (fs.existsSync(filePath)) {
       try {
-        const content = fs
-          .readFileSync(filePath, "utf-8")
-          .substring(0, promptBudget.maxEntryPointChars);
+        const content = readContainedFileSync(repoPath, entry).substring(
+          0,
+          promptBudget.maxEntryPointChars
+        );
         inlineContents.push(`### ${entry}\n\`\`\`\n${content}\n\`\`\``);
         break; // Only include first found entry point
       } catch (err: unknown) {

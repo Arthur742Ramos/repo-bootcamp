@@ -675,7 +675,7 @@ async function detectMonorepo(repoPath: string, files: FileInfo[]): Promise<Mono
 
   if (filePaths.has("package.json")) {
     try {
-      const rootPackageJson = JSON.parse(await readFile(join(repoPath, "package.json"), "utf-8"));
+      const rootPackageJson = JSON.parse(await readContainedFile(repoPath, "package.json"));
       for (const workspacePattern of extractWorkspaceGlobsFromPackageJson(rootPackageJson)) {
         workspaceGlobSet.add(normalizeWorkspacePattern(workspacePattern));
       }
@@ -692,7 +692,7 @@ async function detectMonorepo(repoPath: string, files: FileInfo[]): Promise<Mono
       continue;
     }
     try {
-      const pnpmWorkspace = await readFile(join(repoPath, pnpmFile), "utf-8");
+      const pnpmWorkspace = await readContainedFile(repoPath, pnpmFile);
       for (const workspacePattern of extractWorkspaceGlobsFromPnpmWorkspaceYaml(pnpmWorkspace)) {
         workspaceGlobSet.add(normalizeWorkspacePattern(workspacePattern));
       }
@@ -720,7 +720,7 @@ async function detectMonorepo(repoPath: string, files: FileInfo[]): Promise<Mono
   const workspacePackages: MonorepoInfo["workspacePackages"] = [];
   for (const packagePath of Array.from(workspacePackagePaths).sort()) {
     try {
-      const pkg = JSON.parse(await readFile(join(repoPath, packagePath), "utf-8")) as {
+      const pkg = JSON.parse(await readContainedFile(repoPath, packagePath)) as {
         name?: string;
       };
       workspacePackages.push({

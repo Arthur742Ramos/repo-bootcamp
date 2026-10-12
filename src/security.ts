@@ -4,6 +4,7 @@
  */
 
 import { readFile } from "fs/promises";
+import { readContainedFile } from "./fs-safe.js";
 import { join, basename } from "path";
 import type { FileInfo } from "./types.js";
 
@@ -188,7 +189,7 @@ export async function analyzeSecurityPatterns(
 
   // Check .gitignore for secrets patterns
   try {
-    const gitignore = await readFile(join(repoPath, ".gitignore"), "utf-8");
+    const gitignore = await readContainedFile(repoPath, ".gitignore");
     analysis.secretsHandling.gitignoreSecrets =
       gitignore.includes(".env") || gitignore.includes("*.pem") || gitignore.includes("secrets");
   } catch {

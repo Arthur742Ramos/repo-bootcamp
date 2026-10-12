@@ -61,8 +61,8 @@ vi.mock("../src/cache.js", () => ({
   pruneCache: pruneCacheMock,
 }));
 
-vi.mock("fs/promises", () => ({
-  readFile: readFileMock,
+vi.mock("../src/fs-safe.js", () => ({
+  readContainedFile: readFileMock,
 }));
 
 import { runParallelAnalysis } from "../src/analysis.js";

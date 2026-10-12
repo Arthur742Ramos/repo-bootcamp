@@ -1,6 +1,5 @@
 import { execFile } from "child_process";
-import { readFile } from "fs/promises";
-import { join } from "path";
+import { readContainedFile } from "../fs-safe.js";
 import { promisify } from "util";
 
 import chalk from "chalk";
@@ -50,7 +49,7 @@ interface PackageManifest {
 
 async function readJson(repoPath: string, name: string): Promise<PackageManifest | null> {
   try {
-    return JSON.parse(await readFile(join(repoPath, name), "utf-8")) as PackageManifest;
+    return JSON.parse(await readContainedFile(repoPath, name)) as PackageManifest;
   } catch {
     return null;
   }
@@ -58,7 +57,7 @@ async function readJson(repoPath: string, name: string): Promise<PackageManifest
 
 async function readText(repoPath: string, name: string): Promise<string | null> {
   try {
-    return (await readFile(join(repoPath, name), "utf-8")).trim();
+    return (await readContainedFile(repoPath, name)).trim();
   } catch {
     return null;
   }

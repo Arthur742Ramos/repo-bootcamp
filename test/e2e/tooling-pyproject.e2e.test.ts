@@ -225,10 +225,7 @@ describe("actual tooling-only pyproject fallback exports", () => {
           .update(baseSeed + (phase === "facts" ? "" : "|phase=" + phase) + projection)
           .digest("hex")
           .slice(0, 16)}.json`;
-      const current = filename(
-        "deps",
-        "|projection=mixed-ecosystems-v11-tooling-pyproject-fallback"
-      );
+      const current = filename("deps", "|projection=mixed-ecosystems-v12-contained-metadata");
       const v10 = filename("deps", "|projection=mixed-ecosystems-v10-root-local-references");
       expect(deps!.file).toBe(current);
       expect(entry.value).toEqual({
@@ -254,7 +251,14 @@ describe("actual tooling-only pyproject fallback exports", () => {
         "security",
       ]);
       for (const other of retained) {
-        expect(other.file).toBe(filename(JSON.parse(other.text).phase));
+        const phase = JSON.parse(other.text).phase;
+        const projection =
+          phase === "facts"
+            ? "|projection=facts-v1-contained-prompts"
+            : phase === "security"
+              ? "|projection=security-v1-contained-metadata"
+              : "";
+        expect(other.file).toBe(filename(phase, projection));
         await writeFile(join(second.cache, other.file), other.text);
       }
       entry.value = null;
