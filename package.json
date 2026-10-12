@@ -143,7 +143,8 @@
     "test:e2e:web": "playwright test",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
-    "prepublishOnly": "npm run build && npm test"
+    "prepublishOnly": "npm run build && npm test",
+    "verify:runtime": "node ./scripts/check-packed-runtime.mjs"
   },
   "lint-staged": {
     "*.{js,jsx,ts,tsx,json,md,yml,yaml}": "prettier --write",
@@ -192,6 +193,6 @@
     "postcss": "8.5.26"
   },
   "engines": {
-    "node": ">=20.0.0"
+    "node": "^22.18.0 || >=24.0.0"
   }
 }

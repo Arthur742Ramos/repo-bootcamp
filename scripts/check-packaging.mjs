@@ -10,6 +10,7 @@
 
 import { existsSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
+import yaml from "js-yaml";
 
 const repoRoot = fileURLToPath(new URL("../", import.meta.url));
 const read = (rel) => readFileSync(new URL(`../${rel}`, import.meta.url), "utf-8");
@@ -73,8 +74,27 @@ check(
 
 // --- @types/node must not be OLDER than the minimum supported engine. It may
 // float AHEAD (dependabot manages it), so this is a floor, not an exact match. ---
+const minimumNode = "22.18.0";
+const supportedRange = `^${minimumNode} || >=24.0.0`;
 const enginesFloor = majorOf(pkg.engines?.node);
-check(enginesFloor !== null && enginesFloor >= 20, "engines.node floor must be >= 20");
+check(
+  pkg.engines?.node === supportedRange,
+  `engines.node must match locked runtime support: ${supportedRange}`
+);
+const lock = JSON.parse(read("package-lock.json"));
+check(
+  lock.packages?.[""]?.engines?.node === supportedRange,
+  "package-lock root engine must match package.json"
+);
+const doctor = read("src/doctor.ts");
+check(
+  doctor.includes(`MIN_NODE_VERSION = "${minimumNode}"`),
+  "doctor must check the exact minimum Node version"
+);
+check(
+  doctor.includes(`SUPPORTED_NODE_RANGE = "${supportedRange}"`),
+  "doctor must report the supported Node range"
+);
 const typesNodeMajor = majorOf(pkg.devDependencies?.["@types/node"]);
 check(
   typesNodeMajor !== null && typesNodeMajor >= enginesFloor,
@@ -83,10 +103,29 @@ check(
 
 // --- .nvmrc must name a supported line, matching engines/CI (not EOL Node 18). ---
 const nvmrcMajor = majorOf(read(".nvmrc").trim());
+check(nvmrcMajor === 24, `.nvmrc (${nvmrcMajor}) must select the default Node 24 line`);
+const ci = yaml.load(read(".github/workflows/ci.yml"));
+const testVersions = ci.jobs?.test?.strategy?.matrix?.["node-version"]?.map(String) ?? [];
 check(
-  nvmrcMajor !== null && nvmrcMajor >= enginesFloor,
-  `.nvmrc (${nvmrcMajor}) must be >= engines.node floor (${enginesFloor})`
+  testVersions.includes(minimumNode) && testVersions.includes("24"),
+  "CI must exercise the exact minimum and default runtime"
 );
+check(
+  String(
+    ci.jobs?.["runtime-minimum"]?.steps?.find((step) =>
+      step.uses?.startsWith("actions/setup-node@")
+    )?.with?.["node-version"]
+  ) === minimumNode,
+  "packed-runtime CI must install at the exact minimum"
+);
+for (const workflow of ["onboarding-quality.yml", "release.yml"]) {
+  const document = yaml.load(read(`.github/workflows/${workflow}`));
+  for (const [name, job] of Object.entries(document.jobs ?? {})) {
+    const setup = job.steps?.find((step) => step.uses?.startsWith("actions/setup-node@"));
+    if (setup)
+      check(String(setup.with?.["node-version"]) === "24", `${workflow}/${name} must use Node 24`);
+  }
+}
 
 if (errors.length > 0) {
   console.error("Packaging invariants failed:");

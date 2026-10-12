@@ -20,7 +20,18 @@ import pkg from "../package.json" with { type: "json" };
 const execFileAsync = promisify(execFile);
 
 /** Minimum supported Node.js major version. */
-export const MIN_NODE_MAJOR = 20;
+export const MIN_NODE_MAJOR = 22;
+export const MIN_NODE_VERSION = "22.18.0";
+export const SUPPORTED_NODE_RANGE = "^22.18.0 || >=24.0.0";
+
+/** Match the locked runtime dependencies, including the Node 22 minor floor. */
+export function isSupportedNodeVersion(version: string): boolean {
+  const match = /^v?(\d+)\.(\d+)\.(\d+)$/.exec(version.trim());
+  if (!match) return false;
+  const major = Number(match[1]),
+    minor = Number(match[2]);
+  return (major === MIN_NODE_MAJOR && minor >= 18) || major >= 24;
+}
 
 /** Environment variables that can carry a GitHub/Copilot token. */
 export const TOKEN_ENV_VARS = ["GITHUB_TOKEN", "GH_TOKEN", "COPILOT_TOKEN"];
@@ -92,17 +103,18 @@ export function evaluateDoctor(env: EnvironmentSnapshot): DoctorReport {
   });
 
   // Node.js (required)
-  const major = parseNodeMajor(env.nodeVersion);
-  const nodeOk = Number.isFinite(major) && major >= MIN_NODE_MAJOR;
+  const nodeOk = isSupportedNodeVersion(env.nodeVersion);
   checks.push({
     id: "node",
     label: "Node.js runtime",
     severity: "required",
     status: nodeOk ? "ok" : "fail",
     detail: nodeOk
-      ? `${env.nodeVersion} (>= ${MIN_NODE_MAJOR} required)`
-      : `${env.nodeVersion} is below the required Node ${MIN_NODE_MAJOR}`,
-    remedy: nodeOk ? undefined : `Install Node.js ${MIN_NODE_MAJOR} or newer (https://nodejs.org).`,
+      ? `${env.nodeVersion} (${SUPPORTED_NODE_RANGE} supported)`
+      : `${env.nodeVersion} is outside the supported Node range ${SUPPORTED_NODE_RANGE}`,
+    remedy: nodeOk
+      ? undefined
+      : `Install Node.js 24, or Node.js ${MIN_NODE_VERSION}+ on the 22.x line (https://nodejs.org).`,
   });
 
   // Platform (info)
