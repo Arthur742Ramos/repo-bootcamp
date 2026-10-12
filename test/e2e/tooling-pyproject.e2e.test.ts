@@ -1,4 +1,5 @@
-import { createHash } from "node:crypto";
+import { projectedCacheFilename } from "../helpers/cache-identity.js";
+import type { CachePhase } from "../../src/cache.js";
 import { mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -185,7 +186,7 @@ describe("actual tooling-only pyproject fallback exports", () => {
     }
   );
 
-  it("hits current v11 deps, misses synthetic null v10, and preserves all other phase identities and bytes", async () => {
+  it("hits current contained deps, misses synthetic null v10, and preserves all other phase identities and bytes", async () => {
     const config = toolingConfigurations[0];
     const owned = await toolingFixture(config, true);
     try {
@@ -202,42 +203,11 @@ describe("actual tooling-only pyproject fallback exports", () => {
       const deps = entries.find(({ text }) => JSON.parse(text).phase === "deps");
       expect(deps).toBeDefined();
       const entry = JSON.parse(deps!.text);
-      const options = entry.generationOptions;
-      const fingerprint = JSON.stringify([
-        options.focus,
-        options.style,
-        options.model,
-        options.audience,
-        options.maxFiles,
-        options.subdir,
-        options.exclude,
-        options.scanFingerprint,
-      ]);
-      const baseSeed =
-        `${entry.repoFullName}@${entry.commitSha}` +
-        (fingerprint === JSON.stringify(["", "", "", "", null, "", [], ""])
-          ? ""
-          : "|" + fingerprint);
       const filename = (
-        phase: string,
-        projection = "",
-        analysisFingerprint = options.analysisFingerprint
-      ) => {
-        const phaseFingerprint =
-          phase === "facts" && analysisFingerprint
-            ? JSON.stringify([...JSON.parse(fingerprint), analysisFingerprint])
-            : fingerprint;
-        const phaseBase =
-          phaseFingerprint === fingerprint
-            ? baseSeed
-            : `${entry.repoFullName}@${entry.commitSha}|${phaseFingerprint}`;
-        return `${entry.repoFullName.replace(/\//g, "-")}${phase === "facts" ? "" : "-" + phase}-${createHash(
-          "sha256"
-        )
-          .update(phaseBase + (phase === "facts" ? "" : "|phase=" + phase) + projection)
-          .digest("hex")
-          .slice(0, 16)}.json`;
-      };
+        phase: CachePhase,
+        projection?: string,
+        generationOptions = entry.generationOptions
+      ) => projectedCacheFilename({ ...entry, generationOptions }, phase, projection);
       const current = filename("deps", "|projection=mixed-ecosystems-v12-contained-metadata");
       const v10 = filename("deps", "|projection=mixed-ecosystems-v10-root-local-references");
       expect(deps!.file).toBe(current);
@@ -272,7 +242,7 @@ describe("actual tooling-only pyproject fallback exports", () => {
               ? "|projection=security-v1-contained-metadata"
               : "";
         expect(other.file).toBe(
-          filename(phase, projection, JSON.parse(other.text).generationOptions.analysisFingerprint)
+          filename(phase, projection, JSON.parse(other.text).generationOptions)
         );
         await writeFile(join(second.cache, other.file), other.text);
       }
