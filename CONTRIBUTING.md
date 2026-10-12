@@ -39,7 +39,7 @@ Feature suggestions are welcome! Please:
 2. **Install dependencies**: `npm install`
 3. **Make your changes** following the code style guidelines
 4. **Add tests** for any new functionality
-5. **Run quality checks**: `npm run lint && npm run typecheck && npm test`
+5. **Run quality checks**: `npm run lint && npm run typecheck && npm run typecheck:tests && npm test`
 6. **Ensure the build passes**: `npm run build`
 7. **Check formatting**: `npm run format:check`
 8. **Submit a pull request** with a clear description of your changes (using `.github/PULL_REQUEST_TEMPLATE.md`)
@@ -60,6 +60,7 @@ npm run build
 # Lint and type-check
 npm run lint
 npm run typecheck
+npm run typecheck:tests
 
 # Run tests
 npm test
@@ -76,6 +77,11 @@ npm run dev:web
 # Run with coverage
 npm run test:coverage
 ```
+
+`typecheck` checks production sources with the build configuration. `typecheck:tests`
+checks those sources and every unit, CLI, and browser test with the strict test
+configuration. Run both: Vitest executes TypeScript without checking fixture and
+mock contracts. CI runs both checks.
 
 ## Code Style Guidelines
 

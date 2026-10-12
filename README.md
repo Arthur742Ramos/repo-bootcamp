@@ -1376,6 +1376,7 @@ npm run build
 # Lint + type-check
 npm run lint
 npm run typecheck
+npm run typecheck:tests
 
 # Run tests (1,270+ tests)
 npm test

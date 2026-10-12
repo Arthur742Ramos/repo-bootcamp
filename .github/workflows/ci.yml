@@ -191,6 +191,9 @@ jobs:
       - name: Run typecheck
         run: npm run typecheck
 
+      - name: Typecheck test contracts
+        run: npm run typecheck:tests
+
   format:
     name: Format
     runs-on: ubuntu-latest
