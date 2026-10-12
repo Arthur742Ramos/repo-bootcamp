@@ -138,35 +138,42 @@ Onboarding Risk: 18/100 (A) 🟢
 
 ## Why This Tool Wins
 
-| Traditional Approach            | Repo Bootcamp                |
-| ------------------------------- | ---------------------------- |
-| Manual documentation takes days | Generated in < 60 seconds    |
-| Gets outdated immediately       | Regenerate anytime           |
-| Inconsistent quality            | Structured, validated output |
-| Requires deep knowledge         | Works on any public repo     |
-| Static documents                | Interactive Q&A mode         |
-| No security insights            | Built-in security analysis   |
+| Traditional Approach            | Repo Bootcamp                     |
+| ------------------------------- | --------------------------------- |
+| Manual documentation takes days | Generate from repository evidence |
+| Gets outdated immediately       | Regenerate anytime                |
+| Inconsistent quality            | Structured, validated output      |
+| Requires deep knowledge         | Works on any public repo          |
+| Static documents                | Interactive Q&A mode              |
+| No security insights            | Built-in security analysis        |
 
 ### What Makes It Different
 
 1. **Powered by GitHub Copilot SDK** - Leverages the official SDK for agentic AI with tool-calling
 2. **Truly Agentic** - Claude autonomously explores codebases, not just template filling
 3. **Schema Validated** - All output is validated with Zod schemas and auto-retried on failures
-4. **Production Ready** - 1,270+ tests, TypeScript, proper error handling
+4. **Validation** - Strict source and test typing, automated CLI and browser checks
 5. **Full Feature Set** - A 22-command CLI: interactive Q&A, a combined scan dashboard, health/metrics/security scoring, coupling & impact graphs, machine preflight, ownership maps, cross-ecosystem task discovery, docs-drift analysis, guarded kit publishing, and a web UI
 6. **Beautiful Output** - Mermaid diagrams, structured markdown, professional formatting
 
 ### By the Numbers
 
-| Metric              | Value                        |
-| ------------------- | ---------------------------- |
-| Generated files     | 14+                          |
-| Test suite          | 1,270+ tests                 |
-| Source files        | 59 TypeScript modules        |
-| Test files          | 102 Vitest files             |
-| Lines of code       | 18,326 TypeScript LOC (src/) |
-| Languages supported | 10+                          |
-| Generation time     | < 60 seconds                 |
+| Metric              | Value                                  |
+| ------------------- | -------------------------------------- |
+| Generated files     | 14+                                    |
+| Unit configuration  | 3,201 passed, 8 skipped                |
+| Source files        | 90 TypeScript files                    |
+| Test files          | 137 unit / 51 CLI / 30 browser         |
+| Source lines        | 28,369, including comments and blanks  |
+| Languages supported | 10+                                    |
+| Generation time     | Varies with repository, model and mode |
+
+Inventory measured on 2026-10-12 from tracked files in this campaign. The unit
+result is the complete local Windows run on Node 24; platform-dependent skips
+can differ in CI. The unit and CLI configurations both include `test/e2e.test.ts`,
+so their file counts overlap. Generation time has not been qualified with a fresh
+live-model benchmark. See [release qualification](docs/release-qualification.md)
+for the verification scope and the remaining release decisions.
 
 ## How It Uses the GitHub Copilot SDK
 
@@ -1378,7 +1385,7 @@ npm run lint
 npm run typecheck
 npm run typecheck:tests
 
-# Run tests (1,270+ tests)
+# Run the unit configuration
 npm test
 
 # Check formatting (or apply it)
