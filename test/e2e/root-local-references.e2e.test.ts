@@ -237,15 +237,20 @@ describe("actual bounded root local-reference admission exports", () => {
       const filename = (
         phase: string,
         projection = phase === "facts"
-          ? "|projection=facts-v1-contained-prompts"
+          ? "|projection=facts-v2-effective-analysis-inputs"
           : phase === "security"
             ? "|projection=security-v1-contained-metadata"
-            : ""
+            : "",
+        analysisFingerprint?: string
       ) =>
         `${entry.repoFullName.replace(/\//g, "-")}${phase === "facts" ? "" : "-" + phase}-${createHash(
           "sha256"
         )
-          .update(baseSeed + (phase === "facts" ? "" : "|phase=" + phase) + projection)
+          .update(
+            (phase === "facts" && analysisFingerprint
+              ? `${entry.repoFullName}@${entry.commitSha}|${JSON.stringify([...JSON.parse(fingerprint), analysisFingerprint])}`
+              : baseSeed + (phase === "facts" ? "" : "|phase=" + phase)) + projection
+          )
           .digest("hex")
           .slice(0, 16)}.json`;
       const v9 = filename("deps", "|projection=mixed-ecosystems-v9-pip-logical-lines");
@@ -262,7 +267,13 @@ describe("actual bounded root local-reference admission exports", () => {
         "security",
       ]);
       for (const other of retained) {
-        expect(other.file).toBe(filename(JSON.parse(other.text).phase));
+        expect(other.file).toBe(
+          filename(
+            JSON.parse(other.text).phase,
+            undefined,
+            JSON.parse(other.text).generationOptions.analysisFingerprint
+          )
+        );
         await writeFile(join(second.cache, other.file), other.text);
       }
       entry.value = {

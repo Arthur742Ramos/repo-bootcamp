@@ -67,6 +67,7 @@ describe("effective analysis inputs with real facts cache and saved responses", 
     expect((await run()).model).not.toBe("cache");
     sentinel();
     expect((await run()).model).toBe("cache");
+    expect((await run({ style: "oss" })).model).toBe("cache");
     expect((await run({ format: "html" })).model).toBe("cache");
     await expect(run({ noCache: true })).rejects.toThrow(
       /Failed to read.*REPO_BOOTCAMP_TEST_LLM_RESPONSE_FILE/

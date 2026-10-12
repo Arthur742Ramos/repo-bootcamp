@@ -123,7 +123,7 @@ export async function orchestrateAnalysis({
   const resolvedInputs = resolveAnalysisInputs(repoPath, options, styleConfig);
   const generationOptions: CacheGenerationOptions = {
     focus: options.focus,
-    style: options.style,
+    style: resolvedInputs.styleConfig.name,
     model: options.model,
     audience: options.audience,
     maxFiles: options.maxFiles,
