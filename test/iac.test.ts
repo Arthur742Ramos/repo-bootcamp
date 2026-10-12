@@ -1,20 +1,21 @@
 import { describe, it, expect } from "vitest";
 import { getKeyFilesForImpact } from "../src/impact.js";
 import type { FileInfo } from "../src/types.js";
+import { makeFile } from "./helpers/fixtures.js";
 
 describe("Terraform support", () => {
   describe("key file detection", () => {
     it("should identify root-level Terraform key files", () => {
       const files: FileInfo[] = [
-        { path: "main.tf", size: 1000, content: "" },
-        { path: "variables.tf", size: 500, content: "" },
-        { path: "outputs.tf", size: 300, content: "" },
-        { path: "providers.tf", size: 200, content: "" },
-        { path: "versions.tf", size: 100, content: "" },
-        { path: "backend.tf", size: 150, content: "" },
-        { path: "modules/vpc/main.tf", size: 800, content: "" },
-        { path: "terragrunt.hcl", size: 250, content: "" },
-        { path: ".terraform.lock.hcl", size: 5000, content: "" },
+        makeFile("main.tf", { size: 1000 }),
+        makeFile("variables.tf", { size: 500 }),
+        makeFile("outputs.tf", { size: 300 }),
+        makeFile("providers.tf", { size: 200 }),
+        makeFile("versions.tf", { size: 100 }),
+        makeFile("backend.tf", { size: 150 }),
+        makeFile("modules/vpc/main.tf", { size: 800 }),
+        makeFile("terragrunt.hcl", { size: 250 }),
+        makeFile(".terraform.lock.hcl", { size: 5000 }),
       ];
       const keyFiles = getKeyFilesForImpact(files);
       expect(keyFiles).toContain("main.tf");
@@ -29,8 +30,8 @@ describe("Terraform support", () => {
 
     it("should not include nested Terraform files as key files", () => {
       const files: FileInfo[] = [
-        { path: "modules/vpc/main.tf", size: 800, content: "" },
-        { path: "environments/dev/main.tf", size: 600, content: "" },
+        makeFile("modules/vpc/main.tf", { size: 800 }),
+        makeFile("environments/dev/main.tf", { size: 600 }),
       ];
       const keyFiles = getKeyFilesForImpact(files);
       // Non-root main.tf should not be included (patterns are for root only)
@@ -44,10 +45,10 @@ describe("Bicep support", () => {
   describe("key file detection", () => {
     it("should identify root-level Bicep key files", () => {
       const files: FileInfo[] = [
-        { path: "main.bicep", size: 2000, content: "" },
-        { path: "modules.bicep", size: 500, content: "" },
-        { path: "modules/network.bicep", size: 800, content: "" },
-        { path: "modules/storage.bicep", size: 600, content: "" },
+        makeFile("main.bicep", { size: 2000 }),
+        makeFile("modules.bicep", { size: 500 }),
+        makeFile("modules/network.bicep", { size: 800 }),
+        makeFile("modules/storage.bicep", { size: 600 }),
       ];
       const keyFiles = getKeyFilesForImpact(files);
       expect(keyFiles).toContain("main.bicep");
@@ -61,11 +62,11 @@ describe("Bicep support", () => {
 describe("Mixed IaC + application code", () => {
   it("should detect both IaC and application key files at root", () => {
     const files: FileInfo[] = [
-      { path: "src/index.ts", size: 500, content: "" },
-      { path: "src/handler.ts", size: 300, content: "" },
-      { path: "main.tf", size: 1000, content: "" },
-      { path: "variables.tf", size: 400, content: "" },
-      { path: "main.bicep", size: 800, content: "" },
+      makeFile("src/index.ts", { size: 500 }),
+      makeFile("src/handler.ts", { size: 300 }),
+      makeFile("main.tf", { size: 1000 }),
+      makeFile("variables.tf", { size: 400 }),
+      makeFile("main.bicep", { size: 800 }),
     ];
 
     const keyFiles = getKeyFilesForImpact(files);
@@ -83,8 +84,8 @@ describe("Mixed IaC + application code", () => {
 
   it("should include src-level TypeScript files as key files", () => {
     const files: FileInfo[] = [
-      { path: "src/app.ts", size: 500, content: "" },
-      { path: "src/deep/nested.ts", size: 200, content: "" },
+      makeFile("src/app.ts", { size: 500 }),
+      makeFile("src/deep/nested.ts", { size: 200 }),
     ];
 
     const keyFiles = getKeyFilesForImpact(files);
@@ -98,8 +99,8 @@ describe("Mixed IaC + application code", () => {
 describe("IaC language patterns", () => {
   it("should not match .tfstate files as key files (by design)", () => {
     const files: FileInfo[] = [
-      { path: "terraform.tfstate", size: 50000, content: "" },
-      { path: "terraform.tfstate.backup", size: 45000, content: "" },
+      makeFile("terraform.tfstate", { size: 50000 }),
+      makeFile("terraform.tfstate.backup", { size: 45000 }),
     ];
     const keyFiles = getKeyFilesForImpact(files);
     // .tfstate files are intentionally not key files (they contain secrets)
