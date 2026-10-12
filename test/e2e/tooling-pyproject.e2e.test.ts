@@ -218,13 +218,26 @@ describe("actual tooling-only pyproject fallback exports", () => {
         (fingerprint === JSON.stringify(["", "", "", "", null, "", [], ""])
           ? ""
           : "|" + fingerprint);
-      const filename = (phase: string, projection = "") =>
-        `${entry.repoFullName.replace(/\//g, "-")}${phase === "facts" ? "" : "-" + phase}-${createHash(
+      const filename = (
+        phase: string,
+        projection = "",
+        analysisFingerprint = options.analysisFingerprint
+      ) => {
+        const phaseFingerprint =
+          phase === "facts" && analysisFingerprint
+            ? JSON.stringify([...JSON.parse(fingerprint), analysisFingerprint])
+            : fingerprint;
+        const phaseBase =
+          phaseFingerprint === fingerprint
+            ? baseSeed
+            : `${entry.repoFullName}@${entry.commitSha}|${phaseFingerprint}`;
+        return `${entry.repoFullName.replace(/\//g, "-")}${phase === "facts" ? "" : "-" + phase}-${createHash(
           "sha256"
         )
-          .update(baseSeed + (phase === "facts" ? "" : "|phase=" + phase) + projection)
+          .update(phaseBase + (phase === "facts" ? "" : "|phase=" + phase) + projection)
           .digest("hex")
           .slice(0, 16)}.json`;
+      };
       const current = filename("deps", "|projection=mixed-ecosystems-v12-contained-metadata");
       const v10 = filename("deps", "|projection=mixed-ecosystems-v10-root-local-references");
       expect(deps!.file).toBe(current);
@@ -254,11 +267,13 @@ describe("actual tooling-only pyproject fallback exports", () => {
         const phase = JSON.parse(other.text).phase;
         const projection =
           phase === "facts"
-            ? "|projection=facts-v1-contained-prompts"
+            ? "|projection=facts-v2-effective-analysis-inputs"
             : phase === "security"
               ? "|projection=security-v1-contained-metadata"
               : "";
-        expect(other.file).toBe(filename(phase, projection));
+        expect(other.file).toBe(
+          filename(phase, projection, JSON.parse(other.text).generationOptions.analysisFingerprint)
+        );
         await writeFile(join(second.cache, other.file), other.text);
       }
       entry.value = null;

@@ -1,3 +1,4 @@
+import { makeRepoFacts, makeStyleConfig } from "./helpers/fixtures.js";
 import { afterAll, describe, expect, it, vi } from "vitest";
 import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from "fs/promises";
 import { dirname, join } from "path";
@@ -13,7 +14,10 @@ vi.mock("os", async (importOriginal) => {
   return { ...actual, homedir: () => home };
 });
 const { analyzeRepoMock } = vi.hoisted(() => ({ analyzeRepoMock: vi.fn() }));
-vi.mock("../src/agent.js", () => ({ analyzeRepo: analyzeRepoMock }));
+vi.mock("../src/agent.js", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../src/agent.js")>()),
+  analyzeRepo: analyzeRepoMock,
+}));
 import { orchestrateAnalysis } from "../src/services/analysis-orchestration.js";
 import { scanRepo } from "../src/ingest.js";
 import {
@@ -61,7 +65,7 @@ describe("local Task includes with the real disk cache", () => {
         url: "https://github.com/task/cache",
         branch: "main",
       } as RepoInfo;
-      const facts = {
+      const facts = makeRepoFacts({
         repoName: "task/cache",
         firstTasks: [],
         quickstart: {
@@ -71,7 +75,7 @@ describe("local Task includes with the real disk cache", () => {
           commonErrors: [],
           sources: ["README.md"],
         },
-      } as unknown as RepoFacts;
+      });
       analyzeRepoMock.mockImplementation(async () => ({
         facts: structuredClone(facts),
         stats: { model: "offline-fixture", toolCalls: [] },
@@ -82,7 +86,7 @@ describe("local Task includes with the real disk cache", () => {
           repoInfo,
           scanResult,
           options,
-          styleConfig: {} as StyleConfig,
+          styleConfig: makeStyleConfig(),
           progress: { update: vi.fn(), succeed: vi.fn(), recordToolCall: vi.fn() } as any,
           analysisStart: Date.now(),
         });

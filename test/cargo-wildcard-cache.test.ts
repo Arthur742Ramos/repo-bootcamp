@@ -1,3 +1,4 @@
+import { makeRepoFacts, makeStyleConfig } from "./helpers/fixtures.js";
 import { mkdir, mkdtemp, rename, rm, writeFile } from "fs/promises";
 import { tmpdir } from "os";
 import { join } from "path";
@@ -6,7 +7,10 @@ import type { BootcampOptions, RepoFacts, RepoInfo } from "../src/types.js";
 import type { StyleConfig } from "../src/plugins.js";
 import type { ProgressTracker } from "../src/progress.js";
 const mocks = vi.hoisted(() => ({ analyze: vi.fn(), read: vi.fn(), write: vi.fn() }));
-vi.mock("../src/agent.js", () => ({ analyzeRepo: mocks.analyze }));
+vi.mock("../src/agent.js", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../src/agent.js")>()),
+  analyzeRepo: mocks.analyze,
+}));
 vi.mock("../src/analysis.js", () => ({ runParallelAnalysis: vi.fn() }));
 vi.mock("../src/cache.js", () => ({ readCache: mocks.read, writeCache: mocks.write }));
 import { scanRepo } from "../src/ingest.js";
@@ -33,7 +37,7 @@ it("uses topology-only negative changes in the real orchestration cache key and 
       format: "markdown",
       exclude: ["crates/b/**", "crates/c/**"],
     } as BootcampOptions;
-    const facts = { quickstart: { commands: [] } } as unknown as RepoFacts,
+    const facts = makeRepoFacts(),
       entries = new Map<string, RepoFacts>();
     mocks.analyze.mockResolvedValue({ facts, stats: { toolCalls: [], model: "owned" } });
     mocks.read.mockImplementation(
@@ -54,7 +58,7 @@ it("uses topology-only negative changes in the real orchestration cache key and 
         repoInfo: { fullName: "owned/fixture", commitSha: "1".repeat(40) } as RepoInfo,
         scanResult,
         options,
-        styleConfig: {} as StyleConfig,
+        styleConfig: makeStyleConfig(),
         progress,
         analysisStart: Date.now(),
       });

@@ -14,13 +14,17 @@ const { analyzeRepoMock, readCacheMock, writeCacheMock } = vi.hoisted(() => ({
   writeCacheMock: vi.fn(),
 }));
 
-vi.mock("../src/agent.js", () => ({ analyzeRepo: analyzeRepoMock }));
+vi.mock("../src/agent.js", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../src/agent.js")>()),
+  analyzeRepo: analyzeRepoMock,
+}));
 vi.mock("../src/cache.js", () => ({ readCache: readCacheMock, writeCache: writeCacheMock }));
 vi.mock("chalk", () => ({ default: { yellow: (s: string) => s } }));
 
 import { orchestrateAnalysis } from "../src/services/analysis-orchestration.js";
+import { makeRepoFacts, makeScanResult, makeStyleConfig } from "./helpers/fixtures.js";
 
-const facts = { repoName: "owner/repo", firstTasks: [] } as unknown as RepoFacts;
+const facts = makeRepoFacts({ repoName: "owner/repo", firstTasks: [] });
 
 const liveResult = {
   facts,
@@ -34,8 +38,8 @@ const liveResult = {
   },
 };
 
-const scanResult = { files: [], keySourceFiles: new Map() } as unknown as ScanResult;
-const styleConfig = { firstTasksCount: 5 } as unknown as StyleConfig;
+const scanResult = makeScanResult();
+const styleConfig = makeStyleConfig({ firstTasksCount: 5 });
 
 function makeProgress() {
   return { update: vi.fn(), succeed: vi.fn(), recordToolCall: vi.fn() } as any;
@@ -76,6 +80,45 @@ beforeEach(() => {
 });
 
 describe("orchestrateAnalysis facts cache wiring", () => {
+  it("returns successful analysis after an optional cache write fails", async () => {
+    writeCacheMock.mockRejectedValue(new Error("ENOTDIR: owned cache fixture"));
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      const result = await orchestrateAnalysis({
+        repoPath: "/repo",
+        repoInfo: makeRepoInfo(),
+        scanResult,
+        options: makeOptions({ verbose: true }),
+        styleConfig,
+        progress: makeProgress(),
+        analysisStart: Date.now(),
+      });
+      expect(result.facts).toEqual(facts);
+      expect(result.model).toBe("gpt-live");
+      expect(warn).toHaveBeenCalledWith(
+        expect.stringContaining("[cache] Could not persist analysis cache: ENOTDIR")
+      );
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it("keeps real analysis failures fatal", async () => {
+    const failure = new Error("fixture model failure");
+    analyzeRepoMock.mockRejectedValue(failure);
+    await expect(
+      orchestrateAnalysis({
+        repoPath: "/repo",
+        repoInfo: makeRepoInfo(),
+        scanResult,
+        options: makeOptions(),
+        styleConfig,
+        progress: makeProgress(),
+        analysisStart: Date.now(),
+      })
+    ).rejects.toBe(failure);
+    expect(writeCacheMock).not.toHaveBeenCalled();
+  });
   it("reads the cache and writes it on a miss (running the model once)", async () => {
     const result = await orchestrateAnalysis({
       repoPath: "/repo",

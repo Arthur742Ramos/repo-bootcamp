@@ -9,6 +9,7 @@ import { join } from "path";
 import { homedir } from "os";
 import { createHash } from "crypto";
 import type { RepoFacts } from "./types.js";
+import { RepoFactsSchema } from "./schema.js";
 
 const CACHE_DIR = join(homedir(), ".cache", "repo-bootcamp");
 const CACHE_VERSION = 3;
@@ -39,11 +40,13 @@ export interface CacheGenerationOptions {
   style?: string;
   model?: string;
   audience?: string;
-  maxFiles?: number;
+  maxFiles?: number | null;
   subdir?: string;
   exclude?: readonly string[];
   /** Fingerprint of the actual scanned files and loaded evidence. */
   scanFingerprint?: string;
+  /** Canonical effective model inputs; used only for facts reuse. */
+  analysisFingerprint?: string;
 }
 
 interface NormalizedCacheGenerationOptions {
@@ -55,13 +58,14 @@ interface NormalizedCacheGenerationOptions {
   subdir: string;
   exclude: string[];
   scanFingerprint: string;
+  analysisFingerprint?: string;
 }
 
 function normalizeGenerationOptions(
   options?: CacheGenerationOptions
 ): NormalizedCacheGenerationOptions {
   if (
-    options?.maxFiles !== undefined &&
+    options?.maxFiles != null &&
     (!Number.isSafeInteger(options.maxFiles) || options.maxFiles <= 0)
   ) {
     throw new RangeError("Cache maxFiles must be a positive safe integer");
@@ -77,12 +81,16 @@ function normalizeGenerationOptions(
     // the scan. Preserve each pattern verbatim (including glob escapes).
     exclude: [...new Set(options?.exclude ?? [])].sort(),
     scanFingerprint: options?.scanFingerprint || "",
+    ...(options?.analysisFingerprint ? { analysisFingerprint: options.analysisFingerprint } : {}),
   };
 }
 
-function serializeGenerationOptions(options: NormalizedCacheGenerationOptions): string {
+function serializeGenerationOptions(
+  options: NormalizedCacheGenerationOptions,
+  phase: CachePhase = "facts"
+): string {
   // Structured encoding prevents user-controlled delimiters from colliding.
-  return JSON.stringify([
+  const fields: unknown[] = [
     options.focus,
     options.style,
     options.model,
@@ -91,7 +99,9 @@ function serializeGenerationOptions(options: NormalizedCacheGenerationOptions): 
     options.subdir,
     [...new Set(options.exclude)].sort(),
     options.scanFingerprint,
-  ]);
+  ];
+  if (phase === "facts" && options.analysisFingerprint) fields.push(options.analysisFingerprint);
+  return JSON.stringify(fields);
 }
 
 function hasGenerationOptions(raw: unknown): raw is NormalizedCacheGenerationOptions {
@@ -105,6 +115,8 @@ function hasGenerationOptions(raw: unknown): raw is NormalizedCacheGenerationOpt
       (typeof options.maxFiles === "number" &&
         Number.isSafeInteger(options.maxFiles) &&
         options.maxFiles > 0)) &&
+    (options.analysisFingerprint === undefined ||
+      typeof options.analysisFingerprint === "string") &&
     Array.isArray(options.exclude) &&
     options.exclude.every((pattern) => typeof pattern === "string")
   );
@@ -120,9 +132,9 @@ function cacheKey(
   phase: CachePhase = "facts"
 ): string {
   const normalizedOptions = normalizeGenerationOptions(generationOptions);
-  const optionsFingerprint = serializeGenerationOptions(normalizedOptions);
+  const optionsFingerprint = serializeGenerationOptions(normalizedOptions, phase);
   const baseSeed =
-    optionsFingerprint === serializeGenerationOptions(normalizeGenerationOptions())
+    optionsFingerprint === serializeGenerationOptions(normalizeGenerationOptions(), phase)
       ? `${repoFullName}@${commitSha}`
       : `${repoFullName}@${commitSha}|${optionsFingerprint}`;
   // Invalidate only projections that could retain formerly uncontained reads.
@@ -131,7 +143,7 @@ function cacheKey(
     phase === "deps"
       ? `${phaseSeed}|projection=mixed-ecosystems-v12-contained-metadata`
       : phase === "facts"
-        ? `${phaseSeed}|projection=facts-v1-contained-prompts`
+        ? `${phaseSeed}|projection=facts-v2-effective-analysis-inputs`
         : phase === "security"
           ? `${phaseSeed}|projection=security-v1-contained-metadata`
           : phaseSeed;
@@ -171,7 +183,8 @@ export async function readPhaseCache<T>(
       entry.phase !== phase ||
       entry.repoFullName !== repoFullName ||
       entry.commitSha !== commitSha ||
-      serializeGenerationOptions(entryOptions) !== serializeGenerationOptions(expectedOptions)
+      serializeGenerationOptions(entryOptions, phase) !==
+        serializeGenerationOptions(expectedOptions, phase)
     ) {
       return { hit: false };
     }
@@ -227,7 +240,12 @@ export async function readCache(
   if (!result.hit) {
     return null;
   }
-  return result.value;
+  const validated = RepoFactsSchema.safeParse(result.value);
+  if (!validated.success) {
+    if (process.env.DEBUG) console.error("[cache] Invalid facts payload:", validated.error.message);
+    return null;
+  }
+  return validated.data;
 }
 
 /**
