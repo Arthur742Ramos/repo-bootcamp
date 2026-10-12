@@ -130,16 +130,20 @@ describe("actual bounded root requirements logical-line exports", () => {
           ? ""
           : "|" + fingerprint);
       const name = entry.repoFullName.replace(/\//g, "-");
-      const filename = (phase: string, projection = "") =>
+      const filename = (
+        phase: string,
+        projection = phase === "facts"
+          ? "|projection=facts-v1-contained-prompts"
+          : phase === "security"
+            ? "|projection=security-v1-contained-metadata"
+            : ""
+      ) =>
         `${name}${phase === "facts" ? "" : "-" + phase}-${createHash("sha256")
           .update(baseSeed + (phase === "facts" ? "" : "|phase=" + phase) + projection)
           .digest("hex")
           .slice(0, 16)}.json`;
       const v8 = filename("deps", "|projection=mixed-ecosystems-v8-go-literals");
-      const current = filename(
-        "deps",
-        "|projection=mixed-ecosystems-v11-tooling-pyproject-fallback"
-      );
+      const current = filename("deps", "|projection=mixed-ecosystems-v12-contained-metadata");
       expect(deps!.file).toBe(current);
       const second = await ownedProcess(owned);
       expect(second.home).not.toBe(first.owner.home);
