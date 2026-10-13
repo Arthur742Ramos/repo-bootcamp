@@ -85,6 +85,8 @@ const DEFAULT_STYLE: StyleConfig = {
     showDependencyGraph: false,
     showRadar: true,
     showImpact: false,
+    showMetrics: false,
+    showHealth: false,
   },
   badges: { style: "shields" },
   firstTasksCount: 5,

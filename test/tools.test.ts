@@ -20,7 +20,7 @@ vi.mock("child_process", () => ({
 
 import { readFile, readdir, realpath, stat } from "fs/promises";
 import { execFile } from "child_process";
-import { getRepoTools, safePath, type ToolContext } from "../src/tools.js";
+import { getRepoTools, safePath, type ToolContext, type RepoToolsByName } from "../src/tools.js";
 
 const mockReadFile = vi.mocked(readFile);
 const mockReaddir = vi.mocked(readdir);
@@ -73,11 +73,11 @@ function makeContext(overrides?: Partial<ToolContext>): ToolContext {
 }
 
 // Helper: get a specific tool by name from the tools array
-function getTool(context: ToolContext, name: string) {
+function getTool<Name extends keyof RepoToolsByName>(context: ToolContext, name: Name) {
   const tools = getRepoTools(context);
-  const tool = tools.find((t) => t.name === name);
-  if (!tool) throw new Error(`Tool ${name} not found`);
-  return tool;
+  const tool = tools.find((t): t is RepoToolsByName[Name] => t.name === name);
+  if (!tool || !tool.handler) throw new Error(`Tool ${name} not found or missing handler`);
+  return { ...tool, handler: tool.handler };
 }
 
 describe("getRepoTools", () => {

@@ -21,7 +21,15 @@ function facts(commands: Command[]): RepoFacts {
   return {
     repoName: "local/declared-dot-fixture",
     purpose: "Library",
-    stack: { languages: [], frameworks: [], hasDocker: false, hasCi: false },
+    description: "Library fixture for declared task guidance",
+    stack: {
+      languages: [],
+      frameworks: [],
+      buildSystem: "",
+      packageManager: null,
+      hasDocker: false,
+      hasCi: false,
+    },
     quickstart: { prerequisites: [], steps: [], commands, commonErrors: [], sources: [] },
     structure: { keyDirs: [], entrypoints: [], testDirs: [], docsDirs: [] },
     ci: { workflows: [], mainChecks: [], sources: [] },

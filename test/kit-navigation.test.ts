@@ -60,7 +60,14 @@ const options: BootcampOptions = {
 };
 const scan: ScanResult = {
   files: [],
-  stack: { languages: [], frameworks: [], buildTools: [], testFrameworks: [], linters: [] },
+  stack: {
+    languages: [],
+    frameworks: [],
+    buildSystem: "",
+    packageManager: null,
+    hasDocker: false,
+    hasCi: false,
+  },
   commands: [],
   ciWorkflows: [],
   readme: null,

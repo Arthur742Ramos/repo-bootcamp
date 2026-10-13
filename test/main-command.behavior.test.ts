@@ -205,9 +205,11 @@ describe("runMainCommand --no-clone behavior", () => {
       }));
 
       const { runMainCommand } = await import("../src/commands/main-command.js");
-      const exitSpy = vi.spyOn(process, "exit").mockImplementation(((code?: number) => {
-        throw new Error(`EXIT_${code ?? 0}`);
-      }) as (code?: number) => never);
+      const exitSpy = vi
+        .spyOn(process, "exit")
+        .mockImplementation((code?: string | number | null) => {
+          throw new Error(`EXIT_${code ?? 0}`);
+        });
       const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
 
       try {
@@ -269,9 +271,11 @@ describe("runMainCommand --no-clone behavior", () => {
     vi.doMock("../src/services/config-resolution.js", () => ({ resolveRunConfiguration }));
 
     const { runMainCommand } = await import("../src/commands/main-command.js");
-    const exitSpy = vi.spyOn(process, "exit").mockImplementation(((code?: number) => {
-      throw new Error(`EXIT_${code ?? 0}`);
-    }) as (code?: number) => never);
+    const exitSpy = vi
+      .spyOn(process, "exit")
+      .mockImplementation((code?: string | number | null) => {
+        throw new Error(`EXIT_${code ?? 0}`);
+      });
     const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
     const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
 
@@ -317,9 +321,11 @@ describe("runMainCommand --no-clone behavior", () => {
     vi.doMock("../src/services/config-resolution.js", () => ({ resolveRunConfiguration }));
 
     const { runMainCommand } = await import("../src/commands/main-command.js");
-    const exitSpy = vi.spyOn(process, "exit").mockImplementation(((code?: number) => {
-      throw new Error(`EXIT_${code ?? 0}`);
-    }) as (code?: number) => never);
+    const exitSpy = vi
+      .spyOn(process, "exit")
+      .mockImplementation((code?: string | number | null) => {
+        throw new Error(`EXIT_${code ?? 0}`);
+      });
     const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
     const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
 
@@ -364,9 +370,11 @@ describe("runMainCommand --no-clone behavior", () => {
     vi.doMock("../src/services/config-resolution.js", () => ({ resolveRunConfiguration }));
 
     const { runMainCommand } = await import("../src/commands/main-command.js");
-    const exitSpy = vi.spyOn(process, "exit").mockImplementation(((code?: number) => {
-      throw new Error(`EXIT_${code ?? 0}`);
-    }) as (code?: number) => never);
+    const exitSpy = vi
+      .spyOn(process, "exit")
+      .mockImplementation((code?: string | number | null) => {
+        throw new Error(`EXIT_${code ?? 0}`);
+      });
     const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
     const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
 
@@ -405,9 +413,11 @@ describe("runMainCommand --no-clone behavior", () => {
     vi.doMock("../src/services/config-resolution.js", () => ({ resolveRunConfiguration }));
 
     const { runMainCommand } = await import("../src/commands/main-command.js");
-    const exitSpy = vi.spyOn(process, "exit").mockImplementation(((code?: number) => {
-      throw new Error(`EXIT_${code ?? 0}`);
-    }) as (code?: number) => never);
+    const exitSpy = vi
+      .spyOn(process, "exit")
+      .mockImplementation((code?: string | number | null) => {
+        throw new Error(`EXIT_${code ?? 0}`);
+      });
     const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
     const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
 
@@ -454,9 +464,11 @@ describe("runMainCommand --no-clone behavior", () => {
     vi.doMock("../src/services/config-resolution.js", () => ({ resolveRunConfiguration }));
 
     const { runMainCommand } = await import("../src/commands/main-command.js");
-    const exitSpy = vi.spyOn(process, "exit").mockImplementation(((code?: number) => {
-      throw new Error(`EXIT_${code ?? 0}`);
-    }) as (code?: number) => never);
+    const exitSpy = vi
+      .spyOn(process, "exit")
+      .mockImplementation((code?: string | number | null) => {
+        throw new Error(`EXIT_${code ?? 0}`);
+      });
     const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
     const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
 
@@ -532,9 +544,11 @@ describe("runMainCommand --no-clone behavior", () => {
       vi.doMock("../src/services/config-resolution.js", () => ({ resolveRunConfiguration }));
 
       const { runMainCommand } = await import("../src/commands/main-command.js");
-      const exitSpy = vi.spyOn(process, "exit").mockImplementation(((code?: number) => {
-        throw new Error(`EXIT_${code ?? 0}`);
-      }) as (code?: number) => never);
+      const exitSpy = vi
+        .spyOn(process, "exit")
+        .mockImplementation((code?: string | number | null) => {
+          throw new Error(`EXIT_${code ?? 0}`);
+        });
       const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
       const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
 
@@ -635,9 +649,11 @@ describe("runMainCommand --no-clone behavior", () => {
     vi.doMock("../src/services/config-resolution.js", () => ({ resolveRunConfiguration }));
 
     const { runMainCommand } = await import("../src/commands/main-command.js");
-    const exitSpy = vi.spyOn(process, "exit").mockImplementation(((code?: number) => {
-      throw new Error(`EXIT_${code ?? 0}`);
-    }) as (code?: number) => never);
+    const exitSpy = vi
+      .spyOn(process, "exit")
+      .mockImplementation((code?: string | number | null) => {
+        throw new Error(`EXIT_${code ?? 0}`);
+      });
     const logged: string[] = [];
     const logSpy = vi.spyOn(console, "log").mockImplementation((msg?: unknown) => {
       logged.push(String(msg ?? ""));
@@ -755,9 +771,11 @@ describe("runMainCommand summary.json", () => {
     vi.doMock("../src/services/config-resolution.js", () => ({ resolveRunConfiguration }));
 
     const { runMainCommand } = await import("../src/commands/main-command.js");
-    const exitSpy = vi.spyOn(process, "exit").mockImplementation(((code?: number) => {
-      throw new Error(`EXIT_${code ?? 0}`);
-    }) as (code?: number) => never);
+    const exitSpy = vi
+      .spyOn(process, "exit")
+      .mockImplementation((code?: string | number | null) => {
+        throw new Error(`EXIT_${code ?? 0}`);
+      });
     const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
 
     let summary: any;
@@ -848,9 +866,11 @@ describe("runMainCommand --watch and --interactive", () => {
     vi.doMock("../src/agent.js", () => ({ analyzeRepo }));
 
     const { runMainCommand } = await import("../src/commands/main-command.js");
-    const exitSpy = vi.spyOn(process, "exit").mockImplementation(((code?: number) => {
-      throw new Error(`EXIT_${code ?? 0}`);
-    }) as (code?: number) => never);
+    const exitSpy = vi
+      .spyOn(process, "exit")
+      .mockImplementation((code?: string | number | null) => {
+        throw new Error(`EXIT_${code ?? 0}`);
+      });
     const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
     const onSpy = vi.spyOn(process, "on");
 
@@ -990,9 +1010,11 @@ describe("runMainCommand --watch and --interactive", () => {
       vi.doMock("../src/interactive.js", () => ({ runInteractiveMode }));
 
       const { runMainCommand } = await import("../src/commands/main-command.js");
-      const exitSpy = vi.spyOn(process, "exit").mockImplementation(((code?: number) => {
-        throw new Error(`EXIT_${code ?? 0}`);
-      }) as (code?: number) => never);
+      const exitSpy = vi
+        .spyOn(process, "exit")
+        .mockImplementation((code?: string | number | null) => {
+          throw new Error(`EXIT_${code ?? 0}`);
+        });
       const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
 
       try {
@@ -1067,9 +1089,11 @@ describe("runMainCommand --watch and --interactive", () => {
       vi.doMock("../src/interactive.js", () => ({ runInteractiveMode }));
 
       const { runMainCommand } = await import("../src/commands/main-command.js");
-      const exitSpy = vi.spyOn(process, "exit").mockImplementation(((code?: number) => {
-        throw new Error(`EXIT_${code ?? 0}`);
-      }) as (code?: number) => never);
+      const exitSpy = vi
+        .spyOn(process, "exit")
+        .mockImplementation((code?: string | number | null) => {
+          throw new Error(`EXIT_${code ?? 0}`);
+        });
       const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
 
       try {

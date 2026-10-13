@@ -45,11 +45,14 @@ interface SearchToolArgs {
 
 type RepoMetadataToolArgs = Record<string, never>;
 
-export type RepoTool =
-  | Tool<ReadFileToolArgs>
-  | Tool<ListFilesToolArgs>
-  | Tool<SearchToolArgs>
-  | Tool<RepoMetadataToolArgs>;
+/** Argument contracts for the fixed names created by getRepoTools. */
+export interface RepoToolsByName {
+  read_file: Tool<ReadFileToolArgs>;
+  list_files: Tool<ListFilesToolArgs>;
+  search: Tool<SearchToolArgs>;
+  get_repo_metadata: Tool<RepoMetadataToolArgs>;
+}
+export type RepoTool = RepoToolsByName[keyof RepoToolsByName];
 
 /**
  * Validates that a target path stays within the repository root to prevent path traversal.

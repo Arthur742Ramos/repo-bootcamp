@@ -92,7 +92,7 @@ async function fixture(extra: Record<string, string> = {}, scoped = false, expli
     "import os from 'node:os';import {syncBuiltinESMExports} from 'node:module';os.homedir=()=>process.env.OWNED_CARGO_HOME;syncBuiltinESMExports();globalThis.fetch=async()=>{throw Error('No provider calls authorized in owned fixture');};"
   );
   const run = async (args: string[]) => {
-    const env = {
+    const env: NodeJS.ProcessEnv = {
       ...process.env,
       NODE_ENV: "test",
       OWNED_CARGO_HOME: join(base, "home"),

@@ -137,6 +137,7 @@
     "format:check": "prettier --check .",
     "lint": "eslint \"src/**/*.{ts,tsx}\" --max-warnings=0",
     "typecheck": "tsc -p tsconfig.build.json --noEmit",
+    "typecheck:tests": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
     "test:e2e": "npm run test:e2e:cli && npm run test:e2e:web",
     "test:e2e:cli": "vitest run --config vitest.e2e.config.ts",

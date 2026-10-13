@@ -21,24 +21,31 @@ describe("Tech Radar", () => {
   ];
 
   const mockDeps: DependencyAnalysis = {
+    packageManager: "npm",
+    categories: [],
     runtime: [
-      { name: "react", version: "^18.0.0" },
-      { name: "express", version: "^4.0.0" },
-      { name: "zod", version: "^3.0.0" },
+      { name: "react", version: "^18.0.0", type: "runtime" },
+      { name: "express", version: "^4.0.0", type: "runtime" },
+      { name: "zod", version: "^3.0.0", type: "runtime" },
     ],
     dev: [
-      { name: "typescript", version: "^5.0.0" },
-      { name: "vitest", version: "^1.0.0" },
-      { name: "eslint", version: "^8.0.0" },
+      { name: "typescript", version: "^5.0.0", type: "dev" },
+      { name: "vitest", version: "^1.0.0", type: "dev" },
+      { name: "eslint", version: "^8.0.0", type: "dev" },
     ],
-    optional: [],
     peer: [],
     totalCount: 6,
   };
 
   const mockSecurity: SecurityAnalysis = {
     score: 85,
-    patterns: [],
+    authPatterns: [],
+    securityDeps: [],
+    secretsHandling: { envFiles: [], configFiles: [], gitignoreSecrets: true, hasEnvExample: true },
+    headers: { hasHelmet: false, hasCors: false, hasCSP: false },
+    hasRateLimiting: false,
+    hasInputValidation: false,
+    hasSqlInjectionPrevention: false,
     findings: [],
   };
 
@@ -64,8 +71,8 @@ describe("Tech Radar", () => {
         ...mockDeps,
         runtime: [
           ...mockDeps.runtime,
-          { name: "moment", version: "^2.0.0" },
-          { name: "lodash", version: "^4.0.0" },
+          { name: "moment", version: "^2.0.0", type: "runtime" },
+          { name: "lodash", version: "^4.0.0", type: "runtime" },
         ],
       };
 
@@ -87,8 +94,8 @@ describe("Tech Radar", () => {
         ...mockDeps,
         dev: [
           ...mockDeps.dev,
-          { name: "node-sass", version: "^7.0.0" },
-          { name: "tslint", version: "^6.0.0" },
+          { name: "node-sass", version: "^7.0.0", type: "dev" },
+          { name: "tslint", version: "^6.0.0", type: "dev" },
         ],
       };
 

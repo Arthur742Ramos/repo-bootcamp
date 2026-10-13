@@ -30,7 +30,7 @@ describe("docs-fixer", () => {
   describe("updateVersionNumbers", () => {
     it("should return no changes when no README exists", async () => {
       const result = await updateVersionNumbers(tempDir, [
-        { type: "node", documented: "16", actual: "18" },
+        { type: "node", documented: "16", actual: "18", location: "README.md" },
       ]);
       expect(result.changes).toHaveLength(0);
       expect(result.success).toBe(false);
@@ -39,7 +39,7 @@ describe("docs-fixer", () => {
     it("should update node version in README", async () => {
       await writeFile(join(tempDir, "README.md"), "Requires Node.js 16\n", "utf-8");
       const result = await updateVersionNumbers(tempDir, [
-        { type: "node", documented: "16", actual: "18" },
+        { type: "node", documented: "16", actual: "18", location: "README.md" },
       ]);
       expect(result.success).toBe(true);
       expect(result.changes.length).toBeGreaterThan(0);
@@ -50,7 +50,7 @@ describe("docs-fixer", () => {
     it("should update python version in README", async () => {
       await writeFile(join(tempDir, "README.md"), "Python 3.8 required\n", "utf-8");
       const result = await updateVersionNumbers(tempDir, [
-        { type: "python", documented: "3.8", actual: "3.11" },
+        { type: "python", documented: "3.8", actual: "3.11", location: "README.md" },
       ]);
       expect(result.success).toBe(true);
       const content = await readFile(join(tempDir, "README.md"), "utf-8");
@@ -60,7 +60,7 @@ describe("docs-fixer", () => {
     it("should update npm version in README", async () => {
       await writeFile(join(tempDir, "README.md"), "npm 8 or higher\n", "utf-8");
       const result = await updateVersionNumbers(tempDir, [
-        { type: "npm", documented: "8", actual: "10" },
+        { type: "npm", documented: "8", actual: "10", location: "README.md" },
       ]);
       expect(result.success).toBe(true);
     });
@@ -68,7 +68,7 @@ describe("docs-fixer", () => {
     it("should handle no matching patterns gracefully", async () => {
       await writeFile(join(tempDir, "README.md"), "No versions here\n", "utf-8");
       const result = await updateVersionNumbers(tempDir, [
-        { type: "node", documented: "16", actual: "18" },
+        { type: "node", documented: "16", actual: "18", location: "README.md" },
       ]);
       expect(result.changes).toHaveLength(0);
     });
@@ -76,7 +76,7 @@ describe("docs-fixer", () => {
     it("should skip unknown version types", async () => {
       await writeFile(join(tempDir, "README.md"), "Some content\n", "utf-8");
       const result = await updateVersionNumbers(tempDir, [
-        { type: "unknown" as any, documented: "1.0", actual: "2.0" },
+        { type: "unknown" as any, documented: "1.0", actual: "2.0", location: "README.md" },
       ]);
       expect(result.changes).toHaveLength(0);
     });
@@ -216,11 +216,15 @@ describe("docs-fixer", () => {
         "utf-8"
       );
       const analysis: DocsAnalysisResult = {
-        versionMismatches: [{ type: "node", documented: "16", actual: "18" }],
+        versionMismatches: [
+          { type: "node", documented: "16", actual: "18", location: "README.md" },
+        ],
         frameworkIssues: [{ framework: "react", status: "missing", version: "18" }],
         cliDrift: [{ command: "mycli", type: "missing", actual: "--verbose", documented: "" }],
-        score: 50,
-        suggestions: [],
+        prerequisiteIssues: [],
+        badgeIssues: [],
+        isStale: true,
+        summary: { errors: 2, warnings: 1, ok: 0 },
       };
       const summary = await fixDocumentation(tempDir, analysis);
       expect(summary.filesModified).toBeGreaterThan(0);
@@ -232,8 +236,10 @@ describe("docs-fixer", () => {
         versionMismatches: [],
         frameworkIssues: [],
         cliDrift: [],
-        score: 100,
-        suggestions: [],
+        prerequisiteIssues: [],
+        badgeIssues: [],
+        isStale: false,
+        summary: { errors: 0, warnings: 0, ok: 0 },
       };
       const summary = await fixDocumentation(tempDir, analysis);
       expect(summary.filesModified).toBe(0);

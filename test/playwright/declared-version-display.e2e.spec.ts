@@ -65,7 +65,9 @@ for (const config of configurations) {
             if (declaration?.display === "notation") {
               // Visible JSON notation is reversible metadata, not a replacement
               // selector or a resolved/normalized version.
-              expect(JSON.parse(cells[1])).toBe(declaration.value);
+              const displayed = cells[1];
+              if (displayed === undefined) throw new Error("Missing declared version cell");
+              expect(JSON.parse(displayed)).toBe(declaration.value);
             }
             if (declaration)
               await expect(row.locator("td").nth(1).locator("code")).toHaveCount(
