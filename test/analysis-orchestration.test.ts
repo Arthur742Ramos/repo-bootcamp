@@ -11,7 +11,8 @@ const { analyzeRepoMock, runParallelAnalysisMock } = vi.hoisted(() => ({
   runParallelAnalysisMock: vi.fn(),
 }));
 
-vi.mock("../src/agent.js", () => ({
+vi.mock("../src/agent.js", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../src/agent.js")>()),
   analyzeRepo: analyzeRepoMock,
 }));
 
@@ -86,6 +87,7 @@ import { scanRepo } from "../src/ingest.js";
 import { mkdir, mkdtemp, rm, writeFile } from "fs/promises";
 import { tmpdir } from "os";
 import { join } from "path";
+import { makeRepoFacts, makeStyleConfig } from "./helpers/fixtures.js";
 
 const defaultOptions: BootcampOptions = {
   branch: "main",
@@ -98,21 +100,22 @@ const defaultOptions: BootcampOptions = {
   format: "markdown",
 };
 
-const defaultStyleConfig: StyleConfig = {
+const defaultStyleConfig = makeStyleConfig({
   name: "startup",
   description: "startup style",
   tone: "casual",
   sectionDepth: "standard",
   firstTasksCount: 5,
-  maxCodeExamples: 5,
   sections: {
     showRunbook: true,
     showSecurityDetails: true,
     showRadar: true,
     showDependencyGraph: true,
     showImpact: true,
+    showMetrics: true,
+    showHealth: true,
   },
-};
+});
 
 const mockRepoInfo: RepoInfo = {
   owner: "test-owner",
@@ -120,19 +123,18 @@ const mockRepoInfo: RepoInfo = {
   fullName: "test-owner/test-repo",
   url: "https://github.com/test-owner/test-repo",
   commitSha: "abc123",
-  defaultBranch: "main",
   branch: "main",
-  isLocal: false,
 };
 
 const mockScanResult: ScanResult = {
   files: [{ path: "src/index.ts", size: 500, isDirectory: false }],
   stack: {
-    languages: [{ name: "TypeScript", percentage: 100 }],
+    languages: ["TypeScript"],
     frameworks: [],
-    buildTools: [],
-    testFrameworks: [],
-    linters: [],
+    buildSystem: "npm",
+    packageManager: "npm",
+    hasDocker: false,
+    hasCi: false,
   },
   monorepo: null,
   commands: [],
@@ -142,27 +144,58 @@ const mockScanResult: ScanResult = {
   keySourceFiles: new Map(),
 };
 
-const mockFacts: RepoFacts = {
+const mockFacts = makeRepoFacts({
   purpose: "Test project",
-  techStack: "TypeScript",
-  architecture: "Modular",
-  keyFiles: [],
-  conventions: [],
-  setupSteps: [],
   firstTasks: [
-    { title: "task1", description: "d1", difficulty: "easy", files: [] },
-    { title: "task2", description: "d2", difficulty: "easy", files: [] },
-    { title: "task3", description: "d3", difficulty: "medium", files: [] },
-    { title: "task4", description: "d4", difficulty: "medium", files: [] },
-    { title: "task5", description: "d5", difficulty: "hard", files: [] },
-    { title: "task6", description: "d6", difficulty: "hard", files: [] },
+    {
+      title: "task1",
+      description: "d1",
+      difficulty: "beginner",
+      files: [],
+      category: "test",
+      why: "Fixture",
+    },
+    {
+      title: "task2",
+      description: "d2",
+      difficulty: "beginner",
+      files: [],
+      category: "test",
+      why: "Fixture",
+    },
+    {
+      title: "task3",
+      description: "d3",
+      difficulty: "intermediate",
+      files: [],
+      category: "test",
+      why: "Fixture",
+    },
+    {
+      title: "task4",
+      description: "d4",
+      difficulty: "intermediate",
+      files: [],
+      category: "test",
+      why: "Fixture",
+    },
+    {
+      title: "task5",
+      description: "d5",
+      difficulty: "advanced",
+      files: [],
+      category: "test",
+      why: "Fixture",
+    },
+    {
+      title: "task6",
+      description: "d6",
+      difficulty: "advanced",
+      files: [],
+      category: "test",
+      why: "Fixture",
+    },
   ],
-  codeExamples: [],
-  gotchas: [],
-  testingStrategy: "",
-  deploymentInfo: "",
-  diagrams: { dependencyGraph: "", moduleRelations: "", flowDiagram: "" },
-  contextSummary: "",
   quickstart: {
     prerequisites: ["Task 3"],
     steps: ["Read CONTRIBUTING"],
@@ -170,7 +203,7 @@ const mockFacts: RepoFacts = {
     commonErrors: [],
     sources: ["README.md"],
   },
-};
+});
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -670,6 +703,7 @@ describe("prepareOutputDocuments", () => {
     const minimalStyle: StyleConfig = {
       ...defaultStyleConfig,
       sections: {
+        ...defaultStyleConfig.sections,
         showRunbook: false,
         showSecurityDetails: false,
         showRadar: false,

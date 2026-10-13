@@ -1,4 +1,5 @@
-import { createHash } from "node:crypto";
+import { projectedCacheFilename } from "../helpers/cache-identity.js";
+import type { CachePhase } from "../../src/cache.js";
 import { mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -113,35 +114,11 @@ describe("actual bounded root requirements logical-line exports", () => {
       const deps = entries.find(({ text }) => JSON.parse(text).phase === "deps");
       expect(deps).toBeDefined();
       const entry = JSON.parse(deps!.text);
-      const options = entry.generationOptions;
-      const fingerprint = JSON.stringify([
-        options.focus,
-        options.style,
-        options.model,
-        options.audience,
-        options.maxFiles,
-        options.subdir,
-        options.exclude,
-        options.scanFingerprint,
-      ]);
-      const baseSeed =
-        `${entry.repoFullName}@${entry.commitSha}` +
-        (fingerprint === JSON.stringify(["", "", "", "", null, "", [], ""])
-          ? ""
-          : "|" + fingerprint);
-      const name = entry.repoFullName.replace(/\//g, "-");
       const filename = (
-        phase: string,
-        projection = phase === "facts"
-          ? "|projection=facts-v1-contained-prompts"
-          : phase === "security"
-            ? "|projection=security-v1-contained-metadata"
-            : ""
-      ) =>
-        `${name}${phase === "facts" ? "" : "-" + phase}-${createHash("sha256")
-          .update(baseSeed + (phase === "facts" ? "" : "|phase=" + phase) + projection)
-          .digest("hex")
-          .slice(0, 16)}.json`;
+        phase: CachePhase,
+        projection?: string,
+        generationOptions = entry.generationOptions
+      ) => projectedCacheFilename({ ...entry, generationOptions }, phase, projection);
       const v8 = filename("deps", "|projection=mixed-ecosystems-v8-go-literals");
       const current = filename("deps", "|projection=mixed-ecosystems-v12-contained-metadata");
       expect(deps!.file).toBe(current);
@@ -156,7 +133,13 @@ describe("actual bounded root requirements logical-line exports", () => {
         "security",
       ]);
       for (const other of retained) {
-        expect(other.file).toBe(filename(JSON.parse(other.text).phase));
+        expect(other.file).toBe(
+          filename(
+            JSON.parse(other.text).phase,
+            undefined,
+            JSON.parse(other.text).generationOptions
+          )
+        );
         await writeFile(join(second.cache, other.file), other.text);
       }
       entry.value = {

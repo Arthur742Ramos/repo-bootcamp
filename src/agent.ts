@@ -6,6 +6,7 @@
 import chalk from "chalk";
 import * as fs from "fs";
 import * as path from "path";
+import { createHash } from "crypto";
 import type {
   AnalyzeRepoDependencies,
   BootcampOptions,
@@ -289,6 +290,41 @@ export function formatCustomPromptSection(customPrompt?: string | null): string 
     return "";
   }
   return `\n## Repository Guidance (.bootcamp-prompts.md)\n${customPrompt}\n`;
+}
+
+/** The effective prompt inputs, resolved once for cache identity and execution. */
+export interface ResolvedAnalysisInputs {
+  fast: boolean;
+  customPrompt: string | null;
+  styleConfig: StyleConfig;
+  systemPrompt: string;
+  fingerprint: string;
+}
+
+export function resolveAnalysisInputs(
+  repoPath: string,
+  options: BootcampOptions,
+  styleConfigOverride?: StyleConfig
+): ResolvedAnalysisInputs {
+  const fast = Boolean(options.fast);
+  const styleConfig = styleConfigOverride || getStyleConfig(options.style);
+  const customPrompt = readCustomPrompt(repoPath, options.repoPrompts);
+  const systemPrompt = options.systemPrompt?.trim() || buildSystemPrompt(styleConfig, fast);
+  // Hash effective content, including only style settings used by prompts.
+  // File paths and output-only style settings do not affect model behavior.
+  const descriptor = [
+    fast ? "fast" : "full",
+    systemPrompt,
+    customPrompt,
+    formatStylePromptSection(styleConfig),
+  ];
+  return {
+    fast,
+    customPrompt,
+    styleConfig,
+    systemPrompt,
+    fingerprint: createHash("sha256").update(JSON.stringify(descriptor)).digest("hex"),
+  };
 }
 
 function getAudiencePromptGuidance(audience: BootcampOptions["audience"]): string {
@@ -919,7 +955,8 @@ export async function analyzeRepo(
   options: BootcampOptions,
   onProgress?: (message: string) => void,
   styleConfigOverride?: StyleConfig,
-  dependencies?: AnalyzeRepoDependencies
+  dependencies?: AnalyzeRepoDependencies,
+  resolvedInputs?: ResolvedAnalysisInputs
 ): Promise<{ facts: RepoFacts; stats: AnalysisStats }> {
   const stats: AnalysisStats = {
     model: "",
@@ -930,11 +967,8 @@ export async function analyzeRepo(
   };
 
   const client = await resolveLlmClient(dependencies);
-  const customPrompt = readCustomPrompt(repoPath, options.repoPrompts);
-  const resolvedStyleConfig = styleConfigOverride || getStyleConfig(options.style);
-  const configuredSystemPrompt = options.systemPrompt?.trim();
-  const standardSystemPrompt = configuredSystemPrompt || buildSystemPrompt(resolvedStyleConfig);
-  const fastSystemPrompt = configuredSystemPrompt || buildSystemPrompt(resolvedStyleConfig, true);
+  const inputs = resolvedInputs || resolveAnalysisInputs(repoPath, options, styleConfigOverride);
+  const { customPrompt, styleConfig: resolvedStyleConfig, systemPrompt } = inputs;
 
   if (customPrompt) {
     const source = options.repoPrompts || path.join(repoPath, CUSTOM_PROMPT_FILE);
@@ -944,13 +978,13 @@ export async function analyzeRepo(
   }
 
   // Fast mode: no tools, inline file contents
-  if (options.fast) {
+  if (inputs.fast) {
     try {
       const { session, model } = await createSessionWithFallback(
         client,
         {
           streaming: true,
-          systemMessage: { content: fastSystemPrompt },
+          systemMessage: { content: systemPrompt },
           // No tools in fast mode
         },
         options.verbose,
@@ -1049,7 +1083,7 @@ export async function analyzeRepo(
       client,
       {
         streaming: true,
-        systemMessage: { content: standardSystemPrompt },
+        systemMessage: { content: systemPrompt },
         tools,
       },
       options.verbose,

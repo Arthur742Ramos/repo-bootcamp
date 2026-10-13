@@ -4,7 +4,8 @@ on:
   push:
     branches: [main, master]
   pull_request:
-    branches: [main, master]
+    # Run the same gates for stacked campaign drafts as for main-targeted PRs.
+    branches: ["**"]
 
 jobs:
   test:

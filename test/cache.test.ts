@@ -72,7 +72,7 @@ describe("cache", () => {
       await mkdir(cacheDir, { recursive: true });
       const { createHash } = await import("crypto");
       const hash = createHash("sha256")
-        .update("corrupt/repo@sha123|projection=facts-v1-contained-prompts")
+        .update("corrupt/repo@sha123|projection=facts-v2-effective-analysis-inputs")
         .digest("hex")
         .substring(0, 16);
       const filePath = join(cacheDir, `corrupt-repo-${hash}.json`);
@@ -95,7 +95,7 @@ describe("cache", () => {
       const cacheDir = getCacheDir();
       const { createHash } = await import("crypto");
       const hash = createHash("sha256")
-        .update(`${testRepo}@${testSha}|projection=facts-v1-contained-prompts`)
+        .update(`${testRepo}@${testSha}|projection=facts-v2-effective-analysis-inputs`)
         .digest("hex")
         .substring(0, 16);
       const safeName = testRepo.replace(/\//g, "-");

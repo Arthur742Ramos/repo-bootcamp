@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "crypto";
-import { analyzeRepo, type AnalysisStats } from "../agent.js";
+import { analyzeRepo, resolveAnalysisInputs, type AnalysisStats } from "../agent.js";
 import { runParallelAnalysis } from "../analysis.js";
 import { readCache, writeCache, type CacheGenerationOptions } from "../cache.js";
 import { analyzeDiff, generateDiffDocs } from "../diff.js";
@@ -31,6 +31,7 @@ import type {
   TechRadar,
 } from "../types.js";
 import chalk from "chalk";
+import { getErrorMessage } from "../utils.js";
 
 export interface GeneratedDoc {
   name: string;
@@ -115,19 +116,21 @@ export async function orchestrateAnalysis({
 }: OrchestrateAnalysisParams): Promise<OrchestratedAnalysisResult> {
   // The LLM "facts" phase is by far the most expensive step (a Copilot call
   // against a ~10-minute budget). Cache it by repo + commit + generation
-  // options so a same-commit re-run — e.g. changing --format/--style, adding
+  // options so a same-commit re-run - e.g. changing --format, adding
   // --stats, or regenerating after a delete — can reuse the previous result
   // instead of re-paying the model. A cache key needs a commit SHA; local
   // --no-clone runs without one simply skip the cache.
+  const resolvedInputs = resolveAnalysisInputs(repoPath, options, styleConfig);
   const generationOptions: CacheGenerationOptions = {
     focus: options.focus,
-    style: options.style,
+    style: resolvedInputs.styleConfig.name,
     model: options.model,
     audience: options.audience,
     maxFiles: options.maxFiles,
     subdir: options.subdir,
     exclude: options.exclude,
     scanFingerprint: fingerprintScan(scanResult),
+    analysisFingerprint: resolvedInputs.fingerprint,
   };
   const cacheEligible = !options.noCache && Boolean(repoInfo.commitSha);
 
@@ -169,16 +172,24 @@ export async function orchestrateAnalysis({
       }
       progress.update(msg);
     },
-    styleConfig
+    styleConfig,
+    undefined,
+    resolvedInputs
   );
 
   const durationMs = Date.now() - analysisStart;
   progress.succeed("Analysis complete");
 
   if (cacheEligible) {
-    // Persist on a miss so the next same-commit run is a hit. Failures are
-    // swallowed by writeCache's own error handling — caching is best-effort.
-    await writeCache(repoInfo.fullName, repoInfo.commitSha!, result.facts, generationOptions);
+    // Only optional cache persistence is best-effort. Analysis and output
+    // failures still propagate through their own error boundaries.
+    try {
+      await writeCache(repoInfo.fullName, repoInfo.commitSha!, result.facts, generationOptions);
+    } catch (error: unknown) {
+      if (options.verbose || process.env.DEBUG) {
+        console.warn(`[cache] Could not persist analysis cache: ${getErrorMessage(error)}`);
+      }
+    }
   }
 
   return {
