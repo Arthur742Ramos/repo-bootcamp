@@ -1,0 +1,2 @@
+# Keep formatter inputs consistent on Windows and Unix, including autocrlf checkouts.
+* text=auto eol=lf

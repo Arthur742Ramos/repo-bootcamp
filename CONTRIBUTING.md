@@ -79,6 +79,11 @@ npm run test:coverage
 
 ## Code Style Guidelines
 
+Text files use LF line endings on every platform through `.gitattributes`, including
+fresh Windows checkouts with `core.autocrlf=true`. Prettier checks the same policy.
+For an existing CRLF checkout, save local changes before running `npm run format`;
+an otherwise formatted checkout should change only line endings.
+
 - **TypeScript**: All code should be written in TypeScript
 - **Formatting**: Follow the existing code style in the project
 - **Types**: Prefer explicit types over `any`
