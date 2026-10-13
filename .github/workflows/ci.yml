@@ -149,7 +149,9 @@ jobs:
         run: npm ci
 
       - name: Run CLI end-to-end tests
-        run: npm run test:e2e:cli
+        # Bound concurrent tsx/CLI startup on Windows runner CPUs. Individual
+        # fixture process timeouts and behavioral assertions remain unchanged.
+        run: npm run test:e2e:cli -- --maxWorkers=2
 
   lint:
     name: Lint
