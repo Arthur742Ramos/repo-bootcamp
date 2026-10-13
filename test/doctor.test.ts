@@ -4,6 +4,7 @@ import {
   formatDoctorReport,
   parseNodeMajor,
   MIN_NODE_MAJOR,
+  isSupportedNodeVersion,
   type EnvironmentSnapshot,
 } from "../src/doctor.js";
 import { runDoctor, colorizeReport, buildDoctorJson } from "../src/commands/doctor-command.js";
@@ -11,7 +12,7 @@ import { runDoctor, colorizeReport, buildDoctorJson } from "../src/commands/doct
 function env(overrides: Partial<EnvironmentSnapshot> = {}): EnvironmentSnapshot {
   return {
     toolVersion: "1.0.0",
-    nodeVersion: "v20.11.0",
+    nodeVersion: "v22.18.0",
     platform: "linux",
     arch: "x64",
     gitVersion: "git version 2.43.0",
@@ -40,6 +41,22 @@ describe("parseNodeMajor", () => {
 });
 
 describe("evaluateDoctor", () => {
+  it.each(["v20.20.2", "v22.17.9", "v23.0.0", "v22.18.0-rc.1", "not-a-version"])(
+    "rejects unsupported runtime %s",
+    (nodeVersion) => {
+      expect(isSupportedNodeVersion(nodeVersion)).toBe(false);
+      expect(
+        evaluateDoctor(env({ nodeVersion })).checks.find((check) => check.id === "node")?.status
+      ).toBe("fail");
+    }
+  );
+  it.each(["v22.18.0", "22.18.1", "v22.20.0", "v24.0.0", "v26.0.0"])(
+    "accepts supported runtime %s",
+    (nodeVersion) => {
+      expect(isSupportedNodeVersion(nodeVersion)).toBe(true);
+      expect(evaluateDoctor(env({ nodeVersion })).ok).toBe(true);
+    }
+  );
   it("passes when the environment is healthy", () => {
     const report = evaluateDoctor(env());
     expect(report.ok).toBe(true);
@@ -157,7 +174,7 @@ describe("runDoctor", () => {
     const payload = JSON.parse(log.mock.calls[0][0] as string);
     expect(payload.ok).toBe(true);
     expect(Array.isArray(payload.checks)).toBe(true);
-    expect(payload.environment.nodeVersion).toBe("v20.11.0");
+    expect(payload.environment.nodeVersion).toBe("v22.18.0");
     expect(payload.environment.toolVersion).toBe("1.0.0");
   });
 });

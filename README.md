@@ -20,7 +20,7 @@
 [![npm downloads](https://img.shields.io/npm/dm/repo-bootcamp)](https://www.npmjs.com/package/repo-bootcamp)
 [![npm provenance](https://img.shields.io/badge/npm-provenance-enabled-2ea44f?logo=npm)](https://docs.npmjs.com/generating-provenance-statements)
 [![codecov](https://codecov.io/gh/Arthur742Ramos/repo-bootcamp/branch/main/graph/badge.svg)](https://codecov.io/gh/Arthur742Ramos/repo-bootcamp)
-[![Node.js](https://img.shields.io/badge/node-%3E%3D20-brightgreen)](https://nodejs.org/)
+[![Node.js](<https://img.shields.io/badge/node-22.x%20(%3E%3D22.18)%20%7C%20%3E%3D24-brightgreen>)](https://nodejs.org/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-6.0-blue)](https://www.typescriptlang.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
@@ -1396,15 +1396,15 @@ npm run test:coverage
 
 ### CI Quality Gates
 
-- Test matrix runs on Node.js 20, 22, and 24.
+- Test matrix runs on Node.js 22.18.0, latest 22, and 24.
 - CI separates `lint`, `typecheck`, and `test` checks.
 - Pull requests run dependency review scanning.
 - CI generates and uploads an SPDX SBOM artifact (`sbom.spdx.json`).
-- Coverage is uploaded from the Node 20 lane and validated with Vitest thresholds.
+- Coverage is uploaded from the Node 24 lane and validated with Vitest thresholds.
 
 ## Requirements
 
-- Node.js 20+
+- Node.js 22.18+ on the 22.x line, or Node.js 24+ (24 recommended)
 - GitHub Copilot SDK access (requires GitHub Copilot subscription)
 - `GITHUB_TOKEN` environment variable for API authentication (provided by Copilot SDK)
 - `gh` CLI (optional, for `--create-issues`)
@@ -1421,7 +1421,7 @@ Set `--model` to override.
 
 ## Tech Stack
 
-- **Runtime:** Node.js 20+
+- **Runtime:** Node.js 22.18+ on the 22.x line, or Node.js 24+ (24 recommended)
 - **Language:** TypeScript 6.0
 - **AI:** GitHub Copilot SDK with Claude
 - **Testing:** Vitest (1,270+ tests)
