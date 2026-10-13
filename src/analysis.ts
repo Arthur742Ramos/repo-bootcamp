@@ -1,5 +1,4 @@
-import { readFile } from "fs/promises";
-import { join } from "path";
+import { readContainedFile } from "./fs-safe.js";
 
 import {
   pruneCache,
@@ -93,9 +92,9 @@ export async function runParallelAnalysis(
     return deps;
   });
 
-  const packageJsonPromise: Promise<Record<string, unknown> | undefined> = readFile(
-    join(repoPath, "package.json"),
-    "utf-8"
+  const packageJsonPromise: Promise<Record<string, unknown> | undefined> = readContainedFile(
+    repoPath,
+    "package.json"
   )
     .then((pkgContent) => JSON.parse(pkgContent) as Record<string, unknown>)
     .catch(() => undefined);

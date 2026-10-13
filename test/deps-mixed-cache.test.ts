@@ -351,7 +351,7 @@ dependencies = ["requests>=2.28; python_version >= \"3.10\" and platform_system 
       await writeFile(oldPath, await readFile(entry.path));
       await rm(entry.path);
       expect((await readPhaseCache("deps", repo, sha)).hit).toBe(false);
-      for (const phase of ["facts", "security", "impact", "cycles"] as CachePhase[]) {
+      for (const phase of ["impact", "cycles"] as CachePhase[]) {
         const value = { preserved: phase };
         await writePhaseCache(phase, repo, sha, value);
         const seed = `${repo}@${sha}${phase === "facts" ? "" : `|phase=${phase}`}`;

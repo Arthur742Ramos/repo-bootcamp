@@ -11,7 +11,8 @@
 
 import { join } from "path";
 import { execFileSync } from "child_process";
-import { readFileSafe, README_NAMES } from "./utils.js";
+import { README_NAMES } from "./utils.js";
+import { readContainedFileOrNull } from "./fs-safe.js";
 
 export interface VersionMismatch {
   type: "node" | "python" | "npm" | "other";
@@ -64,7 +65,7 @@ export interface DocsAnalysisResult {
  * Parse package.json from repo
  */
 async function getPackageJson(repoPath: string): Promise<Record<string, unknown> | null> {
-  const content = await readFileSafe(join(repoPath, "package.json"));
+  const content = await readContainedFileOrNull(repoPath, "package.json");
   if (!content) return null;
   try {
     return JSON.parse(content);
@@ -78,7 +79,7 @@ async function getPackageJson(repoPath: string): Promise<Record<string, unknown>
  */
 async function getReadme(repoPath: string): Promise<string | null> {
   for (const name of README_NAMES) {
-    const content = await readFileSafe(join(repoPath, name));
+    const content = await readContainedFileOrNull(repoPath, name);
     if (content) return content;
   }
   return null;
@@ -157,7 +158,7 @@ export async function analyzeVersionMismatches(repoPath: string): Promise<Versio
   }
 
   // Check Python version if pyproject.toml exists
-  const pyproject = await readFileSafe(join(repoPath, "pyproject.toml"));
+  const pyproject = await readContainedFileOrNull(repoPath, "pyproject.toml");
   if (pyproject) {
     const pyVersionMatch = pyproject.match(/python\s*=\s*["']([^"']+)["']/i);
     if (pyVersionMatch) {
@@ -383,9 +384,9 @@ export async function analyzePrerequisites(repoPath: string): Promise<Prerequisi
 
   // Check for docker-compose or Dockerfile
   const hasDocker =
-    (await readFileSafe(join(repoPath, "docker-compose.yml"))) !== null ||
-    (await readFileSafe(join(repoPath, "docker-compose.yaml"))) !== null ||
-    (await readFileSafe(join(repoPath, "Dockerfile"))) !== null;
+    (await readContainedFileOrNull(repoPath, "docker-compose.yml")) !== null ||
+    (await readContainedFileOrNull(repoPath, "docker-compose.yaml")) !== null ||
+    (await readContainedFileOrNull(repoPath, "Dockerfile")) !== null;
   if (hasDocker) tools.docker = true;
 
   // Check if prerequisites are documented
@@ -408,7 +409,7 @@ export async function analyzePrerequisites(repoPath: string): Promise<Prerequisi
   }
 
   // Check for .env.example and env var documentation
-  const envExample = await readFileSafe(join(repoPath, ".env.example"));
+  const envExample = await readContainedFileOrNull(repoPath, ".env.example");
   if (envExample) {
     const envVars = envExample.match(/^([A-Z][A-Z0-9_]+)=/gm) || [];
     for (const envVar of envVars) {

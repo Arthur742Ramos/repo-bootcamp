@@ -234,7 +234,14 @@ describe("actual bounded root local-reference admission exports", () => {
         (fingerprint === JSON.stringify(["", "", "", "", null, "", [], ""])
           ? ""
           : "|" + fingerprint);
-      const filename = (phase: string, projection = "") =>
+      const filename = (
+        phase: string,
+        projection = phase === "facts"
+          ? "|projection=facts-v1-contained-prompts"
+          : phase === "security"
+            ? "|projection=security-v1-contained-metadata"
+            : ""
+      ) =>
         `${entry.repoFullName.replace(/\//g, "-")}${phase === "facts" ? "" : "-" + phase}-${createHash(
           "sha256"
         )
@@ -242,10 +249,7 @@ describe("actual bounded root local-reference admission exports", () => {
           .digest("hex")
           .slice(0, 16)}.json`;
       const v9 = filename("deps", "|projection=mixed-ecosystems-v9-pip-logical-lines");
-      const current = filename(
-        "deps",
-        "|projection=mixed-ecosystems-v11-tooling-pyproject-fallback"
-      );
+      const current = filename("deps", "|projection=mixed-ecosystems-v12-contained-metadata");
       expect(deps!.file).toBe(current);
       const second = await ownedProcess(owned);
       expect(second.home).not.toBe(first.owner.home);
