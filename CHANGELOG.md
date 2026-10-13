@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Bound implicit manifest and default repository-prompt reads to contained regular files; preserve explicit external prompt overrides and invalidate affected cached projections.
+- Include effective system/repository prompt content, resolved prompt style and fast/full mode in facts-cache identity. Reject malformed facts and deterministic phase payloads, and preserve successful analysis when optional cache persistence fails.
+- Align the supported runtime with locked dependencies: Node 22.18 or later in the 22.x series, or Node 24 and later. Verify packed CLI/API and JSON/TypeScript configuration loading at the exact minimum.
+- Keep repository text in LF on Windows and Unix and restore strict typing for test fixtures and mocks, with a separate CI test-contract gate.
+- Refresh measured repository inventory and qualify generation-time claims without a live-model benchmark.
+
 - Index Cargo declaration offsets in one occurrence pass, preserving exact inventory/source ordering while avoiding repeated scans for large manifests.
 
 - Decode valid quoted Go require module/version tokens and isolate lexical comments, retaining first-occurrence declared inventory without quote characters or comment suffixes; refresh dependency-cache identity
