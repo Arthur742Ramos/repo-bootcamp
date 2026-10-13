@@ -40,6 +40,20 @@ passed both cases. This was a cleanup failure after the assertions, not evidence
 of a product regression. Later draft CI must be checked on its own head; an older
 green run does not qualify a changed commit.
 
+The original test-contract draft's
+[complete CI](https://github.com/Arthur742Ramos/repo-bootcamp/actions/runs/38323906735)
+passed for `aadcab079fada8a8b5e70a6616471e236fe33b16`, including full test typing,
+CLI and browser regressions. The original documentation draft also
+[passed CI](https://github.com/Arthur742Ramos/repo-bootcamp/actions/runs/38324156404)
+for `f0b5812ccb6ca938350bd1f79b72339f34483d5b`.
+
+Two earlier runtime/LF Windows CI runs hit existing 30-second fixture-process
+deadlines in different command-guidance cases; completed generation was present
+in some output. All 23 controls passed a bounded two-worker Node 24 replay. The
+Windows CLI job now uses that worker budget and reports child process errors
+explicitly. Generation code, timeouts, assertions and skip policy are unchanged.
+Each final integrated head still needs its own successful CI run.
+
 All application generation regressions used saved responses or injected fixture
 clients. No fresh live-model quality, provider availability, generation-time,
 large-repository memory or manual browser accessibility evaluation was performed.
