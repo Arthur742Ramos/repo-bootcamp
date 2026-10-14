@@ -42,7 +42,10 @@ function commit(dir: string, name: string): void {
   git(dir, ["commit", "--no-gpg-sign", "-m", name]);
 }
 afterEach(async () => {
-  await Promise.all(dirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })));
+  // Git fixture removal can briefly race filesystem cleanup on busy runners.
+  await Promise.all(
+    dirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true, maxRetries: 3 }))
+  );
 });
 
 describe("literal Git changed paths", () => {
