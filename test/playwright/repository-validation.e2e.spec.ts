@@ -70,3 +70,39 @@ test("accepted parser forms reach the server unchanged with their run options", 
   }
   expect(submissions).toHaveLength(4);
 });
+
+for (const edit of ["repoUrl", "branch"] as const) {
+  test(`a delayed repository rejection preserves an edited ${edit} draft and its focus`, async ({
+    page,
+  }) => {
+    let release!: () => void;
+    let started!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const pending = new Promise<void>((resolve) => {
+      started = resolve;
+    });
+    await page.route("**/api/analyze", async (route) => {
+      started();
+      await gate;
+      await route.fulfill({
+        status: 400,
+        json: { error: "Rejected submitted repository", field: "repoUrl" },
+      });
+    });
+    await page.locator("#repoUrl").fill("invalid-repository");
+    await page.getByRole("button", { name: "Analyze", exact: true }).click();
+    await pending;
+    await page.locator("#advancedOptions").evaluate((el) => {
+      (el as HTMLDetailsElement).open = true;
+    });
+    await page.locator("#" + edit).fill(edit === "repoUrl" ? "owner/corrected" : "release-edited");
+    release();
+    await expect(page.getByRole("button", { name: "Analyze", exact: true })).toBeEnabled();
+    await expect(page.locator("#repoUrl")).not.toHaveAttribute("aria-invalid", "true");
+    await expect(page.locator("#repoUrlError")).toBeHidden();
+    await expect(page.locator("#" + edit)).toBeFocused();
+    await expect(page.locator("#retryBtn")).toBeHidden();
+  });
+}

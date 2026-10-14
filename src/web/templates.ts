@@ -917,6 +917,7 @@ export function getIndexHtml(nonce?: string): string {
 
     async function analyze() {
       analysisInputRevision += 1;
+      const submittedInputRevision = analysisInputRevision;
       const repoUrl = document.getElementById('repoUrl').value.trim();
       // Loose non-empty check only: parseGitHubUrl accepts owner/repo, SSH, and
       // scheme-less forms server-side, so strict URL validation here would reject
@@ -974,9 +975,11 @@ export function getIndexHtml(nonce?: string): string {
           document.getElementById('advancedOptions').open = true;
           document.getElementById('subdir').focus();
         } else if (err && err.field === 'repoUrl') {
-          setUrlError(message);
           document.getElementById('progress').hidden = true;
-          document.getElementById('repoUrl').focus();
+          if (submittedInputRevision === analysisInputRevision) {
+            setUrlError(message);
+            document.getElementById('repoUrl').focus();
+          }
         }
         finishPhaseRail('error');
         stopProgressClock();
