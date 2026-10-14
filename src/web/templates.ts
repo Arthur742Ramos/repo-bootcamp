@@ -774,7 +774,7 @@ export function getIndexHtml(nonce?: string): string {
       }
       if (!response.ok) {
         const error = new Error(typeof payload.error === 'string' ? payload.error : requestErrorMessage(response.status));
-        if (payload.field === 'subdir') error.field = 'subdir';
+        if (payload.field === 'subdir' || payload.field === 'repoUrl') error.field = payload.field;
         throw error;
       }
       return payload;
@@ -973,11 +973,15 @@ export function getIndexHtml(nonce?: string): string {
           setSubdirError(message);
           document.getElementById('advancedOptions').open = true;
           document.getElementById('subdir').focus();
+        } else if (err && err.field === 'repoUrl') {
+          setUrlError(message);
+          document.getElementById('progress').hidden = true;
+          document.getElementById('repoUrl').focus();
         }
         finishPhaseRail('error');
         stopProgressClock();
         resetButton();
-        document.getElementById('retryBtn').hidden = false;
+        document.getElementById('retryBtn').hidden = Boolean(err && err.field === 'repoUrl');
       }
     }
 

@@ -124,6 +124,7 @@ describe("web routes", () => {
         .post("/api/analyze")
         .send({});
       expect(res.status).toBe(400);
+      expect(res.body.field).toBe("repoUrl");
     });
 
     it("rejects non-string repoUrl", async () => {
@@ -132,6 +133,7 @@ describe("web routes", () => {
         .post("/api/analyze")
         .send({ repoUrl: 123 });
       expect(res.status).toBe(400);
+      expect(res.body.field).toBe("repoUrl");
     });
 
     it("rejects too-long repoUrl", async () => {
@@ -140,6 +142,7 @@ describe("web routes", () => {
         .post("/api/analyze")
         .send({ repoUrl: "x".repeat(501) });
       expect(res.status).toBe(400);
+      expect(res.body.field).toBe("repoUrl");
     });
 
     it("rejects invalid GitHub URL", async () => {
@@ -148,6 +151,7 @@ describe("web routes", () => {
         .post("/api/analyze")
         .send({ repoUrl: "invalid-url" });
       expect(res.status).toBe(400);
+      expect(res.body.field).toBe("repoUrl");
     });
 
     it("rejects non-object body", async () => {
