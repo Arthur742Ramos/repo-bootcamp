@@ -33,7 +33,11 @@ for (const width of [1440, 320]) {
       await messages.evaluate((el) => el.scrollHeight - el.clientHeight - el.scrollTop)
     ).toBeLessThan(5);
     await messages.focus();
+    await expect(messages).toBeFocused();
     await page.keyboard.press("Home");
+    // Native Home scrolling can animate on Linux. Let that keyboard action
+    // settle before choosing a different reading position for the append check.
+    await expect.poll(() => messages.evaluate((el) => el.scrollTop)).toBe(0);
     await messages.evaluate((el) => {
       el.scrollTop = 80;
     });
