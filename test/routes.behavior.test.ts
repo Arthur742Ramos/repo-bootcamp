@@ -224,11 +224,17 @@ describe("web routes analysis lifecycle", () => {
     const completedCancelResponse = await http.post(`/api/jobs/${jobId}/cancel`);
     expect(completedCancelResponse.status).toBe(409);
 
+    mocks.quickAsk.mockResolvedValueOnce(
+      "Start with src/index.ts. Read [kit](BOOTCAMP.md) or [missing](MISSING.md)."
+    );
     const askResponse = await http.post(`/api/jobs/${jobId}/ask`).send({
       question: "Where should I start reading?",
     });
     expect(askResponse.status).toBe(200);
     expect(askResponse.body.answer).toContain("src/index.ts");
+    expect(askResponse.body.html).toContain("src/index.ts");
+    expect(askResponse.body.html).toContain('<a href="BOOTCAMP.md">kit</a>');
+    expect(askResponse.body.html).not.toContain('href="MISSING.md"');
     expect(mocks.quickAsk).toHaveBeenCalledWith(
       "/tmp/mock-routes-repo",
       expect.objectContaining({ fullName: "owner/repo" }),

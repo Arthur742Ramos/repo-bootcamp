@@ -15,6 +15,19 @@ import {
 } from "../src/formatter.js";
 
 describe("markdownToHtml", () => {
+  it("opts into exact available generated Markdown links without changing default URL policy", () => {
+    const answer =
+      "[guide](ARCHITECTURE.md#overview) [missing](MISSING.md) [unsafe](javascript:alert)";
+    expect(markdownToHtml(answer)).not.toContain("href=");
+    const options = { linkedFiles: ["ARCHITECTURE.md", "javascript:alert"] };
+    const html = markdownToHtml(answer, options);
+    expect(html).toContain('<a href="ARCHITECTURE.md#overview">guide</a>');
+    expect(html.match(/href=/g)).toHaveLength(1);
+    expect(markdownToHtml("`[guide](ARCHITECTURE.md)`", options)).toBe(
+      "<p><code>[guide](ARCHITECTURE.md)</code></p>"
+    );
+    expect(markdownToHtml("```\n[guide](ARCHITECTURE.md)\n```", options)).not.toContain("href=");
+  });
   it("keeps command-line backticks inside a line-delimited code block", () => {
     const command = "npm run 'dev```literal```'\necho AFTER";
     const html = markdownToHtml("```bash\n" + command + "\n```\n[Next](./ONBOARDING.md)");

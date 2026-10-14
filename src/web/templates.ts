@@ -312,6 +312,7 @@ export function getIndexHtml(nonce?: string): string {
     .ask-answer { color: var(--ink); font-size: 0.8125rem; line-height: 1.55; margin-top: 0.75rem; white-space: pre-wrap; }
     .ask-answer.error { color: var(--danger); }
     .ask-answer[hidden] { display: none; }
+    .ask-answer.markdown-preview { white-space: normal; font-size: 0.8125rem; }
     .files-heading-copy { display: flex; align-items: baseline; gap: 0.65rem; min-width: 0; }
     .file-count { color: var(--ink-muted); font: 0.72rem var(--font-mono); white-space: nowrap; }
     #fileSearch { flex: 1; max-width: 340px; padding: 0.65rem 0.75rem; }
@@ -612,7 +613,7 @@ export function getIndexHtml(nonce?: string): string {
               <input id="askQuestion" type="text" maxlength="1000" placeholder="Where should I start reading?" aria-label="Ask a question about this repository" />
               <button class="secondary-btn" type="submit" id="askBtn">Ask</button>
             </form>
-            <p class="ask-answer" id="askAnswer" role="status" hidden></p>
+            <div class="ask-answer" id="askAnswer" role="status" hidden></div>
           </details>
         </section>
         <section class="summary-panel" aria-labelledby="nextStepsHeading">
@@ -1605,7 +1606,8 @@ export function getIndexHtml(nonce?: string): string {
     // HTML directly: discard active elements, attributes, images and unsafe URLs.
     const getHeadingAnchor = ${getHeadingAnchor.toString()};
 
-    function renderDocument(html) {
+    function renderDocument(html, target = document.getElementById('renderedContent')) {
+      const inReader = target.id === 'renderedContent';
       const template = document.createElement('template');
       template.innerHTML = html;
       const allowed = new Set(['P', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6', 'UL', 'OL', 'LI',
@@ -1629,7 +1631,7 @@ export function getIndexHtml(nonce?: string): string {
             element.setAttribute('href', href);
             element.setAttribute('target', '_blank');
             element.setAttribute('rel', 'noopener noreferrer');
-          } else if (href.startsWith('#')) {
+          } else if (inReader && href.startsWith('#')) {
             element.setAttribute('href', href);
             element.addEventListener('click', event => {
               event.preventDefault();
@@ -1661,15 +1663,14 @@ export function getIndexHtml(nonce?: string): string {
           element.setAttribute('role', 'region');
           element.setAttribute('aria-label', 'Code block');
         }
-        if (/^H[1-6]$/.test(node.tagName)) {
+        if (inReader && /^H[1-6]$/.test(node.tagName)) {
           element.dataset.anchor = getHeadingAnchor(element.textContent, headingCounts, headingAnchors);
           element.tabIndex = -1;
         }
         return element;
       }
-      const target = document.getElementById('renderedContent');
       target.replaceChildren(...Array.from(template.content.childNodes, copy));
-      buildPreviewOutline();
+      if (inReader) buildPreviewOutline();
     }
 
     function setPreviewMode(rendered) {
@@ -1934,6 +1935,7 @@ export function getIndexHtml(nonce?: string): string {
       answer.textContent = '';
       answer.hidden = true;
       answer.classList.remove('error');
+      answer.classList.remove('markdown-preview');
       const btn = document.getElementById('askBtn');
       btn.disabled = false;
       btn.textContent = 'Ask';
@@ -1957,6 +1959,7 @@ export function getIndexHtml(nonce?: string): string {
       btn.disabled = true;
       btn.textContent = 'Thinking…';
       answer.classList.remove('error');
+      answer.classList.remove('markdown-preview');
       answer.hidden = false;
       answer.textContent = 'Reading the repository…';
       try {
@@ -1969,7 +1972,12 @@ export function getIndexHtml(nonce?: string): string {
         if (!isCurrentQuestion()) return;
         const payload = await readJsonResponse(response);
         if (!isCurrentQuestion()) return;
-        answer.textContent = typeof payload.answer === 'string' ? payload.answer : 'No answer was returned.';
+        if (typeof payload.answer === 'string' && typeof payload.html === 'string') {
+          renderDocument(payload.html, answer);
+          answer.classList.add('markdown-preview');
+        } else {
+          answer.textContent = typeof payload.answer === 'string' ? payload.answer : 'No answer was returned.';
+        }
       } catch (error) {
         if (!isCurrentQuestion()) return;
         answer.classList.add('error');

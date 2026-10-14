@@ -79,12 +79,17 @@ function getMermaidRuntime(body: string): string {
 /**
  * Convert inline markdown formatting to HTML.
  */
-function convertInlineFormatting(line: string): string {
+function convertInlineFormatting(line: string, linkedFiles: ReadonlySet<string>): string {
   const isSafeUrl = (value: string, allowRelative: boolean): boolean => {
     const trimmed = value.trim();
     if (/^https?:\/\//i.test(trimmed)) return true;
     if (!allowRelative) return false;
-    return trimmed.startsWith("#") || trimmed.startsWith("./") || trimmed.startsWith("../");
+    if (trimmed.startsWith("#") || trimmed.startsWith("./") || trimmed.startsWith("../"))
+      return true;
+    // Follow-up answers may name a generated Markdown file without ./.
+    // Opt in only to exact available basenames, never schemes or arbitrary paths.
+    const file = trimmed.match(/^([A-Za-z0-9][A-Za-z0-9._-]*\.md)(?:#[^\s]*)?$/)?.[1];
+    return Boolean(file && linkedFiles.has(file));
   };
 
   // Render protected inline constructs as output fragments while walking the
@@ -261,7 +266,11 @@ function readTableCells(line: string): string[] {
  * lists, tables, code blocks, blockquotes, inline formatting, HTML
  * passthrough, and horizontal rules.
  */
-export function markdownToHtml(md: string): string {
+export function markdownToHtml(
+  md: string,
+  { linkedFiles = [] }: { linkedFiles?: readonly string[] } = {}
+): string {
+  const availableLinks = new Set(linkedFiles);
   const lines = md.split("\n");
   const html: string[] = [];
   const headingCounts = new Map<string, number>();
@@ -350,7 +359,7 @@ export function markdownToHtml(md: string): string {
         inTable = false;
       }
       const level = headingMatch[1].length;
-      const headingHtml = convertInlineFormatting(headingMatch[2]);
+      const headingHtml = convertInlineFormatting(headingMatch[2], availableLinks);
       // Match the textContent used by the reader: remove renderer-owned tags
       // before decoding escaped text, so source HTML cannot become markup.
       const headingText = headingHtml
@@ -397,7 +406,7 @@ export function markdownToHtml(md: string): string {
         inTable = false;
       }
       const text = line.replace(/^>\s*/, "");
-      html.push(`<blockquote>${convertInlineFormatting(text)}</blockquote>`);
+      html.push(`<blockquote>${convertInlineFormatting(text, availableLinks)}</blockquote>`);
       continue;
     }
 
@@ -414,11 +423,15 @@ export function markdownToHtml(md: string): string {
         );
         inTable = true;
         html.push(
-          "<tr>" + cells.map((c) => `<th>${convertInlineFormatting(c)}</th>`).join("") + "</tr>"
+          "<tr>" +
+            cells.map((c) => `<th>${convertInlineFormatting(c, availableLinks)}</th>`).join("") +
+            "</tr>"
         );
       } else {
         html.push(
-          "<tr>" + cells.map((c) => `<td>${convertInlineFormatting(c)}</td>`).join("") + "</tr>"
+          "<tr>" +
+            cells.map((c) => `<td>${convertInlineFormatting(c, availableLinks)}</td>`).join("") +
+            "</tr>"
         );
       }
       continue;
@@ -440,7 +453,7 @@ export function markdownToHtml(md: string): string {
       }
       let content = ulMatch[2];
       content = content.replace(/^\[x\]\s*/i, "☑ ").replace(/^\[ \]\s*/, "☐ ");
-      html.push(`<li>${convertInlineFormatting(content)}</li>`);
+      html.push(`<li>${convertInlineFormatting(content, availableLinks)}</li>`);
       continue;
     }
 
@@ -455,7 +468,7 @@ export function markdownToHtml(md: string): string {
         html.push("<ol>");
         inOrderedList = true;
       }
-      html.push(`<li>${convertInlineFormatting(olMatch[1])}</li>`);
+      html.push(`<li>${convertInlineFormatting(olMatch[1], availableLinks)}</li>`);
       continue;
     }
 
@@ -473,7 +486,7 @@ export function markdownToHtml(md: string): string {
     if (line.trim() === "") continue;
 
     // Paragraph
-    html.push(`<p>${convertInlineFormatting(line)}</p>`);
+    html.push(`<p>${convertInlineFormatting(line, availableLinks)}</p>`);
   }
 
   // Close any open lists/tables
