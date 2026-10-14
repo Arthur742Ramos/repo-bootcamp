@@ -229,6 +229,7 @@ describe("web routes analysis lifecycle", () => {
     });
     expect(askResponse.status).toBe(200);
     expect(askResponse.body.answer).toContain("src/index.ts");
+    expect(askResponse.body.html).toContain("src/index.ts");
     expect(mocks.quickAsk).toHaveBeenCalledWith(
       "/tmp/mock-routes-repo",
       expect.objectContaining({ fullName: "owner/repo" }),

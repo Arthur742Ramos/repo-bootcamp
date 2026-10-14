@@ -4,6 +4,55 @@ import { markdownToHtml } from "../../src/formatter.js";
 
 const kyAnswer = "For sindresorhus/ky, read source/core/Ky.ts before documenting retries.";
 const expressAnswer = "For expressjs/express, read lib/application.js before changing routes.";
+const formattedAnswer =
+  "Read `source/core/Ky.ts` first.\n\n1. Read [architecture](./ARCHITECTURE.md)\n2. Review the retry behavior.";
+
+for (const width of [1440, 320]) {
+  test(`formatted answers preserve safe code, lists and available guide links at ${width}px`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: width === 320 ? 640 : 1000 });
+    await page.route("**/ask", (route) =>
+      route.fulfill({
+        json: {
+          answer: formattedAnswer,
+          html:
+            markdownToHtml(formattedAnswer) +
+            '<script>window.answerScriptRan=true</script><img src="/unexpected-image" onerror="window.answerScriptRan=true"><a href="javascript:alert(1)">Unsafe link</a><a href="./MISSING.md">Missing guide</a>',
+        },
+      })
+    );
+    await ask(page, "Where should I begin?");
+    await expect(page.locator("#askAnswer code")).toHaveText("source/core/Ky.ts", {
+      timeout: 2000,
+    });
+    await expect(page.locator("#askAnswer ol li")).toHaveCount(2);
+    await expect(
+      page.locator("#askAnswer script, #askAnswer img, #askAnswer [onerror]")
+    ).toHaveCount(0);
+    await expect(
+      page.locator("#askAnswer a").filter({ hasText: "Unsafe link" })
+    ).not.toHaveAttribute("href");
+    await expect(
+      page.locator("#askAnswer a").filter({ hasText: "Missing guide" })
+    ).not.toHaveAttribute("href");
+    expect(
+      await page.evaluate(
+        () => (window as unknown as { answerScriptRan?: boolean }).answerScriptRan
+      )
+    ).toBeUndefined();
+    await page.locator("#askAnswer").scrollIntoViewIfNeeded();
+    await page.screenshot({ path: test.info().outputPath("formatted-answer.png") });
+    await page.getByRole("link", { name: "architecture", exact: true }).click();
+    await expect(page.locator("#modalTitle")).toHaveText("ARCHITECTURE.md");
+    await page.keyboard.press("Escape");
+    await expect(page.getByRole("link", { name: "architecture", exact: true })).toBeFocused();
+    await expect(page.locator("#askAnswer code")).toHaveText("source/core/Ky.ts");
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
+      true
+    );
+  });
+}
 const taskHeading = "1. Document retries";
 const documents: Record<string, string> = {
   "FIRST_TASKS.md":
