@@ -1649,12 +1649,18 @@ export function getIndexHtml(nonce?: string): string {
     }
 
     function setPreviewMode(rendered) {
-      document.getElementById('modalContent').hidden = rendered;
-      document.getElementById('renderedContent').hidden = !rendered;
+      const source = document.getElementById('modalContent');
+      const documentView = document.getElementById('renderedContent');
+      // Capture focus before hiding its surface. Preserve a visible control the
+      // user chose while loading; only transfer focus that would be displaced.
+      const transferFocus = (rendered ? source : documentView).contains(document.activeElement);
+      source.hidden = rendered;
+      documentView.hidden = !rendered;
       document.getElementById('renderedBtn').setAttribute('aria-pressed', String(rendered));
       document.getElementById('sourceBtn').setAttribute('aria-pressed', String(!rendered));
       document.getElementById('previewOutline').hidden = !rendered || previewHeadings().length < 2;
       updatePreviewToolbarHeight();
+      if (transferFocus) (rendered ? documentView : source).focus({ preventScroll: true });
     }
 
     function updatePreviewBack() {
@@ -2015,8 +2021,7 @@ export function getIndexHtml(nonce?: string): string {
     // a sibling of .container, so inerting .container never traps the dialog.
     function openModal() {
       if (!document.getElementById('modal').classList.contains('show')) lastFocused = document.activeElement;
-      const container = document.querySelector('.container');
-      if (container) {
+      for (const container of document.querySelectorAll('.container, .skip-link')) {
         container.inert = true;
         container.setAttribute('aria-hidden', 'true');
       }
@@ -2043,8 +2048,7 @@ export function getIndexHtml(nonce?: string): string {
       if (!modal.classList.contains('show')) return;
       modal.classList.remove('show');
       modal.setAttribute('aria-hidden', 'true');
-      const container = document.querySelector('.container');
-      if (container) {
+      for (const container of document.querySelectorAll('.container, .skip-link')) {
         // Un-inert before restoring focus, since lastFocused lives inside .container.
         container.inert = false;
         container.removeAttribute('aria-hidden');

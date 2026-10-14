@@ -1,5 +1,10 @@
+import { useMemoryClipboard } from "../helpers/browser-clipboard.js";
 import { expect, test, type Page } from "@playwright/test";
 import { getIndexHtml } from "../../src/web/templates.js";
+
+test.beforeEach(async ({ page }) => {
+  await useMemoryClipboard(page);
+});
 
 const repoUrl = "https://github.com/fixture/monorepo";
 const requested = {
@@ -131,7 +136,6 @@ async function routes(
 for (const branch of ["feature/app", "release/v2.0", ""]) {
   test(`active ${branch || "default root"} reload preserves copied command and actual rerun selections`, async ({
     page,
-    context,
   }) => {
     const options = branch ? { ...requested, branch } : defaults;
     const { submissions } = await routes(page, options);
@@ -153,7 +157,6 @@ for (const branch of ["feature/app", "release/v2.0", ""]) {
         ? ` --branch ${branch} --subdir 'packages/app' --focus architecture --audience frontend --max-files 37`
         : "");
     await expect(page.locator("#cliCommand")).toHaveText(command);
-    await context.grantPermissions(["clipboard-read", "clipboard-write"]);
     await page.getByRole("button", { name: "Copy", exact: true }).click();
     expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(command);
     expect(await page.evaluate(() => localStorage.getItem("repo-bootcamp-job-id"))).toBeNull();
@@ -236,7 +239,6 @@ for (const mode of ["fetch", "json"] as const) {
 for (const editDuringRun of [false, true]) {
   test(`a repository draft edit ${editDuringRun ? "during" : "after"} analysis cannot change its displayed or copied handoff`, async ({
     page,
-    context,
   }) => {
     const { submissions } = await routes(page, defaults);
     await page.locator("#repoUrl").fill(repoUrl);
@@ -260,7 +262,6 @@ for (const editDuringRun of [false, true]) {
     await expect(page.locator("#results")).toHaveClass("results show");
     if (!editDuringRun) await page.locator("#repoUrl").fill(draftUrl);
     await expect(page.locator("#cliCommand")).toHaveText("bootcamp " + repoUrl);
-    await context.grantPermissions(["clipboard-read", "clipboard-write"]);
     await page.getByRole("button", { name: "Copy", exact: true }).click();
     expect(await page.evaluate(() => navigator.clipboard.readText())).toBe("bootcamp " + repoUrl);
     await expect(page.locator("#repoUrl")).toHaveValue(draftUrl);

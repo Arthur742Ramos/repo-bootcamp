@@ -1,3 +1,4 @@
+import { useMemoryClipboard } from "../helpers/browser-clipboard.js";
 import { execFileSync } from "child_process";
 import { once } from "events";
 import { mkdtemp, mkdir, rm, writeFile } from "fs/promises";
@@ -8,6 +9,10 @@ import { pathToFileURL } from "url";
 import { expect, test } from "@playwright/test";
 
 import type { RepoFacts } from "../../src/types.js";
+
+test.beforeEach(async ({ page }) => {
+  await useMemoryClipboard(page);
+});
 import { getAvailablePort, spawnCli, waitForHttpReady, waitForOutput } from "../e2e/helpers.js";
 
 async function createFixtureRepo(baseDir: string): Promise<string> {
@@ -187,12 +192,7 @@ test.describe("web UI", () => {
 
   test("submits analysis, streams progress, and opens generated files in the browser", async ({
     page,
-    context,
   }) => {
-    // The modal Copy button uses navigator.clipboard.writeText; grant the
-    // permission up front so the primary path is exercised (a fallback exists).
-    await context.grantPermissions(["clipboard-read", "clipboard-write"]);
-
     const tempDir = await mkdtemp(join(tmpdir(), "bootcamp-web-ui-e2e-"));
     tempDirs.push(tempDir);
 
