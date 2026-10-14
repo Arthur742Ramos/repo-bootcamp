@@ -5,7 +5,7 @@ import { markdownToHtml } from "../../src/formatter.js";
 const kyAnswer = "For sindresorhus/ky, read source/core/Ky.ts before documenting retries.";
 const expressAnswer = "For expressjs/express, read lib/application.js before changing routes.";
 const formattedAnswer =
-  "Read `source/core/Ky.ts` first.\n\n1. Read [architecture](./ARCHITECTURE.md)\n2. Review the retry behavior.";
+  "Read `source/core/Ky.ts` first.\n\n1. Read [architecture](ARCHITECTURE.md)\n2. Review the retry behavior.";
 
 for (const width of [1440, 320]) {
   test(`formatted answers preserve safe code, lists and available guide links at ${width}px`, async ({
@@ -17,7 +17,7 @@ for (const width of [1440, 320]) {
         json: {
           answer: formattedAnswer,
           html:
-            markdownToHtml(formattedAnswer) +
+            markdownToHtml(formattedAnswer, { linkedFiles: Object.keys(documents) }) +
             '<script>window.answerScriptRan=true</script><img src="/unexpected-image" onerror="window.answerScriptRan=true"><a href="javascript:alert(1)">Unsafe link</a><a href="./MISSING.md">Missing guide</a>',
         },
       })

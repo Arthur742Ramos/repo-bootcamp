@@ -746,7 +746,7 @@ export function registerRoutes(app: Application): void {
           false,
           typeof stats.model === "string" && stats.model !== "cache" ? stats.model : undefined
         );
-        res.json({ answer, html: markdownToHtml(answer) });
+        res.json({ answer, html: markdownToHtml(answer, { linkedFiles: job.result.files }) });
       } catch (error: unknown) {
         console.error(`[web] Follow-up question failed for job ${jobId}:`, error);
         res.status(500).json({ error: "Could not answer that question. Try again shortly." });
