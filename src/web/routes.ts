@@ -498,7 +498,9 @@ export function registerRoutes(app: Application): void {
         const requestOptions = req.body.options;
 
         if (!repoUrl || typeof repoUrl !== "string") {
-          res.status(400).json({ error: "repoUrl is required and must be a string" });
+          res
+            .status(400)
+            .json({ error: "repoUrl is required and must be a string", field: "repoUrl" });
           return;
         }
         if (requestOptions !== undefined && !isObjectRecord(requestOptions)) {
@@ -508,7 +510,7 @@ export function registerRoutes(app: Application): void {
 
         // Limit URL length to prevent abuse
         if (repoUrl.length > 500) {
-          res.status(400).json({ error: "repoUrl too long" });
+          res.status(400).json({ error: "repoUrl too long", field: "repoUrl" });
           return;
         }
 
@@ -517,6 +519,7 @@ export function registerRoutes(app: Application): void {
         } catch {
           res.status(400).json({
             error: "Enter a public GitHub, GitLab, or Bitbucket repository.",
+            field: "repoUrl",
           });
           return;
         }
