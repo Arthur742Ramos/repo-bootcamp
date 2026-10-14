@@ -277,7 +277,9 @@ export function getIndexHtml(nonce?: string): string {
     .result-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; margin: 1rem 0; }
     .result-toolbar-actions { display: flex; gap: 0.5rem; flex-wrap: wrap; }
     .summary-actions { margin-top: 0.9rem; }
-    .command-panel, .quickstart-panel { margin-top: 1rem; border-top: 1px solid var(--border); padding-top: 0.9rem; }
+    .command-panel, .quickstart-panel, .setup-guidance { margin-top: 1rem; border-top: 1px solid var(--border); padding-top: 0.9rem; }
+    .setup-guidance h4 { font-size: 0.875rem; margin-bottom: 0.5rem; }
+    .setup-guidance p { margin-bottom: 0.5rem; overflow-wrap: anywhere; }
     .command-header, .quickstart-header { display: flex; align-items: baseline; justify-content: space-between; gap: 0.75rem; }
     .command-header h4, .quickstart-header h4 { color: var(--ink); font-size: 0.8125rem; }
     .command-header span, .quickstart-header span { color: var(--ink-muted); font-size: 0.7rem; }
@@ -576,6 +578,12 @@ export function getIndexHtml(nonce?: string): string {
           <h3 id="summaryHeading">Start here</h3>
           <p id="summaryDescription">The analysis is complete. Use the commands below, then take the recommended first task.</p>
           <p class="result-meta" id="resultMeta"></p>
+          <section class="setup-guidance" id="setupGuidance" aria-labelledby="setupHeading">
+            <h4 id="setupHeading">Set up this repository</h4>
+            <p id="setupContext"></p>
+            <button class="next-step-action" type="button" id="setupGuideBtn" hidden>Open setup guide</button>
+            <p id="setupFallback">Read the repository's README or contribution guide for prerequisites and installation before running commands.</p>
+          </section>
           <div class="command-panel" id="cliCommandPanel">
             <div class="command-header">
               <h4>Continue in your terminal</h4>
@@ -1431,8 +1439,17 @@ export function getIndexHtml(nonce?: string): string {
       document.getElementById('cliCommand').textContent = buildCliCommand();
       const quickstartCount = renderQuickstartCommands(data.quickstartCommands);
       document.getElementById('summaryDescription').textContent = quickstartCount
-        ? 'The analysis is complete. Run a first command, then take the recommended task.'
-        : 'The analysis is complete. Begin with the recommended task and the generated files below.';
+        ? 'The analysis is complete. Set up the repository, run a first command, then take the recommended task.'
+        : 'The analysis is complete. Set up the repository, then explore the recommended task and generated files below.';
+      const hasSetupGuide = data.files.includes('ONBOARDING.md');
+      document.getElementById('setupGuideBtn').hidden = !hasSetupGuide;
+      document.getElementById('setupFallback').hidden = hasSetupGuide;
+      const checkoutName = repository && typeof repository.fullName === 'string'
+        ? repository.fullName.split('/').pop() : '';
+      const workingDirectory = [checkoutName, currentRunOptions.subdir].filter(Boolean).join('/');
+      document.getElementById('setupContext').textContent = workingDirectory
+        ? 'After checking prerequisites and installing dependencies, run repository commands from ' + workingDirectory + '.'
+        : 'Check prerequisites and install dependencies in your repository checkout before running commands.';
 
       const nextSteps = document.getElementById('nextSteps');
       nextSteps.textContent = '';
@@ -2081,6 +2098,9 @@ export function getIndexHtml(nonce?: string): string {
 
     // Clear the inline validation message as soon as the user edits the field.
     document.getElementById('repoUrl').addEventListener('input', () => setUrlError(''));
+    document.getElementById('setupGuideBtn').addEventListener('click', () => {
+      if (latestResult && latestResult.files.includes('ONBOARDING.md')) void viewFile('ONBOARDING.md', 'prerequisites-checklist');
+    });
     document.getElementById('subdir').addEventListener('input', () => setSubdirError(''));
     // User edits supersede pending initial-page restoration, even when reverted.
     const recordAnalysisInput = () => { analysisInputRevision += 1; };
