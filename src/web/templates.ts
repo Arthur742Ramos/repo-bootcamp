@@ -184,12 +184,12 @@ export function getIndexHtml(nonce?: string): string {
       border-radius: var(--r-md);
       padding: 1.5rem;
       margin-bottom: 2rem;
-      max-height: 300px;
-      overflow-y: auto;
       font-family: var(--font-mono);
       font-size: 0.875rem;
     }
     .progress[hidden] { display: none; }
+    .progress-items { max-height: 180px; overflow-y: auto; overflow-wrap: anywhere; }
+    .progress-items:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
     .progress-header { display: flex; justify-content: space-between; align-items: center; gap: 1rem; margin-bottom: 0.5rem; }
     .progress-title { color: var(--ink); font-size: 0.8125rem; font-weight: 600; }
     .progress-meta { color: var(--ink-muted); font: 0.75rem var(--font-mono); }
@@ -523,9 +523,9 @@ export function getIndexHtml(nonce?: string): string {
       </details>
     </form>
 
-    <div class="progress" id="progress" hidden role="log" aria-live="polite">
+    <div class="progress" id="progress" hidden role="region" aria-labelledby="progressTitle">
       <div class="progress-header">
-        <span class="progress-title">Analysis progress</span>
+        <span class="progress-title" id="progressTitle">Analysis progress</span>
         <span class="progress-meta" id="progressMeta"></span>
       </div>
       <ol class="phase-rail" id="phaseRail" aria-label="Analysis phases">
@@ -536,7 +536,7 @@ export function getIndexHtml(nonce?: string): string {
         <li class="phase-step" data-phase="generate"><span class="phase-dot">5</span><span>Generate</span></li>
         <li class="phase-step" data-phase="cleanup"><span class="phase-dot">6</span><span>Clean up</span></li>
       </ol>
-      <div id="progressItems"></div>
+      <div class="progress-items" id="progressItems" tabindex="0" role="log" aria-live="polite" aria-label="Analysis messages"></div>
     </div>
     <div id="statusMsg" role="status" class="sr-only"></div>
 
@@ -1156,6 +1156,7 @@ export function getIndexHtml(nonce?: string): string {
     function addProgressItem(message, type = '', phase = '') {
       if (type === 'phase') updatePhaseRail(phase);
       const progress = document.getElementById('progressItems');
+      const followLatest = progress.scrollHeight - progress.clientHeight - progress.scrollTop <= 4;
       const item = document.createElement('div');
       item.className = 'progress-item ' + type;
       item.textContent = (
@@ -1170,8 +1171,7 @@ export function getIndexHtml(nonce?: string): string {
                 : '  '
       ) + message;
       progress.appendChild(item);
-      const scrollContainer = document.getElementById('progress');
-      scrollContainer.scrollTop = scrollContainer.scrollHeight;
+      if (followLatest) progress.scrollTop = progress.scrollHeight;
     }
 
     function addStatCard(statsContainer, value, label, tone = '', kind = '') {
