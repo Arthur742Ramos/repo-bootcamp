@@ -152,19 +152,19 @@
     "src/**/*.{ts,tsx}": "eslint --fix"
   },
   "dependencies": {
-    "@github/copilot-sdk": "^1.0.13",
+    "@github/copilot-sdk": "^1.0.22",
     "brace-expansion": "5.0.12",
-    "chalk": "^6.0.0",
+    "chalk": "^6.0.1",
     "commander": "^15.0.0",
     "cosmiconfig": "^10.0.1",
     "cosmiconfig-typescript-loader": "^6.3.0",
-    "express": "^5.2.1",
-    "express-rate-limit": "^8.7.0",
+    "express": "^5.3.0",
+    "express-rate-limit": "^8.7.1",
     "helmet": "^8.3.0",
-    "js-yaml": "4.3.2",
+    "js-yaml": "5.5.0",
     "ora": "^9.4.1",
     "picomatch": "4.0.7",
-    "zod": "^4.6.2"
+    "zod": "^4.6.7"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
@@ -189,7 +189,7 @@
   "overrides": {
     "brace-expansion": "5.0.12",
     "ip-address": "10.7.1",
-    "js-yaml": "4.3.2",
+    "js-yaml": "5.5.0",
     "nanoid": "3.3.18",
     "postcss": "8.5.26"
   },
