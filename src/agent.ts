@@ -414,7 +414,8 @@ function enumQuotedOrList(values: readonly string[]): string {
 }
 
 function buildJsonSchema(repoInfo: RepoInfo): string {
-  return `Return a JSON object with this exact structure. Include "sources" arrays citing which files informed each section:
+  return `Return a JSON object with this structure. Include "sources" arrays citing which files informed each section.
+For each command and first task, include optional "evidence": {"path": "relative/file", "quote": "exact excerpt"} only when you can quote the source literally. Do not invent excerpts; omit evidence when uncertain.
 
 \`\`\`json
 {
@@ -434,7 +435,7 @@ function buildJsonSchema(repoInfo: RepoInfo): string {
   "quickstart": {
     "prerequisites": [],
     "steps": [],
-    "commands": [{"name": "", "command": "", "source": ""}],
+    "commands": [{"name": "", "command": "", "source": "", "evidence": {"path": "", "quote": ""}}],
     "commonErrors": [{"error": "", "fix": ""}],
     "sources": []
   },
@@ -471,7 +472,8 @@ function buildJsonSchema(repoInfo: RepoInfo): string {
       "difficulty": "${enumPipeList(DIFFICULTY_VALUES)}",
       "category": "test|docs|refactor|feature|bug-fix",
       "files": [],
-      "why": ""
+      "why": "",
+      "evidence": {"path": "", "quote": ""}
     }
   ],
   "runbook": {
@@ -634,7 +636,8 @@ ${inlineContents.join("\n\n")}
 
 ---
 
-Based on the above information, produce a JSON object. Follow this EXACT structure with these EXACT field names and enum values:
+Based on the above information, produce a JSON object. Follow this structure with these EXACT field names and enum values.
+For each command and first task, include optional "evidence": {"path": "relative/file", "quote": "exact excerpt"} only when an excerpt appears literally in the supplied files. Do not invent excerpts; omit evidence when uncertain.
 
 ## CRITICAL SCHEMA REQUIREMENTS:
 
@@ -679,7 +682,7 @@ Based on the above information, produce a JSON object. Follow this EXACT structu
   "quickstart": {
     "prerequisites": ["Node.js >= 18"],
     "steps": ["Clone the repository", "Run npm install", "Run npm test"],
-    "commands": [{"name": "install", "command": "npm install", "source": "package.json"}],
+    "commands": [{"name": "install", "command": "npm install", "source": "package.json", "evidence": {"path": "README.md", "quote": "exact excerpt from this file"}}],
     "commonErrors": [{"error": "Missing dependencies", "fix": "Run npm install"}],
     "sources": ["README.md"]
   },
@@ -716,7 +719,8 @@ Based on the above information, produce a JSON object. Follow this EXACT structu
       "difficulty": "beginner",
       "category": "test",
       "files": ["test/test.js"],
-      "why": "Good first contribution to understand the codebase"
+      "why": "Good first contribution to understand the codebase",
+      "evidence": {"path": "test/test.js", "quote": "exact excerpt from this file"}
     }
   ],
   "runbook": {

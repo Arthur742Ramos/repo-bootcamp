@@ -62,6 +62,8 @@ export interface DiscoverTasksOptions {
   packageManager?: PackageManager;
   /** Selected, scanned file paths (POSIX relative paths); restricts Taskfiles and Go evidence. */
   taskfileFiles?: ReadonlySet<string>;
+  /** Successful fixed-name task-definition reads, for session fingerprints. */
+  onTaskSourceRead?: (path: string, content: string) => void;
   /** Successful contained Taskfile reads, for effective scan fingerprints. */
   onTaskfileRead?: (path: string, content: string) => void;
   /** Selected scan inventory; restricts Cargo manifests and implicit source targets. */
@@ -963,7 +965,9 @@ export async function discoverTasks(
 
   const read = async (rel: string): Promise<string | null> => {
     try {
-      return await readContainedFile(repoPath, rel);
+      const content = await readContainedFile(repoPath, rel);
+      opts.onTaskSourceRead?.(rel, content);
+      return content;
     } catch {
       return null;
     }

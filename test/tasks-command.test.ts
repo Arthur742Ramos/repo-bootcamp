@@ -1,5 +1,6 @@
 import type { MockInstance } from "vitest";
-import { mkdtemp, mkdir, rm, symlink, writeFile } from "fs/promises";
+import { execFileSync } from "child_process";
+import { access, mkdtemp, mkdir, readFile, readdir, rm, symlink, writeFile } from "fs/promises";
 import { tmpdir } from "os";
 import { join } from "path";
 
@@ -60,6 +61,7 @@ describe("runTasksCommand", () => {
   });
 
   afterEach(async () => {
+    vi.unstubAllEnvs();
     await Promise.all(dirs.map((dir) => rm(dir, { recursive: true, force: true })));
     dirs.length = 0;
   });
@@ -264,5 +266,139 @@ describe("runTasksCommand", () => {
 
     await runTasksCommand("https://github.com/test/repo", { keepTemp: true });
     expect(mockCleanup).not.toHaveBeenCalled();
+  });
+
+  it("persists only opted-in, user-confirmed progress and pauses when definitions change", async () => {
+    const dir = await repoWith({
+      "package.json": JSON.stringify({
+        scripts: { build: "touch must-not-run", test: "echo test" },
+      }),
+    });
+    const stateRoot = await repoWith({});
+    vi.stubEnv("XDG_STATE_HOME", stateRoot);
+    resolveRepoMock.mockResolvedValue(localSource(dir));
+
+    await runTasksCommand(dir, { json: true });
+    expect(await readdir(stateRoot)).toEqual([]);
+    logSpy.mockClear();
+
+    await runTasksCommand(dir, { session: true, json: true });
+    let result = JSON.parse(String(logSpy.mock.calls.at(-1)?.[0]));
+    expect(result.session).toEqual({
+      steps: [
+        { number: 1, command: "npm run build", source: "package.json", completed: false },
+        { number: 2, command: "npm run test", source: "package.json", completed: false },
+      ],
+      next: 1,
+    });
+    await runTasksCommand(dir, { session: true, done: "1", json: true });
+    await runTasksCommand(dir, { session: true, json: true });
+    result = JSON.parse(String(logSpy.mock.calls.at(-1)?.[0]));
+    expect(result.session.steps.map((step: { completed: boolean }) => step.completed)).toEqual([
+      true,
+      false,
+    ]);
+    expect(result.session.next).toBe(2);
+    await expect(access(join(dir, "must-not-run"))).rejects.toMatchObject({ code: "ENOENT" });
+
+    const sessionDir = join(stateRoot, "repo-bootcamp", "sessions");
+    const [stateFile] = await readdir(sessionDir);
+    await writeFile(
+      join(dir, "package.json"),
+      JSON.stringify({ scripts: { build: "echo changed", test: "echo test" } })
+    );
+    await expect(runTasksCommand(dir, { session: true, json: true })).rejects.toThrow(
+      "process.exit"
+    );
+    expect(errorSpy).toHaveBeenLastCalledWith(expect.stringContaining("Task definitions changed"));
+    expect(JSON.parse(await readFile(join(sessionDir, stateFile), "utf8")).completed).toEqual([1]);
+
+    await runTasksCommand(dir, { session: true, restartSession: true, json: true });
+    result = JSON.parse(String(logSpy.mock.calls.at(-1)?.[0]));
+    expect(result.session.next).toBe(1);
+    expect(result.session.steps.every((step: { completed: boolean }) => !step.completed)).toBe(
+      true
+    );
+  });
+
+  it("keeps progress separate for branches and selected packages", async () => {
+    const dir = await repoWith({
+      "package.json": JSON.stringify({ scripts: { test: "echo root" } }),
+      "packages/app/package.json": JSON.stringify({ scripts: { test: "echo child" } }),
+    });
+    const stateRoot = await repoWith({});
+    vi.stubEnv("XDG_STATE_HOME", stateRoot);
+    execFileSync("git", ["init", "-q", dir]);
+    const originalRef = execFileSync("git", ["symbolic-ref", "HEAD"], {
+      cwd: dir,
+      encoding: "utf8",
+    }).trim();
+    resolveRepoMock.mockResolvedValue(localSource(dir));
+
+    await runTasksCommand(dir, { session: true, done: "1", json: true });
+    await runTasksCommand(dir, { session: true, subdir: "packages/app", json: true });
+    expect(JSON.parse(String(logSpy.mock.calls.at(-1)?.[0])).session.next).toBe(1);
+
+    execFileSync("git", ["symbolic-ref", "HEAD", "refs/heads/other-session-branch"], { cwd: dir });
+    await runTasksCommand(dir, { session: true, json: true });
+    expect(JSON.parse(String(logSpy.mock.calls.at(-1)?.[0])).session.next).toBe(1);
+    execFileSync("git", ["symbolic-ref", "HEAD", originalRef], { cwd: dir });
+    await runTasksCommand(dir, { session: true, json: true });
+    expect(JSON.parse(String(logSpy.mock.calls.at(-1)?.[0])).session.next).toBeNull();
+  });
+
+  it("keeps progress separate for detached remote revisions", async () => {
+    const dir = await repoWith({
+      "package.json": JSON.stringify({ scripts: { test: "echo test" } }),
+    });
+    const stateRoot = await repoWith({});
+    const url = "https://github.com/example/repo";
+    const sourceAt = (commitSha: string) => ({
+      ...localSource(dir),
+      isLocal: false,
+      repoInfo: {
+        owner: "example",
+        repo: "repo",
+        fullName: "example/repo",
+        url,
+        branch: "HEAD",
+        commitSha,
+      },
+    });
+    vi.stubEnv("XDG_STATE_HOME", stateRoot);
+    resolveRepoMock.mockResolvedValue(sourceAt("a".repeat(40)));
+    await runTasksCommand(url, { session: true, done: "1", json: true });
+
+    resolveRepoMock.mockResolvedValue(sourceAt("b".repeat(40)));
+    await runTasksCommand(url, { session: true, json: true });
+    expect(JSON.parse(String(logSpy.mock.calls.at(-1)?.[0])).session.next).toBe(1);
+
+    resolveRepoMock.mockResolvedValue(sourceAt("a".repeat(40)));
+    await runTasksCommand(url, { session: true, json: true });
+    expect(JSON.parse(String(logSpy.mock.calls.at(-1)?.[0])).session.next).toBeNull();
+  });
+
+  it("fails safely for invalid progress flags and corrupt state", async () => {
+    const dir = await repoWith({
+      "package.json": JSON.stringify({ scripts: { test: "echo test" } }),
+    });
+    const stateRoot = await repoWith({});
+    vi.stubEnv("XDG_STATE_HOME", stateRoot);
+    resolveRepoMock.mockResolvedValue(localSource(dir));
+    await expect(runTasksCommand(dir, { done: "1" })).rejects.toThrow("process.exit");
+    await expect(runTasksCommand(dir, { session: true, done: "1x" })).rejects.toThrow(
+      "process.exit"
+    );
+    expect(resolveRepoMock).not.toHaveBeenCalled();
+    await runTasksCommand(dir, { session: true, json: true });
+    const sessionDir = join(stateRoot, "repo-bootcamp", "sessions");
+    const [stateFile] = await readdir(sessionDir);
+    await writeFile(join(sessionDir, stateFile), "{broken");
+    await expect(runTasksCommand(dir, { session: true, json: true })).rejects.toThrow(
+      "process.exit"
+    );
+    expect(await readFile(join(sessionDir, stateFile), "utf8")).toBe("{broken");
+    await runTasksCommand(dir, { session: true, restartSession: true, json: true });
+    expect(JSON.parse(String(logSpy.mock.calls.at(-1)?.[0])).session.next).toBe(1);
   });
 });

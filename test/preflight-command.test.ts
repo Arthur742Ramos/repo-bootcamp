@@ -183,6 +183,16 @@ describe("gatherRequirements", () => {
     ]);
   });
 
+  it("prefers the legacy Rust toolchain file when both filenames exist", async () => {
+    const dir = await repoWith({
+      "rust-toolchain": "1.90.0\n",
+      "rust-toolchain.toml": '[toolchain]\nchannel = "nightly"\n',
+    });
+    expect(await gatherRequirements(dir)).toEqual([
+      expect.objectContaining({ tool: "Rust", required: "1.90.0", source: "rust-toolchain" }),
+    ]);
+  });
+
   it("returns nothing for a repo with no declared toolchain", async () => {
     const dir = await repoWith({ "README.md": "# hi\n" });
     expect(await gatherRequirements(dir)).toEqual([]);

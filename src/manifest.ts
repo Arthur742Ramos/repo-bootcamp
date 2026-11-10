@@ -1,4 +1,5 @@
 import type { BootcampOptions, RepoFacts, RepoInfo, ScanResult } from "./types.js";
+import { collectGuidanceEvidence, type GuidanceEvidence } from "./evidence.js";
 
 export interface AnalysisManifest {
   schemaVersion: 1;
@@ -35,7 +36,9 @@ export interface AnalysisManifest {
       lineStart: number;
       lineEnd: number | null;
       kind: "repository-file";
+      contentScope: "loaded-prefix" | "not-loaded";
     }>;
+    guidanceEvidence: GuidanceEvidence;
   };
 }
 
@@ -107,8 +110,10 @@ export function createAnalysisManifest(params: {
           lineStart: 1,
           lineEnd: content === undefined ? null : content.split(/\r?\n/).length,
           kind: "repository-file" as const,
+          contentScope: content === undefined ? "not-loaded" : "loaded-prefix",
         };
       }),
+      guidanceEvidence: collectGuidanceEvidence(facts, scanResult),
     },
   };
 }

@@ -630,10 +630,15 @@ describe("prepareOutputDocuments", () => {
       styleConfig: defaultStyleConfig,
       progress: { update: vi.fn() } as any,
     });
-    expect(generateOnboarding).toHaveBeenCalledWith(expect.anything(), defaultOptions, {
-      repoInfo,
-      localPath: "/repo/packages/my app",
-    });
+    expect(generateOnboarding).toHaveBeenCalledWith(
+      expect.anything(),
+      defaultOptions,
+      {
+        repoInfo,
+        localPath: "/repo/packages/my app",
+      },
+      mockScanResult
+    );
   });
   it("passes the requested tag through detached-HEAD metadata to onboarding", async () => {
     const repoInfo = { ...mockRepoInfo, branch: "HEAD" };
@@ -648,11 +653,16 @@ describe("prepareOutputDocuments", () => {
       styleConfig: defaultStyleConfig,
       progress: { update: vi.fn() } as any,
     });
-    expect(generateOnboarding).toHaveBeenCalledWith(expect.anything(), options, {
-      repoInfo,
-      localPath: undefined,
-      ref: "v2.0",
-    });
+    expect(generateOnboarding).toHaveBeenCalledWith(
+      expect.anything(),
+      options,
+      {
+        repoInfo,
+        localPath: undefined,
+        ref: "v2.0",
+      },
+      mockScanResult
+    );
   });
   it("generates core documents", async () => {
     const progress = { update: vi.fn(), succeed: vi.fn(), recordToolCall: vi.fn() } as any;

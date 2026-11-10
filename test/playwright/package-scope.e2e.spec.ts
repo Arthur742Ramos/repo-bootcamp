@@ -127,6 +127,72 @@ test("selected package is submitted, identified, copied, read and retained for f
   expect(errors).toEqual([]);
 });
 
+test("the package picker submits the chosen directory and clears it when the repository changes", async ({
+  page,
+}) => {
+  const { submissions, errors } = await fixture(page);
+  await page.route("**/api/packages", (route) =>
+    route.fulfill({ json: { packages: ["packages/app", "packages/core"], truncated: false } })
+  );
+  await page.locator("#repoUrl").fill(repoUrl);
+  await page.getByText("Run options", { exact: true }).click();
+  await page.locator("#branch").fill("main");
+  const discovery = page.waitForRequest((request) => request.url().endsWith("/api/packages"));
+  await page.getByRole("button", { name: "Find packages" }).click();
+  expect((await discovery).postDataJSON()).toEqual({ repoUrl, branch: "main" });
+  await expect(page.getByRole("status").filter({ hasText: "Found 2 directories." })).toBeVisible();
+  await page.getByLabel("Discovered directories").selectOption("packages/app");
+  await expect(page.locator("#subdir")).toHaveValue("packages/app");
+  await page.getByRole("button", { name: "Analyze", exact: true }).click();
+  await expect(page.locator("#resultMeta")).toContainText("package packages/app");
+  expect(submissions[0].options.subdir).toBe("packages/app");
+  await page.locator("#repoUrl").fill("https://github.com/fixture/other");
+  await expect(page.locator("#subdir")).toHaveValue("");
+  await expect(page.getByLabel("Discovered directories")).toBeHidden();
+  await expect(page.locator("[style], [onclick], [onchange]")).toHaveCount(0);
+  expect(errors).toEqual([]);
+});
+
+test("a manual directory edit supersedes an in-flight package search", async ({ page }) => {
+  const { errors } = await fixture(page);
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  await page.route("**/api/packages", async (route) => {
+    await gate;
+    await route.fulfill({ json: { packages: ["packages/app"], truncated: false } }).catch(() => {});
+  });
+  await page.locator("#repoUrl").fill(repoUrl);
+  await page.getByText("Run options", { exact: true }).click();
+  const discovery = page.waitForRequest((request) => request.url().endsWith("/api/packages"));
+  await page.getByRole("button", { name: "Find packages" }).click();
+  await discovery;
+  await page.locator("#subdir").fill("custom/path");
+  release();
+  await expect(page.locator("#subdir")).toHaveValue("custom/path");
+  await expect(page.locator("#packageChoices")).toBeHidden();
+  await expect(page.getByRole("button", { name: "Find packages" })).toBeEnabled();
+  expect(errors).toEqual([]);
+});
+
+test("manual directory edits clear the previous picker selection", async ({ page }) => {
+  const { errors } = await fixture(page);
+  await page.route("**/api/packages", (route) =>
+    route.fulfill({ json: { packages: ["packages/app", "packages/core"], truncated: false } })
+  );
+  await page.locator("#repoUrl").fill(repoUrl);
+  await page.getByText("Run options", { exact: true }).click();
+  await page.getByRole("button", { name: "Find packages" }).click();
+  const choices = page.getByLabel("Discovered directories");
+  await choices.selectOption("packages/app");
+  await page.locator("#subdir").fill("custom/path");
+  await expect(choices).toHaveValue("");
+  await choices.selectOption("packages/core");
+  await expect(page.locator("#subdir")).toHaveValue("packages/core");
+  expect(errors).toEqual([]);
+});
+
 test("copied CLI safely preserves spaces, quotes and shell metacharacters in a package name", async ({
   page,
 }) => {

@@ -7,15 +7,27 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const state = vi.hoisted(() => ({
   repoPath: "",
   versions: {} as Record<string, string>,
+  calls: [] as Array<{ command: string; args: string[]; cwd?: string; autoInstall?: string }>,
   exitCode: undefined as number | void,
 }));
 
 vi.mock("child_process", () => {
   const execFile = vi.fn();
   Object.defineProperty(execFile, Symbol.for("nodejs.util.promisify.custom"), {
-    value: async (command: string) => {
-      const version = state.versions[command];
-      if (!version) throw new Error("Tool not installed");
+    value: async (
+      command: string,
+      args: string[],
+      options: { cwd?: string; env?: NodeJS.ProcessEnv }
+    ) => {
+      state.calls.push({
+        command,
+        args,
+        cwd: options.cwd,
+        autoInstall: options.env?.RUSTUP_AUTO_INSTALL,
+      });
+      const version = state.versions[`${command} ${args.join(" ")}`] ?? state.versions[command];
+      if (version === undefined)
+        throw Object.assign(new Error("Tool not installed"), { code: "ENOENT" });
       return { stdout: version, stderr: "" };
     },
   });
@@ -44,6 +56,7 @@ describe("preflight source semantics", () => {
   beforeEach(async () => {
     state.repoPath = await mkdtemp(join(tmpdir(), "bootcamp-preflight-pins-"));
     state.versions = {};
+    state.calls = [];
     state.exitCode = undefined;
     logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
   });
@@ -99,5 +112,109 @@ describe("preflight source semantics", () => {
     const report = JSON.parse(logSpy.mock.calls[0][0]);
     expect(report.checks).toHaveLength(2);
     expect(report.checks.every((check: { status: string }) => check.status === "ok")).toBe(true);
+  });
+
+  it("checks an installed Rust channel without invoking the repository's toolchain", async () => {
+    await writeFile(
+      join(state.repoPath, "rust-toolchain.toml"),
+      '[toolchain]\nchannel = "stable"\n'
+    );
+    state.versions.rustup = "stable-aarch64-apple-darwin (active, default)\n";
+    await runPreflightCommand(state.repoPath, { json: true, check: true });
+
+    expect(JSON.parse(logSpy.mock.calls[0][0])).toMatchObject({
+      ok: true,
+      checks: [
+        {
+          tool: "Rust",
+          required: "stable",
+          installed: "stable-aarch64-apple-darwin",
+          status: "ok",
+        },
+      ],
+    });
+    expect(state.calls).toEqual([
+      expect.objectContaining({
+        command: "rustup",
+        args: ["toolchain", "list"],
+        autoInstall: "0",
+      }),
+    ]);
+    expect(state.calls[0].cwd).not.toBe(state.repoPath);
+  });
+
+  it("fails the gate when the declared Rust toolchain is absent", async () => {
+    await writeFile(join(state.repoPath, "rust-toolchain"), "nightly-2025-01-01\n");
+    state.versions.rustup = "stable-aarch64-apple-darwin (default)\n";
+    await runPreflightCommand(state.repoPath, { json: true, check: true });
+
+    expect(state.exitCode).toBe(1);
+    expect(JSON.parse(logSpy.mock.calls[0][0]).checks).toEqual([
+      expect.objectContaining({ tool: "Rust", required: "nightly-2025-01-01", status: "missing" }),
+    ]);
+  });
+
+  it.each([
+    ["rust-toolchain.toml", '[toolchain]\npath = "/tmp/custom"\n', "Rust"],
+    ["global.json", '{"sdk":{"version":"8.0.100","paths":[".dotnet"]}}', ".NET SDK"],
+  ])(
+    "leaves custom toolchain paths in %s unverified without running them",
+    async (file, content, tool) => {
+      await writeFile(join(state.repoPath, file), content);
+      await runPreflightCommand(state.repoPath, { json: true, check: true });
+
+      expect(state.calls).toEqual([]);
+      expect(JSON.parse(logSpy.mock.calls[0][0]).checks).toEqual([
+        expect.objectContaining({ tool, status: "unknown", installed: null }),
+      ]);
+    }
+  );
+
+  it.each([
+    ["patch", "8.0.100", "8.0.100", "ok"],
+    ["latestPatch", "8.0.100", "8.0.105", "ok"],
+    ["feature", "8.0.200", "8.0.205", "ok"],
+    ["latestFeature", "8.0.100", "8.0.305", "ok"],
+    ["disable", "8.0.200", null, "mismatch"],
+  ] as const)(
+    "honors .NET %s roll-forward from %s",
+    async (rollForward, version, installed, status) => {
+      await writeFile(
+        join(state.repoPath, "global.json"),
+        `{\n  // SDK policy\n  "sdk": {"version":"${version}", "rollForward":"${rollForward}"}\n}`
+      );
+      state.versions.dotnet = [
+        "8.0.100 [/sdk]",
+        "8.0.105 [/sdk]",
+        "8.0.205 [/sdk]",
+        "8.0.305 [/sdk]",
+      ].join("\n");
+      await runPreflightCommand(state.repoPath, { json: true, check: true });
+
+      expect(JSON.parse(logSpy.mock.calls[0][0]).checks).toEqual([
+        expect.objectContaining({
+          tool: ".NET SDK",
+          required: version,
+          status,
+          ...(installed ? { installed } : {}),
+        }),
+      ]);
+      expect(state.calls[0]).toMatchObject({ command: "dotnet", args: ["--list-sdks"] });
+      expect(state.calls[0].cwd).not.toBe(state.repoPath);
+      expect(state.exitCode).toBe(status === "ok" ? 0 : 1);
+    }
+  );
+
+  it("excludes prerelease SDKs when global.json disallows them", async () => {
+    await writeFile(
+      join(state.repoPath, "global.json"),
+      '{"sdk":{"version":"8.0.100","rollForward":"latestFeature","allowPrerelease":false}}'
+    );
+    state.versions.dotnet = "8.0.100 [/sdk]\n8.0.200-preview.1 [/sdk]\n";
+    await runPreflightCommand(state.repoPath, { json: true, check: true });
+
+    expect(JSON.parse(logSpy.mock.calls[0][0]).checks).toEqual([
+      expect.objectContaining({ tool: ".NET SDK", installed: "8.0.100", status: "ok" }),
+    ]);
   });
 });

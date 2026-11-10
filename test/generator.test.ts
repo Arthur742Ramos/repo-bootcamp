@@ -18,7 +18,8 @@ import {
 import { convertToHtml, convertToPdf, markdownToHtml } from "../src/formatter.js";
 import { parsePackageJsonScripts } from "../src/tasks.js";
 import { parseGitHubUrl } from "../src/ingest.js";
-import { makeOptions } from "./helpers/fixtures.js";
+import { makeFile, makeOptions, makeScanResult } from "./helpers/fixtures.js";
+import { createAnalysisManifest } from "../src/manifest.js";
 import type { RepoFacts, BootcampOptions } from "../src/types.js";
 
 const mockFacts: RepoFacts = {
@@ -124,6 +125,94 @@ const mockOptions: BootcampOptions = {
   noClone: false,
   verbose: false,
 };
+
+describe("recommendation evidence", () => {
+  it("reports only exact excerpts in the selected scan and pins their document links", () => {
+    const facts = structuredClone(mockFacts);
+    facts.quickstart.commands = [
+      {
+        name: "install",
+        command: "npm ci",
+        source: "README.md",
+        evidence: { path: "README.md", quote: "npm ci" },
+      },
+      {
+        name: "invented",
+        command: "npm run missing",
+        source: "README.md",
+        evidence: { path: "README.md", quote: "npm run missing" },
+      },
+      {
+        name: "outside",
+        command: "echo outside",
+        source: "../README.md",
+        evidence: { path: "../README.md", quote: "npm ci" },
+      },
+      {
+        name: "unloaded",
+        command: "echo unknown",
+        source: "other.md",
+        evidence: { path: "other.md", quote: "unknown" },
+      },
+      { name: "unsourced", command: "echo review", source: "README.md" },
+      {
+        name: "malformed plugin citation",
+        command: "echo review",
+        source: "README.md",
+        evidence: JSON.parse('{"path":"README.md","quote":42}'),
+      },
+    ];
+    facts.firstTasks = [
+      {
+        ...facts.firstTasks[0],
+        evidence: { path: "src/index.ts", quote: "export function start() {\n  return true;" },
+      },
+    ];
+    const scan = makeScanResult({
+      files: ["README.md", "other.md", "src/index.ts"].map((path) => makeFile(path)),
+      keySourceFiles: new Map([
+        ["README.md", "# Setup\r\nRun `npm ci`.\r\n"],
+        ["src/index.ts", "// entry\nexport function start() {\n  return true;\n}\n"],
+      ]),
+    });
+    const repoInfo = {
+      ...parseGitHubUrl("owner/repo"),
+      sourcePathPrefix: "packages/app",
+      commitSha: "abc123",
+    };
+    const manifest = createAnalysisManifest({
+      repoInfo,
+      scanResult: scan,
+      facts,
+      options: mockOptions,
+      format: "markdown",
+      durationMs: 1,
+      model: "test",
+      toolCalls: 0,
+    });
+    expect(manifest.analysis.guidanceEvidence).toEqual({
+      commands: [
+        { status: "matched", path: "README.md", lineStart: 2, lineEnd: 2 },
+        { status: "unverified", reason: "Excerpt was not found in loaded source." },
+        { status: "unverified", reason: "Source is outside the selected scan." },
+        { status: "unverified", reason: "Source was not loaded for this scan." },
+        { status: "unverified", reason: "No source excerpt supplied." },
+        { status: "unverified", reason: "No source excerpt supplied." },
+      ],
+      firstTasks: [{ status: "matched", path: "src/index.ts", lineStart: 2, lineEnd: 3 }],
+    });
+    const onboarding = generateOnboarding(facts, mockOptions, { repoInfo }, scan);
+    const tasks = generateFirstTasks(facts, mockOptions, undefined, repoInfo, scan);
+    expect(onboarding).toContain(
+      "[`README.md:2`](https://github.com/owner/repo/blob/abc123/packages/app/README.md#L2)"
+    );
+    expect(onboarding.match(/\*\*Evidence:\*\* Unverified/g)).toHaveLength(5);
+    expect(tasks).toContain(
+      "[`src/index.ts:2-3`](https://github.com/owner/repo/blob/abc123/packages/app/src/index.ts#L2-L3)"
+    );
+    expect(tasks).toContain("do not prove the guidance is correct");
+  });
+});
 
 describe("generateBootcamp", () => {
   it("includes repo name in title", () => {

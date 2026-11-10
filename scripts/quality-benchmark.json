@@ -1,0 +1,39 @@
+{
+  "version": 1,
+  "cases": [
+    {
+      "id": "express",
+      "repository": "https://github.com/expressjs/express",
+      "commit": "43fca52d28a422c8be48fd489cbd4f2d6152bab6",
+      "expected": [
+        { "command": "npm run test", "source": "package.json" },
+        { "command": "npm run lint", "source": "package.json" }
+      ]
+    },
+    {
+      "id": "flask",
+      "repository": "https://github.com/pallets/flask",
+      "commit": "49943b5a94413a530761350f04e896f76e8d620e",
+      "expected": [{ "command": "flask", "source": "pyproject.toml" }]
+    },
+    {
+      "id": "rust-log",
+      "repository": "https://github.com/rust-lang/log",
+      "commit": "75fcb86da1cce3b9476c58c911482ec43ec235f4",
+      "expected": [
+        { "command": "cargo build", "source": "Cargo.toml" },
+        { "command": "cargo test", "source": "Cargo.toml" }
+      ]
+    },
+    {
+      "id": "go-hello",
+      "repository": "https://github.com/golang/example",
+      "commit": "7f05d217867b2af52b0a28c6d1c91df97e1b5b39",
+      "subdir": "hello",
+      "expected": [
+        { "command": "go build ./...", "source": "go.mod" },
+        { "command": "go test ./...", "source": "go.mod" }
+      ]
+    }
+  ]
+}
