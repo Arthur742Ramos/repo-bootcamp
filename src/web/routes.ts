@@ -3,7 +3,7 @@ import { EventEmitter } from "events";
 import rateLimit, { ipKeyGenerator } from "express-rate-limit";
 import { randomUUID } from "node:crypto";
 import { mkdir, readFile, rm, writeFile } from "fs/promises";
-import { basename, dirname, join, resolve } from "path";
+import { basename, dirname, join, posix, resolve } from "path";
 
 import { applyOutputFormat, markdownToHtml, type OutputFormat } from "../formatter.js";
 import { parseGitHubUrl } from "../ingest.js";
@@ -23,7 +23,9 @@ import { normalizeScanScope, resolveRunConfiguration } from "../services/config-
 import { writeGeneratedOutputs } from "../services/output-writer.js";
 import type { BootcampOptions, RepoFacts } from "../types.js";
 import { createAnalysisManifest } from "../manifest.js";
-import { isPathInsideDir } from "../utils.js";
+import { verifyCitation } from "../evidence.js";
+import { SKIP_DIRS, isPathInsideDir } from "../utils.js";
+import { walkRepositoryFiles } from "../scan-walk.js";
 import { createZipArchive } from "./zip.js";
 
 /**
@@ -394,11 +396,13 @@ async function runAnalysis(job: AnalysisJob, options: BootcampOptions): Promise<
         evidenceSources: manifest.analysis.evidenceSources.length,
       },
       manifest,
-      recommendations: getFirstTaskRecommendations(preparedFacts, fullOptions, styleConfig).slice(
-        0,
-        3
-      ),
-      quickstartCommands: (preparedFacts.quickstart?.commands ?? []).slice(0, 6),
+      recommendations: getFirstTaskRecommendations(preparedFacts, fullOptions, styleConfig)
+        .slice(0, 3)
+        .map((task) => ({ ...task, verification: verifyCitation(task.evidence, scanResult) })),
+      quickstartCommands: (preparedFacts.quickstart?.commands ?? []).slice(0, 6).map((command) => ({
+        ...command,
+        verification: verifyCitation(command.evidence, scanResult),
+      })),
       scoreDetails: {
         security: {
           findings: security.findings.length,
@@ -468,6 +472,7 @@ async function runAnalysis(job: AnalysisJob, options: BootcampOptions): Promise<
 
 export function registerRoutes(app: Application): void {
   const limiterKeyPrefix = `web-${randomUUID()}`;
+  let activePackageDiscoveries = 0;
   const analysisEndpointRateLimit = rateLimit({
     windowMs: 15 * 60 * 1000,
     limit: 5,
@@ -482,6 +487,96 @@ export function registerRoutes(app: Application): void {
     legacyHeaders: false,
     keyGenerator: (req) => buildRateLimitKey(limiterKeyPrefix, "api", req),
   });
+
+  const packageEndpointRateLimit = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    limit: 5,
+    standardHeaders: true,
+    legacyHeaders: false,
+    keyGenerator: (req) => buildRateLimitKey(limiterKeyPrefix, "packages", req),
+  });
+
+  app.post(
+    "/api/packages",
+    packageEndpointRateLimit,
+    async (req: Request, res: Response): Promise<void> => {
+      if (
+        !isObjectRecord(req.body) ||
+        typeof req.body.repoUrl !== "string" ||
+        !req.body.repoUrl.trim() ||
+        req.body.repoUrl.length > 500 ||
+        (req.body.branch !== undefined &&
+          (typeof req.body.branch !== "string" || req.body.branch.length > 256))
+      ) {
+        res.status(400).json({ error: "Enter a valid repository URL and branch." });
+        return;
+      }
+
+      let repoInfo;
+      try {
+        repoInfo = parseGitHubUrl(req.body.repoUrl);
+      } catch {
+        res.status(400).json({ error: "Enter a public GitHub, GitLab, or Bitbucket repository." });
+        return;
+      }
+      if (activePackageDiscoveries >= 2) {
+        res.status(503).json({ error: "Package discovery is busy. Try again shortly." });
+        return;
+      }
+
+      activePackageDiscoveries++;
+      try {
+        const branch = typeof req.body.branch === "string" ? req.body.branch.trim() : "";
+        const repoPath = await cloneRepository(repoInfo, branch || undefined, false);
+        let result: { packages: string[]; truncated: boolean };
+        try {
+          const entryLimit = 2000;
+          const packageLimit = 100;
+          const ignored = [...SKIP_DIRS].flatMap((dir) => [`**/${dir}`, `**/${dir}/**`]);
+          const files = await walkRepositoryFiles(repoPath, entryLimit, ignored);
+          const packages = new Set<string>();
+          for (const file of files) {
+            if (file.isDirectory) continue;
+            const name = posix.basename(file.path);
+            if (
+              !/^(package\.json|Cargo\.toml|go\.mod|pyproject\.toml|composer\.json|pom\.xml|build\.gradle(?:\.kts)?)$/.test(
+                name
+              ) &&
+              !/\.(?:csproj|fsproj|vbproj)$/.test(name)
+            ) {
+              continue;
+            }
+            const directory = posix.dirname(file.path);
+            const hasUnsupportedCharacters = [...directory].some(
+              (character) =>
+                character === "\\" ||
+                character.charCodeAt(0) < 32 ||
+                character.charCodeAt(0) === 127
+            );
+            if (directory !== "." && directory.length <= 500 && !hasUnsupportedCharacters) {
+              packages.add(directory);
+            }
+          }
+          result = {
+            packages: [...packages].sort().slice(0, packageLimit),
+            truncated: files.length >= entryLimit || packages.size > packageLimit,
+          };
+        } finally {
+          await cleanupRepository(repoPath);
+        }
+        if (!res.destroyed) res.json(result);
+      } catch (error: unknown) {
+        console.error("[web] Package discovery failed:", error);
+        if (!res.destroyed) {
+          res.status(500).json({
+            error: "Could not discover packages. Check the repository and branch, then try again.",
+          });
+        }
+      } finally {
+        activePackageDiscoveries--;
+      }
+    }
+  );
 
   // Start analysis
   app.post(

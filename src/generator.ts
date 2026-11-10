@@ -3,13 +3,20 @@
  * Generates markdown documentation from repo_facts.json
  */
 
-import type { RepoFacts, BootcampOptions, RepoInfo } from "./types.js";
+import type {
+  RepoFacts,
+  BootcampOptions,
+  RepoInfo,
+  ScanResult,
+  EvidenceCitation,
+} from "./types.js";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { getStyleConfig, type StyleConfig } from "./plugins.js";
 import { markdownToHtml } from "./formatter.js";
 import { buildBlobUrl, buildRelativeSourceUrl, sourcePathCode } from "./source-links.js";
 import { findGuidanceCommand } from "./command-guidance.js";
+import { evidenceUrl, verifyCitation } from "./evidence.js";
 import {
   isMultilineCode,
   markdownCodeBlock,
@@ -28,6 +35,25 @@ const MAX_AUDIENCE_TASKS = 3;
 
 type Audience = BootcampOptions["audience"];
 type RepoTask = RepoFacts["firstTasks"][number];
+
+function guidanceEvidenceLabel(
+  citation: EvidenceCitation | undefined,
+  scan: Pick<ScanResult, "files" | "keySourceFiles"> | undefined,
+  repoInfo?: RepoInfo
+): string {
+  const evidence = verifyCitation(citation, scan);
+  if (evidence.status === "unverified") return "**Evidence:** Unverified; check the repository.";
+  const range =
+    evidence.lineStart === evidence.lineEnd
+      ? String(evidence.lineStart)
+      : `${evidence.lineStart}-${evidence.lineEnd}`;
+  const label = sourcePathCode(`${evidence.path}:${range}`);
+  const url = evidenceUrl(evidence, repoInfo);
+  return `**Source excerpt:** ${url ? `[${label}](${url})` : label} (text match)`;
+}
+
+const GUIDANCE_EVIDENCE_NOTE =
+  "Source excerpts are matched against scanned text; they do not prove the guidance is correct. Check unverified guidance before acting.";
 
 /** Checkout metadata for setup instructions; paths describe the selected scope. */
 export interface OnboardingCheckoutContext {
@@ -424,14 +450,15 @@ ${nextSteps}
 export function generateOnboarding(
   facts: RepoFacts,
   options?: Pick<BootcampOptions, "audience">,
-  checkout?: OnboardingCheckoutContext
+  checkout?: OnboardingCheckoutContext,
+  scan?: Pick<ScanResult, "files" | "keySourceFiles">
 ): string {
   const profile = getAudienceProfile(options?.audience);
   const prereqs = facts.quickstart.prerequisites.map((p) => `- [ ] ${p}`).join("\n");
   const commands = facts.quickstart.commands
     .map(
       (c) =>
-        `### ${markdownCommandName(c.name)}\n${markdownCodeBlock(c.command, "bash")}\n${c.description ? `> ${c.description}` : ""}`
+        `### ${markdownCommandName(c.name)}\n${markdownCodeBlock(c.command, "bash")}\n${c.description ? `> ${c.description}\n\n` : ""}${guidanceEvidenceLabel(c.evidence, scan, checkout?.repoInfo)}`
     )
     .join("\n\n");
 
@@ -506,6 +533,8 @@ ${prereqs}
 ${checkoutBlock}${installation}
 
 ## Available Commands
+
+${GUIDANCE_EVIDENCE_NOTE}
 
 ${commands}
 
@@ -805,7 +834,8 @@ export function generateFirstTasks(
   facts: RepoFacts,
   options?: Pick<BootcampOptions, "audience" | "style">,
   styleConfig?: StyleConfig,
-  repoInfo?: RepoInfo
+  repoInfo?: RepoInfo,
+  scan?: Pick<ScanResult, "files" | "keySourceFiles">
 ): string {
   const resolvedStyle = resolveStyleConfig(options, styleConfig);
   const profile = getAudienceProfile(options?.audience);
@@ -832,6 +862,8 @@ export function generateFirstTasks(
 
 ${t.description}
 
+${guidanceEvidenceLabel(t.evidence, scan, repoInfo)}
+
 ${includeFullTaskDetails ? `**Why this matters:** ${t.why}` : ""}
 
 ${
@@ -844,6 +876,7 @@ ${
   return `# First Tasks: ${facts.repoName}
 
 Suggested starter tasks for new contributors, organized by difficulty.
+${GUIDANCE_EVIDENCE_NOTE}
 ${tonePrefix(resolvedStyle)}
 
 ## ${profile.firstTaskTitle}

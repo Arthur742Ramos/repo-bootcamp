@@ -17,6 +17,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
 
       - name: Setup Node.js
         uses: actions/setup-node@v7
@@ -28,6 +30,7 @@ jobs:
         run: npm ci
 
       - name: Build Repo Bootcamp
+        id: build
         run: npm run build
 
       # This uses only deterministic analyzers; no Copilot token or model call
@@ -35,13 +38,25 @@ jobs:
       - name: Run onboarding scan
         run: |
           set -o pipefail
-          node dist/cli.js scan . --json --check --min-score 70 | tee onboarding-scan.json
+          node dist/cli.js scan . --json --check --min-score 70 | tee "$RUNNER_TEMP/onboarding-scan.json"
+
+      - name: Summarize pull request impact
+        if: always() && !cancelled() && github.event_name == 'pull_request' && steps.build.outcome == 'success'
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          set -euo pipefail
+          git worktree add --detach "$RUNNER_TEMP/onboarding-base" "$BASE_SHA"
+          trap 'git worktree remove --force "$RUNNER_TEMP/onboarding-base"' EXIT
+          node dist/cli.js scan "$RUNNER_TEMP/onboarding-base" --json > "$RUNNER_TEMP/onboarding-base.json"
+          node dist/cli.js scan . --json > "$RUNNER_TEMP/onboarding-head.json"
+          node scripts/onboarding-impact.mjs "$RUNNER_TEMP/onboarding-base.json" "$RUNNER_TEMP/onboarding-head.json" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload onboarding report
         if: always()
         uses: actions/upload-artifact@v7
         with:
           name: onboarding-scan-${{ github.run_id }}
-          path: onboarding-scan.json
+          path: ${{ runner.temp }}/onboarding-scan.json
           if-no-files-found: ignore
           retention-days: 14

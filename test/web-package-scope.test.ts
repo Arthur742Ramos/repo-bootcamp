@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import request from "supertest";
-import { access, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
+import { access, mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import type { Server } from "node:http";
@@ -130,6 +130,60 @@ afterEach(async () => {
 });
 
 describe("web selected package using contained scans and saved SDK responses", () => {
+  it("finds contained package directories for the requested branch and cleans the checkout", async () => {
+    alterClone = async (dir) => {
+      await mkdir(join(dir, "node_modules/ignored"), { recursive: true });
+      await writeFile(join(dir, "node_modules/ignored/package.json"), "{}");
+      await mkdir(join(dir, "services/api"), { recursive: true });
+      await writeFile(join(dir, "services/api/api.csproj"), "<Project />");
+    };
+    const response = await request(server).post("/api/packages").send({
+      repoUrl: "https://github.com/fixture/monorepo",
+      branch: "feature/app",
+    });
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({
+      packages: ["packages/app", "packages/core", "services/api"],
+      truncated: false,
+    });
+    expect(clone.mock.calls[0].slice(1)).toEqual(["feature/app", false]);
+    expect(cleanup.mock.calls.map((call) => call[0])).toEqual(clones);
+    expect(await exists(clones[0])).toBe(false);
+  });
+
+  it("bounds package results and reports that discovery may be incomplete", async () => {
+    alterClone = async (dir) => {
+      await Promise.all(
+        Array.from({ length: 101 }, async (_, index) => {
+          const packageDir = join(dir, "modules", `item-${String(index).padStart(3, "0")}`);
+          await mkdir(packageDir, { recursive: true });
+          await writeFile(join(packageDir, "go.mod"), "module example.com/item\n");
+        })
+      );
+    };
+    const response = await request(server).post("/api/packages").send({
+      repoUrl: "https://github.com/fixture/monorepo",
+    });
+    expect(response.status).toBe(200);
+    expect(response.body.packages).toHaveLength(100);
+    expect(response.body.truncated).toBe(true);
+    expect(await exists(clones[0])).toBe(false);
+  });
+
+  it("rejects malformed package discovery requests and does not report cleanup failures as success", async () => {
+    expect(
+      (await request(server).post("/api/packages").send({ repoUrl: "file:///private" })).status
+    ).toBe(400);
+    expect(clone).not.toHaveBeenCalled();
+    cleanup.mockRejectedValueOnce(new Error("private cleanup path"));
+    const response = await request(server).post("/api/packages").send({
+      repoUrl: "https://github.com/fixture/monorepo",
+    });
+    expect(response.status).toBe(500);
+    expect(JSON.stringify(response.body)).not.toContain("private cleanup path");
+    expect(cleanup).toHaveBeenCalledTimes(1);
+  });
+
   for (const branch of ["feature/app", "release/v2.0"]) {
     it(`retains the normalized requested ${branch} options while running and after completion`, async () => {
       let release!: () => void;

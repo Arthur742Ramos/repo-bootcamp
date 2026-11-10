@@ -59,6 +59,8 @@ describe("createApp", () => {
     expect(csp).toContain(`style-src 'self' 'nonce-${styleNonce}'`);
     expect(csp).toContain("script-src-attr 'none'");
     expect(csp).toContain("style-src-attr 'none'");
+    expect(csp).toContain("connect-src 'self'");
+    expect(csp).not.toContain("upgrade-insecure-requests");
     expect(csp).not.toContain("'unsafe-inline'");
   });
 

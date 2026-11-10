@@ -197,6 +197,9 @@ interface TasksActionOptions {
   subdir?: string;
   json?: boolean;
   category?: string;
+  session?: boolean;
+  done?: string;
+  restartSession?: boolean;
   keepTemp?: boolean;
   verbose?: boolean;
 }
@@ -792,6 +795,9 @@ program
     "-c, --category <category>",
     "Only show tasks in this category (install, build, test, lint, dev, run, release, other)"
   )
+  .option("--session", "Save and resume an opt-in first-session checklist")
+  .option("--done <step>", "Mark a numbered session step complete")
+  .option("--restart-session", "Replace saved session progress after task definitions change")
   .option("--keep-temp", "Keep temporary clone directory")
   .option("-v, --verbose", "Show detailed output")
   .action(async (repoUrl: string, _rawOpts, command: Command) => {
@@ -803,6 +809,9 @@ program
       subdir: opts.subdir,
       json: opts.json ?? false,
       category: opts.category,
+      session: opts.session ?? false,
+      done: opts.done,
+      restartSession: opts.restartSession ?? false,
       keepTemp: opts.keepTemp ?? false,
       verbose: opts.verbose ?? false,
     });

@@ -1,8 +1,7 @@
 import request from "supertest";
 import { closeLoopbackServers, listenLoopback } from "./helpers/loopback-server.js";
+import { makeRepoFacts } from "./helpers/fixtures.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
-
-import type { RepoFacts } from "../src/types.js";
 
 type SetupOverrides = {
   scanRepositoryFilesError?: Error;
@@ -47,12 +46,7 @@ async function setupRoutes(overrides: SetupOverrides = {}) {
     ? vi.fn().mockRejectedValue(overrides.cleanupRepositoryError)
     : vi.fn().mockResolvedValue(undefined);
 
-  const facts = {
-    firstTasks: [],
-    stack: {
-      packageManager: "npm",
-    },
-  } as unknown as RepoFacts;
+  const facts = makeRepoFacts();
   const orchestrateAnalysis = vi.fn().mockResolvedValue({
     facts,
     durationMs: 1,

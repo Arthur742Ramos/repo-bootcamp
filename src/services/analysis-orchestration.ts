@@ -130,7 +130,8 @@ export async function orchestrateAnalysis({
     subdir: options.subdir,
     exclude: options.exclude,
     scanFingerprint: fingerprintScan(scanResult),
-    analysisFingerprint: resolvedInputs.fingerprint,
+    // Older facts were generated without requests for source excerpts.
+    analysisFingerprint: `${resolvedInputs.fingerprint}:source-excerpts-v1`,
   };
   const cacheEligible = !options.noCache && Boolean(repoInfo.commitSha);
 
@@ -299,17 +300,22 @@ export async function prepareOutputDocuments({
     overview,
     {
       name: "ONBOARDING.md",
-      content: generateOnboarding(finalFacts, options, {
-        repoInfo,
-        localPath: repoInfo.url.startsWith("file://") ? repoPath : undefined,
-        ...(!repoInfo.url.startsWith("file://") && options.branch ? { ref: options.branch } : {}),
-      }),
+      content: generateOnboarding(
+        finalFacts,
+        options,
+        {
+          repoInfo,
+          localPath: repoInfo.url.startsWith("file://") ? repoPath : undefined,
+          ...(!repoInfo.url.startsWith("file://") && options.branch ? { ref: options.branch } : {}),
+        },
+        scanResult
+      ),
     },
     { name: "ARCHITECTURE.md", content: generateArchitecture(finalFacts, options, repoInfo) },
     { name: "CODEMAP.md", content: generateCodemap(finalFacts, repoInfo) },
     {
       name: "FIRST_TASKS.md",
-      content: generateFirstTasks(finalFacts, options, styleConfig, repoInfo),
+      content: generateFirstTasks(finalFacts, options, styleConfig, repoInfo, scanResult),
     },
     { name: "diagrams.mmd", content: generateDiagrams(finalFacts) },
     { name: "repo_facts.json", content: JSON.stringify(finalFacts, null, 2) },

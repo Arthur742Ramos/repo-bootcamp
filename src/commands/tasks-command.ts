@@ -4,9 +4,15 @@ import {
   CATEGORY_ORDER,
   discoverTasks,
   suggestGettingStarted,
+  type DiscoverTasksOptions,
   type DiscoveredTask,
   type TaskCategory,
 } from "../tasks.js";
+import {
+  fingerprintFirstSession,
+  fingerprintTaskSource,
+  updateFirstSession,
+} from "../first-session.js";
 import { withResolvedRepo } from "./_shared.js";
 import { normalizeScanScope } from "../services/config-resolution.js";
 import { resolveScopedPackageManager } from "../scoped-package-manager.js";
@@ -21,6 +27,12 @@ export interface TasksCommandOptions {
   json?: boolean;
   /** Only show tasks in this category (install, build, test, lint, dev, run, release, other). */
   category?: string;
+  /** Save and resume an explicitly opted-in first-session sequence. */
+  session?: boolean;
+  /** Mark a numbered first-session step as completed. */
+  done?: string;
+  /** Replace the saved sequence and its progress. */
+  restartSession?: boolean;
   /** Keep the temporary clone (remote repos only). */
   keepTemp?: boolean;
   verbose?: boolean;
@@ -107,6 +119,28 @@ export async function runTasksCommand(repoUrl: string, opts: TasksCommandOptions
     process.exit(1);
     return;
   }
+  if (!opts.session && (opts.done !== undefined || opts.restartSession)) {
+    console.error(chalk.red("--done and --restart-session require --session."));
+    process.exit(1);
+    return;
+  }
+  if ((opts.session && opts.category) || (opts.restartSession && opts.done !== undefined)) {
+    console.error(
+      chalk.red(
+        "--session cannot be filtered by --category, and --done cannot be combined with --restart-session."
+      )
+    );
+    process.exit(1);
+    return;
+  }
+  if (
+    opts.done !== undefined &&
+    (!/^[1-9]\d*$/.test(opts.done) || !Number.isSafeInteger(Number(opts.done)))
+  ) {
+    console.error(chalk.red("--done must be a positive step number."));
+    process.exit(1);
+    return;
+  }
   // Validate --category up front: it is repo-independent, so a typo should fail
   // fast instead of cloning a remote repo before we ever look at the flag.
   let category: TaskCategory | undefined;
@@ -133,10 +167,84 @@ export async function runTasksCommand(repoUrl: string, opts: TasksCommandOptions
           selectedRoot: taskRoot,
         })
       : undefined;
-    const all = manager
-      ? await discoverTasks(taskRoot, { packageManager: manager.packageManager })
-      : await discoverTasks(taskRoot);
+    const sourceEvidence = new Map<string, string>();
+    const record = (kind: string) => (path: string, content: string) =>
+      sourceEvidence.set(`${kind}:${path}`, fingerprintTaskSource(content));
+    const discoverOptions: DiscoverTasksOptions = {
+      ...(manager ? { packageManager: manager.packageManager } : {}),
+      ...(opts.session
+        ? {
+            onTaskSourceRead: record("source"),
+            onTaskfileRead: record("taskfile"),
+            onCargoRead: record("cargo"),
+            onCargoWorkspaceEvidence: record("workspace"),
+            onGoModRead: record("go-mod"),
+            onGoPackageEvidence: record("go-source"),
+          }
+        : {}),
+    };
+    const all = await discoverTasks(taskRoot, discoverOptions);
     const tasks = category ? all.filter((t) => t.category === category) : all;
+
+    if (opts.session) {
+      const steps = suggestGettingStarted(all);
+      const done = opts.done === undefined ? undefined : Number(opts.done);
+      if (done !== undefined && done > steps.length) {
+        throw new Error(`Step ${done} does not exist; this session has ${steps.length} steps.`);
+      }
+      const state = await updateFirstSession({
+        repo: repoSource,
+        input: repoUrl,
+        selectedRoot: taskRoot,
+        subdir: scope.subdir,
+        fingerprint: fingerprintFirstSession(all, sourceEvidence),
+        stepCount: steps.length,
+        done,
+        restart: opts.restartSession,
+      });
+      const sessionSteps = steps.map((task, index) => ({
+        number: index + 1,
+        command: task.command,
+        source: task.source,
+        completed: state.completed.includes(index + 1),
+      }));
+      const next = sessionSteps.find((step) => !step.completed)?.number ?? null;
+      if (opts.json) {
+        console.log(
+          JSON.stringify(
+            {
+              repo: repoSource.repoInfo.fullName,
+              ...(scope.subdir ? { subdir: scope.subdir } : {}),
+              session: { steps: sessionSteps, next },
+            },
+            null,
+            2
+          )
+        );
+      } else {
+        console.log(chalk.bold("\nFirst session"));
+        console.log(
+          chalk.dim(
+            `Repository: ${repoSource.repoInfo.fullName}${scope.subdir ? ` · ${scope.subdir}` : ""}`
+          )
+        );
+        if (sessionSteps.length === 0) console.log("No getting-started commands were discovered.");
+        for (const step of sessionSteps) {
+          console.log(
+            `  ${step.completed ? "[x]" : "[ ]"} ${step.number}. ${step.command} ${chalk.dim(`[${step.source}]`)}`
+          );
+        }
+        if (next !== null) {
+          console.log(
+            `\nRun the next command in your checkout, then mark it done with --session --done ${next}.`
+          );
+        } else if (sessionSteps.length > 0) {
+          console.log("\nAll steps marked complete.");
+        }
+        console.log(chalk.dim("Commands are suggestions and are never run automatically."));
+      }
+      return;
+    }
 
     if (opts.json) {
       console.log(

@@ -15,12 +15,18 @@ const StackInfoSchema = z.object({
   hasCi: z.boolean().default(false),
 });
 
+const EvidenceCitationSchema = z.object({
+  path: z.string(),
+  quote: z.string(),
+});
+
 // Command schema
 const CommandSchema = z.object({
   name: z.string(),
   command: z.string(),
   source: z.string(),
   description: z.string().optional(),
+  evidence: EvidenceCitationSchema.optional(),
 });
 
 // Common error schema
@@ -123,6 +129,7 @@ const FirstTaskSchema = z.object({
   category: z.enum(["bug-fix", "test", "docs", "refactor", "feature"]),
   files: z.array(z.string()).default([]),
   why: z.string(),
+  evidence: EvidenceCitationSchema.optional(),
 });
 
 // Incident schema

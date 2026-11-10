@@ -83,9 +83,15 @@ export function getIndexHtml(nonce?: string): string {
           </div>
           <div class="option-field package-directory">
             <label for="subdir">Package directory (optional)</label>
-            <input id="subdir" type="text" placeholder="packages/app" maxlength="500" autocomplete="off" spellcheck="false" aria-describedby="subdirHint subdirError" />
+            <div class="package-input-row">
+              <input id="subdir" type="text" placeholder="packages/app" maxlength="500" autocomplete="off" spellcheck="false" aria-describedby="subdirHint subdirError" />
+              <button class="secondary-btn" type="button" id="findPackagesBtn">Find packages</button>
+            </div>
             <p id="subdirHint" class="field-hint">Relative to the checkout. Leave blank for the repository root.</p>
             <p id="subdirError" class="field-error" role="alert" hidden></p>
+            <label id="packageChoicesLabel" for="packageChoices" hidden>Discovered directories</label>
+            <select id="packageChoices" aria-describedby="packageStatus" hidden></select>
+            <p id="packageStatus" class="field-hint" role="status" aria-live="polite"></p>
           </div>
         </div>
       </details>
@@ -164,7 +170,7 @@ export function getIndexHtml(nonce?: string): string {
           <div class="quickstart-panel" id="quickstartPanel" hidden>
             <div class="quickstart-header">
               <h4>First commands</h4>
-              <span>Detected from the repository</span>
+              <span>Check guidance before running</span>
             </div>
             <div class="quickstart-list" id="quickstartCommands"></div>
           </div>
@@ -262,6 +268,9 @@ export function getIndexHtml(nonce?: string): string {
     let progressTimer = null;
     let activeRunToken = 0;
     let analysisInputRevision = 0;
+    let packageRequest = null;
+    let packageRequestToken = 0;
+    let pickedPackage = null;
     let pollTimer = null;
     let renderedProgressCount = 0;
 
@@ -352,6 +361,79 @@ export function getIndexHtml(nonce?: string): string {
         throw error;
       }
       return payload;
+    }
+
+    function invalidatePackages(clearPicked) {
+      packageRequestToken += 1;
+      if (packageRequest) packageRequest.abort();
+      packageRequest = null;
+      const input = document.getElementById('subdir');
+      if (clearPicked && pickedPackage !== null && input.value === pickedPackage) input.value = '';
+      if (clearPicked) pickedPackage = null;
+      document.getElementById('packageChoices').hidden = true;
+      document.getElementById('packageChoicesLabel').hidden = true;
+      document.getElementById('packageStatus').textContent = '';
+      const button = document.getElementById('findPackagesBtn');
+      button.textContent = 'Find packages';
+      button.disabled = document.getElementById('analyzeBtn').disabled;
+    }
+
+    async function findPackages() {
+      const repoUrl = document.getElementById('repoUrl').value.trim();
+      if (!repoUrl) {
+        setUrlError('Please enter a repository URL');
+        document.getElementById('repoUrl').focus();
+        return;
+      }
+      setUrlError('');
+      invalidatePackages(false);
+      const controller = new AbortController();
+      const token = ++packageRequestToken;
+      packageRequest = controller;
+      const button = document.getElementById('findPackagesBtn');
+      const status = document.getElementById('packageStatus');
+      button.disabled = true;
+      button.textContent = 'Finding…';
+      status.textContent = 'Cloning the repository to find package directories…';
+      try {
+        const response = await fetch('/api/packages', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ repoUrl, branch: document.getElementById('branch').value.trim() }),
+          signal: controller.signal,
+        });
+        const payload = await readJsonResponse(response);
+        if (token !== packageRequestToken) return;
+        if (!Array.isArray(payload.packages) || !payload.packages.every((path) => typeof path === 'string')) {
+          throw new Error('The server returned an invalid package list.');
+        }
+        const select = document.getElementById('packageChoices');
+        select.replaceChildren();
+        const placeholder = document.createElement('option');
+        placeholder.value = '';
+        placeholder.textContent = 'Choose a directory';
+        select.appendChild(placeholder);
+        for (const path of payload.packages) {
+          const option = document.createElement('option');
+          option.value = path;
+          option.textContent = path;
+          select.appendChild(option);
+        }
+        select.hidden = payload.packages.length === 0;
+        document.getElementById('packageChoicesLabel').hidden = select.hidden;
+        status.textContent = payload.packages.length
+          ? 'Found ' + payload.packages.length + ' directories.' + (payload.truncated ? ' The bounded search may be incomplete.' : '')
+          : 'No package directories found. Enter a path manually or use the repository root.';
+      } catch (error) {
+        if (token !== packageRequestToken || (error && error.name === 'AbortError')) return;
+        status.textContent = error instanceof Error ? error.message : String(error);
+      } finally {
+        if (token === packageRequestToken) {
+          packageRequest = null;
+          button.disabled = document.getElementById('analyzeBtn').disabled;
+          button.textContent = 'Find packages';
+        }
+      }
     }
 
     function getRunOptions() {
@@ -481,6 +563,8 @@ export function getIndexHtml(nonce?: string): string {
       const cancelBtn = document.getElementById('cancelBtn');
       const form = document.getElementById('analyzeForm');
       btn.disabled = isBusy;
+      if (isBusy && packageRequest) invalidatePackages(false);
+      document.getElementById('findPackagesBtn').disabled = isBusy;
       btn.textContent = isBusy ? 'Analyzing...' : 'Analyze';
       cancelBtn.hidden = !isBusy;
       cancelBtn.disabled = isBusy && !currentJobId;
@@ -916,12 +1000,10 @@ export function getIndexHtml(nonce?: string): string {
         code.textContent = commandText;
         copy.appendChild(name);
         copy.appendChild(code);
-        if (typeof command.source === 'string' && command.source.trim()) {
-          const source = document.createElement('span');
-          source.className = 'quickstart-source';
-          source.textContent = 'from ' + command.source;
-          copy.appendChild(source);
-        }
+        const source = document.createElement('span');
+        source.className = 'quickstart-source';
+        source.textContent = evidenceLabel(command.verification);
+        copy.appendChild(source);
         const button = document.createElement('button');
         button.className = 'icon-btn';
         button.type = 'button';
@@ -940,6 +1022,12 @@ export function getIndexHtml(nonce?: string): string {
       }
       panel.hidden = validCommands.length === 0;
       return validCommands.length;
+    }
+
+    function evidenceLabel(verification) {
+      if (!verification || verification.status !== 'matched') return 'Evidence unverified';
+      const end = verification.lineEnd === verification.lineStart ? '' : '-' + verification.lineEnd;
+      return 'Source text: ' + verification.path + ':' + verification.lineStart + end + ' (match, not proof)';
     }
 
     function addGeneratedFile(filesContainer, filename) {
@@ -1037,6 +1125,10 @@ export function getIndexHtml(nonce?: string): string {
           : (task && task.why ? String(task.why) : 'Open FIRST_TASKS.md for the details.');
         copy.appendChild(title);
         copy.appendChild(detail);
+        const evidence = document.createElement('div');
+        evidence.className = 'next-step-detail';
+        evidence.textContent = evidenceLabel(task && task.verification);
+        copy.appendChild(evidence);
         if (data.files.includes('FIRST_TASKS.md')) {
           const action = document.createElement('button');
           action.className = 'next-step-action';
@@ -1671,10 +1763,27 @@ export function getIndexHtml(nonce?: string): string {
 
     // Clear the inline validation message as soon as the user edits the field.
     document.getElementById('repoUrl').addEventListener('input', () => setUrlError(''));
+    document.getElementById('repoUrl').addEventListener('input', () => invalidatePackages(true));
+    document.getElementById('branch').addEventListener('input', () => invalidatePackages(true));
+    document.getElementById('findPackagesBtn').addEventListener('click', () => { void findPackages(); });
+    document.getElementById('packageChoices').addEventListener('change', (event) => {
+      const path = event.target.value;
+      if (!path) return;
+      document.getElementById('subdir').value = path;
+      pickedPackage = path;
+      setSubdirError('');
+      analysisInputRevision += 1;
+    });
     document.getElementById('setupGuideBtn').addEventListener('click', () => {
       if (latestResult && latestResult.files.includes('ONBOARDING.md')) void viewFile('ONBOARDING.md', 'prerequisites-checklist');
     });
-    document.getElementById('subdir').addEventListener('input', () => setSubdirError(''));
+    document.getElementById('subdir').addEventListener('input', () => {
+      setSubdirError('');
+      if (packageRequest) invalidatePackages(false);
+      const choices = document.getElementById('packageChoices');
+      if (choices.value && choices.value !== document.getElementById('subdir').value) choices.value = '';
+      pickedPackage = null;
+    });
     // User edits supersede pending initial-page restoration, even when reverted.
     const recordAnalysisInput = () => { analysisInputRevision += 1; };
     document.getElementById('analyzeForm').addEventListener('input', recordAnalysisInput);

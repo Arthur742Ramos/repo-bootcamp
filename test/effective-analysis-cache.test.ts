@@ -74,6 +74,42 @@ describe("effective analysis inputs with real facts cache and saved responses", 
     );
   });
 
+  it("refreshes facts cached before source excerpts were requested", async () => {
+    const { run, responsePath, repoInfo, repoPath, options, style, sentinel } = await fixture();
+    await run();
+    const current = (await listCacheEntries()).find(
+      (candidate) =>
+        candidate.entry?.phase === "facts" && candidate.entry.repoFullName === repoInfo.fullName
+    )!;
+    await rm(current.path);
+    await writePhaseCache(
+      "facts",
+      repoInfo.fullName,
+      repoInfo.commitSha!,
+      makeRepoFacts({ purpose: "legacy" }),
+      {
+        ...current.entry!.generationOptions,
+        analysisFingerprint: resolveAnalysisInputs(repoPath, options, style).fingerprint,
+      }
+    );
+    const fresh = makeRepoFacts({ purpose: "with excerpts" });
+    fresh.quickstart.commands = [
+      {
+        name: "test",
+        command: "npm test",
+        source: "package.json",
+        evidence: { path: "package.json", quote: '"test": "vitest"' },
+      },
+    ];
+    await writeFile(responsePath, JSON.stringify(fresh));
+    const result = await run();
+    expect(result.model).not.toBe("cache");
+    expect(result.facts.purpose).toBe("with excerpts");
+    expect(result.facts.quickstart.commands[0].evidence?.quote).toBe('"test": "vitest"');
+    sentinel();
+    expect((await run()).model).toBe("cache");
+  });
+
   it("treats malformed facts as a miss and recovers via a fresh saved response", async () => {
     const { run, responsePath, repoInfo } = await fixture();
     await run();

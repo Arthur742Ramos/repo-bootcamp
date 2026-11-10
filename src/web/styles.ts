@@ -101,6 +101,8 @@ export const WEB_STYLES = `
     .advanced-options summary { color: var(--ink-muted); cursor: pointer; font-size: 0.8125rem; font-weight: 600; }
     .advanced-options summary:focus-visible { outline: none; color: var(--ink); box-shadow: 0 0 0 2px var(--accent); }
     .package-directory { grid-column: 1 / -1; }
+    .package-input-row { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+    .package-input-row input { flex: 1 1 200px; }
     .options-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0.75rem; margin-top: 0.75rem; }
     .option-field { display: flex; flex-direction: column; gap: 0.35rem; }
     .option-field label { color: var(--ink-muted); font-size: 0.75rem; font-weight: 600; }

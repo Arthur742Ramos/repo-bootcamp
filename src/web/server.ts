@@ -55,6 +55,8 @@ export function createApp(): express.Application {
           styleSrcAttr: ["'none'"],
           imgSrc: ["'self'", "data:"],
           connectSrc: ["'self'"],
+          // This server uses HTTP; Safari otherwise upgrades local requests to HTTPS.
+          upgradeInsecureRequests: null,
         },
       },
       crossOriginEmbedderPolicy: false,

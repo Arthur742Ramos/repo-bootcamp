@@ -1,9 +1,12 @@
 import { execFile } from "child_process";
-import { readContainedFile } from "../fs-safe.js";
+import { tmpdir } from "os";
 import { promisify } from "util";
 
 import chalk from "chalk";
 
+import { readContainedFile } from "../fs-safe.js";
+import { parseJsonc } from "../jsonc.js";
+import { scanTomlMetadata } from "../toml-metadata-scan.js";
 import { withResolvedRepo } from "./_shared.js";
 
 const execFileAsync = promisify(execFile);
@@ -30,6 +33,31 @@ interface ToolRequirement {
   required: string;
   source: string;
   installUrl: string;
+  kind?: "rustup" | "dotnet";
+  dotnet?: DotnetSettings;
+  problem?: string;
+}
+
+const DOTNET_ROLL_FORWARD = [
+  "disable",
+  "patch",
+  "feature",
+  "minor",
+  "major",
+  "latestPatch",
+  "latestFeature",
+  "latestMinor",
+  "latestMajor",
+] as const;
+type DotnetRollForward = (typeof DOTNET_ROLL_FORWARD)[number];
+interface DotnetSettings {
+  version?: string;
+  rollForward: DotnetRollForward;
+  allowPrerelease: boolean;
+}
+
+function isDotnetRollForward(value: unknown): value is DotnetRollForward {
+  return typeof value === "string" && DOTNET_ROLL_FORWARD.some((policy) => policy === value);
 }
 
 interface PreflightResult {
@@ -67,6 +95,84 @@ function pmUrl(name: string): string {
   if (name === "pnpm") return "https://pnpm.io/installation";
   if (name === "yarn") return "https://yarnpkg.com/getting-started/install";
   return "https://www.npmjs.com/get-npm";
+}
+
+function rustRequirement(content: string, source: string): ToolRequirement {
+  let channel: string | undefined;
+  let problem: string | undefined;
+  if (source === "rust-toolchain" && /^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(content)) {
+    channel = content;
+  } else {
+    const metadata = scanTomlMetadata(content);
+    const toolchain = metadata.root.get("toolchain");
+    if (metadata.complete && toolchain instanceof Map) {
+      const value = toolchain.get("channel");
+      if (toolchain.has("path")) {
+        problem =
+          "A custom toolchain path cannot be verified without running repository-selected code.";
+      } else if (typeof value === "string" && /^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(value)) {
+        channel = value;
+      }
+    }
+  }
+  return {
+    tool: "Rust",
+    commands: ["rustup"],
+    versionArgs: ["toolchain", "list"],
+    required: channel ?? "unverified",
+    source,
+    installUrl: "https://rustup.rs/",
+    kind: "rustup",
+    problem: channel
+      ? undefined
+      : (problem ?? "The Rust toolchain declaration is invalid or unsupported."),
+  };
+}
+
+function dotnetRequirement(content: string): ToolRequirement | null {
+  const parsed = parseJsonc(content);
+  const obj = isRecord(parsed) ? parsed : null;
+  if (obj && obj.sdk === undefined) return null;
+  const sdk = obj && isRecord(obj.sdk) ? obj.sdk : null;
+  const version = sdk?.version;
+  const rollForward = sdk?.rollForward ?? "patch";
+  const allowPrerelease = sdk?.allowPrerelease ?? true;
+  let problem: string | undefined;
+  if (!sdk) {
+    problem = "The global.json SDK declaration is invalid.";
+  } else if (sdk.paths !== undefined) {
+    problem =
+      "Custom SDK search paths cannot be verified without running repository-selected code.";
+  } else if (
+    (version !== undefined && (typeof version !== "string" || !parseDotnetVersion(version))) ||
+    !isDotnetRollForward(rollForward) ||
+    (version === undefined && sdk.rollForward !== undefined && rollForward !== "latestMajor") ||
+    typeof allowPrerelease !== "boolean"
+  ) {
+    problem = "The global.json SDK version or roll-forward policy is invalid or unsupported.";
+  }
+  return {
+    tool: ".NET SDK",
+    commands: ["dotnet"],
+    versionArgs: ["--list-sdks"],
+    required: typeof version === "string" ? version : "any installed SDK",
+    source: "global.json",
+    installUrl: "https://dotnet.microsoft.com/download",
+    kind: "dotnet",
+    dotnet:
+      !problem && isDotnetRollForward(rollForward) && typeof allowPrerelease === "boolean"
+        ? {
+            version: typeof version === "string" ? version : undefined,
+            rollForward,
+            allowPrerelease,
+          }
+        : undefined,
+    problem,
+  };
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 /** Collect declared toolchain requirements from the target repo. */
@@ -159,6 +265,24 @@ export async function gatherRequirements(repoPath: string): Promise<ToolRequirem
       source: "go.mod",
       installUrl: "https://go.dev/dl/",
     });
+  }
+
+  // rustup gives the legacy file precedence when both names exist.
+  const rustLegacy = await readText(repoPath, "rust-toolchain");
+  const rustToml = rustLegacy === null ? await readText(repoPath, "rust-toolchain.toml") : null;
+  if (rustLegacy !== null || rustToml !== null) {
+    reqs.push(
+      rustRequirement(
+        rustLegacy ?? rustToml ?? "",
+        rustLegacy !== null ? "rust-toolchain" : "rust-toolchain.toml"
+      )
+    );
+  }
+
+  const globalJson = await readText(repoPath, "global.json");
+  if (globalJson !== null) {
+    const dotnet = dotnetRequirement(globalJson);
+    if (dotnet) reqs.push(dotnet);
   }
 
   return reqs;
@@ -284,6 +408,191 @@ function evaluate(req: ToolRequirement, installed: string | null): PreflightResu
   return { tool: req.tool, required: req.required, source: req.source, installed, status, remedy };
 }
 
+interface DotnetVersion {
+  major: number;
+  minor: number;
+  patch: number;
+  prerelease: string[];
+}
+
+function parseDotnetVersion(value: string): DotnetVersion | null {
+  const match = /^(\d+)\.(\d+)\.(\d{3,})(?:-([A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*))?$/.exec(value);
+  if (!match) return null;
+  const [major, minor, patch] = match.slice(1, 4).map(Number);
+  if (![major, minor, patch].every(Number.isSafeInteger)) return null;
+  return { major, minor, patch, prerelease: match[4]?.split(".") ?? [] };
+}
+
+function compareDotnetVersions(a: DotnetVersion, b: DotnetVersion): number {
+  const numeric = compare([a.major, a.minor, a.patch], [b.major, b.minor, b.patch]);
+  if (numeric !== 0) return numeric;
+  if (!a.prerelease.length || !b.prerelease.length) {
+    return Math.sign(b.prerelease.length - a.prerelease.length);
+  }
+  for (let i = 0; i < Math.max(a.prerelease.length, b.prerelease.length); i++) {
+    const left = a.prerelease[i];
+    const right = b.prerelease[i];
+    if (left === undefined || right === undefined) return left === undefined ? -1 : 1;
+    if (left === right) continue;
+    const leftNumber = /^\d+$/.test(left);
+    const rightNumber = /^\d+$/.test(right);
+    if (leftNumber && rightNumber) {
+      const l = BigInt(left);
+      const r = BigInt(right);
+      if (l === r) continue;
+      return l < r ? -1 : 1;
+    }
+    if (leftNumber !== rightNumber) return leftNumber ? -1 : 1;
+    return left < right ? -1 : 1;
+  }
+  return 0;
+}
+
+function dotnetMatches(settings: DotnetSettings, installed: DotnetVersion): boolean {
+  if (!settings.allowPrerelease && installed.prerelease.length) return false;
+  if (!settings.version) return true;
+  const required = parseDotnetVersion(settings.version);
+  if (!required) return false;
+  const order = compareDotnetVersions(installed, required);
+  if (settings.rollForward === "disable") return order === 0;
+  if (order < 0) return false;
+  switch (settings.rollForward) {
+    case "patch":
+    case "latestPatch":
+      return (
+        installed.major === required.major &&
+        installed.minor === required.minor &&
+        Math.floor(installed.patch / 100) === Math.floor(required.patch / 100)
+      );
+    case "feature":
+    case "latestFeature":
+      return installed.major === required.major && installed.minor === required.minor;
+    case "minor":
+    case "latestMinor":
+      return installed.major === required.major;
+    case "major":
+    case "latestMajor":
+      return true;
+  }
+}
+
+function compareDotnetSelection(
+  a: DotnetVersion,
+  b: DotnetVersion,
+  settings: DotnetSettings
+): number {
+  const required = settings.version ? parseDotnetVersion(settings.version) : null;
+  if (required && settings.rollForward === "patch") {
+    const aExact = compareDotnetVersions(a, required) === 0;
+    const bExact = compareDotnetVersions(b, required) === 0;
+    if (aExact !== bExact) return aExact ? -1 : 1;
+  }
+  if (required && ["feature", "minor", "major"].includes(settings.rollForward)) {
+    if (settings.rollForward === "major" && a.major !== b.major) return a.major - b.major;
+    if (settings.rollForward !== "feature" && a.minor !== b.minor) return a.minor - b.minor;
+    const aBand = Math.floor(a.patch / 100);
+    const bBand = Math.floor(b.patch / 100);
+    if (aBand !== bBand) return aBand - bBand;
+  }
+  return compareDotnetVersions(b, a);
+}
+
+function resultWithStatus(
+  req: ToolRequirement,
+  installed: string | null,
+  status: CheckStatus,
+  remedy?: string
+): PreflightResult {
+  return {
+    tool: req.tool,
+    required: req.required,
+    source: req.source,
+    installed,
+    status,
+    remedy,
+  };
+}
+
+/** Inventory toolchains without running code selected by the target repository. */
+async function evaluateInventory(req: ToolRequirement): Promise<PreflightResult> {
+  if (req.problem) return resultWithStatus(req, null, "unknown", req.problem);
+  try {
+    const { stdout } = await execFileAsync(req.commands[0], req.versionArgs, {
+      cwd: tmpdir(),
+      timeout: 5000,
+      env: { ...process.env, RUSTUP_AUTO_INSTALL: "0" },
+    });
+    if (req.kind === "rustup") {
+      const lines = stdout
+        .split(/\r?\n/)
+        .map((line) => line.trim())
+        .filter(Boolean);
+      const names = lines.map((line) => line.split(/\s+/)[0]);
+      const defaultLine = lines.find((line) => /\bdefault\b/.test(line));
+      const host = defaultLine?.match(/-(?:x86_64|i686|aarch64|armv7|arm)-[^\s]+/)?.[0];
+      const exact = names.find(
+        (name) => name === req.required || (host && name === req.required + host)
+      );
+      if (exact) return resultWithStatus(req, exact, "ok");
+      if (names.some((name) => name.startsWith(`${req.required}-`))) {
+        return resultWithStatus(
+          req,
+          null,
+          "unknown",
+          "The installed Rust toolchain's host could not be verified."
+        );
+      }
+      return resultWithStatus(
+        req,
+        null,
+        "missing",
+        `Install the ${req.required} Rust toolchain with rustup (${req.installUrl}).`
+      );
+    }
+    const settings = req.dotnet;
+    if (!settings)
+      return resultWithStatus(req, null, "unknown", "SDK policy could not be verified.");
+    const versions = stdout
+      .split(/\r?\n/)
+      .map((line) => /^(\S+)\s+\[/.exec(line)?.[1])
+      .filter((version): version is string => version !== undefined)
+      .map((version) => ({ text: version, parsed: parseDotnetVersion(version) }))
+      .filter(
+        (version): version is { text: string; parsed: DotnetVersion } => version.parsed !== null
+      );
+    if (stdout.trim() && versions.length === 0) {
+      return resultWithStatus(
+        req,
+        null,
+        "unknown",
+        "The installed SDK list could not be interpreted."
+      );
+    }
+    const match = versions
+      .filter((version) => dotnetMatches(settings, version.parsed))
+      .sort((a, b) => compareDotnetSelection(a.parsed, b.parsed, settings))[0];
+    if (match) return resultWithStatus(req, match.text, "ok");
+    const available =
+      versions.sort((a, b) => compareDotnetVersions(b.parsed, a.parsed))[0]?.text ?? null;
+    return resultWithStatus(
+      req,
+      available,
+      available ? "mismatch" : "missing",
+      `Install a compatible .NET SDK (${req.installUrl}).`
+    );
+  } catch (error: unknown) {
+    if (isRecord(error) && error.code === "ENOENT" && req.kind === "dotnet") {
+      return resultWithStatus(req, null, "missing", `Install the .NET SDK (${req.installUrl}).`);
+    }
+    return resultWithStatus(
+      req,
+      null,
+      "unknown",
+      `Could not inspect installed ${req.tool} toolchains; check them manually.`
+    );
+  }
+}
+
 const GLYPH: Record<CheckStatus, string> = {
   ok: "✅",
   mismatch: "⚠️",
@@ -297,7 +606,11 @@ function printReport(results: PreflightResult[], repoName: string): void {
   console.log(chalk.dim("Your machine vs. the target repo's declared toolchain\n"));
 
   for (const r of results) {
-    const have = r.installed ? `local ${r.installed}` : chalk.red("not installed");
+    const have = r.installed
+      ? `local ${r.installed}`
+      : r.status === "unknown"
+        ? chalk.yellow("not verified")
+        : chalk.red("not installed");
     console.log(
       `  ${GLYPH[r.status]} ${chalk.bold(r.tool.padEnd(10))} ` +
         chalk.dim(`requires ${r.required} (${r.source})`) +
@@ -314,7 +627,8 @@ function printReport(results: PreflightResult[], repoName: string): void {
  * Run the standalone `bootcamp preflight` command: clone/resolve the target
  * repo, read its declared toolchain (Node `engines`/`.nvmrc`/`.node-version`,
  * Corepack `packageManager`, Python `requires-python`/`.python-version`, Go
- * `go.mod`), and check the LOCAL machine against each — printing a per-tool
+ * `go.mod`, Rust toolchain files and .NET `global.json`), and check the LOCAL
+ * machine against each — printing a per-tool
  * status with a remedy. Distinct from `doctor`, which checks whether your
  * machine can run bootcamp itself. With `--check`, exits non-zero when any
  * declared tool is missing or mismatched.
@@ -327,8 +641,12 @@ export async function runPreflightCommand(
     const reqs = await gatherRequirements(repoSource.path);
     const results: PreflightResult[] = [];
     for (const req of reqs) {
-      const installed = await probeVersion(req.commands, req.versionArgs);
-      results.push(evaluate(req, installed));
+      if (req.kind) {
+        results.push(await evaluateInventory(req));
+      } else {
+        const installed = await probeVersion(req.commands, req.versionArgs);
+        results.push(evaluate(req, installed));
+      }
     }
 
     const failing = results.filter((r) => r.status === "missing" || r.status === "mismatch").length;
@@ -345,7 +663,7 @@ export async function runPreflightCommand(
       console.log(chalk.yellow("\n🚀 No declared toolchain requirements detected."));
       console.log(
         chalk.dim(
-          "Looked for engines.node, .nvmrc, .node-version, packageManager, requires-python, .python-version, and go.mod.\n"
+          "Looked for Node, package-manager, Python, Go, Rust and .NET toolchain declarations.\n"
         )
       );
     } else {

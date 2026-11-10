@@ -39,6 +39,7 @@ interface RunStats {
 
 interface GenerationResult {
   emittedFiles: string[];
+  facts: RepoFacts;
   security: Awaited<ReturnType<typeof prepareOutputDocuments>>["security"];
   radar: Awaited<ReturnType<typeof prepareOutputDocuments>>["radar"];
   deps: Awaited<ReturnType<typeof prepareOutputDocuments>>["deps"];
@@ -173,6 +174,7 @@ async function generateOutputs({
 
   return {
     emittedFiles,
+    facts: preparedFacts,
     security,
     radar,
     deps,
@@ -465,7 +467,7 @@ export async function runMainCommand(repoUrl: string, options: BootcampOptions):
     const manifest = createAnalysisManifest({
       repoInfo,
       scanResult,
-      facts,
+      facts: generation.facts,
       options,
       format: outputFormat,
       durationMs: Date.now() - startTime,
@@ -683,7 +685,7 @@ export async function runMainCommand(repoUrl: string, options: BootcampOptions):
         const manifest = createAnalysisManifest({
           repoInfo,
           scanResult: newScan,
-          facts: styledFacts,
+          facts: generation.facts,
           options: watchOptions,
           format: outputFormat,
           durationMs: result.stats.endTime ? result.stats.endTime - result.stats.startTime : 0,
