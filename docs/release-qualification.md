@@ -1,81 +1,73 @@
-# Campaign release qualification
+# 2.0.0 release qualification
 
-This campaign is unreleased. `package.json` remains at 1.1.1. The evaluated main
-commit is `d05efc197ed7e47c5c95b09784afddb1ac647d58`, with 86 main commits after
-the `v1.1.1` tag. Draft changes require human review and successful CI for each
-exact remote commit before release planning. No version, tag, merge, publication,
-deployment, credential or repository setting is changed by this campaign.
+The release is prepared from `main` at
+`d8b532abe85735519d65aaa61e732001c549e004`, 132 commits after the `v1.1.1`
+tag. Package metadata is aligned to `2.0.0` and the complete unreleased history
+is promoted to that release.
 
-## Implemented scope
+## Release scope
 
-- Contain and bound implicit dependency, default prompt and equivalent metadata
-  reads. Keep the explicitly requested external prompt behavior and existing
-  manifest parser precedence.
-- Key facts by effective prompt content, resolved prompt style and analysis mode.
-  Keep output-format reuse and unrelated deterministic phase identities. Treat
-  malformed payloads as misses and cache-write failures as optional persistence
-  failures; preserve model and output-directory errors.
-- Support `^22.18.0 || >=24.0.0`, default to Node 24, and enforce the same contract
-  in package metadata, doctor, packaging checks and workflows. Node 23 is excluded
-  by the locked configuration loader's supported runtime range.
-- Restore strict source and test typing and check fresh LF checkouts on Windows
-  and Linux CI.
+The major version records the supported-runtime break: Node.js 20, 21, 23, and
+Node.js 22 versions before 22.18.0 are no longer supported. The package,
+doctor checks, packaging checks, CI matrices, and documentation use
+`^22.18.0 || >=24.0.0`; Node 24 remains the recommended runtime.
 
-## Verification record
+The unreleased scope includes:
 
-The final code batch passed 137 local unit-configuration files: 3,201 tests passed
-and 8 retained their existing skips. Strict source and complete test typing, build,
-lint, whole-tree formatting, packaging invariants, and compiled direct/symlink CLI
-entry points passed locally. Exact Node 22.18.0 passed strict locked installation
-and packed CLI/API/JSON/TypeScript config smoke tests. Fresh task-owned checkouts
-with both `core.autocrlf=true` and `false` passed formatting and retained LF files.
+- bounded repository reads, prompt-aware cache identity, strict typing, LF
+  checkout behavior, and hardened manifest, dependency, link, and export handling;
+- deterministic Cargo, Go, Python, Task, package-scope, and command-guidance
+  improvements, with exact provenance and conservative fallback behavior;
+- evidence-backed onboarding guidance and resumable first-session checklists;
+- Rust and .NET preflight checks, pull-request onboarding-impact summaries, and
+  the pinned deterministic quality benchmark; and
+- web workflow, accessibility, preview, retry, restoration, and mobile-layout
+  fixes accumulated since `v1.1.1`.
 
-[Containment CI](https://github.com/Arthur742Ramos/repo-bootcamp/actions/runs/38318928043)
-passed for `b59da98faefc8ee4c36855fe49935cabd7bab20f`.
-[Cache CI](https://github.com/Arthur742Ramos/repo-bootcamp/actions/runs/38321769564)
-passed for `9edc36b4dfc66c45626fcfa2ccd13c84d780e878`, including full CLI and 370
-automated browser cases. The final cache batch's local CLI run passed 387 cases
-with 1 skip and one Windows `EBUSY` cleanup failure; a single isolated replay
-passed both cases. This was a cleanup failure after the assertions, not evidence
-of a product regression. Later draft CI must be checked on its own head; an older
-green run does not qualify a changed commit.
+## Baseline verification
 
-The original test-contract draft's
-[complete CI](https://github.com/Arthur742Ramos/repo-bootcamp/actions/runs/38323906735)
-passed for `aadcab079fada8a8b5e70a6616471e236fe33b16`, including full test typing,
-CLI and browser regressions. The original documentation draft also
-[passed CI](https://github.com/Arthur742Ramos/repo-bootcamp/actions/runs/38324156404)
-for `f0b5812ccb6ca938350bd1f79b72339f34483d5b`.
+The exact baseline
+[CI run](https://github.com/Arthur742Ramos/repo-bootcamp/actions/runs/42845294697)
+and
+[onboarding-quality run](https://github.com/Arthur742Ramos/repo-bootcamp/actions/runs/42845294932)
+passed for `d8b532abe85735519d65aaa61e732001c549e004`. The source change in
+[pull request #231](https://github.com/Arthur742Ramos/repo-bootcamp/pull/231)
+passed 3,235 unit tests with 1 skip, 391 CLI tests, 414 browser tests, strict
+source and test typing, build, lint, formatting, packaging, packed-runtime, and
+the deterministic quality benchmark.
 
-Two earlier runtime/LF Windows CI runs hit existing 30-second fixture-process
-deadlines in different command-guidance cases; completed generation was present
-in some output. All 23 controls passed a bounded two-worker Node 24 replay. The
-Windows CLI job now uses that worker budget and reports child process errors
-explicitly. Generation code, timeouts, assertions and skip policy are unchanged.
-Each final integrated head still needs its own successful CI run.
+The two Dependabot update runs for the same main commit
+([42845538113](https://github.com/Arthur742Ramos/repo-bootcamp/actions/runs/42845538113)
+and
+[42845538226](https://github.com/Arthur742Ramos/repo-bootcamp/actions/runs/42845538226))
+failed in their private-source metadata authentication path. They are separate
+from the successful application CI and onboarding-quality jobs.
 
-All application generation regressions used saved responses or injected fixture
+Application generation regressions use saved responses or injected fixture
 clients. No fresh live-model quality, provider availability, generation-time,
-large-repository memory or manual browser accessibility evaluation was performed.
-The deterministic security score is a heuristic, not an audit conclusion.
+large-repository memory, or manual accessibility benchmark is claimed.
 
-## Decisions before publication
+## Lockfile reproducibility
 
-1. Complete human review of the stacked drafts and confirm exact-head CI after
-   any rebases or fixes. Check both source and test types, coverage thresholds,
-   full CLI/browser regressions, LF formatting and dependency audits.
-2. Choose the next version and release notes deliberately. Node 20 installations
-   are no longer supported by the locked dependency set; communicate the new
-   runtime policy. Verify the release tag equals the chosen package version and
-   rerun packed installation at the supported minimum.
-3. Decide separately whether to enable branch protection and required checks.
-   The evaluation found protection disabled; this campaign does not authorize a
-   settings change.
+Twenty-six lockfile `resolved` fields inherited Microsoft package-feed hosts.
+Those tarballs returned content in the originating environment, but Dependabot
+requires authenticated metadata access to the feed. The 2.0.0 lockfile rewrites
+only those registry host prefixes to `https://registry.npmjs.org/`; locked
+versions and integrity hashes are unchanged. Release validation includes a
+clean install from a fresh npm cache so a warm local cache is not treated as
+proof of portability.
 
-The historical Dependabot runs
-[37373643320](https://github.com/Arthur742Ramos/repo-bootcamp/actions/runs/37373643320)
-and [37373643028](https://github.com/Arthur742Ramos/repo-bootcamp/actions/runs/37373643028)
-report a failed workflow with a cancelled job. A campaign read-only log retrieval
-returned no log content, so their root cause remains unverified. Neither run was
-rerun or cancelled by this campaign. This operational issue remains separate from
-successful application CI.
+## Publication handoff
+
+This metadata preparation does not create or push a release tag and does not
+publish an npm package or GitHub release. The v1.1.1 release workflow's npm job
+failed because `NPM_TOKEN` was not configured, and the repository currently has
+no Actions secrets. npm publication status must therefore remain unknown until
+the maintainer completes and verifies publication.
+
+The existing release workflow runs npm publication and the GitHub release
+archive independently after the same test gate. When a maintainer creates
+`v2.0.0`, the npm job still requires valid publishing credentials, while the
+archive job can produce `repo-bootcamp-2.0.0.tgz` and `SHA256SUMS`. Quick Start
+documents both versioned installation paths without implying either artifact
+already exists.
