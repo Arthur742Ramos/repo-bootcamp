@@ -60,11 +60,13 @@ Most READMEs are outdated. Most wikis are incomplete. Most senior devs are too b
 
 **Repo Bootcamp** uses agentic AI to analyze repositories from GitHub, GitLab, or Bitbucket and generate comprehensive, actionable onboarding documentation in **under 60 seconds**.
 
+After installing a published release, analyze a repository:
+
 ```bash
-npx repo-bootcamp https://github.com/facebook/react
+bootcamp https://github.com/facebook/react
 ```
 
-That's it. You get 14+ interconnected markdown files covering everything a new contributor needs.
+You get 14+ interconnected markdown files covering everything a new contributor needs.
 
 <div align="center">
 
@@ -161,19 +163,18 @@ Onboarding Risk: 18/100 (A) 🟢
 | Metric              | Value                                  |
 | ------------------- | -------------------------------------- |
 | Generated files     | 14+                                    |
-| Unit configuration  | 3,201 passed, 8 skipped                |
-| Source files        | 90 TypeScript files                    |
-| Test files          | 137 unit / 51 CLI / 30 browser         |
-| Source lines        | 28,369, including comments and blanks  |
+| Automated checks    | 3,235 unit / 391 CLI / 414 browser     |
+| Source files        | 94 TypeScript files                    |
+| Source lines        | 29,387, including comments and blanks  |
 | Languages supported | 10+                                    |
 | Generation time     | Varies with repository, model and mode |
 
-Inventory measured on 2026-10-12 from tracked files in this campaign. The unit
-result is the complete local Windows run on Node 24; platform-dependent skips
-can differ in CI. The unit and CLI configurations both include `test/e2e.test.ts`,
-so their file counts overlap. Generation time has not been qualified with a fresh
-live-model benchmark. See [release qualification](docs/release-qualification.md)
-for the verification scope and the remaining release decisions.
+Inventory measured on 2026-11-10 from tracked files in the release baseline. The
+automated check counts come from the #231 release candidate validation and may
+include platform-dependent skips. Generation time has not been qualified with a
+fresh live-model benchmark. See
+[release qualification](docs/release-qualification.md) for the exact baseline,
+verification scope, and publication handoff.
 
 ## How It Uses the GitHub Copilot SDK
 
@@ -437,22 +438,40 @@ destinations are omitted. Quiet and JSON-only modes keep the detailed list hidde
 
 ## Quick Start
 
+Repo Bootcamp 2.0.0 requires Node.js 22.18+ on the 22.x line, or Node.js 24+.
+After the v2.0.0 npm publication is available:
+
 ```bash
-# Clone and install
-git clone https://github.com/your-username/repo-bootcamp.git
-cd repo-bootcamp
-npm install
+npx repo-bootcamp@2.0.0 https://github.com/sindresorhus/ky
+```
 
-# Build
-npm run build
+If npm publication is unavailable, install the independently built GitHub
+release archive after the v2.0.0 release assets exist:
 
-# Generate bootcamp for any repo
-node dist/cli.js https://github.com/sindresorhus/ky
+```bash
+curl -fLO https://github.com/Arthur742Ramos/repo-bootcamp/releases/download/v2.0.0/repo-bootcamp-2.0.0.tgz
+curl -fLO https://github.com/Arthur742Ramos/repo-bootcamp/releases/download/v2.0.0/SHA256SUMS
 
-# Or use with npx (after npm link)
-npm link
+# Linux; on macOS use: shasum -a 256 --check SHA256SUMS
+sha256sum --check SHA256SUMS
+
+npm install --global ./repo-bootcamp-2.0.0.tgz
 bootcamp https://github.com/sindresorhus/ky
 ```
+
+To work from source:
+
+```bash
+git clone https://github.com/Arthur742Ramos/repo-bootcamp.git
+cd repo-bootcamp
+npm install
+npm run build
+node dist/cli.js https://github.com/sindresorhus/ky
+```
+
+The versioned npm and GitHub archive commands are intentionally described as
+post-publication installation paths; this metadata commit does not create a tag
+or publish either artifact.
 
 ## Usage
 

@@ -7,11 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+No unreleased changes yet.
+
+## [2.0.0] - 2026-11-10
+
+### Added
+
+- Add evidence-backed onboarding guidance that distinguishes recommendations matched in scanned repository sources from unverified guidance.
+- Add resumable first-session task checklists and contained package-directory selection across the CLI and web workflow.
+- Extend deterministic preflight checks to Rust toolchains and .NET SDK requirements.
+- Add pull-request onboarding-impact summaries to the onboarding-quality workflow and add the deterministic, pinned `npm run benchmark:quality -- --check` quality benchmark.
+- Expose the new onboarding guidance, package selection, checklist, preflight, PR impact, and benchmark workflows in the README.
+
+### Changed
+
+- Require Node.js `^22.18.0 || >=24.0.0`. This major release no longer supports Node.js 20, 21, 23, or Node.js 22 versions before 22.18.0.
+
 ### Fixed
 
+- Resolve lockfile tarballs from the public npm registry without changing package versions or integrity hashes, so fresh installers and Dependabot do not depend on private-feed metadata access.
+- Make the local web workflow usable in Safari and retain focused same-origin package discovery.
 - Bound implicit manifest and default repository-prompt reads to contained regular files; preserve explicit external prompt overrides and invalidate affected cached projections.
 - Include effective system/repository prompt content, resolved prompt style and fast/full mode in facts-cache identity. Reject malformed facts and deterministic phase payloads, and preserve successful analysis when optional cache persistence fails.
-- Align the supported runtime with locked dependencies: Node 22.18 or later in the 22.x series, or Node 24 and later. Verify packed CLI/API and JSON/TypeScript configuration loading at the exact minimum.
 - Keep repository text in LF on Windows and Unix and restore strict typing for test fixtures and mocks, with a separate CI test-contract gate.
 - Refresh measured repository inventory and qualify generation-time claims without a live-model benchmark.
 
@@ -318,7 +335,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Beautiful CLI output with progress indicators
   - Streaming responses during analysis
 
-[Unreleased]: https://github.com/Arthur742Ramos/repo-bootcamp/compare/v1.1.1...HEAD
+[Unreleased]: https://github.com/Arthur742Ramos/repo-bootcamp/compare/v2.0.0...HEAD
+[2.0.0]: https://github.com/Arthur742Ramos/repo-bootcamp/releases/tag/v2.0.0
 [1.1.1]: https://github.com/Arthur742Ramos/repo-bootcamp/releases/tag/v1.1.1
 [1.1.0]: https://github.com/Arthur742Ramos/repo-bootcamp/releases/tag/v1.1.0
 [1.0.0]: https://github.com/Arthur742Ramos/repo-bootcamp/releases/tag/v1.0.0
