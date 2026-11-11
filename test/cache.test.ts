@@ -2,7 +2,30 @@
  * Tests for the analysis cache layer
  */
 
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, afterAll, beforeAll, vi } from "vitest";
+// Cache captures homedir at module evaluation: isolate it before importing any
+// production modules. Changing HOME in a hook is too late (and differs on Windows).
+const ownedCacheHome = vi.hoisted(() => ({ path: "" }));
+vi.mock("os", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("os")>();
+  const { mkdtemp } = await import("fs/promises");
+  const { join } = await import("path");
+  ownedCacheHome.path = await mkdtemp(join(actual.tmpdir(), "bootcamp-cache-unit-home-"));
+  return { ...actual, homedir: () => ownedCacheHome.path };
+});
+
+beforeAll(() => {
+  // Fail before any clear/prune hook if module isolation ever regresses.
+  expect(ownedCacheHome.path).not.toBe("");
+  expect(getCacheDir()).toBe(join(ownedCacheHome.path, ".cache", "repo-bootcamp"));
+});
+
+afterAll(async () => {
+  // Remove only the directory this suite created, never a path inferred from
+  // the production cache constant or the developer's actual home.
+  if (ownedCacheHome.path) await rm(ownedCacheHome.path, { recursive: true, force: true });
+});
+
 import {
   readCache,
   writeCache,
@@ -60,6 +83,10 @@ function makeFacts(overrides: Partial<RepoFacts> = {}): RepoFacts {
 }
 
 describe("cache", () => {
+  beforeEach(async () => {
+    await clearCache();
+  });
+
   describe("readCache", () => {
     it("returns null for non-existent cache entry", async () => {
       const result = await readCache("nonexistent/repo", "abc123");
@@ -196,8 +223,7 @@ describe("cache", () => {
   describe("clearCache", () => {
     it("returns 0 when cache is empty", async () => {
       const cleared = await clearCache();
-      // May or may not be 0 depending on prior tests, just check it's a number
-      expect(typeof cleared).toBe("number");
+      expect(cleared).toBe(0);
     });
 
     it("removes cached entries", async () => {
@@ -213,6 +239,8 @@ describe("cache", () => {
   describe("getCacheDir", () => {
     it("returns a path under home directory", () => {
       const dir = getCacheDir();
+      expect(ownedCacheHome.path).not.toBe("");
+      expect(dir).toBe(join(ownedCacheHome.path, ".cache", "repo-bootcamp"));
       expect(dir).toContain(".cache");
       expect(dir).toContain("repo-bootcamp");
     });

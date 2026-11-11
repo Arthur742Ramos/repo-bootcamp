@@ -3,9 +3,32 @@ import { mkdtemp, mkdir, rm, writeFile } from "fs/promises";
 import { tmpdir } from "os";
 import { join } from "path";
 import { pathToFileURL } from "url";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
-import { clearCache, readCache, writeCache } from "../src/cache.js";
+// Cache captures homedir at module evaluation: isolate it before importing any
+// production modules. Changing HOME in a hook is too late (and differs on Windows).
+const ownedCacheHome = vi.hoisted(() => ({ path: "" }));
+vi.mock("os", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("os")>();
+  const { mkdtemp } = await import("fs/promises");
+  const { join } = await import("path");
+  ownedCacheHome.path = await mkdtemp(join(actual.tmpdir(), "bootcamp-flags-cache-home-"));
+  return { ...actual, homedir: () => ownedCacheHome.path };
+});
+
+beforeAll(() => {
+  // Fail before any clear/prune hook if module isolation ever regresses.
+  expect(ownedCacheHome.path).not.toBe("");
+  expect(getCacheDir()).toBe(join(ownedCacheHome.path, ".cache", "repo-bootcamp"));
+});
+
+afterAll(async () => {
+  // Remove only the directory this suite created, never a path inferred from
+  // the production cache constant or the developer's actual home.
+  if (ownedCacheHome.path) await rm(ownedCacheHome.path, { recursive: true, force: true });
+});
+
+import { clearCache, getCacheDir, readCache, writeCache } from "../src/cache.js";
 import { generateBootcamp } from "../src/generator.js";
 import { scanRepo } from "../src/ingest.js";
 import { getStyleConfig, type BootcampConfig } from "../src/plugins.js";
@@ -265,6 +288,11 @@ describe("critical flag behavior", () => {
 });
 
 describe("cache option sensitivity", () => {
+  it("uses only this suite's owned cache directory", () => {
+    expect(ownedCacheHome.path).not.toBe("");
+    expect(getCacheDir()).toBe(join(ownedCacheHome.path, ".cache", "repo-bootcamp"));
+  });
+
   beforeEach(async () => {
     await clearCache();
   });
