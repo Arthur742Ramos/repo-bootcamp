@@ -42,7 +42,7 @@ vi.mock("../src/services/config-resolution.js", async () => ({
 
 vi.mock("../src/services/analysis-orchestration.js", () => ({
   orchestrateAnalysis: vi.fn().mockResolvedValue({
-    facts: { firstTasks: [], stack: {} },
+    facts: { firstTasks: [], stack: {}, quickstart: { commands: [] } },
     toolCalls: 5,
     model: "test-model",
     analysisStats: { toolCalls: [] },
@@ -50,7 +50,7 @@ vi.mock("../src/services/analysis-orchestration.js", () => ({
   }),
   prepareOutputDocuments: vi.fn().mockResolvedValue({
     documents: [{ name: "BOOTCAMP.md", content: "# Boot" }],
-    facts: { firstTasks: [], stack: {} },
+    facts: { firstTasks: [], stack: {}, quickstart: { commands: [] } },
     security: { score: 90, findings: [], sourceFilesScanned: 1 },
     radar: { onboardingRisk: { score: 20, grade: "A", factors: [] } },
     deps: { totalCount: 5, runtime: [1, 2], dev: [3, 4, 5] },
@@ -93,6 +93,12 @@ vi.mock("fs/promises", async () => {
 });
 
 import express from "express";
+vi.mock("../src/web/kit-search.js", () => ({
+  searchKit: vi
+    .fn()
+    .mockResolvedValue({ matches: [], searchedFiles: 1, skippedFiles: 0, truncated: false }),
+}));
+import { searchKit } from "../src/web/kit-search.js";
 import { registerRoutes, startJobPruner, stopJobPruner } from "../src/web/routes.js";
 
 function createTestApp() {
@@ -196,6 +202,42 @@ describe("web routes", () => {
       const res = await request(await listenLoopback(app)).get(`/api/jobs/${jobId}`);
       expect(res.status).toBe(200);
       expect(res.body.id).toBe(jobId);
+    });
+  });
+
+  describe("GET /api/jobs/:jobId/search", () => {
+    it("validates queries and requires an existing completed job", async () => {
+      const server = await listenLoopback(createTestApp());
+      for (const query of ["", " ", "x".repeat(201)]) {
+        expect(
+          (await request(server).get("/api/jobs/missing/search").query({ q: query })).status
+        ).toBe(400);
+      }
+      expect((await request(server).get("/api/jobs/missing/search?q=a&q=b")).status).toBe(400);
+      expect((await request(server).get("/api/jobs/missing/search?q=setup")).status).toBe(404);
+    });
+    it("searches only the completed job inventory and returns a safe failure", async () => {
+      const server = await listenLoopback(createTestApp());
+      const start = await request(server)
+        .post("/api/analyze")
+        .send({ repoUrl: "https://github.com/test/repo" });
+      const id = start.body.jobId as string;
+      await vi.waitFor(async () => {
+        expect((await request(server).get("/api/jobs/" + id)).body.status).toBe("complete");
+      });
+      const found = await request(server)
+        .get("/api/jobs/" + id + "/search")
+        .query({ q: " setup " });
+      expect(found.status).toBe(200);
+      expect(searchKit).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.arrayContaining(["BOOTCAMP.md"]),
+        "setup"
+      );
+      vi.mocked(searchKit).mockRejectedValueOnce(new Error("private path"));
+      const failed = await request(server).get("/api/jobs/" + id + "/search?q=setup");
+      expect(failed.status).toBe(500);
+      expect(failed.body.error).toBe("Could not search this kit. Please try again.");
     });
   });
 

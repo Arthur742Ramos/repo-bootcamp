@@ -192,6 +192,19 @@ export function getIndexHtml(nonce?: string): string {
           <ol class="next-steps" id="nextSteps"></ol>
         </section>
       </div>
+      <section class="kit-search" aria-labelledby="kitSearchHeading">
+        <h3 id="kitSearchHeading">Find answers in this kit</h3>
+        <form id="kitSearchForm" class="ask-form" role="search" aria-label="Search generated kit">
+          <label class="sr-only" for="kitSearchQuery">Search kit contents</label>
+          <input id="kitSearchQuery" type="search" maxlength="200" placeholder="Search setup, commands, architecture…" aria-describedby="kitSearchHint" />
+          <button class="secondary-btn" type="submit">Search kit</button>
+          <button class="secondary-btn" type="button" id="clearKitSearch">Clear</button>
+        </form>
+        <p id="kitSearchHint" class="field-hint">Literal text search across Markdown, JSON, text, and Mermaid files. Opens the matching document; Markdown opens near the match.</p>
+        <p id="kitSearchStatus" class="field-hint" role="status" aria-live="polite"></p>
+        <button class="secondary-btn" type="button" id="retryKitSearch" hidden>Retry search</button>
+        <ol id="kitSearchResults" class="kit-search-results"></ol>
+      </section>
       <div class="result-toolbar">
         <div class="files-heading-copy">
           <h2 id="filesHeading">Generated Files</h2>
@@ -240,6 +253,8 @@ export function getIndexHtml(nonce?: string): string {
 
   <script${nonceAttribute}>
     let currentJobId = null;
+    let kitSearchRequest = null;
+    let kitSearchRevision = 0;
     let questionRequest = null;
     const artifactDownloads = {
       kit: { buttonId: 'downloadAllBtn', route: 'download', label: 'Download kit', success: 'Downloaded!', failure: 'Download failed', request: null, timer: null },
@@ -484,6 +499,7 @@ export function getIndexHtml(nonce?: string): string {
 
     function beginRun() {
       activeRunToken += 1;
+      resetKitSearch(true);
       resetQuestion();
       resetArtifactDownloads();
       resetCopyFeedback(clipboardCopies.cli);
@@ -1063,6 +1079,7 @@ export function getIndexHtml(nonce?: string): string {
       }
       resetCopyFeedback(clipboardCopies.cli);
       latestResult = data;
+      resetKitSearch(true);
       document.getElementById('emptyState').hidden = true;
       const issuePreviewButton = document.getElementById('issuesPreviewBtn');
       issuePreviewButton.hidden = !(typeof data.issuePreview === 'string' && data.issuePreview.trim());
@@ -1173,6 +1190,75 @@ export function getIndexHtml(nonce?: string): string {
         heading.scrollIntoView({ block: 'start' });
       }
     }
+
+    function resetKitSearch(clearQuery = false) {
+      kitSearchRevision++;
+      if (kitSearchRequest) kitSearchRequest.abort();
+      kitSearchRequest = null;
+      document.getElementById('kitSearchResults').replaceChildren();
+      document.getElementById('kitSearchStatus').textContent = '';
+      document.getElementById('retryKitSearch').hidden = true;
+      document.getElementById('kitSearchResults').removeAttribute('aria-busy');
+      if (clearQuery) document.getElementById('kitSearchQuery').value = '';
+    }
+
+    async function searchKitContents() {
+      resetKitSearch();
+      const query = document.getElementById('kitSearchQuery').value.trim();
+      if (!query || !currentJobId || !latestResult) return;
+      const revision = kitSearchRevision;
+      const jobId = currentJobId;
+      const runToken = activeRunToken;
+      const result = latestResult;
+      const controller = new AbortController();
+      kitSearchRequest = controller;
+      const ownsSearch = () => revision === kitSearchRevision && isCurrentRun(jobId, runToken) && latestResult === result;
+      const status = document.getElementById('kitSearchStatus');
+      const list = document.getElementById('kitSearchResults');
+      status.textContent = 'Searching kit…';
+      list.setAttribute('aria-busy', 'true');
+      try {
+        const response = await fetch('/api/jobs/' + encodeURIComponent(jobId) + '/search?q=' + encodeURIComponent(query), { signal: controller.signal });
+        if (!ownsSearch()) return;
+        const data = await readJsonResponse(response);
+        if (!ownsSearch()) return;
+        if (!Array.isArray(data.matches) || !Number.isSafeInteger(data.searchedFiles) || data.searchedFiles < 0 || !Number.isSafeInteger(data.skippedFiles) || data.skippedFiles < 0) throw new Error('The server returned invalid search results.');
+        for (const match of data.matches.slice(0, 50)) {
+          if (!match || typeof match.filename !== 'string' || !result.files.includes(match.filename) || typeof match.snippet !== 'string' || typeof match.heading !== 'string' || typeof match.fragment !== 'string' || !Number.isSafeInteger(match.line) || match.line < 1) throw new Error('The server returned invalid search results.');
+        }
+        for (const match of data.matches.slice(0, 50)) {
+          const item = document.createElement('li');
+          const button = document.createElement('button');
+          button.type = 'button';
+          button.className = 'next-step-action';
+          button.textContent = match.filename + ' · line ' + match.line + (match.heading ? ' · ' + match.heading : '');
+          button.addEventListener('click', () => {
+            if (ownsSearch()) void viewFile(match.filename, match.fragment);
+          });
+          const snippet = document.createElement('p');
+          snippet.className = 'kit-search-snippet';
+          snippet.textContent = match.snippet;
+          item.append(button, snippet);
+          list.append(item);
+        }
+        status.textContent = (data.matches.length ? Math.min(50, data.matches.length) + (data.matches.length === 1 ? ' matching line' : ' matching lines') : 'No matches') + ' in ' + data.searchedFiles + (data.searchedFiles === 1 ? ' searched file.' : ' searched files.') + (data.truncated ? ' Showing the first 50 matches; narrow your search.' : '') + (data.skippedFiles ? ' ' + data.skippedFiles + ' files skipped (unsupported, unavailable, or search limits).' : '');
+      } catch (error) {
+        if (!ownsSearch()) return;
+        list.replaceChildren();
+        status.textContent = error instanceof Error ? error.message : 'Search failed. Please try again.';
+        document.getElementById('retryKitSearch').hidden = false;
+      } finally {
+        if (ownsSearch()) {
+          kitSearchRequest = null;
+          list.removeAttribute('aria-busy');
+        }
+      }
+    }
+
+    document.getElementById('kitSearchForm').addEventListener('submit', event => { event.preventDefault(); void searchKitContents(); });
+    document.getElementById('kitSearchQuery').addEventListener('input', () => resetKitSearch());
+    document.getElementById('clearKitSearch').addEventListener('click', () => { resetKitSearch(true); document.getElementById('kitSearchQuery').focus(); });
+    document.getElementById('retryKitSearch').addEventListener('click', () => { void searchKitContents(); });
 
     function filterFiles() {
       const query = document.getElementById('fileSearch').value.trim().toLowerCase();

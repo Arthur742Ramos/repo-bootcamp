@@ -232,6 +232,10 @@ Restore a saved job only while the initial page still owns the analysis form. A 
 
 The question field and answer belong to the current analysis. Keep them while reading generated documents and returning with Back. Starting a new analysis clears both, cancels the obsolete client request, and restores Ask immediately. Each pending question owns its loading state; late answers, errors, and control updates from another run must be ignored, including responses whose JSON parsing finishes after the run changes. Allow one pending question per analysis. Client cancellation does not imply cancellation of server-side model work.
 
+### Whole-kit content search
+
+The result readout provides a labeled literal search distinct from filename filtering. Show source-line snippets as text, file names and nearest Markdown headings, bounded coverage, and explicit no-match/failure states. Search is submitted intentionally, not on every keystroke. Editing or clearing a query invalidates pending results immediately; a new analysis clears query and results. Late fetch or JSON completions never repaint a newer query/run. Results open the existing reader and preserve its Back, Close, and focus-restoration behavior. No new model call or persistent browser history is created.
+
 ### Modal (file preview)
 
 Rendered documents with at least two headings offer a labeled native “Jump to section” select. Build its options from sanitized heading text in document order, use positional values to distinguish repeated titles, and hide it for source mode, loading, errors, and shorter documents. Choosing a section or following a fragment link opens all ancestor disclosures before focusing and scrolling to the heading. Back restores the selected section alongside the reading context. Clear options when the file changes or the dialog closes.

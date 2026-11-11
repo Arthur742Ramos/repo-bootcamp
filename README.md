@@ -288,6 +288,7 @@ The Copilot SDK transforms what would be a simple template-filler into an intell
 - **Style Pack Explorer** - `bootcamp styles` lists the built-in style packs and the doc sections each one enables
 - **Version & PR Comparison** - Compare refs with `--compare` or analyze pull requests with `bootcamp diff`
 - **Auto-Issue Creator** - Generate GitHub issues from starter tasks
+- **Whole-kit Search** - Find literal text across generated Markdown, JSON, text, and Mermaid documents in the web reader, with source-line snippets and Markdown section navigation.
 - **Web Demo Server** - Beautiful browser UI for analyzing repositories
 - **Template Packs** - Customize output style for different contexts
 - **Diagram Rendering** - Convert Mermaid to SVG/PNG with mermaid-cli
@@ -1530,3 +1531,9 @@ _Stop wasting time on manual onboarding docs. Let AI do the heavy lifting._
 [![Built with Copilot SDK](https://img.shields.io/badge/Built%20with-GitHub%20Copilot%20SDK-8957e5?logo=github&logoColor=white&style=for-the-badge)](https://github.com/github/copilot-sdk)
 
 </div>
+
+### Searching a generated kit
+
+After analysis, use **Find answers in this kit** to search document contents rather than filenames. Search is case-insensitive and literal (not regex), with one result per matching source line. Select a result to open the existing reader near its Markdown heading; Close returns to the results. The separate file filter still filters names only.
+
+Search does not call a model or search the original repository. It checks at most 64 unique generated text files, each no larger than 512 KiB, and returns the first 50 matching lines in generated-file order. Unsupported formats (including HTML/PDF), unavailable files, and files outside those limits are reported as skipped. Narrow the phrase when results are limited. Search terms and results remain in this page, not browser storage.
