@@ -434,6 +434,13 @@ export const WEB_STYLES = `
       .preview-outline label { display: none; }
       .preview-outline select { padding: 0.45rem 0.75rem; }
     }
+    .kit-search { margin: 1.5rem 0; padding: 1rem; border: 1px solid var(--border); border-radius: 8px; }
+    .kit-search h3 { margin-bottom: 0.75rem; }
+    .kit-search-results { padding-left: 1.5rem; }
+    .kit-search-results li { margin: 1rem 0; }
+    .kit-search-results button { text-align: left; overflow-wrap: anywhere; }
+    .kit-search-snippet { white-space: pre-wrap; overflow-wrap: anywhere; font-family: var(--font-mono); margin-top: 0.5rem; }
+    #kitSearchQuery { min-width: 0; flex: 1; }
     @media (prefers-reduced-motion: reduce) {
       * { transition: none !important; animation: none !important; scroll-behavior: auto !important; }
     }

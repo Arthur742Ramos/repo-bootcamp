@@ -26,6 +26,7 @@ import { createAnalysisManifest } from "../manifest.js";
 import { verifyCitation } from "../evidence.js";
 import { SKIP_DIRS, isPathInsideDir } from "../utils.js";
 import { walkRepositoryFiles } from "../scan-walk.js";
+import { searchKit } from "./kit-search.js";
 import { createZipArchive } from "./zip.js";
 
 /**
@@ -898,6 +899,29 @@ export function registerRoutes(app: Application): void {
       res.setHeader("Content-Type", "text/markdown; charset=utf-8");
       res.setHeader("Content-Disposition", 'attachment; filename="ISSUES_PREVIEW.md"');
       res.send(job.result.issuePreview);
+    }
+  );
+
+  // Search a completed kit using bounded, inventory-only text reads.
+  app.get(
+    "/api/jobs/:jobId/search",
+    defaultApiRateLimit,
+    async (req: Request, res: Response): Promise<void> => {
+      const query = req.query.q;
+      if (typeof query !== "string" || !query.trim() || query.trim().length > 200) {
+        res.status(400).json({ error: "Enter a search phrase of 1 to 200 characters." });
+        return;
+      }
+      const job = jobs.get(req.params.jobId as string);
+      if (!job || job.status !== "complete" || !job.result) {
+        res.status(404).json({ error: "Completed kit not found. Analyze the repository again." });
+        return;
+      }
+      try {
+        res.json(await searchKit(job.result.outputDir, job.result.files, query.trim()));
+      } catch {
+        res.status(500).json({ error: "Could not search this kit. Please try again." });
+      }
     }
   );
 
