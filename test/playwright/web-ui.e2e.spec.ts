@@ -292,7 +292,52 @@ test.describe("web UI", () => {
     await expect(page.locator('[data-file="SECURITY.md"]')).toBeVisible();
     await expect(page.locator("#fileCount")).toContainText("of");
     await expect(page.locator('[data-file="BOOTCAMP.md"]')).toBeHidden();
+    // Exercise the real endpoint and on-disk generated kit, not a routed search fixture.
+    // Filename filtering must not hide content-search hits from other documents.
+    await expect(page.locator('[data-file="FIRST_TASKS.md"]')).toBeHidden();
+    const searchResponsePromise = page.waitForResponse((response) => {
+      const url = new URL(response.url());
+      return url.origin === baseUrl && /\/api\/jobs\/[^/]+\/search$/.test(url.pathname);
+    });
+    await page.getByRole("searchbox", { name: "Search kit contents" }).fill("health check route");
+    await page.getByRole("button", { name: "Search kit", exact: true }).click();
+    const searchResponse = await searchResponsePromise;
+    expect(searchResponse.status()).toBe(200);
+    const report = await searchResponse.json();
+    expect(report.searchedFiles).toBeGreaterThan(0);
+    expect(report.matches).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          filename: "FIRST_TASKS.md",
+          heading: "1. Add a health check route",
+        }),
+      ])
+    );
+    const searchTask = page.locator("#kitSearchResults").getByRole("button", {
+      name: /^FIRST_TASKS\.md · line \d+ · 1\. Add a health check route$/,
+    });
+    await expect(searchTask).toBeVisible();
+    await expect(page.locator("#kitSearchStatus")).toContainText("matching");
+    await searchTask.focus();
+    await page.keyboard.press("Enter");
+    await expect(page.locator("#modalTitle")).toHaveText("FIRST_TASKS.md");
+    await expect(
+      page.getByRole("heading", { name: "1. Add a health check route", exact: true })
+    ).toBeFocused();
+    await page.keyboard.press("Escape");
+    await expect(searchTask).toBeFocused();
+    await expect(page.locator("#fileSearch")).toHaveValue("security");
+    await expect(page.locator('[data-file="FIRST_TASKS.md"]')).toBeHidden();
+    await expect(page.locator('[data-file="SECURITY.md"]')).toBeVisible();
+    await expect(page.getByRole("searchbox", { name: "Search kit contents" })).toHaveValue(
+      "health check route"
+    );
+    await page.locator(".kit-search").screenshot({
+      path: `test-results/live-kit-search-${test.info().project.name}.png`,
+    });
     await page.locator("#fileSearch").fill("");
+    await expect(page.locator('[data-file="FIRST_TASKS.md"]')).toBeVisible();
+    await expect(searchTask).toBeVisible();
 
     const kitDownloadPromise = page.waitForEvent("download");
     await page.locator("#downloadAllBtn").click();

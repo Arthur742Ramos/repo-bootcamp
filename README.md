@@ -1097,6 +1097,12 @@ Library/tool runbooks select their Build & Release command using the same build 
 
 The web interface allows you to analyze repositories interactively through your browser.
 
+### Searching a generated kit
+
+After analysis, use **Find answers in this kit** to search document contents rather than filenames. Search is case-insensitive and literal (not regex), with one result per matching source line. Select a result to open the existing reader near its Markdown heading; Close returns to the results. The separate file filter still filters names only.
+
+Search does not call a model or search the original repository. It checks at most 64 unique generated text files, each no larger than 512 KiB, and returns the first 50 matching lines in generated-file order. Unsupported formats (including HTML/PDF), unavailable files, and files outside those limits are reported as skipped. Narrow the phrase when results are limited. Search terms and results remain in this page, not browser storage.
+
 ### Template Packs
 
 ```bash
@@ -1531,9 +1537,3 @@ _Stop wasting time on manual onboarding docs. Let AI do the heavy lifting._
 [![Built with Copilot SDK](https://img.shields.io/badge/Built%20with-GitHub%20Copilot%20SDK-8957e5?logo=github&logoColor=white&style=for-the-badge)](https://github.com/github/copilot-sdk)
 
 </div>
-
-### Searching a generated kit
-
-After analysis, use **Find answers in this kit** to search document contents rather than filenames. Search is case-insensitive and literal (not regex), with one result per matching source line. Select a result to open the existing reader near its Markdown heading; Close returns to the results. The separate file filter still filters names only.
-
-Search does not call a model or search the original repository. It checks at most 64 unique generated text files, each no larger than 512 KiB, and returns the first 50 matching lines in generated-file order. Unsupported formats (including HTML/PDF), unavailable files, and files outside those limits are reported as skipped. Narrow the phrase when results are limited. Search terms and results remain in this page, not browser storage.
