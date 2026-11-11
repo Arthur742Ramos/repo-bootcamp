@@ -1,5 +1,7 @@
 import { execFile } from "child_process";
 import { tmpdir } from "os";
+import { realpath } from "fs/promises";
+import { isAbsolute, relative, sep } from "path";
 import { promisify } from "util";
 
 import chalk from "chalk";
@@ -8,12 +10,16 @@ import { readContainedFile } from "../fs-safe.js";
 import { parseJsonc } from "../jsonc.js";
 import { scanTomlMetadata } from "../toml-metadata-scan.js";
 import { withResolvedRepo } from "./_shared.js";
+import { normalizeScanScope } from "../services/config-resolution.js";
+import { resolveScanRoot } from "../services/scan-scope.js";
 
 const execFileAsync = promisify(execFile);
 
 /** Options accepted by the `bootcamp preflight` command. */
 export interface PreflightCommandOptions {
   branch?: string;
+  /** Inspect declarations only in this contained repository directory. */
+  subdir?: string;
   /** Emit the report as JSON for machine consumption. */
   json?: boolean;
   /** Exit non-zero if any declared tool is missing or mismatched (CI gate). */
@@ -600,9 +606,10 @@ const GLYPH: Record<CheckStatus, string> = {
   unknown: "•",
 };
 
-function printReport(results: PreflightResult[], repoName: string): void {
+function printReport(results: PreflightResult[], repoName: string, subdir?: string): void {
   console.log(chalk.bold("\n🚀 Preflight"));
   console.log(chalk.dim(`Repository: ${repoName}`));
+  if (subdir) console.log(chalk.dim(`Package directory: ${subdir} (local declarations only)`));
   console.log(chalk.dim("Your machine vs. the target repo's declared toolchain\n"));
 
   for (const r of results) {
@@ -637,8 +644,33 @@ export async function runPreflightCommand(
   repoUrl: string,
   opts: PreflightCommandOptions
 ): Promise<void> {
+  const scope = { subdir: opts.subdir };
+  try {
+    // Reject absolute roots before normalization can trim their final separator.
+    if (scope.subdir && isAbsolute(scope.subdir.trim())) {
+      throw new Error("Invalid subdir: use a relative path within the repository.");
+    }
+    normalizeScanScope(scope);
+  } catch (error: unknown) {
+    console.error(
+      chalk.red(`Preflight failed: ${error instanceof Error ? error.message : String(error)}`)
+    );
+    process.exit(1);
+    return;
+  }
   await withResolvedRepo(repoUrl, opts, "Preflight failed", async (repoSource) => {
-    const reqs = await gatherRequirements(repoSource.path);
+    const selectedRoot = scope.subdir
+      ? await resolveScanRoot(repoSource.path, scope.subdir)
+      : repoSource.path;
+    // Canonical paths identify the actual declaration, including contained aliases.
+    const subdir = scope.subdir
+      ? relative(await realpath(repoSource.path), selectedRoot)
+          .split(sep)
+          .join("/") || "."
+      : undefined;
+    // A selected package is a strict evidence boundary. In particular, an outer
+    // package manager identity does not establish a version requirement here.
+    const reqs = await gatherRequirements(selectedRoot);
     const results: PreflightResult[] = [];
     for (const req of reqs) {
       if (req.kind) {
@@ -649,17 +681,27 @@ export async function runPreflightCommand(
       }
     }
 
+    if (subdir && subdir !== ".") {
+      for (const result of results) result.source = `${subdir}/${result.source}`;
+    }
+
     const failing = results.filter((r) => r.status === "missing" || r.status === "mismatch").length;
 
     if (opts.json) {
       console.log(
         JSON.stringify(
-          { repo: repoSource.repoInfo.fullName, ok: failing === 0, checks: results },
+          {
+            repo: repoSource.repoInfo.fullName,
+            ...(subdir ? { subdir, scope: "directory" } : {}),
+            ok: failing === 0,
+            checks: results,
+          },
           null,
           2
         )
       );
     } else if (results.length === 0) {
+      if (subdir) console.log(chalk.dim(`Package directory: ${subdir} (local declarations only)`));
       console.log(chalk.yellow("\n🚀 No declared toolchain requirements detected."));
       console.log(
         chalk.dim(
@@ -667,7 +709,7 @@ export async function runPreflightCommand(
         )
       );
     } else {
-      printReport(results, repoSource.repoInfo.fullName);
+      printReport(results, repoSource.repoInfo.fullName, subdir);
     }
 
     if (opts.check && failing > 0) {

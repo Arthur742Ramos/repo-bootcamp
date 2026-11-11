@@ -1,11 +1,15 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
+const runPreflightCommand = vi.fn().mockResolvedValue(undefined);
 const runAskCommand = vi.fn().mockResolvedValue(undefined);
 const runDocsCommand = vi.fn().mockResolvedValue(undefined);
 const runPullRequestDiff = vi.fn().mockResolvedValue(undefined);
 const runMainCommand = vi.fn().mockResolvedValue(undefined);
 const startServer = vi.fn();
 
+vi.mock("../src/commands/preflight-command.js", () => ({
+  runPreflightCommand: (...args: any[]) => runPreflightCommand(...args),
+}));
 vi.mock("../src/commands/ask-command.js", () => ({
   runAskCommand: (...args: any[]) => runAskCommand(...args),
 }));
@@ -39,6 +43,48 @@ describe("CLI option routing past root-command flag collisions", () => {
     vi.clearAllMocks();
     vi.resetModules();
     ({ program } = await import("../src/cli.js"));
+  });
+
+  it.each([
+    ["preflight", "./repo", "--subdir", "packages/api space"],
+    ["--subdir", "packages/api space", "preflight", "./repo"],
+    ["preflight", "./repo", "--subdir=packages/api space"],
+    ["preflight", "./repo", "--subdir", "first", "--subdir", "packages/api space"],
+    ["--subdir", "first", "preflight", "./repo", "--subdir", "packages/api space"],
+    ["--subdir=first", "--subdir=packages/api space", "preflight", "./repo"],
+  ])("routes package preflight flags: %s", async (...args) => {
+    await runArgv(args);
+    expect(runPreflightCommand).toHaveBeenCalledWith(
+      "./repo",
+      expect.objectContaining({ subdir: "packages/api space" })
+    );
+    expect(runMainCommand).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["preflight", "./repo", "--subdir", "first", "--subdir", ""],
+    ["--subdir=first", "preflight", "./repo", "--subdir="],
+  ])(
+    "preserves an explicit empty final scope instead of recovering an obsolete value: %s",
+    async (...args) => {
+      await runArgv(args);
+      expect(runPreflightCommand).toHaveBeenCalledWith(
+        "./repo",
+        expect.objectContaining({ subdir: "" })
+      );
+    }
+  );
+
+  it("advertises scoped preflight in help and generated completion specs", async () => {
+    const { collectCompletionSpec } = await import("../src/completion.js");
+    const command = program.commands.find((command) => command.name() === "preflight")!;
+    expect(command.helpInformation()).toContain("--subdir <path>");
+    const spec = collectCompletionSpec(program).commands.find(
+      (command) => command.name === "preflight"
+    )!;
+    expect(spec.optionSpecs).toContainEqual(
+      expect.objectContaining({ flags: ["--subdir"], value: "required" })
+    );
   });
 
   it("routes ask --branch and --model to the ask command", async () => {

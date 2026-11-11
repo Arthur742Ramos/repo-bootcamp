@@ -176,6 +176,7 @@ interface CyclesActionOptions {
 interface PreflightActionOptions {
   [key: string]: unknown;
   branch?: string;
+  subdir?: string;
   check?: boolean;
   json?: boolean;
   keepTemp?: boolean;
@@ -841,6 +842,7 @@ program
   )
   .option("-b, --branch <branch>", "Branch to analyze", "")
   .option("--check", "Exit with code 1 if any declared tool is missing or mismatched (for CI)")
+  .option("--subdir <path>", "Inspect toolchain declarations only in this repository directory")
   .option("--json", "Output the preflight report as JSON for machine consumption")
   .option("--keep-temp", "Keep temporary clone directory")
   .option("-v, --verbose", "Show detailed output")
@@ -849,6 +851,7 @@ program
       rawOpts as Command | PreflightActionOptions
     );
     await runPreflightCommand(repoUrl, {
+      subdir: opts.subdir ?? program.opts<MainActionOptions>().subdir,
       branch: opts.branch || getCliFlagValue(["--branch", "-b"]) || "",
       check: opts.check || false,
       json: opts.json || false,
