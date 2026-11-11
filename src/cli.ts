@@ -230,9 +230,11 @@ interface StylesActionOptions {
 
 /**
  * Shared option shape for the deterministic, scan-based report commands
- * (`health`, `metrics`, `security`). They expose an identical flag surface.
+ * (`scan`, `health`, `metrics`, `security`), including scan-only baseline options.
  */
 interface ScanActionOptions {
+  baseline?: string;
+  maxRegression?: string;
   [key: string]: unknown;
   branch?: string;
   check?: boolean;
@@ -289,6 +291,8 @@ function isNegativeOptionEnabled(
 
 /** Resolved options passed to a scan-command runner. */
 interface ScanRunnerOptions {
+  baseline?: string;
+  maxRegression?: number;
   branch: string;
   check: boolean;
   minScore: number;
@@ -302,10 +306,10 @@ type ScanCommandRunner = (repoUrl: string, options: ScanRunnerOptions) => Promis
 
 /**
  * Register one of the deterministic, scan-based report commands (`scan`,
- * `health`, `metrics`, `security`). They share an identical flag surface and
+ * `health`, `metrics`, `security`). They share the core flag surface and
  * option plumbing — including the raw-argv fallback for `-b/--branch` and
  * `-m/--max-files`, which collide with the root command's options — so this
- * helper keeps the registrations in lock-step and DRY.
+ * helper keeps the core registrations in lock-step. Baseline options belong only to `scan`.
  */
 function registerScanCommand(config: {
   name: string;
@@ -315,7 +319,7 @@ function registerScanCommand(config: {
   jsonHelp: string;
   run: ScanCommandRunner;
 }): void {
-  program
+  const command = program
     .command(`${config.name} <repo-url>`)
     .description(config.description)
     .option("-b, --branch <branch>", "Branch to analyze", "")
@@ -335,13 +339,36 @@ function registerScanCommand(config: {
       await config.run(repoUrl, {
         branch,
         check: opts.check || false,
-        minScore: parseInt(opts.minScore || "70", 10),
+        minScore:
+          config.name === "scan" && opts.baseline !== undefined
+            ? Number(opts.minScore || "70")
+            : parseInt(opts.minScore || "70", 10),
         json: opts.json || false,
-        maxFiles: parseInt(maxFiles, 10),
+        maxFiles:
+          config.name === "scan" && opts.baseline !== undefined
+            ? Number(maxFiles)
+            : parseInt(maxFiles, 10),
         keepTemp: opts.keepTemp || false,
         verbose: opts.verbose || false,
+        ...(config.name === "scan" && {
+          ...(opts.baseline !== undefined && { baseline: opts.baseline }),
+          ...(opts.maxRegression !== undefined && {
+            maxRegression: opts.maxRegression.trim() ? Number(opts.maxRegression) : NaN,
+          }),
+        }),
       });
     });
+  if (config.name === "scan") {
+    command
+      .option(
+        "--baseline <file>",
+        "Compare with a scan JSON report from the same analyzer and scan limit"
+      )
+      .option(
+        "--max-regression <points>",
+        "Allowed score deterioration, 0-100 (requires --baseline and --check; default 0)"
+      );
+  }
 }
 
 program
@@ -579,7 +606,7 @@ registerScanCommand({
   name: "scan",
   description:
     "Scan a repository once and report a combined health + metrics + security dashboard, gated on the lowest of the three scores (supports local paths)",
-  checkHelp: "Exit with code 1 if the lowest of the three scores is below --min-score (for CI)",
+  checkHelp: "Fail below --min-score or, with --baseline, beyond --max-regression (for CI)",
   minScoreHelp:
     "Minimum passing score for --check, applied to the lowest of the three scores (0-100)",
   jsonHelp: "Output the combined report (all three analyses plus a score summary) as JSON",

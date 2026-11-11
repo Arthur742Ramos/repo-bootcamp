@@ -1,4 +1,12 @@
 import chalk from "chalk";
+import pkg from "../../package.json" with { type: "json" };
+import {
+  SCAN_SCHEMA_VERSION,
+  readScanBaseline,
+  compareScanSnapshots,
+  formatScanComparison,
+  type ScanSnapshot,
+} from "../scan-baseline.js";
 import { readContainedFile } from "../fs-safe.js";
 
 import { extractDependencies } from "../deps.js";
@@ -14,6 +22,10 @@ import { withResolvedRepo } from "./_shared.js";
 /** Options accepted by the `bootcamp scan` command. */
 export interface ScanCommandOptions {
   branch?: string;
+  /** Compare with a previous scan JSON report. */
+  baseline?: string;
+  /** Maximum per-score deterioration allowed by --check with --baseline. */
+  maxRegression?: number;
   /** Emit the combined report as JSON for machine consumption. */
   json?: boolean;
   /** Exit non-zero when the lowest of the three scores is below `minScore`. */
@@ -162,16 +174,50 @@ function printReport(
  * dashboard (or `--json`). With `--check`, exits non-zero when the lowest of the
  * three *higher-is-better* scores (health/metrics/security) is below
  * `--min-score`; onboarding risk is shown but, being lower-is-better, is not
- * part of the gate.
+ * part of the absolute gate. With --baseline, --check also gates deterioration
+ * in all four scores, respecting the lower-is-better onboarding-risk direction.
  */
 export async function runScanCommand(repoUrl: string, opts: ScanCommandOptions): Promise<void> {
   const minScore = finiteOr(opts.minScore, 70);
+  const maxFiles = finiteOr(opts.maxFiles, 500, { min: 1 });
+  const metadata = { schemaVersion: SCAN_SCHEMA_VERSION, analyzerVersion: pkg.version, maxFiles };
+  let baseline: ScanSnapshot | undefined;
+  try {
+    if (opts.maxRegression !== undefined && (!opts.baseline || !opts.check)) {
+      throw new Error("--max-regression requires both --baseline and --check.");
+    }
+    if (
+      opts.maxRegression !== undefined &&
+      (!Number.isFinite(opts.maxRegression) || opts.maxRegression < 0 || opts.maxRegression > 100)
+    ) {
+      throw new Error("--max-regression must be a finite number from 0 to 100.");
+    }
+    if (opts.baseline !== undefined) {
+      if (
+        opts.minScore !== undefined &&
+        (!Number.isFinite(opts.minScore) || opts.minScore < 0 || opts.minScore > 100)
+      ) {
+        throw new Error("Baseline comparisons require --min-score from 0 to 100.");
+      }
+      if (!opts.baseline.trim()) throw new Error("--baseline requires a JSON file path.");
+      if (
+        opts.maxFiles !== undefined &&
+        (!Number.isSafeInteger(opts.maxFiles) || opts.maxFiles < 1)
+      ) {
+        throw new Error("Baseline comparisons require a positive integer --max-files.");
+      }
+      baseline = await readScanBaseline(opts.baseline, metadata);
+    }
+  } catch (error: unknown) {
+    console.error(
+      chalk.red("Scan failed: " + (error instanceof Error ? error.message : String(error)))
+    );
+    process.exit(1);
+    return;
+  }
 
   await withResolvedRepo(repoUrl, opts, "Scan failed", async (repoSource) => {
-    const scan = await scanRepositoryFiles(
-      repoSource.path,
-      finiteOr(opts.maxFiles, 500, { min: 1 })
-    );
+    const scan = await scanRepositoryFiles(repoSource.path, maxFiles);
     const packageJson = await readContainedFile(repoSource.path, "package.json")
       .then((content) => JSON.parse(content) as Record<string, unknown>)
       .catch(() => undefined);
@@ -191,39 +237,39 @@ export async function runScanCommand(repoUrl: string, opts: ScanCommandOptions):
     const scores = combinedScores(health, metrics, security);
     const filesScanned = scan.files.length;
 
+    const report = {
+      metadata,
+      repo: repoSource.repoInfo.fullName,
+      filesScanned,
+      scores: {
+        health: { score: health.score, grade: health.grade },
+        metrics: { score: metrics.approachability.score, grade: metrics.approachability.grade },
+        security: {
+          score: security.score,
+          grade: getSecurityGrade(security.score, security.sourceFilesScanned),
+        },
+        onboardingRisk: { score: radar.onboardingRisk.score, grade: radar.onboardingRisk.grade },
+        lowest: scores.lowest,
+      },
+      health,
+      metrics,
+      security,
+      onboardingRisk: radar.onboardingRisk,
+    };
+    const comparison = baseline
+      ? compareScanSnapshots(baseline, report, opts.maxRegression ?? 0)
+      : undefined;
     if (opts.json) {
-      console.log(
-        JSON.stringify(
-          {
-            repo: repoSource.repoInfo.fullName,
-            filesScanned,
-            scores: {
-              health: { score: health.score, grade: health.grade },
-              metrics: {
-                score: metrics.approachability.score,
-                grade: metrics.approachability.grade,
-              },
-              security: {
-                score: security.score,
-                grade: getSecurityGrade(security.score, security.sourceFilesScanned),
-              },
-              onboardingRisk: {
-                score: radar.onboardingRisk.score,
-                grade: radar.onboardingRisk.grade,
-              },
-              lowest: scores.lowest,
-            },
-            health,
-            metrics,
-            security,
-            onboardingRisk: radar.onboardingRisk,
-          },
-          null,
-          2
-        )
-      );
+      console.log(JSON.stringify({ ...report, ...(comparison && { comparison }) }, null, 2));
     } else {
       printReport(health, metrics, security, radar, repoSource.repoInfo.fullName, filesScanned);
+      if (comparison) console.log(formatScanComparison(comparison));
+    }
+
+    if (opts.check && comparison?.regressed) {
+      if (!opts.json)
+        console.error(chalk.red("Scan scores regressed beyond the allowed tolerance."));
+      return 1;
     }
 
     if (opts.check && scores.lowest < minScore) {

@@ -279,7 +279,7 @@ The Copilot SDK transforms what would be a simple template-filler into an intell
 - **Codebase Metrics & Hotspots** - Deterministic `METRICS.md` with language breakdown, largest-file hotspots, test-to-source ratio, and an Approachability score (0-100 + grade)
 - **Repo Health Check** - Deterministic `HEALTH.md` scoring onboarding-readiness across documentation, community, quality, and automation signals (0-100 + grade) with prioritized, actionable recommendations
 - **Environment Doctor** - Diagnose Node, git, GitHub CLI/auth, mermaid-cli, and cache health with `bootcamp doctor` (`--json` for CI)
-- **Combined Scan Dashboard** - `bootcamp scan` reports health, metrics, security, and onboarding risk from a single clone, with a `--check` CI gate on the lowest score
+- **Combined Scan Dashboard** - `bootcamp scan` reports health, metrics, security, and onboarding risk from a single clone, with an absolute `--check` CI gate and optional baseline regression comparison
 - **Module Coupling Map** - `bootcamp coupling` ranks modules by import coupling to reveal the load-bearing core, orchestrator hubs, and possibly-orphaned dead code
 - **Circular Dependency Detection** - `bootcamp cycles` finds circular import groups (Tarjan SCC) on the import graph, with a `--check` CI gate
 - **Machine Preflight** - `bootcamp preflight` checks your machine against the target repo's declared toolchain (Node, package manager, Python, Go, Rust, .NET) with a per-row remedy
@@ -630,9 +630,53 @@ bootcamp scan ./my-repo --check --min-score 70
 ```
 
 The dashboard also includes the tech-radar **onboarding-risk** score (0-100,
-lower is better) alongside health/metrics/security. The `--check` gate stays on
-the lowest of the three higher-is-better scores (onboarding risk is reported but
-not gated, since for it lower is better).
+lower is better) alongside health/metrics/security. The absolute `--check` gate
+uses the lowest of the three higher-is-better scores. With a baseline, it also
+checks deterioration in all four scores, using the correct direction for risk.
+
+### Scan Baselines and Regression Gates
+
+Keep a scan snapshot to see whether a change makes onboarding harder, even when
+scores still clear your absolute quality floor:
+
+```bash
+# Save UTF-8 JSON outside the scanned repository so the report does not affect its own scan
+bootcamp scan ./my-repo --json > ./onboarding-baseline.json
+
+# Inspect score deltas and changed readiness checks without failing on a regression
+bootcamp scan ./my-repo --baseline ./onboarding-baseline.json
+
+# Enforce both the absolute floor and no deterioration from the baseline
+bootcamp scan ./my-repo --baseline ./onboarding-baseline.json --check --min-score 70
+
+# Allow at most 3 points of deterioration per score; retain machine-readable output
+bootcamp scan ./my-repo --baseline ./onboarding-baseline.json --check --max-regression 3 --json
+```
+
+The tolerance is inclusive: a 3-point decline passes at 3, but a larger decline
+fails. Health, approachability and security regress when their scores decrease;
+onboarding risk regresses when it increases. Readiness status changes are shown
+for context; they do not independently fail the gate. Without `--check`, comparison
+is informational. `--max-regression` requires both `--baseline` and `--check` and
+accepts finite values from 0 to 100 (default 0). Use `--min-score 0` when only the
+regression gate is wanted.
+
+JSON reports include `metadata` (schema version, analyzer release version, scan
+limit) and add `comparison` when a baseline is supplied. Each compared score has
+`before`, `after`, signed `delta`, nonnegative `regression` and
+`exceedsTolerance`; `comparison.regressed` summarizes the regression gate, not the
+absolute floor. Baselines must be regular UTF-8 JSON files no larger than 8 MiB,
+produced by the same analyzer release with the same `--max-files` setting and health
+check catalog. Old reports without metadata, malformed files and incompatible
+baselines are rejected rather than silently compared. Regenerate baselines after
+upgrading or modifying the analyzer, including unpublished changes that retain
+the same package version.
+
+Choose the baseline from the same repository and intended scope. Local worktrees
+may have different directory names, so repository-name equality is not enforced.
+Keep baseline files outside the scanned tree. These scores are deterministic
+heuristics, not a security audit; changes in file-limit sampling can also change
+scores. Use a suitable, identical scan budget for both snapshots.
 
 ### Continuous Onboarding Quality
 
