@@ -18,6 +18,7 @@ let scan: ReturnType<typeof vi.fn>;
 let ask: ReturnType<typeof vi.fn>;
 let readCache: ReturnType<typeof vi.fn>;
 let phaseCache: ReturnType<typeof vi.fn>;
+let pruneCache: ReturnType<typeof vi.fn>;
 let holdClone: (() => Promise<void>) | undefined;
 let alterClone: ((dir: string) => Promise<void>) | undefined;
 const clones: string[] = [];
@@ -101,10 +102,14 @@ beforeEach(async () => {
     const actual = await vi.importActual<typeof import("../src/cache.js")>("../src/cache.js");
     readCache = vi.fn(async () => null);
     phaseCache = vi.fn(async () => ({ hit: false }));
+    pruneCache = vi.fn(async () => 0);
     return {
       ...actual,
       readCache,
       readPhaseCache: phaseCache,
+      // The real analyzer also starts background pruning; never let a partial
+      // cache mock retain a write path into the developer's genuine cache.
+      pruneCache,
       writeCache: vi.fn(),
       writePhaseCache: vi.fn(),
     };
@@ -324,6 +329,8 @@ describe("web selected package using contained scans and saved SDK responses", (
     await settle((await start("packages/app")).body.jobId);
     expect(readCache.mock.calls[0][2].subdir).toBeUndefined();
     expect(readCache.mock.calls[1][2].subdir).toBe("packages/app");
+    expect(pruneCache).toHaveBeenCalledTimes(2);
+    expect(pruneCache).toHaveBeenCalledWith(7 * 24 * 60 * 60 * 1000);
     expect(readCache.mock.calls[0][2].scanFingerprint).not.toBe(
       readCache.mock.calls[1][2].scanFingerprint
     );
